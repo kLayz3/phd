@@ -1,0 +1,10 @@
+build
+includes/build
+lib*
+*.root
+*.lmd
+*.pcm
+.clangd
+cal
+includes/dict
+rootfiles

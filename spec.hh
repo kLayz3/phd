@@ -9,3 +9,10 @@
 #define FOOT17 17
 #define FOOT10 10
 
+#include <unordered_set>
+#include <unordered_map>
+/* Table of bad strips, per detector (searched by the same index as in the ROOT file) */
+typedef std::unordered_map<int, std::unordered_set<int>> BadStripTable;
+
+//extern BadStripTable bad_strips = {
+//};
