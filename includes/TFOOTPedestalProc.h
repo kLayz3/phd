@@ -22,8 +22,10 @@ public:
 	static constexpr int N_STRIPS_PER_ASIC = TFOOTPedestalCont::N_STRIPS_PER_ASIC; //!
 
 public:
-	bool do_global_pedestal = 1;
-
+	enum ProcessType {
+		kGPED,
+		kEPED
+	} process_type = kGPED;
 		
 	TFOOTPedestalCont& data;
 	TFOOTPedestalProc(TFOOTPedestalCont& data) : TAnalysisWorker(data, data), 
@@ -31,9 +33,9 @@ public:
 	~TFOOTPedestalProc() = default;
 
 	void ProcessGlobalPedestal() noexcept;
-	void ProcessEventPedestal() noexcept;
-	
 	void CalcGlobalPedestal();
+	void ProcessEventPedestal() noexcept;
+	void CalcFinalPedestal();
 
 	void ProcessEntry() noexcept override;
 
@@ -41,9 +43,7 @@ public:
 	static constexpr inline int GetChannel(int asic, int offset) { return asic * N_STRIPS_PER_ASIC + offset; }
 
 	inline void Clear(Option_t* option = "") noexcept override { data.Clean(option); }
+
 private:
-	std::array<double, N_STRIPS_PER_ASIC> ped_offset;
-	std::array<double, N_ASIC> gped_sum_per_asic;
-	double gped_offset_avg;
-	double gped_offset_sig;
+	std::array<double, N_STRIPS_PER_ASIC> ped_offset = {0.0};
 };

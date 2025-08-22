@@ -36,8 +36,5 @@ void TAnalysisWorker::Start() {
 }
 
 Int_t TAnalysisWorker::Write() {
-	Int_t nbytes = 0;
-	for(TOnceBase* b : output._vc) 
-		nbytes += b->Write();
-	return nbytes;
+	return output.Write();
 }

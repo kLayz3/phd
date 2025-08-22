@@ -48,7 +48,7 @@ public:
 public: // related to parts to be serialized only once.
 	
 	/**
-	 * Serialize chosen parts of the worker to the currently open directory.
+	 * Serialize single objects (non-TTree) parts of the worker to the currently open directory.
 	 */
 	virtual Int_t Write();
 };

@@ -121,6 +121,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 
 	TFile* out = new TFile(outFile.c_str(), "RECREATE"); 
 	TTree* h102 = new TTree("h102", "h102");
+	h102->SetAutoFlush(0); h102->SetAutoSave(0);
 
 	std::unordered_map<std::string, std::string> info;
 	TFOOTPedestalCont foot[N_FOOT];
@@ -131,7 +132,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		TFOOTPedestalCont& f = foot[i]; \
 		info["FOOT_ID"] = #ID; \
 		f.Init(info); \
-		h102->Branch(foot[i].GetName(), &foot[i]); \
+		f.Setup(out, h102, ContainerIO::kMIXED); \
 		f._FOOT = &sort->FOOT##ID; \
 		f._FOOTE = sort->FOOT##ID##E; \
 	}
@@ -187,17 +188,20 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	
 	tv.emplace_back(TimePoint("after gped"));
 	PrintElapsed<kSECOND>(tv);
-
-	/* Set the worker to calculate entry-specific pedestal.
-	 * Also save the global pedestal calculation. */
+	
+	/* Perform fitting for the global pedestal calculation. 
+	 * Cannot be (obviously) paralellized. */
 	for(size_t i=0; i < pool.Size(); ++i) { 
 		TFOOTPedestalProc* p = dynamic_cast<TFOOTPedestalProc*>(pool.GetWorker(i));
 		if(!p) continue;
 		p->CalcGlobalPedestal();
-		p->do_global_pedestal = false;
+		p->process_type = TFOOTPedestalProc::kEPED;
+		dbg("Finished with one global pedestal fitting ...", i+1);
 	}
+	tv.emplace_back(TimePoint("post fit"));
+	PrintElapsed<kSECOND>(tv);
 
-	dbg("Doing finer pedestal analysis...");
+	dbg("Doing finer pedestal analysis now...");
 	ProgressBar bar2 {
 		option::BarWidth{50},
 		option::Start{"["},
@@ -232,24 +236,35 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	tv.emplace_back(TimePoint("after fineped"));
 	PrintElapsed<kSECOND>(tv);
 
+	/* Perform final fit for the corrected pedestal sigma calculation. 
+	 * Cannot be (obviously) paralellized. */
+	for(size_t i=0; i < pool.Size(); ++i) { 
+		TFOOTPedestalProc* p = dynamic_cast<TFOOTPedestalProc*>(pool.GetWorker(i));
+		if(!p) continue;
+		p->CalcFinalPedestal();
+		dbg("Finished with one fine pedestal fitting (sigma calc) ...", i+1);
+	}
+	tv.emplace_back(TimePoint("post fineped fit"));
+	PrintElapsed<kSECOND>(tv);
+
 	printf("Total execution time: "); PrintElapsed<kSECOND>(tv.back(), tv.front());
 
 	show_console_cursor(true);
 
-	out->Write();
-	out->Close();
-
-	app->Run();
+	pool.Write();
 	
+	out->Close();
+	app->Run();
 	in->Close();
 }
 
 const char* calibrate_help =
-"\nUsage: ./clusterise <OPT1> <OPT2> ...\n\
+"\nUsage: ./cal <OPT1> <OPT2> ...\n\
 \n\
 [--file=]inputName.root      ..Input file.\n\
 --output=/PATH/TO/OUT.root   ..Specify output file name. Default same as input file with '_subtr' suffix.\n\
 --help                       ..Print this message to stdout. \n\
 --max-events=N               ..Specify how many events to process in the ROOT file. Default all.\n\
 \n\
+This script will analyse the raw (sorted) ROOT file and do the full pedestal analysis of the FOOT data.\n\
 Always remember: PHYSICS IS FUN <(^.^)>\n\n";

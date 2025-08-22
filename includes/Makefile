@@ -1,17 +1,10 @@
 SRC_DIR = $(shell pwd -P)
-BUILD_DIR = $(SRC_DIR)/build
+BUILD_DIR = $(SRC_DIR)/build_$(shell gcc -dumpmachine)_$(shell gcc -dumpversion)
 DICT_DIR = $(SRC_DIR)/dict
 
-# Switch on optimization
-OPTIMIZATION = 1
-
 CXXFLAGS := $(shell root-config --cflags) -Wall -MMD -MP -fPIC
-ifneq ($(OPTIMIZATION),1)
-CXXFLAGS += -ggdb -g3 -O0
-else
-CXXFLAGS += -O3 -march=native
-endif
-CXXFLAGS += -I../
+
+include common.mk
 
 LDFLAGS := $(shell root-config --ldflags)
 LIBS := $(shell root-config --libs)

@@ -18,7 +18,7 @@ public:
 	TOnceBase& operator=(TOnceBase&& ) noexcept = default;
 	virtual ~TOnceBase() = default; 
 
-	virtual Int_t Write(const char* = "") = 0;
+	virtual Int_t Write(TFile* file = nullptr, const char* target = "") = 0;
 	virtual void* Load(TFile* file = nullptr, const char* target = "") = 0;
 
 	virtual void SetName(std::string name, const char* title = "");

@@ -1,7 +1,7 @@
 #include "TFOOTPedestalCont.h"
-#include "AuxFunctions.hh"
 #include "TContainer.h"
 #include "TH2.h"
+#include <algorithm>
 #include <cmath>
 #include <string>
 
@@ -22,24 +22,34 @@ void TFOOTPedestalCont::Init(TDictInfo info) {
 	FOOT_N = n;
 	this->SetName(Form("FOOT%d", n));
 	
-	assert(sizeof(GetOwnedTOnceObjects()) == 0 && "Don't call `SetId` twice. Clear the owned objects first.");
+	assert(GetOwnedTOnceObjects().size() == 0 && "Don't call `SetId` twice. Clear the owned objects first.");
 
-	h2_raw  = RegisterObject<TH2I>(Form("%s_h2_raw", GetName()), Form("Raw FOOT%s", GetName()), 640,0,640,4096,0,4096);
-	h2_corr = RegisterObject<TH2D>(Form("%s_h2_corr", GetName()), Form("Corrected FOOT%s", GetName()), 640,0,640,3000,-500,2500);
-	h2_s0   = RegisterObject<TH2D>(Form("%s_h2_sigma0", GetName()), Form("Sigma0 FOOT%s", GetName()), 640,0,640,100,0,20);
-	h2_s1   = RegisterObject<TH2D>(Form("%s_h2_sigma1", GetName()), Form("Sigma1 FOOT%s", GetName()), 640,0,640,100,0,20);
-	gped    = RegisterObject<std::array<double, N_STRIPS>>(Form("%s_gped", GetName()), {});
-	gped_s  = RegisterObject<std::array<double, N_STRIPS>>(Form("%s_gped_s", GetName()), {});
+	h2_raw     = RegisterObject<TH2I>("h2_raw" , Form("Raw FOOT%s", GetName()), 640,0,640,4096,0,4096);
+	h2_mid     = RegisterObject<TH2D>("h2_mid", Form("Raw FOOT%s - Global Pedestal", GetName()), 640,0,640,3000,-500,2500);
+	h2_corr    = RegisterObject<TH2D>("h2_corr", Form("Corrected FOOT%s", GetName()), 640,0,640,6000,-500,2500);
+	gr_s0      = RegisterObject<TGraph>("sigma0", N_ASIC);
+	gr_s1      = RegisterObject<TGraph>("sigma1", N_ASIC);
+	gped       = RegisterObject<std::array<double, N_STRIPS>>("gped", {});
+	gped_s     = RegisterObject<std::array<double, N_STRIPS>>("gped_sigma", {});
+	gped_sf    = RegisterObject<std::array<double, N_STRIPS>>("ped_sigma_corr", {});
+	bad_strips = RegisterObject<std::vector<int>>("bad_strips", {});	
+	h2_ped_off_med  = RegisterObject<TH2D>("h2_ped_off_med" , Form("Fine pedestal %s offset calculated via median", GetName()), 10,0,10, 1000,-100,100); 
+	h2_ped_off_avg  = RegisterObject<TH2D>("h2_ped_off_avg" , Form("Fine pedestal %s offset calculated via trimmed average", GetName()), 10,0,10, 1000,-100,100);
+	h2_ped_off_diff = RegisterObject<TH2D>("h2_ped_off_diff", Form("Fine pedestal %s offset diff (median - trimmed average)", GetName()), 10,0,10, 100,-10,10);
 
-	h2_ped_off_med = RegisterObject<TH2D>(Form("%s_h2_ped_off_med", GetName()), Form("Fine pedestal offset calculated via median"), 10,0,10, 1000,-100,100); 
-	h2_ped_off_avg = RegisterObject<TH2D>(Form("%s_h2_ped_off_avg", GetName()), Form("Fine pedestal offset calculated via trimmed average"), 10,0,10, 1000,-100,100);
-	h2_ped_off_diff = RegisterObject<TH2D>(Form("%s_h2_ped_off_diff", GetName()), Form("Fine pedestal offset diff (median - trimmed average)"), 10,0,10, 100,-10,10);
+	gr_s0->SetMarkerStyle(22);
+	gr_s0->SetMarkerSize(1);
+	gr_s0->SetMarkerColor(kRed);
+	gr_s1->SetMarkerStyle(23);
+	gr_s1->SetMarkerSize(1);
+	gr_s1->SetMarkerColor(kGreen);
 }
 
 void TFOOTPedestalCont::Clean(Option_t* option) noexcept {
 	(void)option;
-	has_data = false;
+	std::fill_n(FOOTE, LEN(FOOTE), std::nan(""));
 }
 
-IMPL_CONTAINER_SETUP(TFOOTPedestalCont)
+IMPL_CONTAINER_METHODS(TFOOTPedestalCont)
+
 ClassImp(TFOOTPedestalCont);

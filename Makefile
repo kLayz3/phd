@@ -1,7 +1,7 @@
 CXX:=g++
 SRC_DIR = src
 INC_DIR = includes
-BUILD_DIR = build
+BUILD_DIR = build_$(shell gcc -dumpmachine)_$(shell gcc -dumpversion)
 SCRIPT_DIR = scripts
 GO4_SRC_DIR = $(shell pwd -P)/../go4/src
 CXXFLAGS := $(shell root-config --cflags) \
@@ -10,14 +10,7 @@ CXXFLAGS := $(shell root-config --cflags) \
 	-I$(GO4_SRC_DIR) \
 	-I$(GO4SYS)/include \
 
-# Switch on optimization
-OPTIMIZATION = 1
-
-ifneq ($(OPTIMIZATION),1)
-CXXFLAGS += -ggdb -g3 -O0
-else
-CXXFLAGS += -O3 -march=native
-endif
+include includes/common.mk
 
 CXXFLAGS += -DPOOL_MAX_THREADS_=$(shell nproc) 
 
@@ -33,7 +26,7 @@ SRC:=$(wildcard $(SRC_DIR)/*.cc)
 OBJ:=$(patsubst $(SRC_DIR)/%.cc,  $(BUILD_DIR)/%.o, $(SRC))
 EXE:=$(patsubst $(SRC_DIR)/%.cc, %, $(SRC))
 
-STRUCT_LIB = libStructures.so
+STRUCT_LIB = $(INC_DIR)/$(BUILD_DIR)/libStructures.so
 
 MKDIR = mkdir -p $(@D)
 
@@ -41,6 +34,7 @@ MKDIR = mkdir -p $(@D)
 all: $(EXE) $(AUX)
 
 $(EXE): % : $(BUILD_DIR)/%.o $(STRUCT_LIB)
+	ln -sf $(STRUCT_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cc
@@ -58,3 +52,4 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(EXE)
 	$(MAKE) -C $(INC_DIR) clean
+	rm -rf libStructures.so

@@ -1,10 +1,11 @@
-build
-includes/build
+build*
+includes/build*
 lib*
 *.root
 *.lmd
 *.pcm
 .clangd
 cal
+clust
 includes/dict
 rootfiles

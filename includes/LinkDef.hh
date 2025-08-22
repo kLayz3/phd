@@ -6,4 +6,5 @@
 #pragma link C++ nestedtypedefs;
 #pragma link C++ class TContainer+;
 #pragma link C++ class TFOOTPedestalCont+;
+#pragma link C++ class TFOOTCalCont+;
 #endif

@@ -61,6 +61,10 @@ public:
 			return std::get<TChain*>(in)->GetEntriesFast();
 		else return 0;
 	}
+
+	/**
+	 * Call the internal `Fill` of the TTree* output object
+	 */
 	inline Int_t FillOutput() const noexcept { 
 		if(out and *out) return (*out)->Fill();
 		else return 0;
@@ -107,6 +111,13 @@ public:
 	 * Stops execution and clears all the workers. Call the underlying destructor of owned workers.
 	 */
 	void ClearPool();
+
+	/**
+	 * At the end, write the objects and the output TTree into the TFile.
+	 * Note that this will make the pool instance unusable for the remainder of the program.
+	 * Returns number of bytes written across all the output containers.
+	 */
+	Int_t Write();
 };
 
 /* Explicitly check for nullptr here to allow this call tailing `ClearPool`. */
@@ -194,3 +205,12 @@ void TAnalysisPool<MAX_WORKERS>::Start() {
 	}
 }
 
+template<size_t MAX_WORKERS>
+Int_t TAnalysisPool<MAX_WORKERS>::Write() {
+	Int_t r = 0;
+	for(TAnalysisWorker* worker : this->_pool)
+		r += worker->Write();
+	
+	if(out and *out) r += (*out)->Write();
+	return r;
+}

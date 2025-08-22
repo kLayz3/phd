@@ -25,17 +25,18 @@ public: // Inputs from Go4.
 
 public:
 	// Objects held by the TContainer::_vc  
-	TH2I* h2_raw; //!
+	TH2I* h2_raw;  //!
+	TH2D* h2_mid;  //!
 	TH2D* h2_corr; //!
-	TH2D* h2_s0; //!
-	TH2D* h2_s1; //!
+	TGraph* gr_s0; //!
+	TGraph* gr_s1; //!
+	std::array<double, N_STRIPS> *gped, *gped_s, *gped_sf; //! indices [0], [1], [2], ..., [639]
+	std::vector<int> *bad_strips; //! [0, 1, 2, ..., 639]
 	TH2D* h2_ped_off_med; //!
 	TH2D* h2_ped_off_avg; //!
 	TH2D* h2_ped_off_diff; //!
-	std::array<double, N_STRIPS> *gped, *gped_s; //! indices [0], [1], [2], ..., [639]
 
 public: // Exported back to ROOT
-	bool has_data = false;
 
 	/* Final ADC value after all three pedestal removals. */
 	Double_t FOOTE[N_STRIPS];
@@ -62,7 +63,8 @@ public:
 	
 	void Clean(Option_t* option="") noexcept /* override */;
 	void Init(TDictInfo info) /* override */;
-	void Setup(TFile* f = nullptr, TTree* t = nullptr, ContainerIO io_mode = ContainerIO::kINPUT);
+	
+	DECL_CONTAINER_METHODS
 
 	ClassDef(TFOOTPedestalCont, 1);
 };

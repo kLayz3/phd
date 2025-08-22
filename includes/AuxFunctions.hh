@@ -153,7 +153,7 @@ template<typename T,
 		 typename std::enable_if<util::is_an_array_v<U>>::type* = nullptr>
 auto median(const T& arr) {
 	constexpr std::size_t N = util::is_an_array<U>::size;
-	if constexpr(N%2)
+	if constexpr(N % 2)
 		return arr[(N-1) / 2];
 	else 
 		return ( arr[(N-1) / 2] + arr[N/2] ) / 2;
