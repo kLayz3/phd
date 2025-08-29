@@ -20,12 +20,18 @@ using namespace CMDLineParser;
 
 extern const char* calibrate_help;
 
-#if 1
-#define ANALYSIS_MULTITHREADED
-#else
-#warning "Running single-threaded. Possibly slower."
+#if !defined(ANALYSIS_MULTITHREADED)
+	/* Default build: enable multithread. */
+	#if 1
+		#define ANALYSIS_MULTITHREADED
+	#else
+		#warning "Running single-threaded. Possibly slower."
+	#endif
 #endif
 
+#if defined(ANALYSIS_SINGLETHREADED)
+	#undef ANALYSIS_MULTITHREADED
+#endif
 
 /* If this is defined then the original ROOT branch comes from FRS Go4 - Sort step instead of ucesb. */
 #if defined(FRS_GO4)
@@ -75,6 +81,7 @@ constexpr i32 N_FOOT = LEN(static_detectors);
 auto main(i32 argc, char* argv[]) -> i32 {
 	using namespace indicators;
 	show_console_cursor(false);	
+	srand(time(NULL));
 
 	string pStr, fileName, outFile;
 	u64 maxEvents = -1;
@@ -147,12 +154,19 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	INIT_FOOT(FOOT_ID_6);
 	INIT_FOOT(FOOT_ID_7);
 
-	TAnalysisPool<8> pool;
+	auto pool = TAnalysisPool<>()
+		.emplace_worker<TFOOTPedestalProc>(foot[0])
+		.emplace_worker<TFOOTPedestalProc>(foot[1])
+		.emplace_worker<TFOOTPedestalProc>(foot[2])
+		.emplace_worker<TFOOTPedestalProc>(foot[3])
+		.emplace_worker<TFOOTPedestalProc>(foot[4])
+		.emplace_worker<TFOOTPedestalProc>(foot[5])
+		.emplace_worker<TFOOTPedestalProc>(foot[6])
+		.emplace_worker<TFOOTPedestalProc>(foot[7]);
+
 	pool.out = h102;
 	pool.in = h101; 
-	FOR(i, N_FOOT) pool.AddOwnedWorker(new TFOOTPedestalProc(foot[i]));
 
-	pool.FinalizeInit();
 	tv.emplace_back(TimePoint("start"));
 	dbg("Doing global pedestal analysis...");
 	u64 nentries = std::min((u64)pool.GetEntries(), maxEvents);
@@ -171,7 +185,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		option::ShowRemainingTime{true},
 		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 	};
-
+ 
 	pool.Start();
 	for(u64 ev = 0; ev < nentries; ++ev) {
 		pool.GetEntry(ev);

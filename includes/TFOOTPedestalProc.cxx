@@ -3,6 +3,7 @@
 #include "libs.hh"
 #include "dbg.hh"
 #include <cassert>
+#include <cstdlib>
 #include <numeric>
 #include "AuxFunctions.hh"
 
@@ -20,21 +21,21 @@ void TFOOTPedestalProc::ProcessEntry() noexcept {
 }
 
 void TFOOTPedestalProc::ProcessGlobalPedestal() noexcept {
-	if(*data._FOOT == 0) return;
+	if(*data->_FOOT == 0) return;
 	FOR(i, N_STRIPS) {
-		data.h2_raw->Fill(i, data._FOOTE[i]);
+		data->h2_raw->Fill(i, data->_FOOTE[i]);
 	}
 }
 
 /* This is NOT thread safe to run in parallel since `slice->Fit` inherently talks to gROOT, gPad.
  * Even if TH1D histograms are detached. */
 void TFOOTPedestalProc::CalcGlobalPedestal() {
-	if(data.h2_raw->GetEntries() == 0) {
-		dbg("Ran over the TTree, but found 0 events with data?", data.FOOT_N, "Setting all pedestals to 0.");
+	if(data->h2_raw->GetEntries() == 0) {
+		dbg("Ran over the TTree, but found 0 events with data?", data->FOOT_N, "Setting all pedestals to 0.");
 		return;
 	} 
 	FOR(i, N_STRIPS) {
-		TH1D* slice = data.h2_raw->ProjectionY("", i+1, i+1);
+		TH1D* slice = data->h2_raw->ProjectionY("", i+1, i+1);
 		slice->SetDirectory(nullptr);
 		int maxBin = slice->GetMaximumBin();
 		double fitMin = slice->GetBinCenter(maxBin - 20);
@@ -42,9 +43,9 @@ void TFOOTPedestalProc::CalcGlobalPedestal() {
 
 		slice->Fit("gaus", "Q", "", fitMin, fitMax);
 		TF1* fitF = slice->GetFunction("gaus");
-		data.gped->at(i)   = fitF->GetParameter(1);
-		data.gped_s->at(i) = fitF->GetParameter(2);
-		data.gr_s0->SetPoint(i, i, data.gped_s->at(i));
+		data->gped->at(i)   = fitF->GetParameter(1);
+		data->gped_s->at(i) = fitF->GetParameter(2);
+		data->gr_s0->SetPoint(i, i, data->gped_s->at(i));
 		
 		delete slice;
 	}
@@ -54,7 +55,7 @@ void TFOOTPedestalProc::CalcGlobalPedestal() {
 
 void TFOOTPedestalProc::ProcessEventPedestal() noexcept {
 	this->Clear();
-	if(*data._FOOT == 0) return;
+	if(*data->_FOOT == 0) return;
 	
 	/* Subtract the global pedestal. */
 	/* Algorithm (per groups of 64-strips) is the following: j=0,1,2, ... 63
@@ -76,7 +77,7 @@ void TFOOTPedestalProc::ProcessEventPedestal() noexcept {
 		/* Calculate the systematic shift per asic (group of 64 strips). */
 		FOR(strip, N_STRIPS_PER_ASIC /* 0..=63 */) {
 			i = i0 + strip;
-			ped_offset[strip] = data._FOOTE[i] - data.gped->at(i);
+			ped_offset[strip] = data->_FOOTE[i] - data->gped->at(i);
 		}
 		std::sort(ped_offset.begin(), ped_offset.end());
 
@@ -84,34 +85,40 @@ void TFOOTPedestalProc::ProcessEventPedestal() noexcept {
 		ped_off_avg = std::accumulate(ped_offset.cbegin() + N_TRIM_FINE_PED, ped_offset.cend() - N_TRIM_FINE_PED, (double)0.0);
 		ped_off_avg /= (N_STRIPS_PER_ASIC - 2*N_TRIM_FINE_PED);
 
-		data.h2_ped_off_med->Fill(asic, ped_off_med);
-		data.h2_ped_off_avg->Fill(asic, ped_off_avg);
-		data.h2_ped_off_diff->Fill(asic, ped_off_avg - ped_off_med);
+		data->h2_ped_off_med->Fill(asic, ped_off_med);
+		data->h2_ped_off_avg->Fill(asic, ped_off_avg);
+		data->h2_ped_off_diff->Fill(asic, ped_off_avg - ped_off_med);
 	
 		FOR(strip, N_STRIPS_PER_ASIC /* 0..=63 */) {
 			i = i0 + strip;
-			adc_intermediate = data._FOOTE[i] - data.gped->at(i);
-			data.h2_mid->Fill(i, adc_intermediate);
-			adc_final = adc_intermediate -
+			adc_intermediate = data->_FOOTE[i] - data->gped->at(i);
+			data->h2_mid->Fill(i, adc_intermediate);
+			adc_final = adc_intermediate;
+			if(strip > 0) {
+				adc_final -=
 #ifdef CALC_OFFSET_FROM_MEDIAN
 				ped_off_med
 #else
 				ped_off_avg
 #endif
-			;
-			data.h2_corr->Fill(i, adc_final); 
-			data.FOOTE[i] = adc_final;
+				; /* The first strip in ASIC is uncoupled, just let it be. */
+			} 
+			else { /* To wash away binning all the values into a single bin, for initial strip that's uncoupled. */
+				adc_final += rand() / (double)RAND_MAX ;
+			}
+			data->h2_corr->Fill(i, adc_final); 
+			data->FOOTE[i] = adc_final;
 		}
 	}
 }
 
 void TFOOTPedestalProc::CalcFinalPedestal() {
-	if(data.h2_corr->GetEntries() == 0) {
-		dbg("Ran over the TTree, but found 0 events with calibrated data?", data.FOOT_N);
+	if(data->h2_corr->GetEntries() == 0) {
+		dbg("Ran over the TTree, but found 0 events with calibrated data?", data->FOOT_N);
 		return;
 	} 
 	FOR(i, N_STRIPS) {
-		TH1D* slice = data.h2_corr->ProjectionY("", i+1, i+1);
+		TH1D* slice = data->h2_corr->ProjectionY("", i+1, i+1);
 		slice->SetDirectory(nullptr);
 		int maxBin = slice->GetMaximumBin();
 		double fitMin = slice->GetBinCenter(maxBin - 10);
@@ -119,9 +126,12 @@ void TFOOTPedestalProc::CalcFinalPedestal() {
 
 		slice->Fit("gaus", "Q", "", fitMin, fitMax);
 		TF1* fitF = slice->GetFunction("gaus");
-		data.gped_sf->at(i) = fitF->GetParameter(2);
-		data.gr_s1->SetPoint(i, i, data.gped_sf->at(i));
-		
+		data->gped_sf->at(i) = fitF->GetParameter(2);
+		data->gr_s1->SetPoint(i, i, data->gped_sf->at(i));
+	
+		if(fitF->GetParameter(2) > BAD_STRIP_CUTOFF or (i % N_STRIPS_PER_ASIC) == 0) {
+			data->bad_strips->push_back(i);
+		}
 		delete slice;
 	}
 }

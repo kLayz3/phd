@@ -149,8 +149,8 @@ namespace util {
 }
 
 template<typename T,
-		 typename U = std::remove_cv_t<std::remove_reference_t<T>>,
-		 typename std::enable_if<util::is_an_array_v<U>>::type* = nullptr>
+	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
+	typename std::enable_if<util::is_an_array_v<U>>::type* = nullptr>
 auto median(const T& arr) {
 	constexpr std::size_t N = util::is_an_array<U>::size;
 	if constexpr(N % 2)
@@ -160,8 +160,8 @@ auto median(const T& arr) {
 }
 
 template<typename T,
-		 typename U = std::remove_cv_t<std::remove_reference_t<T>>,
-		 typename std::enable_if<util::is_an_array_v<U>>::type* = nullptr>
+	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
+	typename std::enable_if<util::is_an_array_v<U>>::type* = nullptr>
 constexpr int FindIndex(const T& arr, const typename util::is_an_array<U>::value_type& val) {
 	constexpr std::size_t N = util::is_an_array<U>::size;
 	for(int i=0; i < (int)N; ++i)

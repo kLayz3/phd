@@ -8,13 +8,14 @@
 class TOnceBase;
 class TFile;
 class TTree;
-class TAnalysisWorker;
 
 using TDictInfo = std::unordered_map<std::string, std::string>;
 enum class ContainerIO { kINPUT, kOUTPUT, kMIXED }; //!
 
 class TContainer {
-	friend class TAnalysisWorker; //!
+	template<typename T> 
+	friend class TAnalysisWorker;
+	
 	std::string _name; //!
 
 protected:
@@ -105,7 +106,8 @@ public:
 		/* Set the instance to be either the input or the output. */  \
 		switch(io_mode) { \
 			case ContainerIO::kINPUT: { \
-					Int_t rc = t->SetBranchAddress(this->GetName(), this); \
+					ClassName* p = this; \
+					Int_t rc = t->SetBranchAddress(this->GetName(), &p); \
 					if(rc != 0) \
 					ERROR("Container (%s - INPUT) setbranchaddress failed. rc = 0x%08x", GetName(), rc);	 \
 					\

@@ -18,10 +18,17 @@
 using namespace std;
 using namespace CMDLineParser;
 
-#if 1
-#define ANALYSIS_MULTITHREADED
-#else
-#warning "Running single-threaded. Possibly slower."
+#if !defined(ANALYSIS_MULTITHREADED)
+	/* Default build: enable multithread. */
+	#if 1
+		#define ANALYSIS_MULTITHREADED
+	#else
+		#warning "Running single-threaded. Possibly slower."
+	#endif
+#endif
+
+#if defined(ANALYSIS_SINGLETHREADED)
+	#undef ANALYSIS_MULTITHREADED
 #endif
 
 extern const char* clusterize_help;
@@ -51,7 +58,7 @@ constexpr i32 N_FOOT = LEN(static_detectors);
 auto main(int argc, char* argv[]) -> i32 {
 	using namespace indicators;
 	show_console_cursor(false);
-	
+	srand(time(NULL));	
 	string pStr, fileName, outFile;
 	u64 maxEvents = -1;
 

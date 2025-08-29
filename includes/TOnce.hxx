@@ -76,9 +76,9 @@ public:
     template<typename U = T, typename std::enable_if<util::has_value_type<U>::value>::type* = nullptr>
         TOnce(const char* name, std::initializer_list<typename U::value_type> il) :
             TOnceBase(name) {
-                if constexpr(std::is_constructible_v<U, std::initializer_list<typename U::value_type>>)
-                    _internal = U(il); // vector, list, etc
-                else if constexpr(util::is_std_array<U>::value) {
+				if constexpr(std::is_constructible_v<U, std::initializer_list<typename U::value_type>>)
+					_internal = U(il); // vector, list, etc
+				else if constexpr(util::is_std_array<U>::value) {
 					if(il.size() == 0)
 						_internal.fill(typename U::value_type() );
 					else if(il.size() == 1)
@@ -88,9 +88,9 @@ public:
 					else
 						assert(il.size() == _internal.size() && "Initializer list for std::array<T,N> must have either 0, 1 or N members"); 
 				}
-                else static_assert(std::is_constructible_v<U, std::initializer_list<typename U::value_type>>,
-                        "Type doesn't support initializer lists ctor.");
-            }
+				else static_assert(std::is_constructible_v<U, std::initializer_list<typename U::value_type>>,
+						"Type doesn't support initializer lists ctor.");
+			}
 
     template<typename std::is_default_constructible<T>::type* = nullptr>
         TOnce(const char* name = "") : TOnceBase(name), _internal() {}
@@ -99,23 +99,23 @@ public:
 	TOnce& operator=(const TOnce& ) = default;
 	TOnce(TOnce&& ) noexcept = default;
 	TOnce& operator=(TOnce&& ) noexcept = default;
-    ~TOnce() = default;
+	~TOnce() = default;
 
 	void SetName(std::string name, const char* title = "") {
         TOnceBase::SetName(name);
-        if constexpr(std::is_base_of_v<TNamed, T> || util::has_setname<T>::value) {
-            _internal.SetName(name.c_str());
+		if constexpr(std::is_base_of_v<TNamed, T> || util::has_setname<T>::value) {
+			_internal.SetName(name.c_str());
 			if constexpr(std::is_base_of_v<TNamed, T>)
 				if(title && *title) _internal.SetTitle(title);
-        }
+		}
     }
 
     Int_t Write(TFile* f = nullptr, const char* name = "") override {
 		if(!name) ERROR("Don't pass nullptr for `name` here.");
 		if(!f || f->IsZombie() || !f->IsOpen()) {
-            f = gDirectory->GetFile();
+			f = gDirectory->GetFile();
 			if(!f || f->IsZombie() || !f->IsOpen())
-                ERROR("%s (label: \'%s\') : output ROOT file not supplied or invalid and gDirectory holds no open valid file.", _name.c_str(), name);
+				ERROR("%s (label: \'%s\') : output ROOT file not supplied or invalid and gDirectory holds no open valid file.", _name.c_str(), name);
 		}
         if constexpr(std::is_base_of_v<TObject, T>)
             return f->WriteTObject(&_internal, *name ? name : _name.c_str());
@@ -134,7 +134,7 @@ public:
 		T* tmp = f->Get<T>(name);
 		if(!tmp) ERROR("(%s) - asked for " EMPH(%s) " name as key to a static object, got back nullptr.", _name.c_str(), name);
 		try {
-			_internal = *tmp; // deep-copy
+			_internal = *tmp; // deep-copy ; asserted via type traits on the top.
 			if constexpr(std::is_base_of_v<TH1, T>) { 
 				tmp->SetDirectory(nullptr); // remove from ROOT’s ownership
 				delete tmp;
@@ -147,8 +147,8 @@ public:
 		return (void*)&_internal;
 	}
 
-    inline T& operator()() { return _internal; }
-    inline const T& operator()() const { return _internal; }
+	inline T& operator()() { return _internal; }
+	inline const T& operator()() const { return _internal; }
 
 	inline T* operator->() { return &_internal; }
 	inline const T* operator->() const { return &_internal; }

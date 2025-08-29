@@ -1,59 +1,150 @@
 #pragma once
 
 #include "libs.hh"
-#include "dbg.hh"
 #include "TTree.h"
 #include "TChain.h"
 #include <atomic>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 #include <variant>
 #include <optional>
-#include "TAnalysisWorker.h"
+#include "TAnalysisWorker.hxx"
 #include "TContainer.h"
 
-/* Passed from build tool. */
+/* Passed from the build tool. */
 #ifndef POOL_MAX_THREADS_
 #	define POOL_MAX_THREADS_ 10
 #endif
 
-class TAnalysisWorker;
+namespace util {
+	template<typename T, typename = void> struct worker_of {};
+	template<typename T> struct worker_of<TAnalysisWorker<T>, void> { using type = T; };
 
-template<size_t MAX_WORKERS>
+	template<typename Tuple, typename F, std::size_t... Is>
+	void _for_each_in_tuple_impl(Tuple&& t, F&& f, std::index_sequence<Is...>) {
+		(f (std::get<Is>(std::forward<Tuple>(t))), ...);
+	}
+
+	template<typename Tuple, typename F>
+	void for_each_in_tuple(Tuple&& t, F&& f) {
+		constexpr std::size_t N = std::tuple_size_v<std::decay_t<Tuple>>;
+		_for_each_in_tuple_impl(std::forward<Tuple>(t), std::forward<F>(f), 
+			std::make_index_sequence<N>{});
+	}
+}
+
+template<typename... Ts>
 class TAnalysisPool final {
-	static_assert(MAX_WORKERS <= POOL_MAX_THREADS_, 
+	static_assert(sizeof...(Ts) <= POOL_MAX_THREADS_, 
 		"TAnalysisPool template instantiated with over-the-top capacity. Consider lowering.");
 public:
-	constexpr size_t Size() { return MAX_WORKERS; }
-
+	static constexpr size_t Size() { return sizeof...(Ts); }
+	
 private:
-	std::array<TAnalysisWorker*, MAX_WORKERS> _pool = {nullptr}; //!
-	int n_valid_workers = 0; //!
+	std::tuple<
+		TAnalysisWorker<Ts>...
+	> _pool;
 
-private:
-	bool _stop = true; //! Flagging this will join the workers' threads back to the main
-	std::array<bool, MAX_WORKERS> _owned = {0}; //! A label indicator which Worker object should be owned by the pool.	
+	bool _stop = true;     // Flagging this will join the workers' threads back to the main
+	bool _is_valid = true; // Validity flag, moved objects will be marked as invalid.
+	
+	template<size_t I>
+	using worker_t = std::tuple_element_t<I, decltype(_pool)>;
+	template<size_t I>
+	using base_t = typename util::worker_of<worker_t<I>>::type;
+
+	template<size_t I>
+	static TProcessor* get_at(TAnalysisPool* self) noexcept {
+		return static_cast<TProcessor*>(&std::get<I>(self->_pool));
+	}
+	
+	using Getter = TProcessor* (*)(TAnalysisPool*);
+
+	template<std::size_t... Is>
+	static constexpr std::array<Getter, sizeof...(Is)>
+	make_getter_table(std::index_sequence<Is...>) noexcept { return { &get_at<Is>... }; }
 
 public:
 	// TTree objects are owned and handled by gROOT. Here we expose just the raw handles.
-	std::variant<TTree*, TChain*> in; //!
-	std::optional<TTree*> out; //!
+	std::variant<TTree*, TChain*> in;
+	std::optional<TTree*> out;
 
 	TAnalysisPool() = default;
-	TAnalysisPool(const TAnalysisPool& ) = delete;
-	TAnalysisPool(TAnalysisPool&& ) = delete;
+	explicit TAnalysisPool(std::tuple<TAnalysisWorker<Ts>...> w) : _pool(std::move(w)) {}
+
+	TAnalysisPool(const TAnalysisPool& )            = delete;
 	TAnalysisPool& operator=(const TAnalysisPool& ) = delete;
-	TAnalysisPool& operator=(TAnalysisPool&& ) = delete;
-	~TAnalysisPool();
-	
-	inline bool IsStopped() const noexcept { return _stop; }
-	inline TAnalysisWorker* GetWorker(size_t i) const noexcept {
-		if(i >= MAX_WORKERS) return nullptr;
-		else return _pool[i];
+	TAnalysisPool(TAnalysisPool&& ) noexcept            = default;
+	TAnalysisPool& operator=(TAnalysisPool&& ) noexcept = default;
+
+	~TAnalysisPool() = default;
+
+	/* Hacky part. Adding a new worker changes the type of the object. */
+
+	// Reference-qualified: take an l/rvalue ref of an existing worker and
+	// eat up the object. Now we own it. 
+	// Moves *this* pool into a new one.
+	template<typename W,
+		typename Decayed = std::decay_t<W>,
+		typename U = typename util::worker_of<Decayed>::type
+	> auto push_worker(W&& w) && -> TAnalysisPool<Ts..., U> {
+		auto new_pool = std::tuple_cat(
+			std::move(_pool),
+			std::tuple<TAnalysisWorker<U>>(std::move(w))
+		);
+		this->_is_valid = false; // Invalidate the current object.
+		return TAnalysisPool<Ts..., U> ( std::move(new_pool) );
 	}
+	
+	// Emplace-style construction, again move *this* pool into a new one.
+	template<typename U, typename... Args,
+		typename std::enable_if<
+			std::is_constructible_v<
+				TAnalysisWorker<U>,
+				Args...
+			>
+		>::type* = nullptr
+	> auto emplace_worker(Args&&... args) && -> TAnalysisPool<Ts..., U> {
+		auto new_pool = std::tuple_cat(
+			std::move(_pool),
+			std::make_tuple(TAnalysisWorker<U>(std::forward<Args>(args)... ))
+		);
+		this->_is_valid = false; // Invalidate the current object.
+		return TAnalysisPool<Ts..., U>(std::move(new_pool));
+	}
+
+	inline bool IsStopped() const noexcept { return _stop; }
+
+	/**
+	 * Returns the pointer 'T*' of the object wrapped up in the 'TAnalysisWorker<T>',
+	 * at the tuple index 'I'
+	 */
+	template<std::size_t I>
+	auto* GetWorker() noexcept {
+		static_assert(I < Size(), "Request for worker index outside of the tuple size.");
+		return static_cast<base_t<I>*>(&std::get<I>(_pool));
+	}
+	template<std::size_t I>
+	auto* GetWorker() const noexcept {
+		static_assert(I < Size(), "Request for worker index outside of the tuple size.");
+		return static_cast<const base_t<I>*>(&std::get<I>(_pool));
+	}
+	// Runtime version, can throw.
+	TProcessor* GetWorker(size_t i) {
+		if(i > Size()) ERROR("Request for worker index outside of the tuple size.");
+		static constexpr auto table = make_getter_table(std::make_index_sequence<Size()>{});
+
+		return table[i](this);
+	}
+
+
 	inline Int_t GetEntry(Long64_t entry, Int_t getall = 0) const { 
 		if(in.valueless_by_exception()) 
 			ERROR("Valueless input TTree/TChain. Invalid");
 		else return std::visit([=](const auto& obj) { return obj->GetEntry(entry,getall); }, this->in); 
 	}
+
 	inline Long64_t GetEntries() const noexcept { 
 		if(std::holds_alternative<TTree*>(in)) 
 			return std::get<TTree*>(in)->GetEntries();
@@ -63,7 +154,7 @@ public:
 	}
 
 	/**
-	 * Call the internal `Fill` of the TTree* output object
+	 * Calls the internal `Fill` of the TTree* output object
 	 */
 	inline Int_t FillOutput() const noexcept { 
 		if(out and *out) return (*out)->Fill();
@@ -71,146 +162,66 @@ public:
 	}
 	
 	/**
-	 * Add a base class ptr of a either stack or heap-allocated worker, to be managed by the pool.
-	 * Every action the worker needs to take is completely managed by the pool instance.
-	 * The pool however will not free the object. 
-	 */
-	TAnalysisPool& AddWorker(TAnalysisWorker*);
-
-	/**
-	 * Add a heap-allocated worker to be owned by the pool. It will call destructors on release.
-	 */
-	TAnalysisPool& AddOwnedWorker(TAnalysisWorker*);
-
-	/**
 	 * Start the underlying thread of every worker.
 	 */
-	void Start();
+	void Start() {
+		if(!_is_valid) ERROR("Called in invalidated object.");
+		// State prior to this call must be stopped.
+		if(!_stop) ERROR("Must be in a stopped state before calling start.");
+		_stop = false;
+		util::for_each_in_tuple(_pool, [](auto& w) {
+			w._stop.store(false, std::memory_order_release);
+			w.Start();
+		});
+	}
 
 	/**
 	 * Mark the flag to wake-up for all workers simultaneously.
 	 */
-	void AssignWork() const noexcept;
+	void AssignWork() noexcept {
+		util::for_each_in_tuple(_pool, [](auto& w) {
+			w._has_work.store(true, std::memory_order_release);
+		});
+	};
 
 	/**
-	 * Fill the remainder of the pool with no-op workers. 
+	 * Block the main thread until the execution of all the workers is marked finished. 
 	 */
-	void FinalizeInit();
-
-	/**
-	 * Block the master thread until the execution of all the workers is marked finished. 
-	 */
-	void Await() const noexcept;
+	void Await() const noexcept {
+		while(true) {
+			bool all_done = std::apply([](auto&... ws) {
+					return (true && ... && ws.IsDone()); 	
+				}, _pool
+			);
+			if(all_done) break;
+		}
+	};
 
 	/**
 	 * Stops execution of all the workers and joins their internal threads.
 	 */
-	void Stop();
-
-	/**
-	 * Stops execution and clears all the workers. Call the underlying destructor of owned workers.
-	 */
-	void ClearPool();
+	void Stop() {
+		if(!_is_valid) ERROR("Called in invalidated object.");
+		_stop = true;
+		util::for_each_in_tuple(_pool, [](auto& w) {
+			if(w._thread.joinable()) {
+				w._stop.store(true, std::memory_order_release);
+				w._thread.join();
+			}
+		});	
+	};
 
 	/**
 	 * At the end, write the objects and the output TTree into the TFile.
 	 * Note that this will make the pool instance unusable for the remainder of the program.
 	 * Returns number of bytes written across all the output containers.
 	 */
-	Int_t Write();
-};
-
-/* Explicitly check for nullptr here to allow this call tailing `ClearPool`. */
-template<size_t MAX_WORKERS>
-void TAnalysisPool<MAX_WORKERS>::Stop() {
-	_stop = true;
-	for(size_t i=0; i < MAX_WORKERS; ++i) {
-		if(_pool[i] != nullptr and _pool[i]->_thread.joinable()) {
-			_pool[i]->_stop.store(true, std::memory_order_release);
-			_pool[i]->_thread.join();
-		}
+	Int_t Write() {
+		if(!_is_valid) ERROR("Called in invalidated object.");
+		return std::apply([](auto&... ws) {
+				return (0 + ... + ws.Write());
+			}, _pool
+		);
+		_is_valid = false;
 	};
-}
-
-template<size_t MAX_WORKERS>
-void TAnalysisPool<MAX_WORKERS>::ClearPool() {
-	this->Stop();
-
-	for(size_t i=0; i < MAX_WORKERS; ++i) {
-		if(_owned[i]) delete _pool[i];
-		_pool[i] = nullptr;
-	}
-	n_valid_workers = 0;
-}
-
-template<size_t MAX_WORKERS>
-TAnalysisPool<MAX_WORKERS>::~TAnalysisPool() {
-	this->ClearPool();
-}
-
-template<size_t MAX_WORKERS>
-void TAnalysisPool<MAX_WORKERS>::Await() const noexcept {
-	while(true) {
-		bool all_done = 1;
-
-		for(size_t i=0; i < MAX_WORKERS; ++i)
-			all_done &= _pool[i]->IsDone();
-		
-		if(all_done) break; 
-	}
-}
-
-template<size_t MAX_WORKERS>
-TAnalysisPool<MAX_WORKERS>& TAnalysisPool<MAX_WORKERS>::AddWorker(TAnalysisWorker* w) {
-	if(n_valid_workers >= static_cast<int>(MAX_WORKERS))
-		ERROR("Failed assert (n_valid_workers < MAX_WORKERS): (%d<%d)\n", n_valid_workers, static_cast<int>(MAX_WORKERS));
-	
-	if(!w) ERROR("Worker arg (0x%lx) must not be nullptr.\n", (uintptr_t)w);
-	_pool[n_valid_workers++] = w;
-	return *this;
-}
-
-template<size_t MAX_WORKERS>
-TAnalysisPool<MAX_WORKERS>& TAnalysisPool<MAX_WORKERS>::AddOwnedWorker(TAnalysisWorker* w) {
-	this->AddWorker(w);
-	_owned[n_valid_workers - 1] = true;
-	return *this;
-}
-
-template<size_t MAX_WORKERS>
-void TAnalysisPool<MAX_WORKERS>::AssignWork() const noexcept {
-	for(size_t i=0; i<MAX_WORKERS; ++i)
-		_pool[i]->_has_work.store(true, std::memory_order_release);
-}
-
-template<size_t MAX_WORKERS>
-void TAnalysisPool<MAX_WORKERS>::FinalizeInit() {
-	while(n_valid_workers < static_cast<int>(MAX_WORKERS)) {
-		this->AddOwnedWorker(new TAnalysisWorker(TContainer::dummy, TContainer::dummy));
-		WARN("Added a no-op worker: %i; consider lowering the capacity of TAnalysisPool instance (%zu).\n", n_valid_workers, MAX_WORKERS);
-	}
-}
-
-
-template<size_t MAX_WORKERS>
-void TAnalysisPool<MAX_WORKERS>::Start() {
-	/* State prior to this call must be stopped. */
-	if(!_stop) ERROR("Must be in a stopped state before calling start.");
-	_stop = false;
-
-	for(size_t i=0; i<MAX_WORKERS; ++i) {
-		if(!_pool[i]) ERROR("Worker[%zu] (0x%lx) must not be nullptr.\n", i, (uintptr_t)_pool[i]);
-		_pool[i]->_stop.store(false, std::memory_order_release);
-		_pool[i]->Start();
-	}
-}
-
-template<size_t MAX_WORKERS>
-Int_t TAnalysisPool<MAX_WORKERS>::Write() {
-	Int_t r = 0;
-	for(TAnalysisWorker* worker : this->_pool)
-		r += worker->Write();
-	
-	if(out and *out) r += (*out)->Write();
-	return r;
-}
+}; // TAnalysisPool
