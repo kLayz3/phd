@@ -6,9 +6,8 @@
 #include <iostream>
 #include "TApplication.h"
 #include "TFile.h"
-#include "TSystem.h"
-#include "dbg.hh"
 
+#include "dbg.hh"
 #include "indicators.hh"
 
 #include "TAnalysisPool.hxx"
@@ -25,7 +24,7 @@ extern const char* calibrate_help;
 	#if 1
 		#define ANALYSIS_MULTITHREADED
 	#else
-		#warning "Running single-threaded. Possibly slower."
+		#warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls!"
 	#endif
 #endif
 
@@ -121,10 +120,17 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		YELL("TTree static_cast is somehow nullptr?\n");
 		exit(-3);
 	}
-
+#ifdef FRS_GO4
 	TFRSSortEvent* sort;
 	int r = h101->SetBranchAddress(_branch_base_name, &sort);
 	if(r != 0) ERROR("SetBranchAddress failed. \'%s\', RC = %d\n", _branch_base_name, r);
+#else
+	// Pass an h101 generated struct.
+	EXT_STR_h101 _sort;
+	EXT_STR_h101 *sort = &_sort;
+	int r = h101->SetBranchAddress(_branch_base_name, sort);
+	if(r != 0) ERROR("SetBranchAddress failed. \'%s\', RC = %d\n", _branch_base_name, r);
+#endif
 
 	TFile* out = new TFile(outFile.c_str(), "RECREATE"); 
 	TTree* h102 = new TTree("h102", "h102");
@@ -195,7 +201,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		pool.Await();
 #else
 		for(int i=0; i < (int)pool.Size(); ++i)
-			pool.GetWorker(i)->ProcessEntry();
+			static_cast<TFOOTPedestalProc*>(pool.GetWorker(i)->ProcessEntry());
 #endif
 	}
 	pool.Stop(); bar1.mark_as_completed();
@@ -240,7 +246,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		pool.Await();
 #else
 		for(int i=0; i < (int)pool.Size(); ++i)
-			pool.GetWorker(i)->ProcessEntry();
+			static_cast<TFOOTPedestalProc*>(pool.GetWorker(i)->ProcessEntry());
 #endif
 
 		pool.FillOutput();

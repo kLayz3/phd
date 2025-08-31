@@ -111,10 +111,11 @@ public:
 			std::make_tuple(TAnalysisWorker<U>(std::forward<Args>(args)... ))
 		);
 		this->_is_valid = false; // Invalidate the current object.
+								 // Possibly useless, it's a temporary anyway.
 		return TAnalysisPool<Ts..., U>(std::move(new_pool));
 	}
 
-	inline bool IsStopped() const noexcept { return _stop; }
+	bool IsStopped() const noexcept { return _stop; }
 
 	/**
 	 * Returns the pointer 'T*' of the object wrapped up in the 'TAnalysisWorker<T>',
@@ -132,20 +133,19 @@ public:
 	}
 	// Runtime version, can throw.
 	TProcessor* GetWorker(size_t i) {
-		if(i > Size()) ERROR("Request for worker index outside of the tuple size.");
+		if(i >= Size()) ERROR("Request for worker index outside of the tuple size.");
 		static constexpr auto table = make_getter_table(std::make_index_sequence<Size()>{});
 
 		return table[i](this);
 	}
 
-
-	inline Int_t GetEntry(Long64_t entry, Int_t getall = 0) const { 
+	Int_t GetEntry(Long64_t entry, Int_t getall = 0) const { 
 		if(in.valueless_by_exception()) 
 			ERROR("Valueless input TTree/TChain. Invalid");
 		else return std::visit([=](const auto& obj) { return obj->GetEntry(entry,getall); }, this->in); 
 	}
 
-	inline Long64_t GetEntries() const noexcept { 
+	Long64_t GetEntries() const noexcept { 
 		if(std::holds_alternative<TTree*>(in)) 
 			return std::get<TTree*>(in)->GetEntries();
 		else if(std::holds_alternative<TChain*>(in)) 
@@ -156,7 +156,7 @@ public:
 	/**
 	 * Calls the internal `Fill` of the TTree* output object
 	 */
-	inline Int_t FillOutput() const noexcept { 
+	Int_t FillOutput() const noexcept { 
 		if(out and *out) return (*out)->Fill();
 		else return 0;
 	}
@@ -179,9 +179,9 @@ public:
 	 * Mark the flag to wake-up for all workers simultaneously.
 	 */
 	void AssignWork() noexcept {
-		util::for_each_in_tuple(_pool, [](auto& w) {
-			w._has_work.store(true, std::memory_order_release);
-		});
+		std::apply([](auto&... ws) { 
+				(..., ws._has_work.store(true, std::memory_order_release)); 
+			}, _pool); 
 	};
 
 	/**
@@ -190,9 +190,8 @@ public:
 	void Await() const noexcept {
 		while(true) {
 			bool all_done = std::apply([](auto&... ws) {
-					return (true && ... && ws.IsDone()); 	
-				}, _pool
-			);
+					return (...&& ws.IsDone()); 	
+				}, _pool);
 			if(all_done) break;
 		}
 	};
@@ -203,6 +202,7 @@ public:
 	void Stop() {
 		if(!_is_valid) ERROR("Called in invalidated object.");
 		_stop = true;
+		
 		util::for_each_in_tuple(_pool, [](auto& w) {
 			if(w._thread.joinable()) {
 				w._stop.store(true, std::memory_order_release);
@@ -219,7 +219,7 @@ public:
 	Int_t Write() {
 		if(!_is_valid) ERROR("Called in invalidated object.");
 		return std::apply([](auto&... ws) {
-				return (0 + ... + ws.Write());
+				return (...+ ws.Write());
 			}, _pool
 		);
 		_is_valid = false;

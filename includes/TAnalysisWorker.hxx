@@ -67,9 +67,9 @@ public:
 
 	~TAnalysisWorker() { if(_thread.joinable()) _thread.join(); }
 
-	inline bool IsDone() const noexcept { return ! _has_work.load(std::memory_order_acquire); }
+	bool IsDone() const noexcept { return ! _has_work.load(std::memory_order_acquire); }
 		
-	inline void Start() {
+	void Start() {
 		if(_thread.joinable())
 			ERROR("Trying to (re)start the worker but thread is in a joinable state?");
 		if(_stop.load(std::memory_order_acquire)) 
@@ -90,5 +90,5 @@ public:
 	/**
 	 * Serialize single objects (non-TTree) parts of the worker to the currently open directory.
 	 */
-	inline Int_t Write() { return T::Write(); }
+	Int_t Write() { return T::Write(); }
 };

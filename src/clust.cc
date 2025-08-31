@@ -23,7 +23,7 @@ using namespace CMDLineParser;
 	#if 1
 		#define ANALYSIS_MULTITHREADED
 	#else
-		#warning "Running single-threaded. Possibly slower."
+		#warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls!"
 	#endif
 #endif
 
@@ -59,6 +59,7 @@ auto main(int argc, char* argv[]) -> i32 {
 	using namespace indicators;
 	show_console_cursor(false);
 	srand(time(NULL));	
+
 	string pStr, fileName, outFile;
 	u64 maxEvents = -1;
 
