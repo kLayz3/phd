@@ -11,6 +11,7 @@
 #include <optional>
 #include "TAnalysisWorker.hxx"
 #include "TContainer.h"
+#include "dbg.hh"
 
 /* Passed from the build tool. */
 #ifndef POOL_MAX_THREADS_
@@ -110,8 +111,6 @@ public:
 			std::move(_pool),
 			std::make_tuple(TAnalysisWorker<U>(std::forward<Args>(args)... ))
 		);
-		this->_is_valid = false; // Invalidate the current object.
-								 // Possibly useless, it's a temporary anyway.
 		return TAnalysisPool<Ts..., U>(std::move(new_pool));
 	}
 
@@ -154,7 +153,7 @@ public:
 	}
 
 	/**
-	 * Calls the internal `Fill` of the TTree* output object
+	 * Calls the internal `Fill` of the (optional) TTree* output object
 	 */
 	Int_t FillOutput() const noexcept { 
 		if(out and *out) return (*out)->Fill();
@@ -218,10 +217,29 @@ public:
 	 */
 	Int_t Write() {
 		if(!_is_valid) ERROR("Called in invalidated object.");
-		return std::apply([](auto&... ws) {
+		Int_t r = std::apply([](auto&... ws) {
 				return (...+ ws.Write());
 			}, _pool
 		);
+		// Tree handle just gets written into its directory.
+		// Check for possible mishandling though.
+		if(out) {
+			if(!(*out))          ERROR("Output TTree handle given, but is nullptr? Cannot write.");
+
+			TDirectory* dir = (*out)->GetDirectory();
+			if(!dir)             ERROR("Output TTree handle given, but is not attached to any directory.");
+
+			TFile *f = dynamic_cast<TFile*>(dir);
+			if(!f)               ERROR("Output TTree handle belongs to a non-file directory.");
+			if(!f->IsWritable()) ERROR("Output TTree's associated file is not writable. Inside 'main()' define it after opening an output file, or call its 'SetDirectory()` method.");
+
+			r += (*out)->Write();
+			dbg("Successfully written the output TTree.");
+		} else {
+			WARN("Calling Write but output TTree* not specified. Is OK.");
+		}
 		_is_valid = false;
+		return r;
 	};
+
 }; // TAnalysisPool

@@ -8,7 +8,7 @@ class TH1D;
 class TFOOTCalCont : public TContainer {
 	friend class TFOOTCalProc;
 public:	
-	static constexpr size_t CAPACITY = 300; //!
+	static constexpr size_t CAPACITY = 200; //!
 	static constexpr int N_STRIPS = _FOOT_N_STRIPS; //!
 
 public:

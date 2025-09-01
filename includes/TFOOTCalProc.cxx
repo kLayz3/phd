@@ -1,5 +1,6 @@
 #include "TFOOTCalProc.h"
 #include <algorithm>
+#include <cmath>
 #include <iterator>
 #include <numeric>
 
@@ -17,8 +18,11 @@ void TFOOTCalProc::Init(const TDictInfo& info_in, const TDictInfo& info_out) {
 }
 
 void TFOOTCalProc::ProcessEntry() noexcept {
-	int i ;
-	for(i=0; i < N_STRIPS; ) {
+	output->Clean();
+	if( std::isnan(e[0]) ) return; /* Missing data; in previous step marked NAN by default. */
+	
+	int i = 0;
+	for(; i < N_STRIPS; ++i) {
 		if(e[i] > thr[i])
 			MakeACluster(i);
 	}
@@ -34,16 +38,16 @@ void TFOOTCalProc::MakeACluster(int& i /* starting index. */ ) {
 	_AddHit(i);
 	
 	/* The moment `e[i] > thr[i]` fails, a lookahead to i+1 occurs. 
-	 * If the lookahead finds a hit, e[i] is averaged out between e[i-1] and e[i+1]. 
+	 * If the lookahead finds a hit, e[i] is averaged out between e[i-1] and e[i+1] or stays itself, if larger. 
 	 * If it fails, means both e[i] and e[i+1] fail the condition and it constitutes a 
 	 * cluster end. */
 	while((++i) < N_STRIPS and (e[i] > thr[i] || _IsAddibleToCluster(i)))  {
-		_AddHit(i);	
+		_AddHit(i);
 	}
 	
-	/* Handle the wavyness in the cluster. Only if it's not fragmented, then it's wavy by default. 
-	 * Meaning: first sequence of strips fired must be monotonically increasing,
-	 * while second sequence must be monotonically decreasing, as to yield a proper
+	/* Handle the wavyness in the cluster. If it is fragmented, then it's wavy by default.
+	 * Meaning: first sequence of collected strips energy must be monotonically increasing,
+	 * while second sequence musthave monotonically decreasing energy values, as to yield a proper
 	 * hit structure, if the cluster is to be marked `kGOOD`.  */
 	
 	if(_ct != ClusterType::kFRAGMENTED) {
@@ -82,11 +86,9 @@ bool TFOOTCalProc::_IsAddibleToCluster(int i /* 1, ... , 639 */) {
 	if(i < (N_STRIPS-1) and e[i+1] > thr[i]) {
 		e[i] = std::max( (e[i-1] + e[i+1]) / 2, e[i] );
 		_ct = ClusterType::kFRAGMENTED;
-		return true;
+		return true; // Caller fnc adds this hit.
 	}
-	else {
-		return false;
-	}
+	return false;
 }
 
 double TFOOTCalProc::_CalculateMultiplicity() {

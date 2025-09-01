@@ -32,7 +32,7 @@ class TAnalysisWorker final : public T {
 	static_assert(util::has_process_entry<T>::value, "Type <T> needs a `void ProcessEntry()` method implemented!");
 	static_assert(std::is_move_constructible<T>::value,  "Type <T> needs a move ctor.");
 	static_assert(std::is_move_assignable<T>::value, "Type <T> needs move assignment op.");
-	static_assert(std::is_base_of_v<TProcessor, T>, "Type <T> must inherit from TProcessor!.");
+	static_assert(std::is_base_of<TProcessor, T>::value, "Type <T> must inherit from TProcessor!.");
 
 	template<typename... Ts> friend class TAnalysisPool;
 

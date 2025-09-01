@@ -10,7 +10,7 @@ class TFile;
 class TTree;
 
 using TDictInfo = std::unordered_map<std::string, std::string>;
-enum class ContainerIO { kINPUT, kOUTPUT, kMIXED }; //!
+enum class ContainerIO { kINPUT, kOUTPUT }; //!
 
 class TContainer {
 	template<typename T> 
@@ -62,22 +62,23 @@ public:
 
 	/**
 	 * Assign the TFile* and TTree* handles to the container.
-	 * Switch the container into either input or output mode, or a mix.
-	 * 1. Switch to input/mix mode will load all the static objects
-	 * 2. Switch to pure input mode will also set a branch address of the TTree* to itself, key'ed by its name.
-	 * 3. Output and mixed mode will create a new TBranch key'ed by its name.
-	 * In mixed mode, users should provide non-serializable `//!` pointers to input handles that get SetBranchAddress'ed.
+	 * Switch the container into either input or output mode.
+	 * 1. Switch to input mode will load all the static objects and set the branch address of the TTree* to itself, key'ed by its name.
+	 * 2. Output mode will create a new TBranch key'ed by its name.
 	 */
-	virtual void Setup(TFile* f = nullptr, TTree* t = nullptr, ContainerIO io_mode = ContainerIO::kINPUT);
+	virtual void Setup(ContainerIO io_mode, TFile* f = nullptr, TTree* t = nullptr);
 
 	/**
-	 * At the end of processing in output/mixed mode, writes the output to the TFile* handle.
+	 * At the end of processing in output mode, writes the output to the TFile* handle.
 	 */
 	virtual Int_t Write();
 
 	std::vector<TOnceBase*> GetOwnedTOnceObjects() const; //!
 	int ClearOwnedTOnceObjects();
 
+	inline TFile* GetFileHandle() const noexcept { return _file_p; } 
+	inline TTree* GetTreeHandle() const noexcept { return _tree_p; } 
+	
 protected:
 	ContainerIO _io_mode; //!
 	TFile* _file_p = nullptr; //!
@@ -85,6 +86,7 @@ protected:
 
 public:
 	static TContainer dummy;
+	void* _p_self = nullptr; //!
 
 	ClassDef(TContainer, 1);
 };
@@ -97,34 +99,38 @@ public:
  * must be callable via TContainer base class ref/ptr, the derived class must explicitly implement it.
  * That's why all the derived classes must have this boilerplated code... */
 
+#define DECL_CONTAINER_METHODS \
+	void Setup(ContainerIO io_mode, TFile* f = nullptr, TTree* t = nullptr) /* override */; \
+	Int_t Write() /* override */;
+
+
 #define IMPL_CONTAINER_METHODS(ClassName) \
-	void ClassName::Setup(TFile* f, TTree* t, ContainerIO io_mode) { \
+	void ClassName::Setup(ContainerIO io_mode, TFile* f, TTree* t) { \
 		static_assert(std::is_base_of_v<TContainer, ClassName>); \
-		\
-		TContainer::Setup(f, t, io_mode); \
-		\
-		/* Set the instance to be either the input or the output. */  \
-		switch(io_mode) { \
-			case ContainerIO::kINPUT: { \
-					ClassName* p = this; \
-					Int_t rc = t->SetBranchAddress(this->GetName(), &p); \
-					if(rc != 0) \
-					ERROR("Container (%s - INPUT) setbranchaddress failed. rc = 0x%08x", GetName(), rc);	 \
-					\
-					/* These pointers are set-up either in the ctor or in the `Init` call. */ \
-					for(TOnceBase* p : this->_vc) \
-						p->Load(f, p->GetName()); \
-				} \
+		/* Setup the pointers, try to grab defaults if 'f' or 't' are null. */ \
+		TContainer::Setup(io_mode, f, t); \
+		switch(_io_mode) { \
+			case ContainerIO::kINPUT: \
+			{ \
+				_p_self = (void*)this; \
+				Int_t rc = _tree_p ? (_tree_p->SetBranchAddress(this->GetName(), (ClassName**)&_p_self)) : 0; \
+				if(rc != 0) \
+					ERROR("Container (%s - INPUT) setbranchaddress failed. rc = 0x%08x", GetName(), rc); \
+				\
+				/* These pointers are set-up either in the ctor or in the `Init` call. */ \
+				for(TOnceBase* p : this->_vc) \
+					p->Load(_file_p, p->GetName()); \
 				break; \
-			case ContainerIO::kMIXED: \
-			case ContainerIO::kOUTPUT: { \
-					if(!t || t->IsZombie()) break; \
-					/* Container owns the objects that will be written into the ROOT file. */ \
-					TBranch* rb = t->Branch(this->GetName(), this); \
-					if(rb == nullptr)  \
-					ERROR("Container (%s - OUTPUT) creating output branch failed.", GetName()); \
-				} \
+			} \
+			case ContainerIO::kOUTPUT: \
+			{ \
+				if(!_tree_p ) break; \
+				/* Container owns the objects that will be written into the ROOT file. */ \
+				TBranch* rb = _tree_p->Branch(this->GetName(), this); \
+				if(rb == nullptr) \
+				ERROR("Container (%s - OUTPUT) creating output branch failed.", GetName()); \
 				break; \
+			} \
 		} \
 	} \
 	\
@@ -137,11 +143,8 @@ public:
 			r += p->Write(_file_p); \
 		} \
 		/* Writing of the TTree itself is taken care of by the TAnalysisPool instance who ultimately 
-		 * hosts all the processes and containers. This class only holds a weak reference to it to place
-		 * its branch. */ \
+		 * hosts all the processes and containers. This class only holds a weak reference to it, to construct
+		 * its own branch. */ \
 		return r; \
 	} \
 
-#define DECL_CONTAINER_METHODS \
-	void Setup(TFile* f = nullptr, TTree* t = nullptr, ContainerIO io_mode = ContainerIO::kINPUT); \
-	Int_t Write();

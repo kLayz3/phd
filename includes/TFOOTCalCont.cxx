@@ -2,7 +2,6 @@
 #include "Rtypes.h"
 #include "RtypesCore.h"
 #include "TH1D.h"
-#include "TH2D.h"
 
 TFOOTCalCont::TFOOTCalCont() {
 	fCX = &_x[0];
@@ -34,9 +33,9 @@ void TFOOTCalCont::Init(TDictInfo info) {
 
 	assert(GetOwnedTOnceObjects().size() == 0 && "Don't call `SetId` twice. Clear the owned objects first.");
 	
-	h1_mult = RegisterObject<TH1D>("h1_mult", Form("FOOT(%d -> %d) multiplicity", FOOT_N, POS), 100,0,20);
-	h1_dE   = RegisterObject<TH1D>("h1_dE", Form("FOOT(%d -> %d) multiplicity", FOOT_N, POS), 100,0,20);
-	h2_X    = RegisterObject<TH1D>("h2_x", Form("FOOT(%d -> %d) clust position", FOOT_N, POS), N_STRIPS, 0, N_STRIPS);
+	h1_mult = RegisterObject<TH1D>("h1_mult", Form("(%d -> %d) multiplicity", FOOT_N, POS), 100,0,20);
+	h1_dE   = RegisterObject<TH1D>("h1_dE", Form("(%d -> %d) multiplicity", FOOT_N, POS), 100,0,20);
+	h2_X    = RegisterObject<TH1D>("h2_x", Form("(%d -> %d) clust position", FOOT_N, POS), N_STRIPS, 0, N_STRIPS);
 }
 
 void TFOOTCalCont::Clean(Option_t* option) noexcept {

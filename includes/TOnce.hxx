@@ -1,9 +1,12 @@
 #pragma once
 
+#include "RtypesCore.h"
 #include "TOnceBase.h"
 #include "TDirectory.h"
 #include "TNamed.h"
 #include "TFile.h"
+#include "TROOT.h"
+#include "TH1.h"
 #include "libs.hh"
 #include <cstring>
 #include <type_traits>
@@ -46,7 +49,7 @@ namespace util {
 
 template<typename T>
 class TOnce : public TOnceBase {
-	static_assert(! std::is_pointer_v<T>, "Must not pass pointer type (T*) to TOnce<T>");
+	static_assert(! std::is_pointer_v<T>, "Mst not pass pointer type (T*) to TOnce<T>");
 	static_assert(! std::is_fundamental_v<T>, "Must not pass trivial type. Wrap it in e.g. TParameter<T> first.");
 	static_assert(! std::is_void_v<T>, "Hello?");
 	static_assert(! std::is_array_v<T>, "Must not pass raw C-style arrays. Pass an `std::array<T,N>` instead.");
@@ -100,7 +103,7 @@ public:
 	TOnce& operator=(TOnce&& ) noexcept = default;
 	~TOnce() = default;
 
-	void SetName(std::string name, const char* title = "") {
+	void SetName(std::string name, const char* title = "") override {
         TOnceBase::SetName(name);
 		if constexpr(std::is_base_of_v<TNamed, T> || util::has_setname<T>::value) {
 			_internal.SetName(name.c_str());
@@ -122,27 +125,37 @@ public:
 			return f->WriteObject (&_internal, *name ? name : _name.c_str());
 	}
     
-	void* Load(TFile* f = nullptr, const char* target = "") override {
+	void* Load(TFile* f, const char* target = "") override {
 		const char* name = *target ? target : _name.c_str();
 		if(!name || ! *name) ERROR("Unnamed TOnce<T> object while trying to load from a file.");
-		if(!f || f->IsZombie() || !f->IsOpen()) {
-			f = gDirectory->GetFile();
-			if(!f || f->IsZombie() || !f->IsOpen()) 
-				ERROR("(%s) (target: \'%s\') tried to open the file, but didn't receive a handle and also gDirectory holds no open valid file.", _name.c_str(), target);
-		}
+		if(!f || f->IsZombie() || !f->IsOpen())
+			ERROR("(%s) (target: \'%s\') tried to open the file, but didn't receive a handle and also gDirectory holds no open valid file.", _name.c_str(), target);
+		//static bool _old = true;
+		//if constexpr(std::is_base_of_v<TH1, T>) {
+		//	_old = TH1::AddDirectoryStatus();
+		//	TH1::AddDirectory(kFALSE);
+		//}
+
 		T* tmp = f->Get<T>(name);
 		if(!tmp) ERROR("(%s) - asked for " EMPH(%s) " name as key to a static object, got back nullptr.", _name.c_str(), name);
+		
 		try {
 			_internal = *tmp; // deep-copy ; asserted via type traits on the top.
-			if constexpr(std::is_base_of_v<TH1, T>) { 
-				tmp->SetDirectory(nullptr); // remove from ROOT’s ownership
-				delete tmp;
-			}
+			delete tmp;
 		} catch(const std::exception& e) {
-			ERROR("Caught: " EMPH(%s) " while trying to copy during loading of a static object.", e.what());	
+			ERROR("Caught: " EMPH(%s) " while trying to deep-copy during loading of a static object.", e.what());	
 		} catch(...) {
 			ERROR("Unknown exception caught.");
 		}
+
+		//if constexpr(std::is_base_of_v<TH1, T>) {
+		//	delete tmp;
+		//	TH1::AddDirectory(_old);
+		//}
+		/* In general, this leaves other objects, like TGraph, TCanvas, TParameter, etc still
+		 * allocated on the heap and sitting. Cleaned up at the end when ROOT session terminates. 
+		 * Here we perfectly own (without a sitting copy) only TH1 objects. */
+
 		return (void*)&_internal;
 	}
 

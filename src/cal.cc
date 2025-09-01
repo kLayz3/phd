@@ -107,19 +107,15 @@ auto main(i32 argc, char* argv[]) -> i32 {
 
 	VerifyNoArgumentsLeft(argc, argv);
 
-	TApplication* app = new TApplication("myApp", 0, 0);
 	vector<TimePoint> tv;
 
 	TFile* in = new TFile(fileName.c_str(), "READ");
-	if(!in or in->IsZombie()) {
-		WARN("Bad input ROOT file: %s\n", fileName.c_str());
-		exit(-2);
-	}
+	if(!in or in->IsZombie())
+		ERROR("Bad input ROOT file: %s\n", fileName.c_str());
 	TTree* h101 = dynamic_cast<TTree*>(in->Get(_tree_base_name));
-	if(!h101 or h101->IsZombie()) {
-		YELL("TTree static_cast is somehow nullptr?\n");
-		exit(-3);
-	}
+	if(!h101 or h101->IsZombie())
+		ERROR("TTree static_cast is somehow nullptr?\n");
+
 #ifdef FRS_GO4
 	TFRSSortEvent* sort;
 	int r = h101->SetBranchAddress(_branch_base_name, &sort);
@@ -145,7 +141,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		TFOOTPedestalCont& f = foot[i]; \
 		info["FOOT_ID"] = #ID; \
 		f.Init(info); \
-		f.Setup(out, h102, ContainerIO::kMIXED); \
+		f.Setup(ContainerIO::kOUTPUT, out, h102); \
 		f._FOOT = &sort->FOOT##ID; \
 		f._FOOTE = sort->FOOT##ID##E; \
 	}
@@ -170,8 +166,8 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		.emplace_worker<TFOOTPedestalProc>(foot[6])
 		.emplace_worker<TFOOTPedestalProc>(foot[7]);
 
+	pool.in  = h101; 
 	pool.out = h102;
-	pool.in = h101; 
 
 	tv.emplace_back(TimePoint("start"));
 	dbg("Doing global pedestal analysis...");
@@ -256,8 +252,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	tv.emplace_back(TimePoint("after fineped"));
 	PrintElapsed<kSECOND>(tv);
 
-	/* Perform final fit for the corrected pedestal sigma calculation. 
-	 * Cannot be (obviously) paralellized. */
+	/* Perform final fit for the corrected pedestal sigma calculation. */ 
 	for(size_t i=0; i < pool.Size(); ++i) { 
 		TFOOTPedestalProc* p = dynamic_cast<TFOOTPedestalProc*>(pool.GetWorker(i));
 		if(!p) continue;
@@ -274,7 +269,6 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	pool.Write();
 	
 	out->Close();
-	app->Run();
 	in->Close();
 }
 
@@ -286,5 +280,5 @@ const char* calibrate_help =
 --help                       ..Print this message to stdout. \n\
 --max-events=N               ..Specify how many events to process in the ROOT file. Default all.\n\
 \n\
-This script will analyse the raw (sorted) ROOT file and do the full pedestal analysis of the FOOT data.\n\
+This program will analyse the raw (sorted) ROOT file and do the full pedestal analysis of the FOOT data.\n\
 Always remember: PHYSICS IS FUN <(^.^)>\n\n";

@@ -1,5 +1,6 @@
 #include "CMDLineParser.h"
 #include "AuxFunctions.hh"
+#include "TContainer.h"
 #include "TString.h"
 #include "libs.hh"
 #include <algorithm>
@@ -15,8 +16,8 @@
 #include "TFOOTPedestalProc.h"
 #include "TFOOTPedestalCont.h"
 
-using namespace std;
 using namespace CMDLineParser;
+using namespace std::literals;
 
 #if !defined(ANALYSIS_MULTITHREADED)
 	/* Default build: enable multithread. */
@@ -60,7 +61,7 @@ auto main(int argc, char* argv[]) -> i32 {
 	show_console_cursor(false);
 	srand(time(NULL));	
 
-	string pStr, fileName, outFile;
+	std::string pStr, fileName, outFile;
 	u64 maxEvents = -1;
 
 	if(argc < 2) {	
@@ -68,6 +69,44 @@ auto main(int argc, char* argv[]) -> i32 {
 		printf("%s", clusterize_help);
 		return 0;
 	}
+	if(IsCmdArg("help", argc, argv)) { std::cout << clusterize_help; return 0; }
+	
+	if(!ParseCmdLine("file", fileName, argc, argv)) {
+		fileName = std::string(argv[1]);
+	}
+	if(!ParseCmdLine("output", outFile, argc, argv)) {
+		outFile = fileName.substr(0, fileName.find('.')) + "_cal.root"; 
+		WARN("No output file specified. Writing to file: %s\n", outFile.c_str());
+	}
+	if(ParseCmdLine("max-events", pStr, argc, argv)) {
+		try { maxEvents = stoi(pStr); }
+		catch(std::exception& e) { WARN("Unparsable " EMPH(max-events) " argument to u64"); std::cout << e.what() << std::endl; }
+	}
+
+	std::vector<TimePoint> tv;
+
+	VerifyNoArgumentsLeft(argc, argv);
+	
+	TFile* in = new TFile(fileName.c_str(), "READ");
+	if(!in or in->IsZombie())
+		ERROR("Bad input ROOT file: %s\n", fileName.c_str());
+	TTree* h102 = dynamic_cast<TTree*>(in->Get("h102"));
+	if(!h102 or h102->IsZombie())
+		ERROR("TTree cast is somehow nullptr?\n");
+
+	TFile* out = new TFile(outFile.c_str(), "RECREATE"); 
+	TTree* h103 = new TTree("h103", "h103");
+	h103->SetAutoFlush(0); h103->SetAutoSave(0);
+
+	std::unordered_map<std::string, std::string> info;
+	TFOOTPedestalCont foot[N_FOOT]; // input container.
+	for(int i=0; i<N_FOOT; ++i) {
+		foot[i].Init( {{"FOOT_ID"s, std::to_string(i)}} );
+		foot[i].Setup(ContainerIO::kOUTPUT);
+	}
+	
+	out->Close();
+	in->Close();
 }
 
 const char* clusterize_help =
@@ -78,5 +117,5 @@ const char* clusterize_help =
 --help                       ..Print this message to stdout. \n\
 --max-events=N               ..Specify how many events to process in the ROOT file. Default all.\n\
 \n\
-This script will analyse the raw (sorted) ROOT file and do the full pedestal analysis of the FOOT data.\n\
+This program will analyse the calibrated ROOT file and perform the clustering of the FOOT data.\n\
 Always remember: PHYSICS IS FUN <(^.^)>\n\n";

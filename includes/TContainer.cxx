@@ -2,6 +2,8 @@
 #include "TFile.h"
 #include "TTree.h"
 #include "TKey.h"
+#include "TROOT.h"
+#include <cstdint>
 #include <cstring>
 
 TContainer::TContainer() {}
@@ -30,32 +32,80 @@ int TContainer::ClearOwnedTOnceObjects() {
 	return r;
 }
 
-void TContainer::Setup(TFile* f, TTree* t, ContainerIO io_mode) {
+void TContainer::Setup(ContainerIO io_mode, TFile* f, TTree* t) {
 		/* Maybe users don't want to write the output? */ 
-		if(!f || f->IsZombie() || !f->IsOpen()) { 
-			WARN("Container (%s - %s) - passed TFile* handle which: isn't in gDirectory or pointer isn't valid, isn't opened, could be ignored. Is OK.", GetName(), (io_mode == ContainerIO::kINPUT) ? "INPUT" : "OUTPUT" ); 
-			return; 
-		} 
- 
-		if(!t || t->IsZombie()) { 
-			WARN("Container (%s - %s) - passed bad TTree handle to the function. Ignoring it, is OK. Event-by-event data won't be written/read.", GetName(), (io_mode == ContainerIO::kINPUT) ? "INPUT" : "OUTPUT"); 
-		} else { 
-			this->_tree_p = t; 
-		} 
- 
+		if(!f || f->IsZombie() || !f->IsOpen()) {
+			/* Fine. Try to find it in `gROOT`. */
+			std::vector<std::pair<TFile*, TTree*>> _candidate_set{};	
+			
+			switch(io_mode) {
+				case ContainerIO::kINPUT: 
+				{
+					for(TObject* _f : *gROOT->GetListOfFiles()) {
+						f = (TFile*)_f;
+						if(f->IsZombie() || !f->IsOpen() || f->IsWritable()) continue;
+						for(TObject* _k : *f->GetListOfKeys()) {
+							TKey* k = dynamic_cast<TKey*>(_k);
+							if(!k) continue;
+							TClass* cl = TClass::GetClass(k->GetClassName());
+							if(cl && cl->InheritsFrom(TTree::Class())) {
+								TTree* _t = dynamic_cast<TTree*>(f->Get(k->GetName()));
+								if(!_t || _t->IsZombie()) continue;	
+								_candidate_set.emplace_back(f, _t);
+								/* This is fine since. since if we fetch the object in this call,
+								 * and later users (main or TAnalysisPool) want to fetch the object,
+								 * they just fetch the same pointer. */
+							}
+						}
+						if(_candidate_set.size() == 0) 
+							ERROR("TFile* and TTree* handles not given, and unable to be found inside gROOT.");
+						if(_candidate_set.size() > 1) 
+							ERROR("TFile* and TTree* handles not given, and found multiple TTrees/TFiles readable inside gROOT. Only one deduction is allowed.");
+						std::tie(f, t) = _candidate_set[0];
+					} 
+					break;
+				}
+				case ContainerIO::kOUTPUT:
+				{
+					for(TObject* _f : *gROOT->GetListOfFiles()) {
+						f = (TFile*)_f;
+						if(f->IsZombie() || !f->IsOpen() || !f->IsWritable()) continue;
+						for(TObject* _k : *f->GetList()) {
+							TTree* t = dynamic_cast<TTree*>(_k);
+							if(!t || t->IsZombie()) continue;
+							_candidate_set.emplace_back(f,t);
+						}
+						if(_candidate_set.size() == 0)
+							ERROR("TFile* and TTree* handles not given, and unable to be found inside gROOT.");
+						if(_candidate_set.size() > 1)
+							ERROR("TFile* and TTree* handles not given, and found multiple TTrees/TFiles readable inside gROOT. Only one deduction is allowed.");
+						std::tie(f, t) = _candidate_set[0];
+					}
+					break;	
+				}
+			}
+			/* At this point, we either found correct handles or the call threw. */
+			WARN("Success deducing (%s: %s), found TFile*: %p (%s) . TTree*: %p (%s, \'%s\')\n",
+				GetName(), io_mode == ContainerIO::kINPUT ? "Input" : "Output", (void*)f, f->GetName(),
+				(void*)t, t->GetName(), t->GetTitle());
+		}
+		else if( !t || t->IsZombie()) {
+			/* TFile* passed is non-null and open. 
+			 * All file. Maybe users don't want to (de)serialize data row-wise. */
+			t = nullptr;
+		}
+		/* TFile* handle can never be null without exception thrown. */
+		this->_file_p  = f; 
+		this->_tree_p  = t; 
 		this->_io_mode = io_mode; 
-		this->_file_p = f; 
 }
 
 Int_t TContainer::Write() {
-	if(!_file_p || _file_p->IsZombie() || !_file_p->IsOpen())
-		ERROR("TFile* handle which isn't valid or isn't open. Was the TContainer::Setup call successful?");
-	if(!_tree_p || _tree_p->IsZombie())
-		ERROR("TTree* handle which isn't valid or isn't open. Was the TContainer::Setup call successful?");
 	if(_io_mode == ContainerIO::kINPUT)
-		ERROR("Forbidden to call TContainer::Write with mode switch to input instead of output/mixed.");
+		ERROR("Bad call to `TContainer::Write()` with its mode being in \'input\'.");
+	if(!_file_p || _file_p->IsZombie() || !_file_p->IsOpen())
+		ERROR("TFile* handle which isn't valid or isn't open. Was the TContainer::Setup(...) call successful?");
 	return 0;
 }
-
 
 ClassImp(TContainer)
