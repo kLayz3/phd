@@ -8,15 +8,16 @@ class TH1D;
 class TFOOTCalCont : public TContainer {
 	friend class TFOOTCalProc;
 public:	
-	static constexpr size_t CAPACITY = 200; //!
+	static constexpr size_t INIT_CAPACITY = _FOOT_N_STRIPS_PER_ASIC; //!
 	static constexpr int N_STRIPS = _FOOT_N_STRIPS; //!
 
 public:
 	enum ClusterType {
-		kUNKNOWN    = 0,
-		kGOOD       = 1,
-		kFRAGMENTED = 2, /* One or two strips missing between them. */
+		kUNKNOWN    = 0, /* Unqualified. */
+		kGOOD       = 1, /* Good cluster. Monotonically rising ADC values to peak ADC strip, then monotonically decreasing. */
+		kFRAGMENTED = 2, /* One strip in noise; is missing between two sequences of the cluster. */
 		kWAVEY      = 3, /* Cluster such as: _/\/\_, initial sequence isn't strictly rising, latter isn't stricly falling. */
+		kMERGED     = 4, /* When two or more non-neighbouring distinct strips pass C-threshold check, and form a cluster. */
 	};
 	
 	enum class Orientation {
@@ -25,35 +26,37 @@ public:
 		kY       = 2,
 	};
 	
-private:
-	double _x[CAPACITY] {0}; //!
-	double _e[CAPACITY] {0}; //!
-	double _m[CAPACITY] {0}; //!
-	ClusterType _t[CAPACITY] {kUNKNOWN}; //!
-
 public:
 
 	Orientation o; //! 
 	int FOOT_N;  //! /* Comes from sort step. */
 	int POS; //! /* Force the FOOT's to be labelled 0,1,2,3,4,5,6,7 from now onward.
 
-	TH1D* h1_mult; //!
-	TH1D* h1_dE; //!
-	TH1D* h2_X; //!
+	TH1I* h1_raw_mult; //!
+	TH1I* h1_mult; //!
+	TH1I* h1_dE; //!
+	TH1I* h1_X; //!
+	TH1I* h1_cl_type; //!
+
+	TH1I* h1_dE_m1; //!
+	TH1I* h1_dE_m2; //!
+	TH1I* h1_dE_m3; //!
 
 private:
 	void AddCluster(double, double, double, ClusterType);
 
 public:
 	TFOOTCalCont();
-	TFOOTCalCont(int );
 	virtual ~TFOOTCalCont();
 
 	int N;                   /* Number of clusters in the event. */
-	double* fCX; //[N]       /* Cluster mean strip position. */
-	double* fCE; //[N]       /* Cluster summed energy. */
-	double* fCM; //[N]       /* Cluster mean multiplicity. */
-	ClusterType* fCT; // [N] /* Cluster type. */
+	std::vector<double> fCX; /* Cluster mean strip position. */
+	std::vector<double> fCE; /* Cluster summed energy. */
+	std::vector<double> fCM; /* Cluster mean multiplicity. */
+	std::vector<ClusterType> fCT; /* Cluster type. */
+
+	/* Record whole event in a vector, if we find a large cluster, for some reason. */
+	std::vector<double> _fBadE; /* Size will be either 0 or 640. */
 
 	void Clean(Option_t* option="") noexcept /* override */;
 	void Init(TDictInfo info) /* override */;

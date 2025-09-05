@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <thread>
 #include <type_traits>
 #include "Rtypes.h"
@@ -28,7 +29,7 @@ namespace util {
 }
 
 template<typename T>
-class TAnalysisWorker final : public T {
+class alignas(64) TAnalysisWorker final : public T {
 	static_assert(util::has_process_entry<T>::value, "Type <T> needs a `void ProcessEntry()` method implemented!");
 	static_assert(std::is_move_constructible<T>::value,  "Type <T> needs a move ctor.");
 	static_assert(std::is_move_assignable<T>::value, "Type <T> needs move assignment op.");
@@ -75,6 +76,8 @@ public:
 		if(_stop.load(std::memory_order_acquire)) 
 			ERROR("Trying to start the worker but it's marked as stopped?");
 
+		using namespace std::chrono_literals;
+
 		_thread = std::thread {
 			[this]() {
 				while(! _stop.load(std::memory_order_acquire)) {
@@ -82,6 +85,7 @@ public:
 						T::ProcessEntry();
 						_has_work.store(false, std::memory_order_release);
 					}
+					std::this_thread::sleep_for(1us);
 				}
 			}
 		};

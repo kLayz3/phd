@@ -15,6 +15,8 @@
 #include "TAnalysisPool.hxx"
 #include "TFOOTPedestalProc.h"
 #include "TFOOTPedestalCont.h"
+#include "TFOOTCalProc.h"
+#include "TFOOTCalCont.h"
 
 using namespace CMDLineParser;
 using namespace std::literals;
@@ -30,6 +32,7 @@ using namespace std::literals;
 
 #if defined(ANALYSIS_SINGLETHREADED)
 	#undef ANALYSIS_MULTITHREADED
+	#warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls!"
 #endif
 
 extern const char* clusterize_help;
@@ -101,10 +104,72 @@ auto main(int argc, char* argv[]) -> i32 {
 	std::unordered_map<std::string, std::string> info;
 	TFOOTPedestalCont foot[N_FOOT]; // input container.
 	for(int i=0; i<N_FOOT; ++i) {
-		foot[i].Init( {{"FOOT_ID"s, std::to_string(i)}} );
-		foot[i].Setup(ContainerIO::kOUTPUT);
+		foot[i].Init( {{"FOOT_ID"s, std::to_string(::static_detectors[i])} } );
+		foot[i].Setup(ContainerIO::kINPUT);
 	}
 	
+	TFOOTCalCont cfoot[N_FOOT]; // output container.
+	for(int i=0; i<N_FOOT; ++i) {
+		cfoot[i].Init({
+			{ "FOOT_ID"s, std::to_string(::static_detectors[i]) }, 
+			{ "FOOT_POS"s, std::to_string(i) }
+		});
+		cfoot[i].Setup(ContainerIO::kOUTPUT);
+	}
+	auto pool = TAnalysisPool<>()
+		.emplace_worker<TFOOTCalProc>(foot[0], cfoot[0], 6, 2)
+		.emplace_worker<TFOOTCalProc>(foot[1], cfoot[1], 6, 1)
+		.emplace_worker<TFOOTCalProc>(foot[2], cfoot[2], 6, 3)
+		.emplace_worker<TFOOTCalProc>(foot[3], cfoot[3], 6, 1.5)
+		.emplace_worker<TFOOTCalProc>(foot[4], cfoot[4], 5, 2)
+		.emplace_worker<TFOOTCalProc>(foot[5], cfoot[5], 5, 1)
+		.emplace_worker<TFOOTCalProc>(foot[6], cfoot[6], 5, 3)
+		.emplace_worker<TFOOTCalProc>(foot[7], cfoot[7], 5, 1.5);
+	
+	pool.in = h102;
+	pool.out = h103;
+
+	tv.emplace_back(TimePoint("start"));
+	dbg("Doing the cluster analysis...");
+	u64 nentries = std::min((u64)pool.GetEntries(), maxEvents);
+
+	ProgressBar bar {
+		option::BarWidth{50},
+		option::Start{"["},
+		option::Fill{"="},
+		option::Lead{">"},
+		option::Remainder{" "},
+		option::End{"]"},
+		option::PostfixText{"Clustering (per event)"},
+		option::ForegroundColor{Color::yellow},
+		option::ShowPercentage{true},
+		option::ShowElapsedTime{true},
+		option::ShowRemainingTime{true},
+		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
+	};
+
+#ifdef ANALYSIS_MULTITHREADED	
+	pool.Start();
+#endif
+	for(u64 ev = 0; ev < nentries; ++ev) {
+		pool.GetEntry(ev);
+		PrintProgress(bar, ev, nentries);
+#ifdef ANALYSIS_MULTITHREADED
+		pool.AssignWork();
+		pool.Await();
+#else
+		pool.ProcessEntry();
+#endif
+		pool.FillOutput();
+	}
+	pool.Stop(); bar.mark_as_completed();
+	tv.emplace_back(TimePoint("end"));
+
+	printf("Total execution time: "); PrintElapsed<kSECOND>(tv.back(), tv.front());
+
+	show_console_cursor(true);
+	pool.Write();
+
 	out->Close();
 	in->Close();
 }

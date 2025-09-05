@@ -52,48 +52,48 @@ void TContainer::Setup(ContainerIO io_mode, TFile* f, TTree* t) {
 								TTree* _t = dynamic_cast<TTree*>(f->Get(k->GetName()));
 								if(!_t || _t->IsZombie()) continue;	
 								_candidate_set.emplace_back(f, _t);
-								/* This is fine since. since if we fetch the object in this call,
-								 * and later users (main or TAnalysisPool) want to fetch the object,
-								 * they just fetch the same pointer. */
 							}
 						}
-						if(_candidate_set.size() == 0) 
-							ERROR("TFile* and TTree* handles not given, and unable to be found inside gROOT.");
-						if(_candidate_set.size() > 1) 
-							ERROR("TFile* and TTree* handles not given, and found multiple TTrees/TFiles readable inside gROOT. Only one deduction is allowed.");
-						std::tie(f, t) = _candidate_set[0];
 					} 
 					break;
 				}
+				/* This is fine since. since if we fetch the object in this call,
+				 * and later users (main or TAnalysisPool) want to fetch the object,
+				 * they just fetch the same pointer. */
 				case ContainerIO::kOUTPUT:
 				{
 					for(TObject* _f : *gROOT->GetListOfFiles()) {
 						f = (TFile*)_f;
 						if(f->IsZombie() || !f->IsOpen() || !f->IsWritable()) continue;
 						for(TObject* _k : *f->GetList()) {
-							TTree* t = dynamic_cast<TTree*>(_k);
-							if(!t || t->IsZombie()) continue;
-							_candidate_set.emplace_back(f,t);
+							TTree* _t = dynamic_cast<TTree*>(_k);
+							if(!_t || _t->IsZombie()) continue;
+							_candidate_set.emplace_back(f, _t);
 						}
-						if(_candidate_set.size() == 0)
-							ERROR("TFile* and TTree* handles not given, and unable to be found inside gROOT.");
-						if(_candidate_set.size() > 1)
-							ERROR("TFile* and TTree* handles not given, and found multiple TTrees/TFiles readable inside gROOT. Only one deduction is allowed.");
-						std::tie(f, t) = _candidate_set[0];
 					}
 					break;	
 				}
 			}
+			if(_candidate_set.size() == 0) 
+				ERROR("(%s: \'%s\'), TFile* and TTree* handles not given, and unable to be found inside gROOT.", 
+					GetName(), io_mode == ContainerIO::kINPUT ? "Input" : "Output");
+			if(_candidate_set.size() > 1) 
+				ERROR("(%s: \'%s\'), TFile* and TTree* handles not given, and found multiple TTrees/TFiles readable inside gROOT. Only one deduction is allowed.",
+					GetName(), io_mode == ContainerIO::kINPUT ? "Input" : "Output");
+
+			std::tie(f, t) = _candidate_set[0]; // it's asserted, these are not nullptrs.
+
 			/* At this point, we either found correct handles or the call threw. */
-			WARN("Success deducing (%s: %s), found TFile*: %p (%s) . TTree*: %p (%s, \'%s\')\n",
-				GetName(), io_mode == ContainerIO::kINPUT ? "Input" : "Output", (void*)f, f->GetName(),
+			WARN("Deducing (%s: \'%s\'), found TFile*: %p (%s) . TTree*: %p (%s, \'%s\')\n",
+				GetName(), io_mode == ContainerIO::kINPUT ? "Input " : "Output", (void*)f, f->GetName(),
 				(void*)t, t->GetName(), t->GetTitle());
 		}
+		/* TFile* passed is non-null and open. 
+		 * All file. Maybe users don't want to (de)serialize data row-wise. */
 		else if( !t || t->IsZombie()) {
-			/* TFile* passed is non-null and open. 
-			 * All file. Maybe users don't want to (de)serialize data row-wise. */
 			t = nullptr;
 		}
+
 		/* TFile* handle can never be null without exception thrown. */
 		this->_file_p  = f; 
 		this->_tree_p  = t; 

@@ -30,6 +30,7 @@ extern const char* calibrate_help;
 
 #if defined(ANALYSIS_SINGLETHREADED)
 	#undef ANALYSIS_MULTITHREADED
+	#warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls!"
 #endif
 
 /* If this is defined then the original ROOT branch comes from FRS Go4 - Sort step instead of ucesb. */
@@ -79,25 +80,18 @@ constexpr i32 N_FOOT = LEN(static_detectors);
 
 auto main(i32 argc, char* argv[]) -> i32 {
 	using namespace indicators;
-	show_console_cursor(false);	
 	srand(time(NULL));
 
-	string pStr, fileName, outFile;
+	string pStr, outFile;
+	vector<string> fileName{};
 	u64 maxEvents = -1;
 
-	if(argc < 2) {	
-		YELL("Must supply a file argument!\n");
-		printf("%s", calibrate_help);
-		return 0;
-	}
-
+	CMDLineParser::Mandatory::SetMessage(calibrate_help);
 	if(IsCmdArg("help", argc, argv)) { cout << calibrate_help; return 0; }
-	
-	if(!ParseCmdLine("file", fileName, argc, argv)) {
-		fileName = std::string(argv[1]);
-	}
+	ParseCmdLine("file", fileName, argc, argv, true);
 	if(!ParseCmdLine("output", outFile, argc, argv)) {
-		outFile = fileName.substr(0, fileName.find('.')) + "_cal.root"; 
+		auto& ref = fileName[0];
+		outFile = ref.substr(0, ref.find('.')) + "_cal.root"; 
 		WARN("No output file specified. Writing to file: %s\n", outFile.c_str());
 	}
 	if(ParseCmdLine("max-events", pStr, argc, argv)) {
@@ -109,15 +103,18 @@ auto main(i32 argc, char* argv[]) -> i32 {
 
 	vector<TimePoint> tv;
 
-	TFile* in = new TFile(fileName.c_str(), "READ");
-	if(!in or in->IsZombie())
-		ERROR("Bad input ROOT file: %s\n", fileName.c_str());
-	TTree* h101 = dynamic_cast<TTree*>(in->Get(_tree_base_name));
-	if(!h101 or h101->IsZombie())
-		ERROR("TTree static_cast is somehow nullptr?\n");
+	TChain* h101 = new TChain(_tree_base_name);
+	for(auto& name : fileName) {
+		TFile* in = new TFile(name.c_str(), "READ");
+		if(!in or in->IsZombie())
+			ERROR("Bad input ROOT file: %s\n", name.c_str());
+		h101->Add(name.c_str());
+	}
+
+	h101->LoadTree(0);
 
 #ifdef FRS_GO4
-	TFRSSortEvent* sort;
+	TFRSSortEvent* sort{};
 	int r = h101->SetBranchAddress(_branch_base_name, &sort);
 	if(r != 0) ERROR("SetBranchAddress failed. \'%s\', RC = %d\n", _branch_base_name, r);
 #else
@@ -170,9 +167,10 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	pool.out = h102;
 
 	tv.emplace_back(TimePoint("start"));
-	dbg("Doing global pedestal analysis...");
 	u64 nentries = std::min((u64)pool.GetEntries(), maxEvents);
+	dbg("Doing global pedestal analysis...", nentries);
 	
+	show_console_cursor(false);	
 	ProgressBar bar1 {
 		option::BarWidth{50},
 		option::Start{"["},
@@ -188,7 +186,9 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 	};
  
+#ifdef ANALYSIS_MULTITHREADED	
 	pool.Start();
+#endif
 	for(u64 ev = 0; ev < nentries; ++ev) {
 		pool.GetEntry(ev);
 		PrintProgress(bar1, ev, nentries);
@@ -196,8 +196,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		pool.AssignWork();
 		pool.Await();
 #else
-		for(int i=0; i < (int)pool.Size(); ++i)
-			static_cast<TFOOTPedestalProc*>(pool.GetWorker(i)->ProcessEntry());
+		pool.ProcessEntry();
 #endif
 	}
 	pool.Stop(); bar1.mark_as_completed();
@@ -233,7 +232,9 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 	};
 
+#ifdef ANALYSIS_MULTITHREADED	
 	pool.Start();
+#endif
 	for(u64 ev = 0; ev < nentries; ++ev) {
 		pool.GetEntry(ev);
 		PrintProgress(bar2, ev, nentries);
@@ -241,8 +242,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		pool.AssignWork();
 		pool.Await();
 #else
-		for(int i=0; i < (int)pool.Size(); ++i)
-			static_cast<TFOOTPedestalProc*>(pool.GetWorker(i)->ProcessEntry());
+		pool.ProcessEntry();
 #endif
 
 		pool.FillOutput();
@@ -269,16 +269,18 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	pool.Write();
 	
 	out->Close();
-	in->Close();
+	delete h101;
 }
 
 const char* calibrate_help =
 "\nUsage: ./cal <OPT1> <OPT2> ...\n\
+Options can be passed Windows style (-tag value1 value2 ...) or Unix style (--tag=value1,value2,...)\n\
+For either single or multiple values.\n\
 \n\
-[--file=]inputName.root      ..Input file.\n\
---output=/PATH/TO/OUT.root   ..Specify output file name. Default same as input file with '_subtr' suffix.\n\
---help                       ..Print this message to stdout. \n\
---max-events=N               ..Specify how many events to process in the ROOT file. Default all.\n\
+-file input1.root input2.root...   ..Input file(s).\n\
+-output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_cal' suffix.\n\
+-help                       ..Print this message to stdout. \n\
+-max-events N               ..Specify how many events to process in the ROOT file. Default all.\n\
 \n\
 This program will analyse the raw (sorted) ROOT file and do the full pedestal analysis of the FOOT data.\n\
 Always remember: PHYSICS IS FUN <(^.^)>\n\n";

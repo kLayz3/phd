@@ -3,9 +3,12 @@
 #include <cstring>
 #include <regex>
 #include <algorithm>
+#include <type_traits>
 #include "libs.hh"
 
 using namespace std;
+using CMDLineParser::Mandatory;
+const char* Mandatory::def_msg = "Check options by passing --help";
 
 bool CMDLineParser::IsCmdArg(const char* line, int argc, char** argv) {
 	char *line1 = (char*)malloc(strlen(line)+3);
@@ -34,44 +37,94 @@ bool CMDLineParser::IsCmdArg(const char* line, int argc, char** argv) {
 	free(line1); return retval;
 }
 
-/* Cmd args have to be: --tag0=identifier0 --tag1=identifier1 ... */
-bool CMDLineParser::ParseCmdLine(const char* line, string& parsed, int argc, char** argv) {
+template<typename T>
+bool 
+CMDLineParser::ParseCmdLine(const char* line, T& dest, int argc, char** argv, Mandatory mandatory) {
+	using std::string;
+	using Vec = std::vector<string>;
+	static_assert(std::is_same_v<T, string> || std::is_same_v<T, Vec>,
+		"Second argument must be either std::string or std::vector<std::string>>");
+	
+	/* Regardless if we pass Vector or just String, create a local to reassign later. */
+	Vec parsed{};
+
 	cmatch m;
-	std::regex r("^(?:--)([^=]+)[=](.+)$");
+	static const std::regex r(
+		R"(^--([^=]+)[=]([^,]+(?:,([^,])+)*)$)"
+	);
+
 	bool retval = 0;
 	for(int i(1); i<argc; ++i) {
-		if(regex_match(argv[i], m, r) && !strcmp(m[1].str().c_str(), line)) {
-			parsed = m[2].str();
+		if(regex_match(argv[i], m, r) and !strcmp(line, m[1].str().c_str())) {
+			string list = m[2].str();
+			
+			size_t pos;
+			string split;
+			while((pos = list.find(',')) != string::npos) {
+				split = list.substr(0, pos);
+				parsed.push_back( std::move(split) );
+				list.erase(0, pos + 1);
+			}
+			parsed.push_back( std::move(list) );
+
 			// Set argv[i] to be something redundant.
 			memset(argv[i], '_', strlen(argv[i]));
+			if(retval)
+				ERROR("Passed twice argument: \'%s\' in the command line!\n", line);
+
 			retval = 1;
 		}
 	}
 	
 	/* Handle the `-tag value` case. */
-	for(int i(1); i<argc-1; ++i) {
+	for(int i(1); i < argc; ++i) {
 		if(argv[i][0] != '-') continue;
 
-		if(!strcmp((char*)(argv[i]+1), line) and argv[i+1][0] != '-') {
-			parsed = std::string(argv[i+1]);
-
-			// Set argv[i] and argv[i+1] to be something redundant.
+		if(!strcmp((char*)(argv[i]+1), line)) {
 			memset(argv[i], '_', strlen(argv[i]));
-			memset(argv[i+1], '_', strlen(argv[i+1]));
 			retval = 1;
+			
+			/* Eat up all the argv's until we reach another '^-' regex. */
+			while((++i) < argc && argv[i][0] != '-') {
+				parsed.emplace_back(argv[i]);
+				memset(argv[i], '_', strlen(argv[i]));
+			}
+			--i;
 		}
 	}
-	if(retval) WARN("From " EMPH(%s) " parsed " EMPH(%s) "\n", line, parsed.c_str());
-	  return retval;
+
+	if(retval) {
+		if(parsed.size() == 0)
+			ERROR("Saw an argument: \'-%s\', but no followup parameter after.\n", line);
+
+		WARN("Parsed option " EMPH(%s) " with %zu argument%s: ", 
+			line, parsed.size(), parsed.size() ? "s" : "");
+		for(auto& p : parsed) printf(EMPH(%s) " ", p.c_str());
+		printf("\n");
+
+		if constexpr(std::is_same_v<T, string>) {
+			dest = std::move(parsed.back());
+			if( parsed.size() > 1) 
+				WARN("Only taking the last argument: \'%s\'\n", dest.c_str());
+		}
+		else
+			dest = std::move(parsed);
+	}
+	else if(mandatory.is_it) {
+		ERROR("Mandatory argument " EMPH(%s) " not supplied.\n%s%s\n", 
+				line, KNRM, mandatory.help_msg ? mandatory.help_msg : mandatory.def_msg);
+	}
+
+	return retval;
 }
 
 void CMDLineParser::VerifyNoArgumentsLeft(int argc, char** argv) {
-	for(int i=2; i < argc; ++i) {
+	for(int i=1; i < argc; ++i) {
 		for(int j=0; j < (int)strlen(argv[i]); ++j) {
 			if(argv[i][j] != '_') {
 				YELL("Unrecognized or invalid option: " EMPH(%s) "\n", argv[i]);
 				printf("Terminating the program.\n");
-				exit(1111);
+				exit(11);
 			}
 		}
 	}
@@ -103,3 +156,8 @@ unordered_set<string> CMDLineParser::SplitStringToSet(const string& str, char de
 	return parts;
 }
 
+template bool
+CMDLineParser::ParseCmdLine<std::string>(const char*, std::string&, int, char**, Mandatory);
+
+template bool
+CMDLineParser::ParseCmdLine<std::vector<std::string>>(const char*, std::vector<std::string>&, int, char**, Mandatory);

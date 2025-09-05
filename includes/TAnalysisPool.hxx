@@ -148,7 +148,7 @@ public:
 		if(std::holds_alternative<TTree*>(in)) 
 			return std::get<TTree*>(in)->GetEntries();
 		else if(std::holds_alternative<TChain*>(in)) 
-			return std::get<TChain*>(in)->GetEntriesFast();
+			return std::get<TChain*>(in)->GetEntries();
 		else return 0;
 	}
 
@@ -241,5 +241,12 @@ public:
 		_is_valid = false;
 		return r;
 	};
+	
+	/**
+	 * Sequentially calls `T::ProcessEntry()` of each underlying worker. 
+	 * */
+	void ProcessEntry() {
+		std::apply([](auto&... ws) { (..., ws.ProcessEntry()); }, _pool);
+	}
 
 }; // TAnalysisPool
