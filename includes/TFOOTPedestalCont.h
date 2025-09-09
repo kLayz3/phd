@@ -42,18 +42,6 @@ public: // Exported back to ROOT
 	/* Final ADC value after all three pedestal removals. */
 	Double_t FOOTE[N_STRIPS];
 
-/*
-	// Category label for each strip in each event.
-	enum SignalType {
-		kBAD   = 0,
-		kNOISE = 1,
-		kHIT   = 2
-	} stype[N_STRIPS];
-
-	i32 n_bad = 0;
-	i32 n_fired = 0;
-	std::vector<int> fired_strips;
-*/
 public:
 
 	TFOOTPedestalCont();

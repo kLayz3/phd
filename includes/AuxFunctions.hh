@@ -10,6 +10,8 @@
 #include <vector>
 #include "libs.hh"
 #include "indicators.hh"
+#include "nlohmann/json.hpp"
+#include <regex>
 
 inline void PrintProgress(indicators::ProgressBar& bar,	u64 n_entry, u64 max_entries, u64 step = 100) noexcept {
 	static u64 n_entry_called = 0;
@@ -29,7 +31,7 @@ inline uint64_t SortEntries(uint64_t& firstEvent, uint64_t& maxEvents, TTree* h1
 
 /* ------------------------- */
 template<class A, class B>
-inline void TGraphFromVector(TGraph& t, std::vector<A> vX, std::vector<B> vY) {
+void TGraphFromVector(TGraph& t, std::vector<A>& vX, std::vector<B>& vY) {
 	auto s = std::min(vX.size(), vY.size());
 	for(auto i=0; i<s; ++i) {
 		t.AddPoint((double)vX[i], (double)vY[i]);
@@ -38,31 +40,31 @@ inline void TGraphFromVector(TGraph& t, std::vector<A> vX, std::vector<B> vY) {
 
 /* ------------------------- */
 template<class T>  
-inline void QuickSwap(std::vector<T>& v, int i, int j) {
+void QuickSwap(std::vector<T>& v, int i, int j) {
 	if(!v.size()) return;
     std::swap(v[i], v[j]);
 }
 
 /* ------------------------- */
 template<class T>  
-inline void QuickErase(std::vector<T> &v, int i) {
+void QuickErase(std::vector<T> &v, int i) {
     std::swap(v[i], v.back());
     v.pop_back();
 }
 
 /* ------------------------- */
 template<class T>
-inline void ReleaseMalloc(T x) {
+void ReleaseMalloc(T x) {
 	free(x);
 }
 template<class T, class... Args>
-inline void ReleaseMalloc(T x, Args... args) {
+void ReleaseMalloc(T x, Args... args) {
 	free(x); ReleaseMalloc(args...);
 }
 
 /* ------------------------- */
 template<class T>
-inline T rround(double x) noexcept { return static_cast<T>(x + 0.5); }
+T rround(double x) noexcept { return static_cast<T>(x + 0.5); }
 
 using std::chrono::duration_cast;
 using std::chrono::seconds;
@@ -77,36 +79,41 @@ struct TimePoint {
 	TimePoint(std::string s) : t(timeNow()), tag(s) {};
 };
 
-enum TimingVariant {
-	kMINUTE,
-	kSECOND,
-	kMILLISECOND,
-	kMICROSECOND,
+enum TimingVariant : u64 {
+	kMINUTE = 1,
+	kSECOND = 60,
+	kMILLISECOND = 60'000,
+	kMICROSECOND = 60'000'000,
 };
 
 template<TimingVariant E = kMILLISECOND>
 void PrintElapsed(const TimePoint& end, const TimePoint& start) {
-	using ms = std::chrono::milliseconds;
 	using us = std::chrono::microseconds;
-	
-	double elapsed; const char* mode;
+
+	static const char* mode[] = {"us", "ms", "sec", "min"};
+	int mode_i = 0;
+	double elapsed;
 	if constexpr(E == kMINUTE) {
-		elapsed = static_cast<double>(std::chrono::duration_cast<ms>(end.t - start.t).count()) / 60'000;
-		mode = "min";
+		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count()) * static_cast<double>(kMINUTE) / kMICROSECOND;
+		mode_i = 3;
 	}
 	else if constexpr(E == kSECOND) {
-		elapsed = static_cast<double>(std::chrono::duration_cast<ms>(end.t - start.t).count()) / 1'000;
-		mode = "sec";
+		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count()) * static_cast<double>(kSECOND) / kMICROSECOND;
+		if(elapsed > 60) {
+			elapsed *= static_cast<double>(kMINUTE) / kSECOND;
+			mode_i = 3;
+		} else 
+			mode_i = 2;
 	}
 	else if constexpr(E == kMILLISECOND) {
-		elapsed = static_cast<double>(std::chrono::duration_cast<us>(end.t - start.t).count()) / 1'000;
-		mode = "ms";
+		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count()) * static_cast<double>(kMILLISECOND) / kMICROSECOND;
+		mode_i = 1;
 	}
 	else if constexpr(E == kMICROSECOND) {
-		elapsed = static_cast<double>(std::chrono::duration_cast<us>(end.t - start.t).count());
-		mode = "us";
+		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count());
+		mode_i = 0;
 	}
-    printf("Elapsed time from " EMPH1(%s) " to " EMPH1(%s) ": " EMPH(%.1f) " %s\n", start.tag.c_str(), end.tag.c_str(), elapsed, mode);
+    printf("Elapsed time from " EMPH1(%s) " to " EMPH1(%s) ": " EMPH(%.1f) " %s\n", start.tag.c_str(), end.tag.c_str(), elapsed, mode[mode_i]);
 }
 
 template<TimingVariant E = kMILLISECOND>
@@ -167,4 +174,98 @@ constexpr int FindIndex(const T& arr, const typename util::is_an_array<U>::value
 	for(int i=0; i < (int)N; ++i)
 		if(arr[i] == val) return i;
 	return -1;
+}
+
+static inline void Trim(std::string& s) {
+	s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c){return std::isspace(c);}), s.end());
+}
+
+using nlohmann::json;
+
+static inline void parse_json_string(std::vector<int>& out, std::string s) {
+	
+	static const std::regex re_num(
+		R"(^(0x|0b)?(\d+)$)"
+	);
+	static const std::regex re_range(
+		R"(^(\d+)\.\.(=)?(\d+)$)"
+	);
+	static const std::regex re_seq(
+		R"(^(\d+)n(\+\d+)?$)"
+	);
+
+
+	::Trim(s);
+
+	/* Strings can be passed either as:
+	 * 1) raw numbers
+	 * 2) range x1..x2 (x2 excluded) or x1..=x2 (x2 included)
+	 * 3) sequence: an+b ('a', 'b' are the parameters, '+b' optional; 'n' fixed token). 
+	 *    Meaning: strips: b, a+b, 2*a+b, etc. */
+	std::smatch m;
+	if(std::regex_match(s, m, re_num)) {
+		if(m[1].matched) {
+			if(m[1].str() == "0x") out.push_back(std::stoi(m[2].str(), nullptr, 16));
+			else out.push_back(std::stoi(m[2].str(), nullptr, 2));
+		}
+		else out.push_back(std::stoi(m[2].str()));
+	} else if(std::regex_match(s, m, re_range)) {
+		int a = std::stoi(m[1].str());
+		int b = std::stoi(m[3].str());
+		if(a > b) ERROR("%d < %d found while parsing json: \'%s\'\n", a,b,s.c_str());
+		for(int i=a; i<b; ++i) out.push_back(i);
+		if(m[2].matched) out.push_back(b);
+	} else if(std::regex_match(s, m, re_seq)) {
+		int a = std::stoi(m[1].str());
+		int b = m[2].matched ? std::stoi(m[2].str()) : 0;
+		for(int i=b; i <	 640; i+=a)
+			out.push_back(i);
+	} else {
+		WARN("String \'%s\' doesn't match a: number, range or sequence regular expression.", s.c_str());
+	}
+}
+
+/**
+ * Json Custom range parser, accepting raw numbers or strings (or arrays of the same)
+ * parsable as int or as a range:
+ * 'a1..a2' left-inclusive, or 'a1..=a2' right inclusive.
+ * */
+static inline void parse_json_as_int_vec(std::vector<int>& out, const json& j) {
+	if(j.is_string()) {
+		::parse_json_string(out, j.get<std::string>());
+	}
+	else if(j.is_number()) {
+		out.push_back(j.get<int>());	
+	}
+	else if(j.is_array()) {
+		out.reserve(j.size());
+		for(const auto& jsub : j) 
+			::parse_json_as_int_vec(out, jsub);
+	}
+	else ERROR("Passed a json object '%s' which isn't: string/array/number.\n", j.dump().c_str());
+}
+
+static inline void append_flat_json(json& dst, const json& src) {
+	if(!dst.empty() && !dst.is_object())
+		ERROR("Destination object \'%s\' cannot store sources appended to it. Non-empty and not-an-object!", dst.dump().c_str());
+	if(!src.is_object())
+		ERROR("Source json: \'%s\' must be an object.", src.dump().c_str());
+
+	for(const auto& [k, v] : src.items()) {
+		auto it = dst.find(k);
+		if(it == dst.end() || it->is_null()) {
+			dst[k] = v;
+			continue;
+		}
+
+		if(!it->is_array()) {
+			*it = json::array({ *it }); // [old]
+		}
+
+		if(v.is_array()) {
+			it->insert(it->end(), v.begin(), v.end()); // "k": [..., v[0], v[1], v[n-1] ]
+		} else {
+			it->push_back(v); // "k": [..., v]
+		}
+	}
 }

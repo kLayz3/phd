@@ -42,8 +42,10 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	h1_dE_m1    = RegisterObject<TH1I>("h1_dE_m1", Form("(%2d:%d) energy with multiplicity 1", FOOT_N, POS), 2500, 0, 500);
 	h1_dE_m2    = RegisterObject<TH1I>("h1_dE_m2", Form("(%2d:%d) energy with multiplicity 2", FOOT_N, POS), 2500, 0, 500);
 	h1_dE_m3    = RegisterObject<TH1I>("h1_dE_m3", Form("(%2d:%d) energy with multiplicity 3", FOOT_N, POS), 2500, 0, 500);
+	h1_sn_ratio = RegisterObject<TH1I>("h1_sn_ratio", Form("(%2d:%d) ratio neighbouring vs. seed value (mult <= 3)", FOOT_N, POS), 500, 0, 5);
 
 	_fBadE.reserve(N_STRIPS);
+	_fHeClSize1.reserve(N_STRIPS);
 }
 
 void TFOOTCalCont::Clean(Option_t* option) noexcept {
@@ -54,6 +56,7 @@ void TFOOTCalCont::Clean(Option_t* option) noexcept {
 	fCM.clear();
 	fCT.clear();
 	_fBadE.clear();
+	_fHeClSize1.clear();
 }
 
 void TFOOTCalCont::AddCluster(double mean_x, double e, double mult, ClusterType ct) {

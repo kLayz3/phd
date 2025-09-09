@@ -32,8 +32,8 @@ public:
 	};
 
 public:
-	static constexpr double X_CENTRE_THR_STATIC = 6;
-	static constexpr double X_NEIGHB_THR_STATIC = 2;
+	static constexpr double X_CENTRE_THR_STATIC = 4;
+	static constexpr double X_NEIGHB_THR_STATIC = 1;
 	
 	static_assert(X_CENTRE_THR_STATIC > X_NEIGHB_THR_STATIC, 
 		"Cannot cluster correctly if seed strip threshold cutoff is smaller than neighbouring strip's threshold (AMS paper).");
@@ -56,7 +56,8 @@ public:
 private:
 	void MakeACluster(int& );
 
-	Double_t* e;
+	Double_t* _e;
+	Double_t e[N_STRIPS]{0};
 	Double_t c_thr[N_STRIPS] = {0};
 	Double_t n_thr[N_STRIPS] = {0};
 

@@ -41,6 +41,7 @@ public:
 	TH1I* h1_dE_m1; //!
 	TH1I* h1_dE_m2; //!
 	TH1I* h1_dE_m3; //!
+	TH1I* h1_sn_ratio; //!
 
 private:
 	void AddCluster(double, double, double, ClusterType);
@@ -57,6 +58,7 @@ public:
 
 	/* Record whole event in a vector, if we find a large cluster, for some reason. */
 	std::vector<double> _fBadE; /* Size will be either 0 or 640. */
+	std::vector<double> _fHeClSize1; /* Size will be either 0 or 640. */
 
 	void Clean(Option_t* option="") noexcept /* override */;
 	void Init(TDictInfo info) /* override */;

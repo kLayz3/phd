@@ -39,7 +39,7 @@ public:
 	T* RegisterObject(const char* name, std::initializer_list<typename T::value_type> il) {
 		TOnce<T>* obj = new TOnce<T>(name, il);
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
-		obj->SetName( sstrcat(this->GetName(), "_", obj->GetName()) );
+		obj->SetName( ::sstrcat(this->GetName(), "_", obj->GetName()) );
 		RegisterObject(obj);
 		
 		return obj->operator->(); 
@@ -49,7 +49,7 @@ public:
 	T* RegisterObject(Ts&&... args) {
 		TOnce<T>* obj = new TOnce<T>(std::forward<Ts>(args)...);
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
-		obj->SetName( sstrcat(this->GetName(), "_", obj->GetName()) );
+		obj->SetName( ::sstrcat(this->GetName(), "_", obj->GetName()) );
 		RegisterObject(obj);
 		
 		return obj->operator->(); 

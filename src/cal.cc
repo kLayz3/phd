@@ -1,6 +1,3 @@
-#include "CMDLineParser.h"
-#include "AuxFunctions.hh"
-#include "TString.h"
 #include "libs.hh"
 #include <algorithm>
 #include <iostream>
@@ -10,6 +7,8 @@
 #include "dbg.hh"
 #include "indicators.hh"
 
+#include "CMDLineParser.h"
+#include "AuxFunctions.hh"
 #include "TAnalysisPool.hxx"
 #include "TFOOTPedestalProc.h"
 #include "TFOOTPedestalCont.h"
@@ -18,20 +17,6 @@ using namespace std;
 using namespace CMDLineParser;
 
 extern const char* calibrate_help;
-
-#if !defined(ANALYSIS_MULTITHREADED)
-	/* Default build: enable multithread. */
-	#if 1
-		#define ANALYSIS_MULTITHREADED
-	#else
-		#warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls!"
-	#endif
-#endif
-
-#if defined(ANALYSIS_SINGLETHREADED)
-	#undef ANALYSIS_MULTITHREADED
-	#warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls!"
-#endif
 
 /* If this is defined then the original ROOT branch comes from FRS Go4 - Sort step instead of ucesb. */
 #if defined(FRS_GO4)
@@ -133,7 +118,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	TFOOTPedestalCont foot[N_FOOT];
 #define INIT_FOOT_(ID) \
 	{ \
-		int i = FindIndex(static_detectors, ID); \
+		int i = ::FindIndex(static_detectors, ID); \
 		if(i < 0) ERROR("Index cannot be found: ID=%d, i=%d", ID, i); \
 		TFOOTPedestalCont& f = foot[i]; \
 		info["FOOT_ID"] = #ID; \
@@ -153,6 +138,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	INIT_FOOT(FOOT_ID_6);
 	INIT_FOOT(FOOT_ID_7);
 
+	TFOOTPedestalProc::LoadBadStripsFile(PROG_PATH "/params/bad_strips.json");
 	auto pool = TAnalysisPool<>()
 		.emplace_worker<TFOOTPedestalProc>(foot[0])
 		.emplace_worker<TFOOTPedestalProc>(foot[1])
@@ -186,18 +172,12 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 	};
  
-#ifdef ANALYSIS_MULTITHREADED	
 	pool.Start();
-#endif
 	for(u64 ev = 0; ev < nentries; ++ev) {
 		pool.GetEntry(ev);
 		PrintProgress(bar1, ev, nentries);
-#ifdef ANALYSIS_MULTITHREADED
 		pool.AssignWork();
 		pool.Await();
-#else
-		pool.ProcessEntry();
-#endif
 	}
 	pool.Stop(); bar1.mark_as_completed();
 	
@@ -232,19 +212,12 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 	};
 
-#ifdef ANALYSIS_MULTITHREADED	
 	pool.Start();
-#endif
 	for(u64 ev = 0; ev < nentries; ++ev) {
 		pool.GetEntry(ev);
 		PrintProgress(bar2, ev, nentries);
-#ifdef ANALYSIS_MULTITHREADED
 		pool.AssignWork();
 		pool.Await();
-#else
-		pool.ProcessEntry();
-#endif
-
 		pool.FillOutput();
 	}
 	pool.Stop(); bar2.mark_as_completed();
@@ -257,7 +230,6 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		TFOOTPedestalProc* p = dynamic_cast<TFOOTPedestalProc*>(pool.GetWorker(i));
 		if(!p) continue;
 		p->CalcFinalPedestal();
-		dbg("Finished with one fine pedestal fitting (sigma calc) ...", i+1);
 	}
 	tv.emplace_back(TimePoint("post fineped fit"));
 	PrintElapsed<kSECOND>(tv);

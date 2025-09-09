@@ -6,6 +6,7 @@
 #include <type_traits>
 #include "Rtypes.h"
 #include "libs.hh"
+#include <immintrin.h>
 
 class TProcessor;
 
@@ -28,8 +29,20 @@ namespace util {
 		  > {};
 }
 
+#if defined(__clang__) && __cplusplus >= 201703L
+#	include <new>
+#endif
+
+constexpr std::size_t CL = 
+#if defined(__clang__) && __cplusplus >= 201703L
+	std::hardware_destructive_interference_size;
+#else
+	64
+#endif
+	;
+
 template<typename T>
-class alignas(64) TAnalysisWorker final : public T {
+class TAnalysisWorker final : public T {
 	static_assert(util::has_process_entry<T>::value, "Type <T> needs a `void ProcessEntry()` method implemented!");
 	static_assert(std::is_move_constructible<T>::value,  "Type <T> needs a move ctor.");
 	static_assert(std::is_move_assignable<T>::value, "Type <T> needs move assignment op.");
@@ -39,8 +52,8 @@ class alignas(64) TAnalysisWorker final : public T {
 
 private:
 	std::thread _thread{};
-	std::atomic<bool> _stop{false};
-	std::atomic<bool> _has_work{false};
+	alignas(CL) std::atomic<bool> _stop{false};
+	alignas(CL) std::atomic<bool> _has_work{false};
 
 public:
 	using T::T;
@@ -85,7 +98,11 @@ public:
 						T::ProcessEntry();
 						_has_work.store(false, std::memory_order_release);
 					}
-					std::this_thread::sleep_for(1us);
+#if defined(__x86_64__)
+					_mm_pause();
+#else
+					std::this_thread::yield();
+#endif
 				}
 			}
 		};

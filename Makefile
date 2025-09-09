@@ -12,8 +12,6 @@ CXXFLAGS := $(shell root-config --cflags) \
 
 include includes/common.mk
 
-CXXFLAGS += -DPOOL_MAX_THREADS_=$(shell nproc) 
-
 LDFLAGS := $(shell root-config --ldflags) 
 LIBS := $(shell root-config --libs) \
 		-L$(shell pwd -P)/includes/build \

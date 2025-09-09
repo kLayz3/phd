@@ -1,7 +1,3 @@
-#include "CMDLineParser.h"
-#include "AuxFunctions.hh"
-#include "TContainer.h"
-#include "TString.h"
 #include "libs.hh"
 #include <algorithm>
 #include <iostream>
@@ -11,7 +7,8 @@
 #include "dbg.hh"
 
 #include "indicators.hh"
-
+#include "CMDLineParser.h"
+#include "AuxFunctions.hh"
 #include "TAnalysisPool.hxx"
 #include "TFOOTPedestalProc.h"
 #include "TFOOTPedestalCont.h"
@@ -20,20 +17,6 @@
 
 using namespace CMDLineParser;
 using namespace std::literals;
-
-#if !defined(ANALYSIS_MULTITHREADED)
-	/* Default build: enable multithread. */
-	#if 1
-		#define ANALYSIS_MULTITHREADED
-	#else
-		#warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls!"
-	#endif
-#endif
-
-#if defined(ANALYSIS_SINGLETHREADED)
-	#undef ANALYSIS_MULTITHREADED
-	#warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls!"
-#endif
 
 extern const char* clusterize_help;
 
@@ -61,7 +44,6 @@ constexpr i32 N_FOOT = LEN(static_detectors);
 
 auto main(int argc, char* argv[]) -> i32 {
 	using namespace indicators;
-	show_console_cursor(false);
 	srand(time(NULL));	
 
 	std::string pStr, fileName, outFile;
@@ -75,7 +57,6 @@ auto main(int argc, char* argv[]) -> i32 {
 	if(IsCmdArg("help", argc, argv)) { std::cout << clusterize_help; return 0; }
 	
 	if(!ParseCmdLine("file", fileName, argc, argv)) {
-		fileName = std::string(argv[1]);
 	}
 	if(!ParseCmdLine("output", outFile, argc, argv)) {
 		outFile = fileName.substr(0, fileName.find('.')) + "_cal.root"; 
@@ -117,15 +98,15 @@ auto main(int argc, char* argv[]) -> i32 {
 		cfoot[i].Setup(ContainerIO::kOUTPUT);
 	}
 	auto pool = TAnalysisPool<>()
-		.emplace_worker<TFOOTCalProc>(foot[0], cfoot[0], 6, 2)
-		.emplace_worker<TFOOTCalProc>(foot[1], cfoot[1], 6, 1)
-		.emplace_worker<TFOOTCalProc>(foot[2], cfoot[2], 6, 3)
-		.emplace_worker<TFOOTCalProc>(foot[3], cfoot[3], 6, 1.5)
+		.emplace_worker<TFOOTCalProc>(foot[0], cfoot[0], 8, 2)
+		.emplace_worker<TFOOTCalProc>(foot[1], cfoot[1], 8, 4)
+		.emplace_worker<TFOOTCalProc>(foot[2], cfoot[2], 15, 3)
+		.emplace_worker<TFOOTCalProc>(foot[3], cfoot[3], 15, 5)
 		.emplace_worker<TFOOTCalProc>(foot[4], cfoot[4], 5, 2)
 		.emplace_worker<TFOOTCalProc>(foot[5], cfoot[5], 5, 1)
-		.emplace_worker<TFOOTCalProc>(foot[6], cfoot[6], 5, 3)
-		.emplace_worker<TFOOTCalProc>(foot[7], cfoot[7], 5, 1.5);
-	
+		.emplace_worker<TFOOTCalProc>(foot[6], cfoot[6], 10, 2)
+		.emplace_worker<TFOOTCalProc>(foot[7], cfoot[7], 10, 1);
+
 	pool.in = h102;
 	pool.out = h103;
 
@@ -148,18 +129,13 @@ auto main(int argc, char* argv[]) -> i32 {
 		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 	};
 
-#ifdef ANALYSIS_MULTITHREADED	
+	show_console_cursor(false);
 	pool.Start();
-#endif
 	for(u64 ev = 0; ev < nentries; ++ev) {
 		pool.GetEntry(ev);
 		PrintProgress(bar, ev, nentries);
-#ifdef ANALYSIS_MULTITHREADED
 		pool.AssignWork();
 		pool.Await();
-#else
-		pool.ProcessEntry();
-#endif
 		pool.FillOutput();
 	}
 	pool.Stop(); bar.mark_as_completed();

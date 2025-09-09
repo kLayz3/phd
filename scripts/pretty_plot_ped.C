@@ -1,8 +1,6 @@
-void pretty_plot_ped(const char* fileName = "") {
+void pretty_plot_ped(const char* fileName = "", int N=20) {
 	TFile* f = new TFile(fileName, "READ");
 	if(!f || f->IsZombie()) { printf("Error opening file.\n"); exit(2); }
-
-	int N = 20;
 
 #define GET_OBJ(TYPE, x, EXT) \
 	auto* x = dynamic_cast<TYPE*>(f->Get(Form("FOOT%d_%s", N, #EXT))); \

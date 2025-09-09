@@ -13,9 +13,20 @@
 #include "TContainer.h"
 #include "dbg.hh"
 
+/* Passing in this define to purposefully undef
+ * the singlethreaded-ness. */
+#if defined(ANALYSIS_MULTITHREADED)
+#	undef ANALYSIS_SINGLETHREADED
+#endif
+
 /* Passed from the build tool. */
-#ifndef POOL_MAX_THREADS_
-#	define POOL_MAX_THREADS_ 10
+#if !defined(ANALYSIS_SINGLETHREADED)
+#	if !defined(POOL_MAX_THREADS_)
+#		define POOL_MAX_THREADS_ 10
+#	endif
+#else
+#	warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls."
+#	define POOL_MAX_THREADS 100
 #endif
 
 namespace util {
@@ -39,6 +50,7 @@ template<typename... Ts>
 class TAnalysisPool final {
 	static_assert(sizeof...(Ts) <= POOL_MAX_THREADS_, 
 		"TAnalysisPool template instantiated with over-the-top capacity. Consider lowering.");
+	static_assert((std::is_base_of_v<TProcessor, Ts> && ...), "All the (tuple) base workers must inherit from TProcessor!");
 public:
 	static constexpr size_t Size() { return sizeof...(Ts); }
 	
@@ -48,7 +60,7 @@ private:
 	> _pool;
 
 	bool _stop = true;     // Flagging this will join the workers' threads back to the main
-	bool _is_valid = true; // Validity flag, moved objects will be marked as invalid.
+	bool _is_valid = true; // Validity flag. Moved objects will be marked as invalid.
 	
 	template<size_t I>
 	using worker_t = std::tuple_element_t<I, decltype(_pool)>;
@@ -168,31 +180,47 @@ public:
 		// State prior to this call must be stopped.
 		if(!_stop) ERROR("Must be in a stopped state before calling start.");
 		_stop = false;
+#if !defined(ANALYSIS_SINGLETHREADED)
 		util::for_each_in_tuple(_pool, [](auto& w) {
 			w._stop.store(false, std::memory_order_release);
 			w.Start();
 		});
+#endif
+	}
+	
+	/**
+	 * Sequentially calls `T::ProcessEntry()` of each underlying worker. 
+	 * */
+	void ProcessEntry() noexcept {
+		std::apply([](auto&... ws) { (..., ws.ProcessEntry()); }, _pool);
 	}
 
 	/**
 	 * Mark the flag to wake-up for all workers simultaneously.
 	 */
 	void AssignWork() noexcept {
+#if defined(ANALYSIS_SINGLETHREADED)
+		this->ProcessEntry();
+#else
 		std::apply([](auto&... ws) { 
 				(..., ws._has_work.store(true, std::memory_order_release)); 
 			}, _pool); 
+#endif
 	};
 
 	/**
 	 * Block the main thread until the execution of all the workers is marked finished. 
 	 */
 	void Await() const noexcept {
+#if !defined(ANALYSIS_SINGLETHREADED)
 		while(true) {
 			bool all_done = std::apply([](auto&... ws) {
 					return (...&& ws.IsDone()); 	
 				}, _pool);
 			if(all_done) break;
 		}
+#endif
+	/* No-op for single threaded mode. */
 	};
 
 	/**
@@ -224,13 +252,13 @@ public:
 		// Tree handle just gets written into its directory.
 		// Check for possible mishandling though.
 		if(out) {
-			if(!(*out))          ERROR("Output TTree handle given, but is nullptr? Cannot write.");
+			if(!(*out)) ERROR("Output TTree handle given, but is nullptr? Cannot write.");
 
 			TDirectory* dir = (*out)->GetDirectory();
-			if(!dir)             ERROR("Output TTree handle given, but is not attached to any directory.");
+			if(!dir) ERROR("Output TTree handle given, but is not attached to any directory.");
 
 			TFile *f = dynamic_cast<TFile*>(dir);
-			if(!f)               ERROR("Output TTree handle belongs to a non-file directory.");
+			if(!f) ERROR("Output TTree handle belongs to a non-file directory.");
 			if(!f->IsWritable()) ERROR("Output TTree's associated file is not writable. Inside 'main()' define it after opening an output file, or call its 'SetDirectory()` method.");
 
 			r += (*out)->Write();
@@ -242,11 +270,4 @@ public:
 		return r;
 	};
 	
-	/**
-	 * Sequentially calls `T::ProcessEntry()` of each underlying worker. 
-	 * */
-	void ProcessEntry() {
-		std::apply([](auto&... ws) { (..., ws.ProcessEntry()); }, _pool);
-	}
-
 }; // TAnalysisPool

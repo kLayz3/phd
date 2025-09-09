@@ -50,10 +50,9 @@ TFOOTCalProc::ClusterType TFOOTCalProc::GetClusterType() {
 /* Input and output should be properly assigned a priori. */
 TFOOTCalProc::TFOOTCalProc(TFOOTPedestalCont& in, TFOOTCalCont& out, double x_seed, double x_neigh) : 
 	input(&in), output(&out),
-	X_CENTRE_THR(x_seed), X_NEIGHB_THR(x_neigh)
+	X_CENTRE_THR(x_seed), X_NEIGHB_THR(x_neigh),
+	_e(&input->FOOTE[0])
 {
-
-	e = &input->FOOTE[0];
 	if(!input->gr_s1 || input->gr_s1->GetN() != N_STRIPS)
 		ERROR("Input sigma graph not initialized? State (null|entries): \'%s\' . Did you call ::Setup?",
 				input->gr_s1 ? "null" : Form("%d", input->gr_s1->GetN()));
@@ -61,14 +60,14 @@ TFOOTCalProc::TFOOTCalProc(TFOOTPedestalCont& in, TFOOTCalCont& out, double x_se
 	if(output->FOOT_N < 0 || output->POS < 0) 
 		ERROR("Output object (TFOOTCalCont): \'%s\' uninitialized. Did you call ::Setup?", output->GetName());
 
-	double* sigma = input->gr_s1->GetY();
+	const double* sigma = input->gr_s1->GetY();
 	for(int i=0; i<N_STRIPS; ++i) {
 		c_thr[i] = sigma[i] * X_CENTRE_THR; 
 		n_thr[i] = sigma[i] * X_NEIGHB_THR; 
 	}
 
 	/* Bad/dead strips just label them with large thresholds.. */
-	std::vector<int> bad_strips = *input->bad_strips;
+	const std::vector<int>& bad_strips = *input->bad_strips;
 	for(auto i : bad_strips) {
 		c_thr[i] = BAD_STRIP_FAKE_THRESHOLD; 
 		n_thr[i] = BAD_STRIP_FAKE_THRESHOLD; 
@@ -80,12 +79,15 @@ TFOOTCalProc::TFOOTCalProc(TFOOTPedestalCont& in, TFOOTCalCont& out, double x_se
 	_ALTER_TITLE(output->h1_mult);
 	_ALTER_TITLE(output->h1_X);
 	_ALTER_TITLE(output->h1_dE);
+	_ALTER_TITLE(output->h1_sn_ratio);
 }
 
 void TFOOTCalProc::ProcessEntry() noexcept {
 	output->Clean();
-	if( std::isnan(e[0]) ) return; /* Missing data; in previous step marked it NAN by default. */
+	if( std::isnan(_e[0]) ) return; /* Missing data; in previous step marked it NAN by default. */
 	
+	/* Copy	the data over, since there's a write to `e`. */
+	memcpy(e, _e, sizeof(e)); 
 	int i = 0;
 	/* Try to find a central 'seed' strip. */
 	for(; i < N_STRIPS; ++i) {
@@ -120,7 +122,7 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	while((++i) < N_STRIPS and (e[i] > n_thr[i] || _IsAddibleToCluster<kPOS>(i)))  {
 		_AddHit(i);
 	}
-	/* From here here, `i` points to end of cluster. `c0` is to be assigned to that. */
+	/* From here, `i` points to end of cluster. */
 	c0 = i;
 
 	/* In case this positive (right) side connected a fragment, restore the 'old' energy. */
@@ -140,10 +142,19 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		this->e[_i] = _e;
 	}
 	
+	/* Handle cluster size == 1.
+	 * Most of the time it's noise or some other weird effect.
+	 * However, possible that indeed there's a just-below-threshold effect for small
+	 * central hits. */
+	if(_cl_cnt == 1) {
+		/* Bad charge sharing can only be for MIP's, or if the 
+		 * central strip somehow crossed a 'bad strip'. */
+		if(_buf[0].e > 3 * c_thr[i]) return;
+	}
+
 	/* Check if cluster is 'merged'. Meaning that in the cluster,
 	 * there exist two strips above C-threshold with 2 or more strips in-between 
 	 * which are below C-threshold. */
-
 	/* Sort by their position. */
 	std::sort(_buf, _buf + _cl_cnt, [](const auto& l, const auto& r) { return l.x < r.x; });
 
@@ -190,11 +201,10 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	
 	cl_wx /= cl_e;
 
-	double cl_max_e = std::max_element(_buf, _buf + _cl_cnt, 
+	auto [cl_max_i, cl_max_e] = *std::max_element(_buf, _buf + _cl_cnt, 
 		[](const auto& l, const auto& r) { 
 			return l.e < r.e; 
-		})->e;
-
+		});
 	double cl_m = cl_e / cl_max_e;
 
 	ClusterType ct = this->GetClusterType();
@@ -222,6 +232,21 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 			break;
 		default:
 			break;
+	}
+	/* Since the cluster hit array is sorted by the strip index, and only consecutive 
+	 * sequence of hits makes a cluster - means this below is valid: */
+	cl_max_i -= _buf[0].x;
+	/* assert(cl_max_i >= 0 && cl_max_i < _cl_cnt); */
+
+	if(cl_max_i > 0 && cl_max_i+1 < (int)_cl_cnt) {
+		double e_left  = _buf[cl_max_i - 1].e;
+		double e_right = _buf[cl_max_i + 1].e;
+		double sn = 1 / log( cl_max_e * cl_max_e / (e_left*e_right) );
+		output->h1_sn_ratio->Fill(sn);
+	}
+
+	if(cl_max_e > 30 and _cl_cnt == 1 and output->_fHeClSize1.size() == 0 and output->_fBadE.size() == 0) {
+		output->_fHeClSize1.assign(e, e + N_STRIPS);
 	}
 }
 

@@ -25,7 +25,7 @@ namespace CMDLineParser {
 	 *  -tag0 identifier0_0 identifier0_1 identifier0_2 ... (Windows style)
 	 */
 	template<typename T>
-	bool ParseCmdLine(const char* line, T& dest, int argc, char** argv, Mandatory mandatory = Mandatory{});
+	bool ParseCmdLine(const char* line, T& dest, int argc, char** argv, Mandatory mandatory = false);
 
 	void VerifyNoArgumentsLeft(int, char**);
 
