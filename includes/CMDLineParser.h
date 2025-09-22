@@ -13,7 +13,9 @@ namespace CMDLineParser {
 		const char* help_msg = nullptr;
 		Mandatory() = default;
 		Mandatory(bool b) : is_it(b) {}
-		static void SetMessage(const char* msg) { def_msg = msg; }
+		Mandatory(bool b, const char* msg) : is_it(b), help_msg(msg) {}
+		static void SetDefMessage(const char* msg) { def_msg = msg; }
+		static const char* DefMessage() { return def_msg; }
 	};
 	
 	/** 

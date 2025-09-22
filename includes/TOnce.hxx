@@ -45,7 +45,7 @@ namespace util {
  * but also stl-containers (std::vector<int>, std::array<double, T>, etc) that might carry a name or maybe not.
  * This class expands them so that all of these classes' instances carry a name,
  * which shall be serialized (once) into a `TFile`,
- * unlike `TContainer`'s other parts which will be serialized row-wise into a `TTree` inside `TFile`. */
+ * unlike `TContainer`'s other parts which will be serialized row-wise into a `TTree`. */
 
 template<typename T>
 class TOnce : public TOnceBase {

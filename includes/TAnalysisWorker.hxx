@@ -93,7 +93,7 @@ public:
 
 		_thread = std::thread {
 			[this]() {
-				while(! _stop.load(std::memory_order_acquire)) {
+				while(! _stop.load(std::memory_order_relaxed)) {
 					if(_has_work.load(std::memory_order_acquire)) {
 						T::ProcessEntry();
 						_has_work.store(false, std::memory_order_release);
@@ -101,7 +101,7 @@ public:
 #if defined(__x86_64__)
 					_mm_pause();
 #else
-					std::this_thread::yield();
+					//std::this_thread::yield();
 #endif
 				}
 			}

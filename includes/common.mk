@@ -5,7 +5,7 @@ CXXFLAGS += -DPOOL_MAX_THREADS_=$(shell nproc) \
 #CXXFLAGS += -DANALYSIS_SINGLETHREADED
 
 ifneq ($(OPTIMIZATION),1)
-CXXFLAGS += -ggdb -g3 -O0
+CXXFLAGS += -ggdb -g3 -O0 -DANALYSIS_SINGLETHREADED
 else
 CXXFLAGS += -O3 -march=native
 endif

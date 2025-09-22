@@ -26,7 +26,7 @@
 #	endif
 #else
 #	warning "Running single-threaded. Possibly slower for complex `ProcessEntry` calls."
-#	define POOL_MAX_THREADS 100
+#	define POOL_MAX_THREADS 100 /* Dummy value. */
 #endif
 
 namespace util {
@@ -196,7 +196,8 @@ public:
 	}
 
 	/**
-	 * Mark the flag to wake-up for all workers simultaneously.
+	 * Mark the flag to wake-up for all workers simultaneously (multithreaded mode).
+	 * Call underlying workers' ProcessEntry() sequentially in single threaded mode. 
 	 */
 	void AssignWork() noexcept {
 #if defined(ANALYSIS_SINGLETHREADED)
@@ -210,6 +211,7 @@ public:
 
 	/**
 	 * Block the main thread until the execution of all the workers is marked finished. 
+	 * No-op for single threaded mode. 
 	 */
 	void Await() const noexcept {
 #if !defined(ANALYSIS_SINGLETHREADED)
@@ -218,13 +220,16 @@ public:
 					return (...&& ws.IsDone()); 	
 				}, _pool);
 			if(all_done) break;
+#if defined(__x86_64__)
+			_mm_pause();
+#endif
 		}
 #endif
-	/* No-op for single threaded mode. */
 	};
 
 	/**
 	 * Stops execution of all the workers and joins their internal threads.
+	 * No-op for single threaded mode. 
 	 */
 	void Stop() {
 		if(!_is_valid) ERROR("Called in invalidated object.");

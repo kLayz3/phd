@@ -6,7 +6,7 @@ lib*
 *.pcm
 .clangd
 cal
-clust
+map
 includes/dict
 rootfiles
 *.png

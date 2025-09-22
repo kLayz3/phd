@@ -13,10 +13,10 @@ void pretty_cal(const char* fileName = "", int N = 4, uint32_t Nevents = 16, uin
 
 	TCanvas *cbad = new TCanvas("cbad", "Bad events", 2600, 2000);
 
-	const int N_DIV = 4;
+	const int N_DIV = 2;
 	const int N_DIV2 = N_DIV * N_DIV; 
-	const int N_GRAPHS_PER_PAD = 2; /* 1,2,3,4. */
-	Nevents = (N_DIV2 * N_GRAPHS_PER_PAD < 64) ? N_DIV2 * N_GRAPHS_PER_PAD : 64;
+	const int N_GRAPHS_PER_PAD = 1; /* 1,2,3,4. */
+	Nevents = (N_DIV2 * N_GRAPHS_PER_PAD < 64) ? (N_DIV2 * N_GRAPHS_PER_PAD) : 64;
 
 	cbad->Divide(N_DIV, N_DIV);
 	
@@ -46,6 +46,7 @@ void pretty_cal(const char* fileName = "", int N = 4, uint32_t Nevents = 16, uin
 		
 		if(curr_ev % N_GRAPHS_PER_PAD == 0) {
 			cbad->cd(curr_ev / N_GRAPHS_PER_PAD + 1);
+			gr->SetTitle(Form("FOOT%d;StripNum;ADC(ca)", N));
 			gr->Draw("AP");
 			TLatex *latex = new TLatex{};
 			latex->SetTextAlign(13);  //align at top
@@ -95,6 +96,8 @@ void pretty_cal(const char* fileName = "", int N = 4, uint32_t Nevents = 16, uin
 		csn->cd(i+1);
 		auto* h = hsn[i];
 		h->Draw();
+		h->GetXaxis()->SetTitle("#sigma_{<}*#sigma_{>}/#sigma_0^2");
+		h->GetYaxis()->SetTitle("Count");
 		double mx = h->GetBinCenter( h->GetMaximumBin() );
 		double my = h->GetBinContent( h->GetMaximumBin() );
 		TLine *l = new TLine(mx, 0, mx, my);
@@ -127,10 +130,11 @@ void pretty_cal(const char* fileName = "", int N = 4, uint32_t Nevents = 16, uin
 		
 		gr->SetMarkerStyle(style[curr_ev % N_GRAPHS_PER_PAD]);
 		gr->SetMarkerColor(col[curr_ev % N_GRAPHS_PER_PAD]);
-		gr->SetMarkerSize(0.55);
+		gr->SetMarkerSize(0.75);
 			
 		if(curr_ev % N_GRAPHS_PER_PAD == 0) {
 			cweird->cd(curr_ev / N_GRAPHS_PER_PAD + 1);
+			gr->SetTitle(Form("FOOT%d;StripNum;ADC(cal)", N));
 			gr->Draw("AP");
 			TLatex *latex = new TLatex{};
 			latex->SetTextAlign(13);  //align at top
@@ -145,6 +149,6 @@ void pretty_cal(const char* fileName = "", int N = 4, uint32_t Nevents = 16, uin
 		gr_cl->SetMarkerColor(6);
 		gr_cl->SetMarkerSize(0.8);
 
-		curr_ev += 2;
+		++curr_ev;
 	}
 }
