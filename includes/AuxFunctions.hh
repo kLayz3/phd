@@ -10,8 +10,13 @@
 #include <vector>
 #include "libs.hh"
 #include "indicators.hh"
+#include <fstream>
 #include "nlohmann/json.hpp"
 #include <regex>
+#include <typeinfo>
+#ifndef _MSC_VER
+#	include <cxxabi.h>
+#endif
 
 inline void PrintProgress(indicators::ProgressBar& bar,	u64 n_entry, u64 max_entries, u64 step = 100) noexcept {
 	static u64 n_entry_called = 0;
@@ -152,7 +157,68 @@ namespace util {
 	struct is_an_array<std::array<T,N>> : std::true_type { using value_type = T; static constexpr size_t size = N; };
 
 	template<typename T>
-	inline constexpr bool is_an_array_v = is_an_array<T>::value;
+	constexpr bool is_an_array_v = is_an_array<T>::value;
+	
+	template<typename T, typename = void>
+	struct has_clean_noexcept : std::false_type {};
+
+	template<typename T>
+	struct has_clean_noexcept<T, 
+		std::void_t<decltype(std::declval<T&>().Clean())>>
+		: std::bool_constant<
+			std::is_same_v<void, decltype(std::declval<T&>().Clean())> &&
+			noexcept(std::declval<T&>().Clean())
+		> {};
+
+	template<typename T>
+	constexpr bool is_pathlike_arg_v =
+		std::is_base_of_v<std::ifstream, std::decay_t<T>> ||
+		std::is_constructible_v<std::ifstream, T&&> ||
+		std::is_constructible_v<std::string, T&&> ||
+		std::is_constructible_v<std::filesystem::path, T&&>;
+	
+	template<typename T,
+		typename U = std::decay_t<T>,
+		typename std::enable_if<is_pathlike_arg_v<T>>::type* = nullptr
+	> std::optional<std::ifstream> get_maybe_ifstream(T&& arg) {
+		if constexpr(std::is_base_of_v<std::istream, U>) {
+			if(arg.is_open()) return arg;
+			else return {};
+		}
+		else if constexpr(
+			std::is_constructible_v<std::ifstream, T&&> ||
+			std::is_constructible_v<std::filesystem::path, T&&>
+		) {
+			auto f = std::ifstream(std::forward<T>(arg));
+			if(f.is_open()) return f;
+			else return {};
+		}
+		else if constexpr(std::is_constructible_v<std::string, T&&>) {
+			auto f = std::ifstream(std::string(std::forward<T>(arg)));
+			if(f.is_open()) return f;
+			else return {};
+		}
+		else 
+			static_assert(std::is_constructible_v<std::string, T&&>,
+				"Type not constructible to ifstream or path-like type.");
+	}
+
+	template<typename T>	
+	bool is_file_readable(T&& arg) {
+		return get_maybe_ifstream(std::forward<T>(arg)).has_value();
+	}
+
+	template<typename T,
+		typename U = std::decay_t<T>,
+		typename std::enable_if<is_pathlike_arg_v<T>>::type* = nullptr
+	> std::optional<std::string> get_file_path(T&& arg) {
+		if constexpr(std::is_base_of_v<std::istream, U>) 
+			return {};
+		else if constexpr(std::is_constructible_v<std::string, T&&>)
+			return std::string(std::forward<T>(arg));
+		else if constexpr(std::is_constructible_v<std::filesystem::path, T&&>)
+			return std::filesystem::path(std::forward<T>(arg)).string();
+	}
 }
 
 template<typename T,
@@ -174,6 +240,12 @@ template<typename T,
 	for(int i=0; i < (int)N; ++i)
 		if(arr[i] == val) return i;
 	return -1;
+}
+template<typename T,
+	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
+	typename std::enable_if<util::is_an_array_v<U>>::type* = nullptr
+> constexpr int len(const T& arr) {
+	return static_cast<int>(util::is_an_array<U>::size);	
 }
 
 static inline void Trim(std::string& s) {
@@ -269,3 +341,32 @@ static inline void append_flat_json(json& dst, const json& src) {
 		}
 	}
 }
+
+namespace util  {
+template<typename T,
+	typename U = std::decay_t<T>	
+> std::string type_name() {
+	std::unique_ptr<char, void(*)(void*)> own(
+#ifndef _MSC_VER
+		abi::__cxa_demangle(typeid(U).name(), nullptr,
+			nullptr, nullptr),
+#else
+		nullptr,
+#endif
+		std::free
+	);
+	std::string r = (own) ? own.get() : typeid(U).name();
+	if constexpr(std::is_const<T>::value)
+        r += " const";
+    if constexpr(std::is_volatile<T>::value)
+        r += " volatile";
+    if constexpr(std::is_lvalue_reference<T>::value)
+        r += "&";
+    else if constexpr(std::is_rvalue_reference<T>::value)
+        r += "&&";
+    return r;
+}
+}
+
+#define _SELF_TYPE_CSTR \
+	util::type_name<std::remove_reference<decltype(*this)>>().c_str()

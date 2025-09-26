@@ -1,12 +1,10 @@
 #include "TFOOTPedestalProc.h"
 #include "TF1.h"
 #include "libs.hh"
-#include "dbg.hh"
 #include <cassert>
 #include <cfloat>
 #include <cstdlib>
 #include <numeric>
-#include <unordered_map>
 #include <unordered_set>
 #include "AuxFunctions.hh"
 
@@ -28,8 +26,10 @@ void TFOOTPedestalProc::ProcessEntry() noexcept {
 
 void TFOOTPedestalProc::ProcessGlobalPedestal() noexcept {
 	if(*data->_FOOT == 0) return;
+	int iraw;
 	FOR(i, N_STRIPS) {
-		data->h2_raw->Fill(i, data->_FOOTE[i]);
+		iraw = is_swapped ? ((i + N_STRIPS/2) % N_STRIPS) : i;
+		data->h2_raw->Fill(i, data->_FOOTE[iraw]);
 	}
 }
 
@@ -37,7 +37,7 @@ void TFOOTPedestalProc::ProcessGlobalPedestal() noexcept {
  * Even if TH1D histograms are detached. */
 void TFOOTPedestalProc::CalcGlobalPedestal() {
 	if(data->h2_raw->GetEntries() == 0) {
-		dbg("Ran over the TTree, but found 0 events with data?", data->FOOT_N, "Setting all pedestals to 0.");
+		WARN("Ran over the TTree, but found 0 events with data?" EMPH(FOOT: %d) ", Setting all pedestals to 0.", data->FOOT_N);
 		return;
 	} 
 	FOR(i, N_STRIPS) {
@@ -60,7 +60,7 @@ void TFOOTPedestalProc::CalcGlobalPedestal() {
 //#define CALC_OFFSET_FROM_MEDIAN
 
 void TFOOTPedestalProc::ProcessEventPedestal() noexcept {
-	this->Clear();
+	data->Clean();
 	if(*data->_FOOT == 0) return;
 	
 	/* Subtract the global pedestal. */
@@ -84,7 +84,8 @@ void TFOOTPedestalProc::ProcessEventPedestal() noexcept {
 		/* Calculate the systematic shift per asic (group of 64 strips). */
 		FOR(strip, N_STRIPS_PER_ASIC /* 0..=63 */) {
 			i = i0 + strip;
-			ped_offset[strip] = data->_FOOTE[i] - data->gped->at(i);
+			int iraw = is_swapped ? ((i + N_STRIPS/2) % N_STRIPS) : i;
+			ped_offset[strip] = data->_FOOTE[iraw] - data->gped->at(i);
 		}
 		/* Initial strip #0 is uncoupled. It contributes nothing. 
 		 * Just remove it from the analysis. */
@@ -102,7 +103,8 @@ void TFOOTPedestalProc::ProcessEventPedestal() noexcept {
 	
 		FOR(strip, N_STRIPS_PER_ASIC /* 0..=63 */) {
 			i = i0 + strip;
-			adc_intermediate = data->_FOOTE[i] - data->gped->at(i);
+			int iraw = is_swapped ? ((i + N_STRIPS/2) % N_STRIPS) : i;
+			adc_intermediate = data->_FOOTE[iraw] - data->gped->at(i);
 			data->h2_mid->Fill(i, adc_intermediate);
 			adc_final = adc_intermediate;
 			if(strip > 0) {
@@ -118,16 +120,16 @@ void TFOOTPedestalProc::ProcessEventPedestal() noexcept {
 				adc_final += rand() / (double)RAND_MAX ;
 			}
 			data->h2_corr->Fill(i, adc_final); 
-			data->FOOTE[i] = adc_final;
+			data->inner().FOOTE[i] = adc_final;
 		}
 	}
 }
 
 void TFOOTPedestalProc::CalcFinalPedestal() {
 	if(data->h2_corr->GetEntries() == 0) {
-		dbg("Ran over the TTree, but found 0 events with calibrated data?", data->FOOT_N);
+		WARN("Ran over the TTree, but found 0 events with calibrated data?" EMPH(FOOT: %d\n), data->FOOT_N);
 		return;
-	} 
+	}
 	FOR(i, N_STRIPS) {
 		TH1D* slice = data->h2_corr->ProjectionY("", i+1, i+1);
 		slice->SetDirectory(nullptr);

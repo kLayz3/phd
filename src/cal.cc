@@ -1,3 +1,4 @@
+#include "TFRSMapCont.h"
 #include "libs.hh"
 #include <algorithm>
 #include <iostream>
@@ -22,14 +23,14 @@ using namespace std::literals;
 extern const char* calibrate_help;
 void sig_callback_handler(int );
 
-#define FOOT_ID_0 25
-#define FOOT_ID_1 23
-#define FOOT_ID_2 22
-#define FOOT_ID_3 21
-#define FOOT_ID_4 20
-#define FOOT_ID_5 19
-#define FOOT_ID_6 17
-#define FOOT_ID_7 10
+#define FOOT_ID_0 10
+#define FOOT_ID_1 17
+#define FOOT_ID_2 19
+#define FOOT_ID_3 20
+#define FOOT_ID_4 22
+#define FOOT_ID_5 25
+#define FOOT_ID_6 23
+#define FOOT_ID_7 21
 
 constexpr i32 static_detectors[] = {
 	FOOT_ID_0, 
@@ -41,7 +42,6 @@ constexpr i32 static_detectors[] = {
 	FOOT_ID_6,
 	FOOT_ID_7
 };
-
 constexpr i32 N_FOOT = LEN(static_detectors);
 
 auto main(int argc, char* argv[]) -> i32 {
@@ -60,10 +60,9 @@ auto main(int argc, char* argv[]) -> i32 {
 		printf("%s", calibrate_help);
 		return 0;
 	}
-	if(IsCmdArg("help", argc, argv)) { std::cout << calibrate_help; return 0; }
+	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
 	
-	if(!ParseCmdLine("file", fileName, argc, argv)) {
-	}
+	ParseCmdLine("file", fileName, argc, argv, true);
 	if(!ParseCmdLine("output", outFile, argc, argv)) {
 		outFile = fileName.substr(0, fileName.find('.')) + "_cal.root"; 
 		WARN("No output file specified. Writing to file: %s\n", outFile.c_str());
@@ -94,6 +93,8 @@ auto main(int argc, char* argv[]) -> i32 {
 		foot[i].Init( {{"FOOT_ID"s, std::to_string(::static_detectors[i])} } );
 		foot[i].Setup(ContainerIO::kINPUT);
 	}
+	TFRSMapCont frs{};
+	frs.Setup(ContainerIO::kINPUT);
 	
 	TFOOTCalCont cfoot[N_FOOT]; // output container.
 	for(int i=0; i<N_FOOT; ++i) {
@@ -104,14 +105,14 @@ auto main(int argc, char* argv[]) -> i32 {
 		cfoot[i].Setup(ContainerIO::kOUTPUT);
 	}
 	auto pool = TAnalysisPool<>()
-		.emplace_worker<TFOOTCalProc>(foot[0], cfoot[0], 5, 1)
-		.emplace_worker<TFOOTCalProc>(foot[1], cfoot[1], 3, 1)
-		.emplace_worker<TFOOTCalProc>(foot[2], cfoot[2], 5, 2)
-		.emplace_worker<TFOOTCalProc>(foot[3], cfoot[3], 5, 1)
-		.emplace_worker<TFOOTCalProc>(foot[4], cfoot[4], 5, 1)
-		.emplace_worker<TFOOTCalProc>(foot[5], cfoot[5], 5, 1)
-		.emplace_worker<TFOOTCalProc>(foot[6], cfoot[6], 4, 1.2)
-		.emplace_worker<TFOOTCalProc>(foot[7], cfoot[7], 4.5, 1.2);
+		.emplace_worker<TFOOTCalProc>(foot[0], cfoot[0], 4, 1)
+		.emplace_worker<TFOOTCalProc>(foot[1], cfoot[1], 4, 1)
+		.emplace_worker<TFOOTCalProc>(foot[2], cfoot[2], 4, 1)
+		.emplace_worker<TFOOTCalProc>(foot[3], cfoot[3], 4, 1)
+		.emplace_worker<TFOOTCalProc>(foot[4], cfoot[4], 4, 1)
+		.emplace_worker<TFOOTCalProc>(foot[5], cfoot[5], 4, 1)
+		.emplace_worker<TFOOTCalProc>(foot[6], cfoot[6], 4, 1)
+		.emplace_worker<TFOOTCalProc>(foot[7], cfoot[7], 4, 1);
 
 	pool.in = h102;
 	pool.out = h103;
@@ -170,7 +171,7 @@ This program will analyse the mapped ROOT file and perform the clustering of the
 Always remember: PHYSICS IS FUN <(^.^)>\n\n";
 
 void sig_callback_handler(int signum) {
-	WARN("\nCaught abort/seg signal.\n");
+	WARN("Caught abort/seg signal.\n");
 	indicators::show_console_cursor(true);
 	exit(signum);
 }

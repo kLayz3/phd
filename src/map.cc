@@ -46,14 +46,14 @@ constexpr const char* _branch_base_name =
 #endif 
 	;
 
-#define FOOT_ID_0 25
-#define FOOT_ID_1 23
-#define FOOT_ID_2 22
-#define FOOT_ID_3 21
-#define FOOT_ID_4 20
-#define FOOT_ID_5 19
-#define FOOT_ID_6 17
-#define FOOT_ID_7 10
+#define FOOT_ID_0 10
+#define FOOT_ID_1 19
+#define FOOT_ID_2 17
+#define FOOT_ID_3 20
+#define FOOT_ID_4 22
+#define FOOT_ID_5 25
+#define FOOT_ID_6 23
+#define FOOT_ID_7 21
 
 constexpr i32 static_detectors[] = {
 	FOOT_ID_0, 
@@ -117,10 +117,6 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	if(r != 0) ERROR("SetBranchAddress failed. \'%s\', RC = %d\n", _branch_base_name, r);
 #endif
 
-	TFile* out = new TFile(outFile.c_str(), "RECREATE"); 
-	TTree* h102 = new TTree("h102", "h102");
-	h102->SetAutoFlush(0); h102->SetAutoSave(0);
-
 	std::unordered_map<std::string, std::string> info;
 	TFOOTPedestalCont foot[N_FOOT];
 #define INIT_FOOT_(ID) \
@@ -130,7 +126,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		TFOOTPedestalCont& f = foot[i]; \
 		info["FOOT_ID"] = #ID; \
 		f.Init(info); \
-		f.Setup(ContainerIO::kOUTPUT, out, h102); \
+		f.Setup(ContainerIO::kOUTPUT, outFile); \
 		f._FOOT = &sort->FOOT##ID; \
 		f._FOOTE = sort->FOOT##ID##E; \
 	}
@@ -146,7 +142,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	INIT_FOOT(FOOT_ID_7);
 
 	TFRSMapCont frs{};
-	frs.Setup(ContainerIO::kOUTPUT, out, h102);
+	frs.Setup(ContainerIO::kOUTPUT, outFile);
 
 #define MAP_SCI(x, SCI_LABEL) \
 	frs.sci[x]._nhit_raw[0] = &sort->tdc_nhit_sc##SCI_LABEL##l; \
@@ -174,6 +170,8 @@ auto main(i32 argc, char* argv[]) -> i32 {
 			tpc._tpc_at[j]  = &sort->tpc_dt[i][j][0];
 			tpc._tpc_atn[j] = &sort->tpc_nhit_dt[i][j];
 		}
+		tpc._sci_timerefn = &sort->tpc_nhit_timeref[i];
+		tpc._sci_timeref = &sort->tpc_timeref[i][0];
 	}
 
 	frs.music[0]._music_raw = &sort->music_e1[0];
@@ -181,7 +179,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 	frs._pattern = &sort->pattern;
 
 	TFOOTPedestalProc::LoadBadStripsFile(PROG_PATH "/params/bad_strips.json");
-	auto pool = TAnalysisPool<>()
+	auto pool = TAnalysisPool<>(h101, outFile, "h102")
 		.emplace_worker<TFOOTPedestalProc>(foot[0])
 		.emplace_worker<TFOOTPedestalProc>(foot[1])
 		.emplace_worker<TFOOTPedestalProc>(foot[2])
@@ -190,10 +188,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		.emplace_worker<TFOOTPedestalProc>(foot[5])
 		.emplace_worker<TFOOTPedestalProc>(foot[6])
 		.emplace_worker<TFOOTPedestalProc>(foot[7])
-		.emplace_worker<TFRSMapProc>(frs, 0); /* Don't do FRS analysis from first go. */
-
-	pool.in  = h101; 
-	pool.out = h102;
+		.emplace_worker<TFRSMapProc>(frs, 0);
 
 	tv.emplace_back(TimePoint("start"));
 	u64 nentries = std::min((u64)pool.GetEntries(), maxEvents);
@@ -266,7 +261,7 @@ auto main(i32 argc, char* argv[]) -> i32 {
 		PrintProgress(bar2, ev, nentries);
 		pool.AssignWork();
 		pool.Await();
-		pool.FillOutput();
+		pool.Fill();
 	}
 	pool.Stop(); bar2.mark_as_completed();
 
@@ -284,20 +279,16 @@ auto main(i32 argc, char* argv[]) -> i32 {
 
 	printf("Total execution time: "); PrintElapsed<kSECOND>(tv.back(), tv.front());
 
-	show_console_cursor(true);
-
 	pool.Write();
-	
-	out->Close();
-	delete h101;
+	show_console_cursor(true);
 }
 
 const char* map_help =
 "\nUsage: ./map <OPT1> <OPT2> ...\n\
-Options can be passed Windows style (-tag value1 value2 ...) or Unix style (--tag=value1,value2,...)\n\
+Key-value options can be passed Windows style (-tag value1 value2 ...) or Unix style (--tag=value1,value2,...)\n\
 For either single or multiple values.\n\
 \n\
--file input1.root input2.root...   ..Input file(s).\n\
+-file input1.root input2.root...   ..Input file(s) from Go4/UCESB.\n\
 -output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_cal' suffix.\n\
 -help                       ..Print this message to stdout. \n\
 -max-events N               ..Specify how many events to process in the ROOT file. Default all.\n\

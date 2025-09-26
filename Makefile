@@ -14,6 +14,7 @@ include includes/common.mk
 
 LDFLAGS := $(shell root-config --ldflags) 
 LIBS := $(shell root-config --libs) \
+		-lROOTNTuple \
 		-L$(shell pwd -P)/includes/build \
 		-Wl,-rpath,$(shell pwd -P)/includes/build \
 		-lStructures \
@@ -36,7 +37,7 @@ $(EXE): % : $(BUILD_DIR)/%.o $(STRUCT_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cc
-	$(MKDIR)
+	@$(MKDIR)
 	$(CXX) -c -o $@ $(CXXFLAGS) $<
 
 $(STRUCT_LIB):

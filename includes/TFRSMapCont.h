@@ -1,110 +1,131 @@
 #pragma once
 
-#include "TContainer.h"
+#include "TContainer.hxx"
 
-class TFRSMapCont : public TContainer {
+struct RNSciMap {
+	static constexpr int MAX_SIZE = 10;
+	std::array<std::vector<i32>, 2> tdc{}; // [0] = left, [1] = right;
+	u16 qdc[2]{};                          // [0] = left, [1] = right;
+	
+	RNSciMap() {
+		for(auto& t : tdc) t.reserve(MAX_SIZE);
+	}
+	inline void Clean() noexcept { 
+		for(auto& t : tdc) t.clear(); 
+		memset(qdc, 0, sizeof(qdc)); 
+	}
+	virtual ~RNSciMap() = default;
+	ClassDef(RNSciMap, 1);
+};
+
+struct RNTPCMap {
+	static constexpr int MAX_SIZE = 64;
+	std::array<std::vector<i32>, 2> tdc_l{};
+	std::array<std::vector<i32>, 2> tdc_r{};
+	std::array<std::vector<i32>, 4> tdc_a{};
+	std::vector<i32> tdc_ref{};
+	u16 adc[4]{};
+
+	RNTPCMap() { 
+		for(auto& t : tdc_l) 
+			t.reserve(MAX_SIZE);
+		for(auto& t : tdc_r)
+			t.reserve(MAX_SIZE);
+		for(auto& t : tdc_a)
+			t.reserve(MAX_SIZE);
+		tdc_ref.reserve(MAX_SIZE);
+	}
+	inline void Clean() noexcept { 
+		for(auto& t : tdc_l)
+			t.clear();
+		for(auto& t : tdc_r)
+			t.clear();
+		for(auto& t : tdc_a) 
+			t.clear();
+		tdc_ref.clear();
+
+		memset(adc, 0, sizeof(adc));
+	}
+	virtual ~RNTPCMap() = default;
+	ClassDef(RNTPCMap, 1);
+};
+
+template<uint32_t N>
+struct RNMUSICMap {
+	static_assert(N > 1 and N < 100, "Number of RNMUSICMap anodes >100 or <2 ?");
+	static constexpr int size() { return static_cast<int>(N); }
+
+	/* No multihit yet, TDC measurements also garbage. Just take ADC. */
+	u16 e[N];
+	RNMUSICMap() = default;
+	inline void Clean() noexcept { memset(e, 0, sizeof(e)); }
+
+	virtual ~RNMUSICMap() = default;
+	ClassDef(RNMUSICMap, 1);
+};
+
+struct RNFRSCont {
+	std::array<RNSciMap, 4> sci;
+	std::array<RNTPCMap, 7> tpc;
+	std::array<RNMUSICMap<8>, 2> music;
+	uint32_t tpat;
+
+	inline void Clean() noexcept {
+		for(auto& s : sci) s.Clean();
+		for(auto& t : tpc) t.Clean();
+		for(auto& m : music) m.Clean();
+		tpat = static_cast<u32>(-1);
+	}
+	virtual ~RNFRSCont() = default;
+	ClassDef(RNFRSCont, 1);
+};
+
+class TFRSMapCont : public TContainer<RNFRSCont> {
 	static_assert(sizeof(Int_t) == sizeof(i32), 
 		"`i32` and `Int_t` unequal size? Change the std::memcpy to something human in the ProcessEntry!\n");
 public: 
-	class Sci {
-	public:
-		static constexpr int MAX_SIZE = 10;
-		Int_t* _nhit_raw[2]; //! [0] = left, [1] = right;
-		Int_t* _data_raw[2]; //! [0] = left, [1] = right;
-		Int_t* _qdc_raw[2];  //! [0] = left, [1] = right;
-	public:
-		std::array<std::vector<i32>, 2> tdc{}; // [0] = left, [1] = right;
-		u16 qdc[2]{};                          // [0] = left, [1] = right;
-		inline void __clear() { 
-			for(int i=0; i<2; ++i) tdc[i].clear(); 
-			memset(qdc, 0, sizeof(qdc)); 
-		}
-		
-		Sci() {
-			for(int i=0; i<2; ++i)
-				tdc[i].reserve(MAX_SIZE);
-		}
-		virtual ~Sci() {};
-		ClassDef(Sci, 1);
+	struct Sci {
+		static constexpr int MAX_SIZE = RNSciMap::MAX_SIZE;
+		Int_t* _nhit_raw[2]; // [0] = left, [1] = right;
+		Int_t* _data_raw[2]; // [0] = left, [1] = right;
+		Int_t* _qdc_raw[2];  // [0] = left, [1] = right;
 	};
 
 	// --------------------------------------------------- //
-	class TPC {
-	public:
-		static constexpr int MAX_SIZE = 64;
-		Int_t *_tpc_aa{}; //!
-		Int_t *_tpc_lt[2], *_tpc_rt[2], *_tpc_at[4]; //!
-		Int_t *_tpc_ltn[2], *_tpc_rtn[2], *_tpc_atn[4]; //!
-	public:
-		static u32 tpc_ref_i[7]; //!
-
-		std::array<std::vector<i32>, 2> tdc_l{};
-		std::array<std::vector<i32>, 2> tdc_r{};
-		std::array<std::vector<i32>, 4> tdc_a{};
-		u16 adc[4]{};
-
-		inline void __clear() { 
-			for(int i=0; i<2; ++i) {
-				tdc_l[i].clear();
-				tdc_r[i].clear();
-			}
-			for(int i=0; i<4; ++i)
-				tdc_a[i].clear();
-
-			memset(adc, 0, sizeof(adc));
-		}
-		TPC() { 
-			for(int i=0; i<2; ++i) {
-				tdc_l[i].reserve(MAX_SIZE);
-				tdc_r[i].reserve(MAX_SIZE);
-			}
-			for(int i=0; i<4; ++i)
-				tdc_a[i].reserve(MAX_SIZE);
-		}
-		virtual ~TPC() {};
-		ClassDef(TPC, 1);
+	struct TPC {
+		static constexpr int MAX_SIZE = RNTPCMap::MAX_SIZE;
+		static constexpr u32 tpc_ref[MAX_SIZE] {
+			0, // TPC21 => SCI21
+			0, // TPC22 => SCI21
+			0, // TPC23 => SCI21
+			1, // TPC24 => SCI22
+			2, // TPC31 => SCI31
+			3, // TPC41 => SCI41
+			3  // TPC42 => SCI41
+		};
+		Int_t *_tpc_aa{};
+		Int_t *_tpc_lt[2], *_tpc_rt[2], *_tpc_at[4];
+		Int_t *_tpc_ltn[2], *_tpc_rtn[2], *_tpc_atn[4];
+		Int_t *_sci_timerefn, *_sci_timeref;
 	};
 
-	// --------------------------------------------------- //
-
-	template<u32 N>
-	class MUSIC {
-		static_assert(N > 1 and N < 100, "Number of MUSIC anodes >100 or <2 ?");
-	public:
-		/* No multihit yet, TDC measurements also garbage. Just take ADC. */
-		Int_t* _music_raw; //!
-		u16 e[N];
-		inline void __clear() { memset(e, 0, sizeof(e)); }
-		MUSIC() = default;
-		virtual ~MUSIC() {};
-
-		ClassDef(MUSIC,1);
+	struct MUSIC {
+		Int_t* _music_raw;
 	};
 
 	// --------------------------------------------------- //
 	
-	Int_t* _pattern; //!
-	uint32_t tpat;
-
+	Int_t* _pattern;	
 	std::array<Sci, 4> sci;
-	std::array<TPC, 7> tpc{};
-	std::array<MUSIC<8>, 2> music{};
+	std::array<TPC, 7> tpc;
+	std::array<MUSIC, 2> music;
 	
 	TH1I* h1_sci_ml[4];
 	TH1I* h1_sci_mr[4];
-	TH1I* h1_tpc_ml[7]; 
+	TH1I* h1_tpc_ml[7];
 	TH1I* h1_tpc_mr[7];
 	TH1I* h1_tpc_ma1[7];
 	TH1I* h1_tpc_ma2[7];
-
-	void Clear();
 	
-	// Add histos I cba for now ...
-public:
 	TFRSMapCont();
-	virtual ~TFRSMapCont();
-
-	DECL_CONTAINER_METHODS
-
-	ClassDef(TFRSMapCont, 1);
 };

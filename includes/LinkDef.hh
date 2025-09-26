@@ -4,11 +4,9 @@
 #pragma link off all functions;
 #pragma link C++ nestedclasses;
 #pragma link C++ nestedtypedefs;
-#pragma link C++ class TContainer+;
-#pragma link C++ class TFRSMapCont+;
-#pragma link C++ class TFRSMapCont::Sci+;
-#pragma link C++ class TFRSMapCont::TPC+;
-#pragma link C++ class TFRSMapCont::MUSIC<8>+;
-#pragma link C++ class TFOOTPedestalCont+;
-#pragma link C++ class TFOOTCalCont+;
+#pragma link C++ class RNFOOTPedestalCont+;
+#pragma link C++ class RNSciMap+;
+#pragma link C++ class RNTPCMap+;
+#pragma link C++ class RNMUSICMap<8>+;
+#pragma link C++ class RNFRSCont+;
 #endif

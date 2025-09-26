@@ -7,7 +7,7 @@ CXXFLAGS := $(shell root-config --cflags) -Wall -MMD -MP -fPIC
 include common.mk
 
 LDFLAGS := $(shell root-config --ldflags)
-LIBS := $(shell root-config --libs)
+LIBS := $(shell root-config --libs) -lROOTNTuple
 
 SRC := $(wildcard $(SRC_DIR)/*.cxx)
 HEADERS := $(wildcard $(SRC_DIR)/*.h)
@@ -32,15 +32,15 @@ $(GEN_LIB) : $(OBJ) $(DICT_OBJ)
 	$(CXX) $(LDFLAGS) -shared -o $@ $^ $(LIBS)	
 
 $(OBJ) : $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cxx $(SRC_DIR)/%.h $(DICT_OBJ)
-	mkdir -p $(@D)
+	@mkdir -p $(@D)
 	$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 $(DICT_OBJ) : $(DICT)
-	mkdir -p $(@D)
+	@mkdir -p $(@D)
 	$(CXX) -c -o $@ $^ $(CXXFLAGS)
 
 $(DICT) : $(HEADERS) LinkDef.hh 
-	mkdir -p $(DICT_DIR) $(BUILD_DIR)
+	@mkdir -p $(DICT_DIR) $(BUILD_DIR)
 	rootcling -f $@ $(RDFLAGS) -p $^
 
 symlink : $(DICT) $(GEN_LIB)

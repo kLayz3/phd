@@ -1,4 +1,5 @@
 #include "TProcessor.h"
+#include "libs.hh"
 
 void TProcessor::Clear(Option_t* option) { (void)option; }
 Int_t TProcessor::Write() { 

@@ -9,13 +9,13 @@ class TFOOTPedestalCont;
 class TFOOTCalProc : public TProcessor {
 public:
 	static constexpr int N_STRIPS    = TFOOTCalCont::N_STRIPS; /* 640 */
-	static constexpr int MAX_CL_SIZE = 40;
-	static constexpr int MASSIVE_CLUSTER_CUTOFF = 20;
+	static constexpr int MAX_CL_SIZE = 40; /* Maximal allowed cluster size. */
+	static constexpr int MASSIVE_CLUSTER_CUTOFF = 20; /* After which multiplicity a cluster is called 'massive' */
 	static constexpr double BAD_STRIP_FAKE_THRESHOLD = 10'000;
 
 	static_assert(MAX_CL_SIZE > MASSIVE_CLUSTER_CUTOFF);
 
-	using ClusterType = TFOOTCalCont::ClusterType;
+	using ClusterType = TFOOTCluster::ClusterType;
 	using ClusterFullType = std::pair<ClusterType, ClusterType>;
 
 	friend bool operator==(ClusterFullType&, ClusterType );
@@ -31,7 +31,6 @@ public:
 		double e; /* ADC value. */
 	};
 
-public:
 	static constexpr double X_CENTRE_THR_STATIC = 4;
 	static constexpr double X_NEIGHB_THR_STATIC = 1;
 	

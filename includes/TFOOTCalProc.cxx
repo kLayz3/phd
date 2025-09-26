@@ -51,10 +51,10 @@ TFOOTCalProc::ClusterType TFOOTCalProc::GetClusterType() {
 TFOOTCalProc::TFOOTCalProc(TFOOTPedestalCont& in, TFOOTCalCont& out, double x_seed, double x_neigh) : 
 	input(&in), output(&out),
 	X_CENTRE_THR(x_seed), X_NEIGHB_THR(x_neigh),
-	_e(&input->FOOTE[0])
+	_e(&input->inner().FOOTE[0])
 {
 	if(!input->gr_s1 || input->gr_s1->GetN() != N_STRIPS)
-		ERROR("Input sigma graph not initialized? State (null|entries): \'%s\' . Did you call ::Setup?",
+		ERROR("Input sigma graph not initialized? State (null|entries): \'%s\' . Did you call TFOOTPedestalCont::Setup() ?\n",
 				input->gr_s1 ? "null" : Form("%d", input->gr_s1->GetN()));
 
 	if(output->FOOT_N < 0 || output->POS < 0) 
@@ -84,6 +84,8 @@ TFOOTCalProc::TFOOTCalProc(TFOOTPedestalCont& in, TFOOTCalCont& out, double x_se
 
 void TFOOTCalProc::ProcessEntry() noexcept {
 	output->Clean();
+	_e = &input->inner().FOOTE[0]; /* Don't know if rebinding is really necessary... */
+
 	if( std::isnan(_e[0]) ) return; /* Missing data; in previous step marked it NAN by default. */
 	
 	/* Copy	the data over, since there's a write to `e`. */
@@ -208,7 +210,7 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	double cl_m = cl_e / cl_max_e;
 
 	ClusterType ct = this->GetClusterType();
-	output->AddCluster(cl_wx, cl_e, cl_m, ct);
+	output->inner().AddCluster(cl_wx, cl_e, cl_m, ct);
 
 	output->h1_raw_mult->Fill(_cl_cnt);
 	output->h1_mult->Fill(cl_m);
@@ -216,8 +218,8 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	output->h1_X->Fill(cl_wx);
 	output->h1_cl_type->Fill(ct);
 
-	if(_cl_cnt >= MASSIVE_CLUSTER_CUTOFF && output->_fBadE.size() == 0) {
-		output->_fBadE.assign(e, e + N_STRIPS); 
+	if(_cl_cnt >= MASSIVE_CLUSTER_CUTOFF && output->inner()._fBadE.size() == 0) {
+		output->inner()._fBadE.assign(e, e + N_STRIPS); 
 	}
 
 	switch(_cl_cnt) {
@@ -245,8 +247,11 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		output->h1_sn_ratio->Fill(sn);
 	}
 
-	if(cl_max_e > 30 and _cl_cnt == 1 and output->_fHeClSize1.size() == 0 and output->_fBadE.size() == 0) {
-		output->_fHeClSize1.assign(e, e + N_STRIPS);
+	if(cl_max_e > 30 and _cl_cnt == 1 and 
+		output->inner()._fHeClSize1.size() == 0 and 
+		output->inner()._fBadE.size() == 0) 
+	{
+		output->inner()._fHeClSize1.assign(e, e + N_STRIPS);
 	}
 }
 

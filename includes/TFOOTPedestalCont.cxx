@@ -1,13 +1,11 @@
 #include "TFOOTPedestalCont.h"
-#include "TContainer.h"
-#include "TH2.h"
-#include <algorithm>
+#include "TH2D.h"
+#include "TH2I.h"
+#include "TGraph.h"
 #include <cmath>
 #include <string>
 
-TFOOTPedestalCont::TFOOTPedestalCont() {}
 TFOOTPedestalCont::TFOOTPedestalCont(int N) : TContainer(Form("FOOT%d", N)), FOOT_N(N) {}
-TFOOTPedestalCont::~TFOOTPedestalCont() {}
 
 void TFOOTPedestalCont::Init(TDictInfo info) {
 	auto n_it = info.find("FOOT_ID");
@@ -22,7 +20,8 @@ void TFOOTPedestalCont::Init(TDictInfo info) {
 	FOOT_N = n;
 	this->SetName(Form("FOOT%d", n));
 	
-	assert(GetOwnedTOnceObjects().size() == 0 && "Don't call `SetId` twice. Clear the owned objects first.");
+	assert(GetOwnedTOnceObjects().size() == 0 
+		&& Form("(%s) Don't call \'Init\' twice. Clear the owned objects first.", GetName()));
 
 	h2_raw     = RegisterObject<TH2I>("h2_raw" , Form("Raw FOOT%d", FOOT_N), 640,0,640,4096,0,4096);
 	h2_mid     = RegisterObject<TH2D>("h2_mid", Form("Raw FOOT%d - Global Pedestal", FOOT_N), 640,0,640,3000,-500,2500);
@@ -45,11 +44,4 @@ void TFOOTPedestalCont::Init(TDictInfo info) {
 	gr_s1->SetMarkerColor(kGreen);
 }
 
-void TFOOTPedestalCont::Clean(Option_t* option) noexcept {
-	(void)option;
-	std::fill_n(FOOTE, LEN(FOOTE), std::nan(""));
-}
-
-IMPL_CONTAINER_METHODS(TFOOTPedestalCont)
-
-ClassImp(TFOOTPedestalCont);
+ClassImp(RNFOOTPedestalCont);

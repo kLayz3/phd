@@ -19,7 +19,6 @@ bool CMDLineParser::IsCmdArg(const char* line, int argc, char** argv) {
 		if(!strcmp(argv[i], line) || !strcmp(argv[i], line1)) {
 			memset(argv[i], '_', strlen(argv[i]));
 			retval = 1;
-			WARN("Parsed " EMPH(%s) "\n", line);
 		}
 	}
 

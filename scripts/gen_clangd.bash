@@ -11,8 +11,11 @@ rm -f $CLANGD && touch $CLANGD
 
 echo \
 "CompileFlags:
-	Add:
-		- \"-I$(root-config --incdir)\"
-		- \"-I$INC_DIR\"
-		- \"-I$script_dir/../\"
+  Add:
+    - -I$(root-config --incdir)
+    - -I$INC_DIR
+    - -std=c++20
+  Remove: [-std=*]
 " >> $CLANGD
+
+#Compiler: /usr/bin/g++

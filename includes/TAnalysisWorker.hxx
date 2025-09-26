@@ -109,7 +109,7 @@ public:
 	}
 
 	/**
-	 * Serialize single objects (non-TTree) parts of the worker to the currently open directory.
+	 * Serialize single objects (non-RNTuple) parts of the worker to the currently open directory.
 	 */
 	Int_t Write() { return T::Write(); }
 };

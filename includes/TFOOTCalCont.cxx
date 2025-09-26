@@ -3,14 +3,7 @@
 #include "RtypesCore.h"
 #include "TH1D.h"
 
-TFOOTCalCont::TFOOTCalCont() : FOOT_N(-1), POS(-1), N(0) {
-	fCX.reserve(INIT_CAPACITY);
-	fCE.reserve(INIT_CAPACITY);
-	fCM.reserve(INIT_CAPACITY);
-	fCT.reserve(INIT_CAPACITY);
-}
-
-TFOOTCalCont::~TFOOTCalCont() {}
+TFOOTCalCont::TFOOTCalCont() : FOOT_N(-1), POS(-1) {}
 
 void TFOOTCalCont::Init(TDictInfo info) {
 	std::unordered_map<const char*, int> int_mappings;
@@ -43,30 +36,4 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	h1_dE_m2    = RegisterObject<TH1I>("h1_dE_m2", Form("(%2d:%d) energy with multiplicity 2", FOOT_N, POS), 2500, 0, 500);
 	h1_dE_m3    = RegisterObject<TH1I>("h1_dE_m3", Form("(%2d:%d) energy with multiplicity 3", FOOT_N, POS), 2500, 0, 500);
 	h1_sn_ratio = RegisterObject<TH1I>("h1_sn_ratio", Form("(%2d:%d) ratio neighbouring vs. seed value (mult <= 3)", FOOT_N, POS), 500, 0, 5);
-
-	_fBadE.reserve(N_STRIPS);
-	_fHeClSize1.reserve(N_STRIPS);
 }
-
-void TFOOTCalCont::Clean(Option_t* option) noexcept {
-	(void)option;
-	N = 0;
-	fCX.clear();
-	fCE.clear();
-	fCM.clear();
-	fCT.clear();
-	_fBadE.clear();
-	_fHeClSize1.clear();
-}
-
-void TFOOTCalCont::AddCluster(double mean_x, double e, double mult, ClusterType ct) {
-	fCX.push_back(mean_x);
-	fCE.push_back(e);
-	fCM.push_back(mult);
-	fCT.push_back(ct);
-	++N;
-}
-
-IMPL_CONTAINER_METHODS(TFOOTCalCont)
-
-ClassImp(TFOOTCalCont);
