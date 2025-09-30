@@ -88,6 +88,19 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 		data->h1_tpc_mr[s] ->Fill( tpc_raw.tdc_r[1].size() );
 		data->h1_tpc_ma1[s]->Fill( tpc_raw.tdc_a[1].size() );
 		data->h1_tpc_ma2[s]->Fill( tpc_raw.tdc_a[2].size() );
+		
+		for(int a = 0; a<4; ++a) {
+			if(int ndelay = a >> 1;
+				tpc_raw.tdc_a[a].size() == 1 && 
+				tpc_raw.tdc_r[ndelay].size() == 1 &&
+				tpc_raw.tdc_l[ndelay].size() == 1)
+			{
+				data->h1_tpc_csum[s][a] -> Fill(
+					tpc_raw.tdc_l[ndelay][0] + tpc_raw.tdc_r[ndelay][0] - 
+					(tpc_raw.tdc_a[a][0] << 1)
+				);
+			}
+		}
 	}
 
 	for(int s=0; s < (int)data->music.size(); ++s) {

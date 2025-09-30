@@ -1,9 +1,46 @@
 #include "TFOOTCalCont.h"
-#include "Rtypes.h"
-#include "RtypesCore.h"
-#include "TH1D.h"
+#include "TH1I.h"
 
-TFOOTCalCont::TFOOTCalCont() : FOOT_N(-1), POS(-1) {}
+RNFOOTCluster::RNFOOTCluster(double x, double e, double m, ClusterType t) :
+	fCX(x), fCE(e), fCM(m), fCT(t) {}
+
+template<std::size_t I, typename T>
+auto&& RNFOOTCluster::get_helper(T&& t) {
+	static_assert(I<3, "Index out of bounds for RNFOOTCluster");
+	if constexpr(I == 0) 
+		return std::forward<T>(t).fCX;
+	else if constexpr(I == 1) 
+		return std::forward<T>(t).fCE;
+	else 
+		return std::forward<T>(t).fCM;
+}
+
+/* ------------------------------------------------------- */
+
+RNFOOTCal::RNFOOTCal() { 
+	fCl.reserve(INIT_CAPACITY); 
+	_fBadE.reserve(N_STRIPS);
+	_fHeClSize1.reserve(N_STRIPS);
+}
+void RNFOOTCal::Clean() noexcept {
+	fCl.clear(); 
+	_fBadE.clear();
+	_fHeClSize1.clear();
+}
+std::vector<double> RNFOOTCal::E() const noexcept {
+	std::vector<double> res;
+	res.reserve(fCl.size());
+	for(auto const& c : fCl) res.push_back(c.fCE);
+	return res;
+}
+std::vector<double> RNFOOTCal::X() const noexcept {
+	std::vector<double> res;
+	res.reserve(fCl.size());
+	for(auto const& c : fCl) res.push_back(c.fCX);
+	return res;
+}
+
+/* ------------------------------------------------------- */
 
 void TFOOTCalCont::Init(TDictInfo info) {
 	std::unordered_map<const char*, int> int_mappings;
@@ -37,3 +74,6 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	h1_dE_m3    = RegisterObject<TH1I>("h1_dE_m3", Form("(%2d:%d) energy with multiplicity 3", FOOT_N, POS), 2500, 0, 500);
 	h1_sn_ratio = RegisterObject<TH1I>("h1_sn_ratio", Form("(%2d:%d) ratio neighbouring vs. seed value (mult <= 3)", FOOT_N, POS), 500, 0, 5);
 }
+
+ClassImp(RNFOOTCluster);
+ClassImp(RNFOOTCal);

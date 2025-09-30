@@ -6,6 +6,7 @@
 #include "TGraph.h"
 #include <sstream>
 #include <type_traits>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 #include "libs.hh"
@@ -18,7 +19,7 @@
 #	include <cxxabi.h>
 #endif
 
-inline void PrintProgress(indicators::ProgressBar& bar,	u64 n_entry, u64 max_entries, u64 step = 100) noexcept {
+inline void PrintProgress(indicators::ProgressBar& bar,	u64 n_entry, u64 max_entries, u64 step = 250) noexcept {
 	static u64 n_entry_called = 0;
 	if(n_entry - n_entry_called < step) return;
 	bar.set_progress( (n_entry*100) / max_entries );
@@ -125,6 +126,13 @@ template<TimingVariant E = kMILLISECOND>
 inline void PrintElapsed(const std::vector<TimePoint>& v) {
 	if(v.size() < 2) return;
 	PrintElapsed<E>(v[v.size()-1], v[v.size() - 2]);
+}
+
+template<TimingVariant E = kMILLISECOND>
+inline void PrintElapsed(std::vector<TimePoint>&& v) {
+	if(v.size() < 2) return;
+	printf("Total execution time: ");
+	PrintElapsed<E>(v.back(), v.front());
 }
 
 
@@ -366,7 +374,21 @@ template<typename T,
         r += "&&";
     return r;
 }
-}
 
 #define _SELF_TYPE_CSTR \
 	util::type_name<std::remove_reference<decltype(*this)>>().c_str()
+
+/* Sometimes cursor can be hidden mid execution,
+ * if the program dies due to a system signal,
+ * execute this to bring it back. Only POSIX async-safe 
+ * calls are allowed. */
+inline void sig_callback_handler(int signum) {
+	const char show[] = "\x1b[?25h";
+    const char nl   = '\n';
+	write(STDERR_FILENO, &nl, 1);
+	write(STDERR_FILENO, show, sizeof show - 1);
+	WARN_ASYNC("Caught abort/seg signal [%d].\n", signum);
+	_exit(128 + signum);
+}
+}
+

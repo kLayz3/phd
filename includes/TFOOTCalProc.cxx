@@ -1,9 +1,6 @@
 #include "TFOOTCalProc.h"
 #include <algorithm>
 #include <cmath>
-#include <iterator>
-#include <numeric>
-#include <utility>
 
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int );
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int );
@@ -48,13 +45,13 @@ TFOOTCalProc::ClusterType TFOOTCalProc::GetClusterType() {
 }
 
 /* Input and output should be properly assigned a priori. */
-TFOOTCalProc::TFOOTCalProc(TFOOTPedestalCont& in, TFOOTCalCont& out, double x_seed, double x_neigh) : 
+TFOOTCalProc::TFOOTCalProc(TFOOTMapCont& in, TFOOTCalCont& out, double x_seed, double x_neigh) : 
 	input(&in), output(&out),
 	X_CENTRE_THR(x_seed), X_NEIGHB_THR(x_neigh),
 	_e(&input->inner().FOOTE[0])
 {
 	if(!input->gr_s1 || input->gr_s1->GetN() != N_STRIPS)
-		ERROR("Input sigma graph not initialized? State (null|entries): \'%s\' . Did you call TFOOTPedestalCont::Setup() ?\n",
+		ERROR("Input sigma graph not initialized? State (null|entries): \'%s\' . Did you call TFOOTMapCont::Setup() ?\n",
 				input->gr_s1 ? "null" : Form("%d", input->gr_s1->GetN()));
 
 	if(output->FOOT_N < 0 || output->POS < 0) 
@@ -273,7 +270,7 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int i /* 1, ...
 		
 		e[i] = ( e[prev] + e[next] ) / 2;
 
-		// Calling function stashes this hit, here just 'reassign' the energy.	
+		// Calling function will restore this hit, here just 'reassign' the energy.	
 		return true; 
 	}
 	return false;
@@ -297,7 +294,7 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int i /* 0, ...
 		
 		e[i] = ( e[prev] + e[next] ) / 2;
 		
-		// Calling function stashes this hit, here just 'reassign' the energy.
+		// Calling function will restore this hit, here just 'reassign' the energy.
 		return true; 
 	}
 	return false;

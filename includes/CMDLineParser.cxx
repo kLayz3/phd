@@ -65,7 +65,7 @@ CMDLineParser::ParseCmdLine(const char* line, T& dest, int argc, char** argv, Ma
 				list.erase(0, pos + 1);
 			}
 			parsed.push_back( std::move(list) );
-
+			
 			// Set argv[i] to be something redundant.
 			memset(argv[i], '_', strlen(argv[i]));
 			if(retval)
@@ -97,23 +97,24 @@ CMDLineParser::ParseCmdLine(const char* line, T& dest, int argc, char** argv, Ma
 			ERROR("Saw an argument: \'-%s\', but no followup parameter after.\n", line);
 
 		WARN("Parsed option " EMPH(%s) " with %zu argument%s: ", 
-			line, parsed.size(), parsed.size() ? "s" : "");
+			line, parsed.size(), (parsed.size() > 1) ? "s" : "");
 		for(auto& p : parsed) printf(EMPH(%s) " ", p.c_str());
 		printf("\n");
 
 		if constexpr(std::is_same_v<T, string>) {
 			dest = std::move(parsed.back());
-			if( parsed.size() > 1) 
-				WARN("Only taking the last argument: \'%s\'\n", dest.c_str());
-		}
-		else
+			if(parsed.size() > 1)
+				ERROR("(%s): intially parsed as '\%s\', but I found %zu values," 
+					" destination marked as single - multiple values not allowed.\n",
+					line, parsed[0].c_str(), parsed.size());
+		} else { 
 			dest = std::move(parsed);
+		}
 	}
 	else if(mandatory.is_it) {
 		ERROR("Mandatory argument " EMPH(%s) " not supplied.\n%s%s\n", 
 				line, KNRM, mandatory.help_msg ? mandatory.help_msg : mandatory.def_msg);
 	}
-
 	return retval;
 }
 

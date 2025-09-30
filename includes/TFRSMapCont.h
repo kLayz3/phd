@@ -64,7 +64,7 @@ struct RNMUSICMap {
 	ClassDef(RNMUSICMap, 1);
 };
 
-struct RNFRSCont {
+struct RNFRSMap {
 	std::array<RNSciMap, 4> sci;
 	std::array<RNTPCMap, 7> tpc;
 	std::array<RNMUSICMap<8>, 2> music;
@@ -76,11 +76,11 @@ struct RNFRSCont {
 		for(auto& m : music) m.Clean();
 		tpat = static_cast<u32>(-1);
 	}
-	virtual ~RNFRSCont() = default;
-	ClassDef(RNFRSCont, 1);
+	virtual ~RNFRSMap() = default;
+	ClassDef(RNFRSMap, 1);
 };
 
-class TFRSMapCont : public TContainer<RNFRSCont> {
+class TFRSMapCont : public TContainer<RNFRSMap> {
 	static_assert(sizeof(Int_t) == sizeof(i32), 
 		"`i32` and `Int_t` unequal size? Change the std::memcpy to something human in the ProcessEntry!\n");
 public: 
@@ -126,6 +126,7 @@ public:
 	TH1I* h1_tpc_mr[7];
 	TH1I* h1_tpc_ma1[7];
 	TH1I* h1_tpc_ma2[7];
-	
+	TH1I* h1_tpc_csum[7][4];
+
 	TFRSMapCont();
 };

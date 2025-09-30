@@ -14,13 +14,15 @@ class TH2I;
 class TH2D;
 class TGraph;
 
-struct RNFOOTPedestalCont {	
-	double FOOTE[_FOOT_N_STRIPS];
+struct RNFOOTMap {	
+	double FOOTE[_FOOT_N_STRIPS]{};
 	inline void Clean() noexcept { std::fill_n(FOOTE, _FOOT_N_STRIPS, std::nan("")); }
-	ClassDef(RNFOOTPedestalCont, 1);
+	RNFOOTMap() = default;
+	virtual ~RNFOOTMap() = default;
+	ClassDef(RNFOOTMap, 1);
 };
 
-class TFOOTPedestalCont : public TContainer<RNFOOTPedestalCont> {
+class TFOOTMapCont : public TContainer<RNFOOTMap> {
 public:
 	static constexpr int N_STRIPS = _FOOT_N_STRIPS;
 	static constexpr int N_ASIC = _FOOT_N_ASIC;
@@ -45,7 +47,8 @@ public:
 	TH2D* h2_ped_off_diff;
 
 public:
-	TFOOTPedestalCont(int);
-	
+	TFOOTMapCont(int);
+	TFOOTMapCont() = default;	
+
 	void Init(TDictInfo info) /* override */;
 };

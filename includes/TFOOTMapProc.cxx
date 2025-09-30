@@ -1,4 +1,4 @@
-#include "TFOOTPedestalProc.h"
+#include "TFOOTMapProc.h"
 #include "TF1.h"
 #include "libs.hh"
 #include <cassert>
@@ -8,12 +8,12 @@
 #include <unordered_set>
 #include "AuxFunctions.hh"
 
-static_assert(TFOOTPedestalProc::N_STRIPS == TFOOTPedestalProc::N_ASIC * TFOOTPedestalProc::N_STRIPS_PER_ASIC, "Failed build: nstrip != nasic*nstrip_per_asic!\n");
+static_assert(TFOOTMapProc::N_STRIPS == TFOOTMapProc::N_ASIC * TFOOTMapProc::N_STRIPS_PER_ASIC, "Failed build: nstrip != nasic*nstrip_per_asic!\n");
 
 using nlohmann::json;
-json TFOOTPedestalProc::_bad_strips{};
+json TFOOTMapProc::_bad_strips{};
 
-void TFOOTPedestalProc::ProcessEntry() noexcept {
+void TFOOTMapProc::ProcessEntry() noexcept {
 	switch(process_type) {
 		case kGPED: 
 			ProcessGlobalPedestal();
@@ -24,7 +24,7 @@ void TFOOTPedestalProc::ProcessEntry() noexcept {
 	}
 }
 
-void TFOOTPedestalProc::ProcessGlobalPedestal() noexcept {
+void TFOOTMapProc::ProcessGlobalPedestal() noexcept {
 	if(*data->_FOOT == 0) return;
 	int iraw;
 	FOR(i, N_STRIPS) {
@@ -35,7 +35,7 @@ void TFOOTPedestalProc::ProcessGlobalPedestal() noexcept {
 
 /* This is NOT thread safe to run in parallel since `slice->Fit` inherently talks to gROOT, gPad.
  * Even if TH1D histograms are detached. */
-void TFOOTPedestalProc::CalcGlobalPedestal() {
+void TFOOTMapProc::CalcGlobalPedestal() {
 	if(data->h2_raw->GetEntries() == 0) {
 		WARN("Ran over the TTree, but found 0 events with data?" EMPH(FOOT: %d) ", Setting all pedestals to 0.", data->FOOT_N);
 		return;
@@ -59,7 +59,7 @@ void TFOOTPedestalProc::CalcGlobalPedestal() {
 
 //#define CALC_OFFSET_FROM_MEDIAN
 
-void TFOOTPedestalProc::ProcessEventPedestal() noexcept {
+void TFOOTMapProc::ProcessEventPedestal() noexcept {
 	data->Clean();
 	if(*data->_FOOT == 0) return;
 	
@@ -125,7 +125,7 @@ void TFOOTPedestalProc::ProcessEventPedestal() noexcept {
 	}
 }
 
-void TFOOTPedestalProc::CalcFinalPedestal() {
+void TFOOTMapProc::CalcFinalPedestal() {
 	if(data->h2_corr->GetEntries() == 0) {
 		WARN("Ran over the TTree, but found 0 events with calibrated data?" EMPH(FOOT: %d\n), data->FOOT_N);
 		return;
@@ -152,9 +152,9 @@ void TFOOTPedestalProc::CalcFinalPedestal() {
 	this->ParseStaticBadStrips();
 }
 
-int TFOOTPedestalProc::ParseStaticBadStrips() {
+int TFOOTMapProc::ParseStaticBadStrips() {
 	if(!data || !data->bad_strips)
-		ERROR("output bad strips container uninitialized. Did you call TFOOTPedestalCont::Init(..) beforehand?");
+		ERROR("output bad strips container uninitialized. Did you call TFOOTMapCont::Init(..) beforehand?");
 
 	const char* key = Form("FOOT%d", data->FOOT_N);
 	std::vector<int> parsed{};

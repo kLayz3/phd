@@ -43,7 +43,7 @@ constexpr std::size_t CL =
 
 template<typename T>
 class TAnalysisWorker final : public T {
-	static_assert(util::has_process_entry<T>::value, "Type <T> needs a `void ProcessEntry()` method implemented!");
+	static_assert(util::has_process_entry<T>::value, "Type <T> needs a public `void ProcessEntry()` method implemented!");
 	static_assert(std::is_move_constructible<T>::value,  "Type <T> needs a move ctor.");
 	static_assert(std::is_move_assignable<T>::value, "Type <T> needs move assignment op.");
 	static_assert(std::is_base_of<TProcessor, T>::value, "Type <T> must inherit from TProcessor!.");
@@ -101,7 +101,7 @@ public:
 #if defined(__x86_64__)
 					_mm_pause();
 #else
-					//std::this_thread::yield();
+					std::this_thread::yield();
 #endif
 				}
 			}

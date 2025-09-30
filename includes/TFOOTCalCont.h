@@ -1,14 +1,14 @@
 #pragma once
 
 #include "TContainer.hxx"
-#include "TFOOTPedestalCont.h"
+#include "TFOOTMapCont.h"
 #include <cstddef>
 #include <tuple>
 #include <type_traits>
 
 class TH1D;
 
-struct TFOOTCluster {
+struct RNFOOTCluster {
 	enum ClusterType {
 		kUNKNOWN    = 0, /* Unqualified. */
 		kGOOD       = 1, /* Good cluster. Monotonically rising ADC values to peak ADC strip, then monotonically decreasing. */
@@ -23,48 +23,40 @@ struct TFOOTCluster {
 	ClusterType fCT{}; /* Cluster type. */
 
 	template<std::size_t I>
-	auto&& get() & { return get_helper<I>(*this); }
+	inline auto&& get() & { return get_helper<I>(*this); }
 
 	template<std::size_t I>
-	auto&& get() && { return get_helper<I>(*this); }
+	inline auto&& get() && { return get_helper<I>(*this); }
 
 	template<std::size_t I>
-	auto&& get() const & { return get_helper<I>(*this); }
+	inline auto&& get() const & { return get_helper<I>(*this); }
 
 	template<std::size_t I>
-	auto&& get() const && { return get_helper<I>(*this); }
+	inline auto&& get() const && { return get_helper<I>(*this); }
 
-	TFOOTCluster(double x, double e, double m, ClusterType t) :
-		fCX(x), fCE(e), fCM(m), fCT(t) {}
-	virtual ~TFOOTCluster() = default;
-	ClassDef(TFOOTCluster, 1);
+	RNFOOTCluster(double x, double e, double m, ClusterType t);
+	RNFOOTCluster() = default;
+	virtual ~RNFOOTCluster() = default;
+	ClassDef(RNFOOTCluster, 1);
 
 private:
 	template<std::size_t I, typename T>
-	auto&& get_helper(T&& t) {
-		static_assert(I<3, "Index out of bounds for TFOOTCluster");
-		if constexpr(I == 0) 
-			return std::forward<T>(t).fCX;
-		else if constexpr(I == 1) 
-			return std::forward<T>(t).fCE;
-		else 
-			return std::forward<T>(t).fCM;
-	}
+	auto&& get_helper(T&& t);
 };
 
 /* Hacks to make it structured-binding decomposable. */
 namespace std {
-	template<> struct tuple_size<::TFOOTCluster> : integral_constant<size_t, 3> {};
-	template<> struct tuple_element<0, ::TFOOTCluster> { using type = double; };
-	template<> struct tuple_element<1, ::TFOOTCluster> { using type = double; };
-    template<> struct tuple_element<2, ::TFOOTCluster> { using type = double; };
+	template<> struct tuple_size<::RNFOOTCluster> : integral_constant<size_t, 3> {};
+	template<> struct tuple_element<0, ::RNFOOTCluster> { using type = double; };
+	template<> struct tuple_element<1, ::RNFOOTCluster> { using type = double; };
+    template<> struct tuple_element<2, ::RNFOOTCluster> { using type = double; };
 }
 
-struct RNFOOTCalCont {
+struct RNFOOTCal {
 	static constexpr size_t INIT_CAPACITY = _FOOT_N_STRIPS_PER_ASIC;
 	static constexpr int N_STRIPS = _FOOT_N_STRIPS;
 
-	using ClusterType = TFOOTCluster::ClusterType;
+	using ClusterType = RNFOOTCluster::ClusterType;
 	enum Orientation {
 		kUNSPECIFIED = 0,
 		kX           = 1,
@@ -72,52 +64,41 @@ struct RNFOOTCalCont {
 	};
 
 	Orientation o{};
-	std::vector<TFOOTCluster> fCl{}; 
+	std::vector<RNFOOTCluster> fCl{}; 
 
 	/* Record whole event in a vector, if we find a large cluster, for some reason. */
 	std::vector<double> _fBadE{};      /* Size will be either 0 or 640. */
 	std::vector<double> _fHeClSize1{}; /* Size will be either 0 or 640. */
 	
-	RNFOOTCalCont() { 
-		fCl.reserve(INIT_CAPACITY); 
-		_fBadE.reserve(N_STRIPS);
-		_fHeClSize1.reserve(N_STRIPS);
-	}
-	
-	inline void Clean() noexcept { 
-		fCl.clear(); 
-		_fBadE.clear();
-		_fHeClSize1.clear();
-	}
-	inline std::vector<double> E() const noexcept {
-		std::vector<double> res;
-		res.reserve(fCl.size());
-		for(auto const& c : fCl) res.push_back(c.fCE);
-		return res;
-	}
-	inline std::vector<double> X() const noexcept {
-		std::vector<double> res;
-		res.reserve(fCl.size());
-		for(auto const& c : fCl) res.push_back(c.fCX);
-		return res;
-	}
-	void AddCluster(TFOOTCluster cl) {
+	RNFOOTCal();
+	void Clean() noexcept;
+
+	/**
+	 * Return a fresh vector containing all the collected energies in the event.
+	 */
+	std::vector<double> E() const noexcept; 
+
+	/**
+	 * Return a fresh vector containing all the collected energies in the event.
+	 */
+	std::vector<double> X() const noexcept; 
+	inline void AddCluster(RNFOOTCluster cl) noexcept {
 		fCl.push_back(std::move(cl));
 	}
-	void AddCluster(double x, double e, double m, ClusterType ty) {
+	inline void AddCluster(double x, double e, double m, ClusterType ty) noexcept {
 		fCl.emplace_back(x, e, m, ty);
 	}
-	virtual ~RNFOOTCalCont() = default;
-	ClassDef(RNFOOTCalCont, 1);
+	virtual ~RNFOOTCal() = default;
+	ClassDef(RNFOOTCal, 1);
 };
 
-class TFOOTCalCont : public TContainer<RNFOOTCalCont> {
+class TFOOTCalCont : public TContainer<RNFOOTCal> {
 	friend class TFOOTCalProc;
 public:	
-	static constexpr int N_STRIPS = RNFOOTCalCont::N_STRIPS;
-	using Orientation = RNFOOTCalCont::Orientation;	
+	static constexpr int N_STRIPS = RNFOOTCal::N_STRIPS;
+	using Orientation = RNFOOTCal::Orientation;	
 	
-	Orientation o = RNFOOTCalCont::kUNSPECIFIED; 
+	Orientation o = RNFOOTCal::kUNSPECIFIED; 
 	int FOOT_N = -1; /* Comes from sort step. */
 	int POS = -1; /* Force the FOOT's to be labelled 0,1,2,3,4,5,6,7 from now onward. */
 
@@ -132,7 +113,7 @@ public:
 	TH1I* h1_dE_m3; 
 	TH1I* h1_sn_ratio; 
 
-	TFOOTCalCont();
+	TFOOTCalCont() = default;
 
 	void Init(TDictInfo info) /* override */;
 };

@@ -10,3 +10,4 @@ map
 includes/dict
 rootfiles
 *.png
+params/justus_tpc.json

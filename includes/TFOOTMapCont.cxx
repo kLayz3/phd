@@ -1,13 +1,13 @@
-#include "TFOOTPedestalCont.h"
+#include "TFOOTMapCont.h"
 #include "TH2D.h"
 #include "TH2I.h"
 #include "TGraph.h"
 #include <cmath>
 #include <string>
 
-TFOOTPedestalCont::TFOOTPedestalCont(int N) : TContainer(Form("FOOT%d", N)), FOOT_N(N) {}
+TFOOTMapCont::TFOOTMapCont(int N) : TContainer(Form("FOOT%d", N)), FOOT_N(N) {}
 
-void TFOOTPedestalCont::Init(TDictInfo info) {
+void TFOOTMapCont::Init(TDictInfo info) {
 	auto n_it = info.find("FOOT_ID");
 	if(n_it == info.end())
 		ERROR("FOOT_ID key not found in the info hashmap.");
@@ -44,4 +44,4 @@ void TFOOTPedestalCont::Init(TDictInfo info) {
 	gr_s1->SetMarkerColor(kGreen);
 }
 
-ClassImp(RNFOOTPedestalCont);
+ClassImp(RNFOOTMap);

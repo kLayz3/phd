@@ -179,12 +179,15 @@ public:
 			if(!util::is_file_readable(file_name))
 				ERROR("Unable to read a ROOT file: " EMPH(%s\n), file_name.c_str());
 			
-			/* RNTuple must exist in this file. */
+			/* RNTuple must exist in this file. 
+			 * Find the first one and mark it. Multiple RNTuple objects qualify
+			 * undefined behaviour. */
 			auto f = std::make_unique<TFile>(file_name.c_str(), "READ");	
 			if(f->IsZombie() || !f->IsOpen())
 				ERROR("Able to open a ROOT file, but unable to make a TFile hook in: " EMPH(%s\n), file_name.c_str());
 			
-			std::string rntuple_name{};
+			std::string rntuple_name;
+
 			for(TObject* _k : *f->GetListOfKeys()) {
 				TKey* k = dynamic_cast<TKey*>(_k);
 				if(!k) continue;
@@ -195,13 +198,12 @@ public:
 				}
 			}
 			if(rntuple_name.empty())
-				ERROR("Able to cleanly read the ROOT file, but couldn't find the RNTuple object in: " EMPH(%s\n), file_name.c_str());
+				ERROR("Able to cleanly read the ROOT file, but couldn't find the ROOT::RNTuple object in: " EMPH(%s\n), file_name.c_str());
 
 			{ std::unique_ptr<TFile> _fmoved = std::move(f); } // Release the resource.
 
 			this->in_file = file_name;
 			_in_reader = ROOT::Experimental::RNTupleReader::Open(std::move(TContainerBase::ReleaseModelRead()), rntuple_name, file_name);
-			WARN("saw string.\n");
 		}
 	}
 
@@ -387,7 +389,7 @@ public:
 			}, _pool
 		);
 
-		WARN("Successfully written the output file.");
+		WARN("Successfully written the output file.\n");
 		_is_valid = false;
 		return r;
 	};

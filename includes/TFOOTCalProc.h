@@ -1,10 +1,10 @@
 #pragma once
 
-#include "TFOOTPedestalCont.h"
+#include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"
 #include "TProcessor.h"
 
-class TFOOTPedestalCont;
+class TFOOTMapCont;
 
 class TFOOTCalProc : public TProcessor {
 public:
@@ -15,17 +15,15 @@ public:
 
 	static_assert(MAX_CL_SIZE > MASSIVE_CLUSTER_CUTOFF);
 
-	using ClusterType = TFOOTCluster::ClusterType;
+	using ClusterType = RNFOOTCluster::ClusterType;
 	using ClusterFullType = std::pair<ClusterType, ClusterType>;
 
 	friend bool operator==(ClusterFullType&, ClusterType );
 	friend bool operator!=(ClusterFullType&, ClusterType );
 
-	enum LookAhead {
-		kPOS =  1,
-		kNEG = -1,
-	};
+	enum LookAhead { kNEG, kPOS, };
 	
+	/* Single hit belonging to a cluster. */
 	struct TClustHit {
 		int x;    /* Position.  */
 		double e; /* ADC value. */
@@ -37,13 +35,13 @@ public:
 	static_assert(X_CENTRE_THR_STATIC > X_NEIGHB_THR_STATIC, 
 		"Cannot cluster correctly if seed strip threshold cutoff is smaller than neighbouring strip's threshold (AMS paper).");
 
-	TFOOTPedestalCont* input;
+	TFOOTMapCont* input;
 	TFOOTCalCont* output;
 
 	double X_CENTRE_THR;
 	double X_NEIGHB_THR;
 	
-	TFOOTCalProc(TFOOTPedestalCont& in, TFOOTCalCont& out, 
+	TFOOTCalProc(TFOOTMapCont& in, TFOOTCalCont& out, 
 			double x_seed  = X_CENTRE_THR_STATIC, 
 			double x_neigh = X_NEIGHB_THR_STATIC);
 

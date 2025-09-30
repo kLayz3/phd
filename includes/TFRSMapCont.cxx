@@ -24,10 +24,15 @@ TFRSMapCont::TFRSMapCont() : TContainer("FRS") {
 		h1_tpc_ma2[i] = RegisterObject<TH1I>(
 			Form("TPC%d_MA2", i), Form("Multipl. TPC%d anode(2)", i), 10, 0, 10
 		);
+		for(int a=0; a<4; ++a) {
+			h1_tpc_csum[i][a] = RegisterObject<TH1I>(
+				Form("TPC%d_CSum%d", i,a), Form("CSum TPC%d anode(%d) mult == 1", i, a), 20000, 10000,30000
+			);
+		}
 	}
 };
 
 ClassImp(RNSciMap);
 ClassImp(RNTPCMap);
 ClassImp(RNMUSICMap<8>);
-ClassImp(RNFRSCont);
+ClassImp(RNFRSMap);

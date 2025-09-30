@@ -8,7 +8,7 @@
 #include "TTree.h"
 #include "libs.hh"
 #include "TProcessor.h"
-#include "TFOOTPedestalCont.h"
+#include "TFOOTMapCont.h"
 #include "TOnce.hxx"
 #include <utility>
 #include <filesystem>
@@ -16,11 +16,11 @@
 #include <type_traits>
 #include "nlohmann/json.hpp"
 
-class TFOOTPedestalProc : public TProcessor {
+class TFOOTMapProc : public TProcessor {
 public:
-	static constexpr int N_STRIPS          = TFOOTPedestalCont::N_STRIPS;          /* 640 */
-	static constexpr int N_ASIC            = TFOOTPedestalCont::N_ASIC;            /* 10  */
-	static constexpr int N_STRIPS_PER_ASIC = TFOOTPedestalCont::N_STRIPS_PER_ASIC; /* 64  */
+	static constexpr int N_STRIPS          = TFOOTMapCont::N_STRIPS;          /* 640 */
+	static constexpr int N_ASIC            = TFOOTMapCont::N_ASIC;            /* 10  */
+	static constexpr int N_STRIPS_PER_ASIC = TFOOTMapCont::N_STRIPS_PER_ASIC; /* 64  */
 	
 	static constexpr double BAD_STRIP_CUTOFF_HI = 2.8;	
 	static constexpr double BAD_STRIP_CUTOFF_LO = 1.2;
@@ -30,19 +30,19 @@ public:
 		kEPED
 	} process_type = kGPED;
 		
-	TFOOTPedestalCont* data;
+	TFOOTMapCont* data;
 	bool is_swapped;
 
-	TFOOTPedestalProc(TFOOTPedestalCont& data, bool is_cabling_swapped = false) :  
+	TFOOTMapProc(TFOOTMapCont& data, bool is_cabling_swapped = false) :  
 		data(&data), is_swapped(is_cabling_swapped) {}
 
 	/* Rule-of-five: if a destructor or a custom move ctor/assignment
 	 * is declared, then all three (dtor/move ctor/move assignment) must be declared,
 	 * even if `= default;`. The copies are implicitly deleted, due to the base class. */
 	 /* 
-	TFOOTPedestalProc(TFOOTPedestalProc&& ) noexcept = default;
-	TFOOTPedestalProc& operator=(TFOOTPedestalProc&& ) noexcept = default;
-	~TFOOTPedestalProc() = default;
+	TFOOTMapProc(TFOOTMapProc&& ) noexcept = default;
+	TFOOTMapProc& operator=(TFOOTMapProc&& ) noexcept = default;
+	~TFOOTMapProc() = default;
 	*/
 
 	void ProcessGlobalPedestal() noexcept;
@@ -50,7 +50,7 @@ public:
 	void ProcessEventPedestal() noexcept;
 	void CalcFinalPedestal();
 
-	void ProcessEntry() noexcept ;
+	void ProcessEntry() noexcept;
 
 	inline Int_t Write() override { return data->Write(); }
 
@@ -67,8 +67,8 @@ public:
 	template<typename T, typename... Ts>
 	static void LoadBadStripsFile(T&& arg, Ts&&... other) {
 		static_assert(util::is_pathlike_arg_v<T>,
-			"LoadBadStripsFile args must be std::ifstream or a path-like "
-			"(const char*, std::string, std::filesystem::path, std::string_view)");
+				"LoadBadStripsFile args must be std::ifstream or a path-like "
+				"(const char*, std::string, std::filesystem::path, std::string_view)");
 
 		std::ifstream f{}; 
 		try {
@@ -79,13 +79,13 @@ public:
 
 		try {
 			json j = json::parse(f);
-			::append_flat_json(TFOOTPedestalProc::_bad_strips, j);	
+			::append_flat_json(TFOOTMapProc::_bad_strips, j);	
 		} catch(std::exception const& e) {
 			WARN("Json parsing failed. Reason: %s\n", e.what());
 			throw;
 		}
 		(LoadBadStripsFile(other), ...);
-	}
+	} 
 
 	/**
 	 * Call this at the end of the processing, to also write to the `bad_strips`

@@ -1,27 +1,24 @@
-#include "TFRSMapCont.h"
 #include "libs.hh"
 #include <algorithm>
 #include <iostream>
-#include "TApplication.h"
 #include "TFile.h"
-#include "TSystem.h"
-#include "dbg.hh"
 
 #include "indicators.hh"
 #include <csignal>
 #include "CMDLineParser.h"
 #include "AuxFunctions.hh"
 #include "TAnalysisPool.hxx"
-#include "TFOOTPedestalProc.h"
-#include "TFOOTPedestalCont.h"
-#include "TFOOTCalProc.h"
+#include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"
+#include "TFOOTCalProc.h"
+#include "TFRSMapCont.h"
+#include "TFRSCalCont.h"
+#include "TFRSCalProc.h"
 
 using namespace CMDLineParser;
 using namespace std::literals;
 
 extern const char* calibrate_help;
-void sig_callback_handler(int );
 
 #define FOOT_ID_0 10
 #define FOOT_ID_1 17
@@ -44,9 +41,10 @@ constexpr i32 static_detectors[] = {
 };
 constexpr i32 N_FOOT = LEN(static_detectors);
 
-auto main(int argc, char* argv[]) -> i32 {
+int main(int argc, char* argv[]) {
 	using namespace indicators;
-	signal(SIGINT | SIGSEGV, sig_callback_handler);
+	signal(SIGINT , util::sig_callback_handler);
+	signal(SIGSEGV, util::sig_callback_handler);
 	CMDLineParser::Mandatory::SetDefMessage(calibrate_help);
 	auto& def_msg = CMDLineParser::Mandatory::DefMessage;
 
@@ -55,11 +53,7 @@ auto main(int argc, char* argv[]) -> i32 {
 	std::string pStr, fileName, outFile;
 	u64 maxEvents = -1;
 
-	if(argc < 2) {	
-		YELL("Must supply a file argument!\n");
-		printf("%s", calibrate_help);
-		return 0;
-	}
+	CMDLineParser::Mandatory::SetDefMessage(calibrate_help);
 	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
 	
 	ParseCmdLine("file", fileName, argc, argv, true);
@@ -72,9 +66,8 @@ auto main(int argc, char* argv[]) -> i32 {
 		catch(std::exception& e) { WARN("Unparsable " EMPH(max-events) " argument to u64"); std::cout << e.what() << std::endl; }
 	}
 
-	std::vector<TimePoint> tv;
-
 	VerifyNoArgumentsLeft(argc, argv);
+	std::vector<TimePoint> tv;
 	
 	TFile* in = new TFile(fileName.c_str(), "READ");
 	if(!in or in->IsZombie())
@@ -83,26 +76,26 @@ auto main(int argc, char* argv[]) -> i32 {
 	if(!h102 or h102->IsZombie())
 		ERROR("TTree cast is somehow nullptr?\n");
 
-	TFile* out = new TFile(outFile.c_str(), "RECREATE"); 
-	TTree* h103 = new TTree("h103", "h103");
-	h103->SetAutoFlush(0); h103->SetAutoSave(0);
-
-	std::unordered_map<std::string, std::string> info;
-	TFOOTPedestalCont foot[N_FOOT]; // input container.
+	TFOOTMapCont foot[N_FOOT]{}; // input container.
 	for(int i=0; i<N_FOOT; ++i) {
-		foot[i].Init( {{"FOOT_ID"s, std::to_string(::static_detectors[i])} } );
-		foot[i].Setup(ContainerIO::kINPUT);
+		foot[i].Init( {{"FOOT_ID"s, std::to_string(::static_detectors[i])}} );
+		foot[i].Setup(ContainerIO::kINPUT, fileName);
 	}
+
 	TFRSMapCont frs{};
-	frs.Setup(ContainerIO::kINPUT);
-	
+	frs.Setup(ContainerIO::kINPUT, fileName);
+
+	TFRSCalCont cfrs{};
+	cfrs.Setup(ContainerIO::kOUTPUT, outFile); 
+	cfrs.Init( {{"Setup", "../params/frs_setup.json"}} );
+
 	TFOOTCalCont cfoot[N_FOOT]; // output container.
 	for(int i=0; i<N_FOOT; ++i) {
 		cfoot[i].Init({
 			{ "FOOT_ID"s, std::to_string(::static_detectors[i]) }, 
 			{ "FOOT_POS"s, std::to_string(i) }
 		});
-		cfoot[i].Setup(ContainerIO::kOUTPUT);
+		cfoot[i].Setup(ContainerIO::kOUTPUT, outFile);
 	}
 	auto pool = TAnalysisPool<>()
 		.emplace_worker<TFOOTCalProc>(foot[0], cfoot[0], 4, 1)
@@ -112,13 +105,10 @@ auto main(int argc, char* argv[]) -> i32 {
 		.emplace_worker<TFOOTCalProc>(foot[4], cfoot[4], 4, 1)
 		.emplace_worker<TFOOTCalProc>(foot[5], cfoot[5], 4, 1)
 		.emplace_worker<TFOOTCalProc>(foot[6], cfoot[6], 4, 1)
-		.emplace_worker<TFOOTCalProc>(foot[7], cfoot[7], 4, 1);
-
-	pool.in = h102;
-	pool.out = h103;
+		.emplace_worker<TFOOTCalProc>(foot[7], cfoot[7], 4, 1)
+		.emplace_worker<TFRSCalProc>(frs, cfrs);
 
 	tv.emplace_back(TimePoint("start"));
-	dbg("Doing the cluster analysis...");
 	u64 nentries = std::min((u64)pool.GetEntries(), maxEvents);
 
 	ProgressBar bar {
@@ -143,18 +133,15 @@ auto main(int argc, char* argv[]) -> i32 {
 		PrintProgress(bar, ev, nentries);
 		pool.AssignWork();
 		pool.Await();
-		pool.FillOutput();
+		pool.Fill();
 	}
 	pool.Stop(); bar.mark_as_completed();
 	tv.emplace_back(TimePoint("end"));
 
-	printf("Total execution time: "); PrintElapsed<kSECOND>(tv.back(), tv.front());
+	PrintElapsed<kSECOND>(std::move(tv));
 
 	show_console_cursor(true);
 	pool.Write();
-
-	out->Close();
-	in->Close();
 }
 
 const char* calibrate_help =
@@ -162,16 +149,10 @@ const char* calibrate_help =
 Options can be passed Windows style (-tag value1 value2 ...) or Unix style (--tag=value1,value2,...)\n\
 For either single or multiple values.\n\
 \n\
--file input1.root input2.root...   ..Input file(s).\n\
+-file input.root            ..Input file(s).\n\
 -output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_cal' suffix.\n\
 -help                       ..Print this message to stdout. \n\
 -max-events N               ..Specify how many events to process in the ROOT file. Default all.\n\
 \n\
 This program will analyse the mapped ROOT file and perform the clustering of the FOOT data + calibrating FRS data.\n\
 Always remember: PHYSICS IS FUN <(^.^)>\n\n";
-
-void sig_callback_handler(int signum) {
-	WARN("Caught abort/seg signal.\n");
-	indicators::show_console_cursor(true);
-	exit(signum);
-}
