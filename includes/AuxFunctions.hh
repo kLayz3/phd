@@ -28,9 +28,9 @@ inline void PrintProgress(indicators::ProgressBar& bar,	u64 n_entry, u64 max_ent
 }
 
 /* ------------------------- */
-inline uint64_t SortEntries(uint64_t& firstEvent, uint64_t& maxEvents, TTree* h101) {
-	firstEvent = std::min(firstEvent, (uint64_t)h101->GetEntries());
-    uint64_t n = (maxEvents==0 || firstEvent+maxEvents > (uint64_t)h101->GetEntries()) ? (h101->GetEntries()) : (firstEvent+maxEvents);
+inline u64 SortEntries(u64& firstEvent, u64& maxEvents, TTree* h101) {
+	firstEvent = std::min(firstEvent, (u64)h101->GetEntries());
+    u64 n = (maxEvents==0 || firstEvent+maxEvents > (u64)h101->GetEntries()) ? (h101->GetEntries()) : (firstEvent+maxEvents);
     maxEvents = n - firstEvent;
 	return n;
 }
@@ -350,7 +350,14 @@ static inline void append_flat_json(json& dst, const json& src) {
 	}
 }
 
+#if __has_include(<new>)
+#	include <new>
+#endif
+
 namespace util  {
+
+/* Returns the name of the type passed, also adding 
+ * ref-cv qualifiers. Useful for templated types. */
 template<typename T,
 	typename U = std::decay_t<T>	
 > std::string type_name() {
@@ -376,12 +383,13 @@ template<typename T,
 }
 
 #define _SELF_TYPE_CSTR \
-	util::type_name<std::remove_reference<decltype(*this)>>().c_str()
+	util::type_name<typename std::remove_reference<decltype(*this)>::type>().c_str()
 
 /* Sometimes cursor can be hidden mid execution,
  * if the program dies due to a system signal,
  * execute this to bring it back. Only POSIX async-safe 
- * calls are allowed. */
+ * calls are allowed. NOTE: this *might* disable standard ROOT
+ * stack trace dump in case of SIGSEGV catch. */
 inline void sig_callback_handler(int signum) {
 	const char show[] = "\x1b[?25h";
     const char nl   = '\n';
@@ -390,5 +398,15 @@ inline void sig_callback_handler(int signum) {
 	WARN_ASYNC("Caught abort/seg signal [%d].\n", signum);
 	_exit(128 + signum);
 }
-}
 
+constexpr std::size_t CL = 
+#if defined(__cpp_lib_hardware_interference_size)
+	std::hardware_destructive_interference_size
+#elif defined(__x86_64__)
+	64 // fallback, for sure.
+#else
+	64 // Suppose
+#endif
+	;
+
+}

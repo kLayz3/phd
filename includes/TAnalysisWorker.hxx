@@ -1,11 +1,9 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
 #include <thread>
 #include <type_traits>
-#include "Rtypes.h"
-#include "libs.hh"
+#include "AuxFunctions.hh"
 #include <immintrin.h>
 
 class TProcessor;
@@ -29,17 +27,6 @@ namespace util {
 		  > {};
 }
 
-#if defined(__clang__) && __cplusplus >= 201703L
-#	include <new>
-#endif
-
-constexpr std::size_t CL = 
-#if defined(__clang__) && __cplusplus >= 201703L
-	std::hardware_destructive_interference_size;
-#else
-	64
-#endif
-	;
 
 template<typename T>
 class TAnalysisWorker final : public T {
@@ -52,8 +39,8 @@ class TAnalysisWorker final : public T {
 
 private:
 	std::thread _thread{};
-	alignas(CL) std::atomic<bool> _stop{false};
-	alignas(CL) std::atomic<bool> _has_work{false};
+	alignas(util::CL) std::atomic<bool> _stop{false};
+	alignas(util::CL) std::atomic<bool> _has_work{false};
 
 public:
 	using T::T;

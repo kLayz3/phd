@@ -20,7 +20,7 @@ void TFOOTMapCont::Init(TDictInfo info) {
 	FOOT_N = n;
 	this->SetName(Form("FOOT%d", n));
 	
-	assert(GetOwnedTOnceObjects().size() == 0 
+	assert(GetNOwnedTOnceObjects() == 0 
 		&& Form("(%s) Don't call \'Init\' twice. Clear the owned objects first.", GetName()));
 
 	h2_raw     = RegisterObject<TH2I>("h2_raw" , Form("Raw FOOT%d", FOOT_N), 640,0,640,4096,0,4096);

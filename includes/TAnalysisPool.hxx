@@ -89,7 +89,9 @@ private:
 	std::string out_rntuple{}; // can be empty
 
 public:
+	using Empty = std::monostate;
 	std::variant<
+		Empty,
 		TTree*,  // non-owning
 		TChain*, // non-owning
 		std::unique_ptr<ROOT::Experimental::RNTupleReader>
@@ -110,7 +112,7 @@ public:
 		std::string&& in_file,
 		std::string&& out_file,
 		std::string&& out_rntuple,
-		std::variant<TTree*, TChain*,
+		std::variant<Empty, TTree*, TChain*,
 			std::unique_ptr<ROOT::Experimental::RNTupleReader>
 		>&& _in_reader,
 		std::unique_ptr<ROOT::Experimental::RNTupleWriter>&& _out_writer
@@ -169,7 +171,7 @@ public:
 	
 	void SetInput(std::variant<std::string, TTree*, TChain*> input) {
 		if(input.valueless_by_exception())
-			ERROR("Passed valueless variant.\n");
+			ERROR("Passed valueless variant?\n");
 		else if(std::holds_alternative<TTree*>(input))
 			_in_reader = std::get<TTree*>(input);
 		else if(std::holds_alternative<TChain*>(input))
@@ -199,8 +201,7 @@ public:
 			}
 			if(rntuple_name.empty())
 				ERROR("Able to cleanly read the ROOT file, but couldn't find the ROOT::RNTuple object in: " EMPH(%s\n), file_name.c_str());
-
-			{ std::unique_ptr<TFile> _fmoved = std::move(f); } // Release the resource.
+			{ std::unique_ptr<TFile> _ = std::move(f); } // Release the resource.
 
 			this->in_file = file_name;
 			_in_reader = ROOT::Experimental::RNTupleReader::Open(std::move(TContainerBase::ReleaseModelRead()), rntuple_name, file_name);
@@ -246,6 +247,8 @@ public:
 	Int_t GetEntry(Long64_t entry, Int_t getall = 0) const { 
 		if(_in_reader.valueless_by_exception()) 
 			ERROR("Valueless input TTree/TChain/RNTuple. Invalid");
+		else if(std::holds_alternative<Empty>(_in_reader)) 
+			ERROR("Empty input TTree/TChain/RNTuple. Invalid");
 		else if(std::holds_alternative<TTree*>(_in_reader)) 
 			return std::get<TTree*>(_in_reader)->GetEntry(entry, getall);
 		else if(std::holds_alternative<TChain*>(_in_reader)) 
@@ -261,6 +264,8 @@ public:
 	Long64_t GetEntries() const { 
 		if(_in_reader.valueless_by_exception()) 
 			ERROR("Valueless input TTree/TChain/RNTuple. Invalid");
+		else if(std::holds_alternative<Empty>(_in_reader)) 
+			ERROR("Empty input TTree/TChain/RNTuple. Invalid");
 		else if(std::holds_alternative<TTree*>(_in_reader)) 
 			return std::get<TTree*>(_in_reader)->GetEntries();
 		else if(std::holds_alternative<TChain*>(_in_reader)) 
@@ -290,8 +295,19 @@ public:
 			ERROR("Must be in a stopped state before calling start.");
 		if(_in_reader.valueless_by_exception()) 
 			ERROR("Valueless input TTree/TChain/RNTuple. Invalid");
-		if(! std::visit([](const auto& v) { return (!!v); }, _in_reader))
-			ERROR("Reader input is in valued but non-valid (null) state.\n");
+		else if(std::holds_alternative<Empty>(_in_reader)) 
+			ERROR("Empty input TTree/TChain/RNTuple. Invalid");
+	
+		/* Check if the reader state isn't Empty, and the pointer variant valid. */
+		if(! std::visit([](const auto& v) { 
+			using X = std::decay_t<decltype(v)>;
+			if constexpr(std::is_same_v<X, Empty>)
+				return false;
+			else
+				return (!!v); 
+		}, _in_reader ) ) {
+			ERROR("Reader input is in valued, but empty/null state?\n");
+		}
 
 		_stop = false;
 #if !defined(ANALYSIS_SINGLETHREADED)
@@ -378,18 +394,18 @@ public:
 		}
 		/* RNTupleWriter gets dropped here. */
 
-		/* Tail calls of:
-		 * TAnalysisWorker<Whatever>::Write -->
+		/* Tail calls of following sequence:
+		 * TAnalysisWorker<Whatever>::Write calls
 		 * Whatever::Write usually calls TContainer<???>::Write().
-		 * Now, this could write to the same file as RNTupleWriter, or it could be
-		 * a different file, based on supplied file names there. */
+		 * Now, this **should** write to the same file as RNTupleWriter, or it could be
+		 * a different file, but then weird things happen. */
 
 		Int_t r = std::apply([](auto&... ws) {
 				return (...+ ws.Write());
 			}, _pool
 		);
 
-		WARN("Successfully written the output file.\n");
+		WARN("Successfully written %d bytes the output file.\n", r);
 		_is_valid = false;
 		return r;
 	};

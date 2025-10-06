@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AuxFunctions.hh"
 #include "TContainer.hxx"
 
 struct RNSciMap {
@@ -64,7 +65,7 @@ struct RNMUSICMap {
 	ClassDef(RNMUSICMap, 1);
 };
 
-struct RNFRSMap {
+struct alignas(util::CL) RNFRSMap {
 	std::array<RNSciMap, 4> sci;
 	std::array<RNTPCMap, 7> tpc;
 	std::array<RNMUSICMap<8>, 2> music;

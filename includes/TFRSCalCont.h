@@ -4,7 +4,7 @@
 #include "nlohmann/json.hpp"
 class TH2I;
 
-struct RNFRSCal {
+struct alignas(util::CL) RNFRSCal {
 	class Position {
 	public:
 		double x{}, y{};
@@ -31,10 +31,10 @@ struct RNFRSCal {
 class TFRSCalCont: public TContainer<RNFRSCal> {
 public:
 	using TPCParam = std::tuple<
-		std::array<double, 2>,
-		std::array<double, 2>,
-		std::array<double, 4>,
-		std::array<double, 4>
+		std::array<double, 2>, // x_offset
+		std::array<double, 2>, // x_factor
+		std::array<double, 4>, // y_offset
+		std::array<double, 4>  // y_factor
 	>;
 
 	static nlohmann::json setup; 
@@ -47,7 +47,6 @@ public:
 	std::string *setupName{};
 	std::array<TPCParam, 7> *tpc_param{};
 
-	TFRSCalCont() = default;
-
+	TFRSCalCont() ;
 	void Init(TDictInfo info) /* override */;
 };

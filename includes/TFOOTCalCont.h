@@ -52,7 +52,7 @@ namespace std {
     template<> struct tuple_element<2, ::RNFOOTCluster> { using type = double; };
 }
 
-struct RNFOOTCal {
+struct alignas(util::CL) RNFOOTCal {
 	static constexpr size_t INIT_CAPACITY = _FOOT_N_STRIPS_PER_ASIC;
 	static constexpr int N_STRIPS = _FOOT_N_STRIPS;
 

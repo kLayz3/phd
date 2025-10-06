@@ -1,16 +1,12 @@
+#include "ROOT/RNTupleModel.hxx"
+#include "ROOT/RNTupleReader.hxx"
+#include "ROOT/RNTupleWriter.hxx"
+
+using RNTupleModel = ROOT::Experimental::RNTupleModel;
+using RNTupleReader = ROOT::Experimental::RNTupleReader;
+using RNTupleWriter = ROOT::Experimental::RNTupleWriter;
+
 void pretty_cal(const char* fileName = "", int N = 4, uint32_t Nevents = 16, uint64_t nFirstEntry = 0) {
-	TFile* f = new TFile(fileName, "READ");
-	if(!f || f->IsZombie()) { printf("Error opening file.\n"); exit(2); }
-
-
-	TTree* t = dynamic_cast<TTree*>(f->Get("h103"));
-	if(!t || t->IsZombie()) { printf("Error opening ttree.\n"); exit(2); }
-
-	TFOOTCalCont cont{};
-	cont.Init( {{"FOOT_ID"s, std::to_string(N)}, {"FOOT_POS"s, std::to_string(N)}} );
-
-	cont.Setup(ContainerIO::kINPUT);
-
 	TCanvas *cbad = new TCanvas("cbad", "Bad events", 2600, 2000);
 
 	const int N_DIV = 2;
@@ -28,17 +24,20 @@ void pretty_cal(const char* fileName = "", int N = 4, uint32_t Nevents = 16, uin
 #define N_STRIPS 640
 	double arr[N_STRIPS]{};
 	std::iota(arr, arr+N_STRIPS,0);
+	
+	auto model = RNTupleModel::Create();
+	auto m = MakeField<RNFOOTCal>(Form("FOOT%d", N)); // shared_ptr.
+	auto ntuple = RNTupleReader::Open(std::move(model), "h102", fileName);
 
-	uint64_t nentries = t->GetEntries();
-	for(uint64_t i = nFirstEntry; i < nentries; ++i) {
-		t->GetEntry(i);
-		if(cont._fBadE.size() == 0) continue;
+	for(auto entryId : *ntuple) {
+		ntuple->LoadEntry(entryId);
+		if(m->_fBadE.size() == 0) continue;
 		
-		if(curr_ev == Nevents) break;
+		if(entryId == Nevents) break;
 
 		TGraph* gr = new TGraph(N_STRIPS);
 		memcpy(gr->GetX(), arr, sizeof(arr));
-		memcpy(gr->GetY(), cont._fBadE.data(), sizeof(arr));
+		memcpy(gr->GetY(), m->_fBadE.data(), sizeof(arr));
 		
 		gr->SetMarkerStyle(style[curr_ev % N_GRAPHS_PER_PAD]);
 		gr->SetMarkerColor(col[curr_ev % N_GRAPHS_PER_PAD]);
@@ -55,31 +54,17 @@ void pretty_cal(const char* fileName = "", int N = 4, uint32_t Nevents = 16, uin
 			gr->Draw("P SAME");
 		++curr_ev;
 	}
-/*	
-	std::vector<TLine*> vlines;
-	for(int i = 1; i < TFOOTPedestalCont::N_ASIC; ++i) {
-		TLine* line = new TLine(i * TFOOTPedestalCont::N_STRIPS_PER_ASIC, -500, 
-				                 i * TFOOTPedestalCont::N_STRIPS_PER_ASIC, 4096);
-		line->SetLineColor(1);
-		line->SetLineStyle(2);
-		line->SetLineWidth(3);
-		vlines.push_back( line );
-	}
-	for(int i=1; i <= N_DIV2; ++i) {
-		cbad->cd(i);
-		for(auto* l0 : vlines) {
-			TLine* l = dynamic_cast<TLine*>(l0->Clone());
-			l->SetY1(-60);
-			l->SetY2(400);
-			l->Draw("SAME");
-		}
-	}
-*/
+	ntuple.reset(); /* Stop the RNTuple stuff here. */
+	m.reset();
+
+	std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName, "READ");
+	if(!f || f->IsZombie()) { printf("Error opening file.\n"); exit(2); }
+
 	TCanvas *csn = new TCanvas("csn", "csn", 2600,2000);
 	csn->Divide(2, 4);
 
 #define GET_OBJ(TYPE, x, N, EXT) \
-	x = dynamic_cast<TYPE*>(f->Get(Form("CFOOT%d_%s", N, #EXT))); \
+	x = f->Get<TYPE>(Form("CFOOT%d_%s", N, #EXT)); \
 	if(!x) { printf("Err getting \'%s\', extension: \'%s\', object: \'%s\', type: \'%s\'\n", \
 		#x, #EXT, Form("CFOOT%d_%s", N, #EXT), #TYPE); exit(3); }
 	TH1I *hsn[8];

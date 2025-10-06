@@ -1,7 +1,6 @@
 #include "libs.hh"
 #include <algorithm>
 #include <iostream>
-#include "TFile.h"
 
 #include "indicators.hh"
 #include <csignal>
@@ -68,26 +67,20 @@ int main(int argc, char* argv[]) {
 
 	VerifyNoArgumentsLeft(argc, argv);
 	std::vector<TimePoint> tv;
-	
-	TFile* in = new TFile(fileName.c_str(), "READ");
-	if(!in or in->IsZombie())
-		ERROR("Bad input ROOT file: %s\n", fileName.c_str());
-	TTree* h102 = dynamic_cast<TTree*>(in->Get("h102"));
-	if(!h102 or h102->IsZombie())
-		ERROR("TTree cast is somehow nullptr?\n");
 
+	/* Set up the containers. */
 	TFOOTMapCont foot[N_FOOT]{}; // input container.
 	for(int i=0; i<N_FOOT; ++i) {
 		foot[i].Init( {{"FOOT_ID"s, std::to_string(::static_detectors[i])}} );
-		foot[i].Setup(ContainerIO::kINPUT, fileName);
+		foot[i].Setup(ContainerIO::kINPUT_FULL, fileName);
 	}
 
 	TFRSMapCont frs{};
-	frs.Setup(ContainerIO::kINPUT, fileName);
+	frs.Setup(ContainerIO::kINPUT_RNONLY, fileName);
 
 	TFRSCalCont cfrs{};
 	cfrs.Setup(ContainerIO::kOUTPUT, outFile); 
-	cfrs.Init( {{"Setup", "../params/frs_setup.json"}} );
+	cfrs.Init( {{"Setup", PROG_PATH "/params/frs_setup.json"}} );
 
 	TFOOTCalCont cfoot[N_FOOT]; // output container.
 	for(int i=0; i<N_FOOT; ++i) {
@@ -97,6 +90,8 @@ int main(int argc, char* argv[]) {
 		});
 		cfoot[i].Setup(ContainerIO::kOUTPUT, outFile);
 	}
+
+	/* Set up the processing pool. */
 	auto pool = TAnalysisPool<>()
 		.emplace_worker<TFOOTCalProc>(foot[0], cfoot[0], 4, 1)
 		.emplace_worker<TFOOTCalProc>(foot[1], cfoot[1], 4, 1)
@@ -107,6 +102,8 @@ int main(int argc, char* argv[]) {
 		.emplace_worker<TFOOTCalProc>(foot[6], cfoot[6], 4, 1)
 		.emplace_worker<TFOOTCalProc>(foot[7], cfoot[7], 4, 1)
 		.emplace_worker<TFRSCalProc>(frs, cfrs);
+	pool.SetInput(fileName);
+	pool.SetOutput(outFile, "h103");
 
 	tv.emplace_back(TimePoint("start"));
 	u64 nentries = std::min((u64)pool.GetEntries(), maxEvents);

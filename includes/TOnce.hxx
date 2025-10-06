@@ -37,7 +37,15 @@ namespace util {
  
 	template<typename T>
 	struct has_setname<T, std::void_t<
-		decltype(std::declval<const T&>().SetName(std::declval<const char*>()))
+		decltype( std::declval<T&>().SetName(std::declval<const char*>() ) )
+	>> : std::true_type {};
+
+	template<typename T, typename = void>
+	struct has_copy : std::false_type {};
+
+	template<typename T>
+	struct has_copy<T, std::void_t<
+		decltype( std::declval<const T&>().Copy( std::declval<TObject&>() ) )
 	>> : std::true_type {};
 }
 
@@ -55,12 +63,12 @@ class TOnce : public TOnceBase {
 	static_assert(! std::is_array_v<T>, "Must not pass raw C-style arrays. Pass an `std::array<T,N>` instead.");
 	static_assert(  std::is_copy_assignable_v<T>, "Type T must be copy-assignable");
 
-    T _internal;
+	T _internal;
 
 public:
     using type = T;
 
-    /* Case 1: T constructible with (const char*, Args...) */
+	/* Case 1: T constructible with (const char*, Args...) */
 	template<typename... Ts,
 		typename std::enable_if<std::is_constructible_v<T, const char*, Ts...>>::type* = nullptr
 	> TOnce(const char* name, Ts&&... args) : TOnceBase(name), 
@@ -110,7 +118,7 @@ public:
 			if constexpr(std::is_base_of_v<TNamed, T>)
 				if(title && *title) _internal.SetTitle(title);
 		}
-    }
+	}
 
 	Int_t Write(TFile* f = nullptr, const char* name = "") override {
 		if(!name) ERROR("Don't pass nullptr for `name` here.");
@@ -130,32 +138,29 @@ public:
 		if(!name || ! *name) ERROR("Unnamed TOnce<T> object while trying to load from a file.");
 		if(!f || f->IsZombie() || !f->IsOpen())
 			ERROR("(%s) (target: \'%s\') tried to open the file, but didn't receive a handle and also gDirectory holds no open valid file.", _name.c_str(), target);
-		//static bool _old = true;
-		//if constexpr(std::is_base_of_v<TH1, T>) {
-		//	_old = TH1::AddDirectoryStatus();
-		//	TH1::AddDirectory(kFALSE);
-		//}
 
 		T* tmp = f->Get<T>(name);
 		if(!tmp) ERROR("(%s) - asked for " EMPH(%s) " name as key to a static object, got back nullptr.", _name.c_str(), name);
 		
-		try {
-			_internal = *tmp; // deep-copy ; asserted via type traits on the top.
-			delete tmp;
-		} catch(const std::exception& e) {
-			ERROR("Caught: " EMPH(%s) " while trying to deep-copy during loading of a static object.", e.what());	
-		} catch(...) {
-			ERROR("Unknown exception caught.");
+		if constexpr(std::is_base_of_v<TObject, T>) {
+			// Try calling `Copy` if it exists in the derived class.
+			if constexpr(util::has_copy<T>::value) {
+				tmp->Copy(_internal);
+			} else {
+				_internal = *tmp; // deep-copy ; asserted via type traits on the top.
+			}
+			if constexpr(std::is_base_of_v<TH1, T>) {
+				_internal.SetDirectory(nullptr);
+			}
+		} else {
+			// Plain STL-types. std::vector, std::array, etc
+			_internal = std::move(*tmp);
 		}
 
-		//if constexpr(std::is_base_of_v<TH1, T>) {
-		//	delete tmp;
-		//	TH1::AddDirectory(_old);
-		//}
-		/* In general, this leaves other objects, like TGraph, TCanvas, TParameter, etc still
-		 * allocated on the heap and sitting. Cleaned up at the end when ROOT session terminates. 
-		 * Here we perfectly own (without a sitting copy) only TH1 objects. */
-
+		/* In general, this leaves objects, like TGraph, TCanvas, TParameter, etc still
+		 * allocated on the heap and sitting. Cleaned up at the end when TFile closes or its dtor runs. 
+		 */
+		
 		return (void*)&_internal;
 	}
 

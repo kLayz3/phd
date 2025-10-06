@@ -20,12 +20,12 @@ void pretty_plot_ped(const char* fileName = "", int N=20) {
 	corr->GetXaxis()->SetTitle("Strip number");
 	corr->GetYaxis()->SetTitle("Corrected ADC value");
 	
-	printf("N_STRIPS: %d\nNASIC: %d\n", TFOOTPedestalCont::N_STRIPS_PER_ASIC, TFOOTPedestalCont::N_ASIC);
+	printf("N_STRIPS: %d\nNASIC: %d\n", 64, 10);
 
 	std::vector<TLine*> vlines;
-	for(int i = 1; i < TFOOTPedestalCont::N_ASIC; ++i) {
-		TLine* line = new TLine(i * TFOOTPedestalCont::N_STRIPS_PER_ASIC, -500, 
-				                 i * TFOOTPedestalCont::N_STRIPS_PER_ASIC, 4096);
+	for(int i = 1; i < 10; ++i) {
+		TLine* line = new TLine(i * 64, -500, 
+				                 i * 64, 4096);
 		line->SetLineColor(kRed);
 		line->SetLineStyle(2);
 		line->SetLineWidth(3);

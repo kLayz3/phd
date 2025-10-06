@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Rtypes.h"
+
 /**
  * Base class API for all types that will implement `void ProcessEntry()` and `Int_t Write()` methods.
  * It holds refs/ptrs to associated containers, or the containers should be movable.
@@ -18,7 +19,6 @@ public:
 	virtual ~TProcessor() = default;
 
 public:
-	virtual void Clear(Option_t* option = "");
 	virtual Int_t Write();
 };
 

@@ -60,9 +60,10 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	FOOT_N = int_mappings.at("FOOT_ID");
 	POS = int_mappings.at("FOOT_POS");
 
-	this->SetName(Form("CFOOT%d", POS));
+	this->SetName(Form("FOOT%d", POS));
 
-	assert(GetOwnedTOnceObjects().size() == 0 && "Don't call `SetId` twice. Clear the owned objects first.");
+	assert(GetNOwnedTOnceObjects() == 0 && 
+		"Don't call `SetId` twice. Clear the owned objects first.");
 	
 	h1_raw_mult = RegisterObject<TH1I>("h1_raw_mult", Form("FOOT(%2d: %d) raw multiplicity", FOOT_N, POS), 50,0,50);
 	h1_mult     = RegisterObject<TH1I>("h1_mult", Form("FOOT (%2d: %d) multiplicity", FOOT_N, POS), 200,0,50);
