@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
 		option::Lead{">"},
 		option::Remainder{" "},
 		option::End{"]"},
-		option::PostfixText{"Clustering (per event)"},
+		option::PostfixText{"Clustering & Calibration (per event)"},
 		option::ForegroundColor{Color::yellow},
 		option::ShowPercentage{true},
 		option::ShowElapsedTime{true},

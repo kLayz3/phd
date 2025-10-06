@@ -80,7 +80,7 @@ public:
 	T& operator*() noexcept { return *(_inner.get()); }
 	T& inner() noexcept { return this->operator*(); }
 
-	virtual ~TContainer() = default;
+	virtual ~TContainer() = default; /* Don't need it, but doesn't really hurt performance. */
 
 	void Clean() noexcept {
 		if constexpr(util::has_clean_noexcept<T>::value)
@@ -192,6 +192,6 @@ public:
 		return r;
 	}
 
-	inline std::size_t GetNOwnedTOnceObjects() { return _vc.size(); }
+	std::size_t GetNOwnedTOnceObjects() { return _vc.size(); }
 
 };

@@ -4,17 +4,6 @@
 RNFOOTCluster::RNFOOTCluster(double x, double e, double m, ClusterType t) :
 	fCX(x), fCE(e), fCM(m), fCT(t) {}
 
-template<std::size_t I, typename T>
-auto&& RNFOOTCluster::get_helper(T&& t) {
-	static_assert(I<3, "Index out of bounds for RNFOOTCluster");
-	if constexpr(I == 0) 
-		return std::forward<T>(t).fCX;
-	else if constexpr(I == 1) 
-		return std::forward<T>(t).fCE;
-	else 
-		return std::forward<T>(t).fCM;
-}
-
 /* ------------------------------------------------------- */
 
 RNFOOTCal::RNFOOTCal() { 

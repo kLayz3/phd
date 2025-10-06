@@ -23,16 +23,16 @@ struct RNFOOTCluster {
 	ClusterType fCT{}; /* Cluster type. */
 
 	template<std::size_t I>
-	inline auto&& get() & { return get_helper<I>(*this); }
+	decltype(auto) get() & { return get_helper<I>(*this); }
 
 	template<std::size_t I>
-	inline auto&& get() && { return get_helper<I>(*this); }
+	decltype(auto) get() && { return get_helper<I>(*this); }
 
 	template<std::size_t I>
-	inline auto&& get() const & { return get_helper<I>(*this); }
+	decltype(auto) get() const & { return get_helper<I>(*this); }
 
 	template<std::size_t I>
-	inline auto&& get() const && { return get_helper<I>(*this); }
+	decltype(auto) get() const && { return get_helper<I>(*this); }
 
 	RNFOOTCluster(double x, double e, double m, ClusterType t);
 	RNFOOTCluster() = default;
@@ -41,15 +41,22 @@ struct RNFOOTCluster {
 
 private:
 	template<std::size_t I, typename T>
-	auto&& get_helper(T&& t);
+	decltype(auto) get_helper(T&& t) {
+		if constexpr(I == 0)      return (std::forward<T>(t).fCX);
+		else if constexpr(I == 1) return (std::forward<T>(t).fCE);
+		else if constexpr(I == 2) return (std::forward<T>(t).fCM);
+		else if constexpr(I == 3) return (std::forward<T>(t).fCT);
+		else static_assert(I < 4, "Index out of bounds for RNFOOTCluster::get");
+	} 
 };
 
 /* Hacks to make it structured-binding decomposable. */
 namespace std {
-	template<> struct tuple_size<::RNFOOTCluster> : integral_constant<size_t, 3> {};
+	template<> struct tuple_size<::RNFOOTCluster> : integral_constant<size_t, 4> {};
 	template<> struct tuple_element<0, ::RNFOOTCluster> { using type = double; };
 	template<> struct tuple_element<1, ::RNFOOTCluster> { using type = double; };
     template<> struct tuple_element<2, ::RNFOOTCluster> { using type = double; };
+    template<> struct tuple_element<3, ::RNFOOTCluster> { using type = RNFOOTCluster::ClusterType; };
 }
 
 struct alignas(util::CL) RNFOOTCal {

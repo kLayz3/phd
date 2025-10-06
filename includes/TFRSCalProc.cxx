@@ -1,7 +1,5 @@
 #include "TFRSCalProc.h"
 
-using TPCParam = TFRSCalCont::TPCParam;
-
 void TFRSCalProc::ProcessEntry() noexcept {
 	for(int i=0; i<7; ++i)
 		this->ProcessTPC(i);				

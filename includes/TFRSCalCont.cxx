@@ -17,7 +17,7 @@ TFRSCalCont::TFRSCalCont() : TContainer("FRS") {
 	h1_xy_s2_after_target = RegisterObject<TH2I>("h1_xy_s2_after_target", "XY after target (mm x mm)", 200, -50, 50, 200, -50, 50);
 	h1_ab_s2_after_target = RegisterObject<TH2I>("h1_ab_s2_after_target", "Angle after target (mrad x mrad)", 200, -50, 50, 200, -50, 50);
 	tpc_param = RegisterObject<
-		std::remove_reference_t<decltype(*tpc_param)>
+		std::remove_reference_t<decltype(*tpc_param)> // std::array<TPCParam, 7>
 	>("tpc_parameters", {});
 }
 
@@ -54,17 +54,23 @@ void TFRSCalCont::Init(TDictInfo info) {
 			"y_offset",
 			"y_factor"
 		};
-		static_assert(std::tuple_size_v<TFRSCalCont::TPCParam> == LEN(keys),
+		static_assert(TPCParam::N_PARAMS == LEN(keys),
 			"Broken parameter mapping construction (tuple sizes b/w JSON rep and code mismatch).\n");
 		
-		/* Manually unroll here using a macro. Either that or do aerobatics getting runtime indexing
-		 * of tuple (check the pain in TAnalysisPool). */
+		/* Manually unroll here using a macro. Either that or do aerobatics getting runtime indexing. */
 #define UNROLL_TPC_JSON_PARAM(X) \
 		if(! params.at(keys[X]).is_array()) { \
-			ERROR("TPC%d; Key \'%s\' not found in: %s\n", i, keys[X], pinfo.c_str());	 \
+			ERROR("TPC%d; Key \'%s\' not array in: %s\n", i, keys[X], pinfo.c_str());	 \
 		} \
 		try { \
-			std::get<X>( tpc_param->at(i) ) = params[keys[X]]; \
+			/* Hacky part: right side is implicit conversion from nlohmann::json object
+			 * to std::array<?>. Type traits explore the exact array type. */ \
+			tpc_param->at(i).get<X>() = params[keys[X]] \
+				.template get< \
+					std::remove_reference_t< \
+						decltype( std::declval<TPCParam&>().get<X>() ) \
+					> \
+				>(); \
 		} catch(std::exception const& e) { \
 			ERROR("Failed setup assignment TPC:%d, keyId:%d, key:%s: reason: %s\n",  \
 				i, X, keys[X], e.what()); \
@@ -80,3 +86,4 @@ void TFRSCalCont::Init(TDictInfo info) {
 
 ClassImp(RNFRSCal::Position);
 ClassImp(RNFRSCal);
+ClassImp(TPCParam);
