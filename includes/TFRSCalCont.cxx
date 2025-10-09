@@ -52,10 +52,12 @@ void TFRSCalCont::Init(TDictInfo info) {
 			"x_offset",
 			"x_factor",
 			"y_offset",
-			"y_factor"
+			"y_factor",
+			"csum_lim",
+			"sci_ref_lim",
 		};
 		static_assert(TPCParam::N_PARAMS == LEN(keys),
-			"Broken parameter mapping construction (tuple sizes b/w JSON rep and code mismatch).\n");
+			"Broken parameter mapping construction (tuple sizes b/w JSON representation and code mismatch)\n");
 		
 		/* Manually unroll here using a macro. Either that or do aerobatics getting runtime indexing. */
 #define UNROLL_TPC_JSON_PARAM(X) \
@@ -63,10 +65,10 @@ void TFRSCalCont::Init(TDictInfo info) {
 			ERROR("TPC%d; Key \'%s\' not array in: %s\n", i, keys[X], pinfo.c_str());	 \
 		} \
 		try { \
-			/* Hacky part: right side is implicit conversion from nlohmann::json object
-			 * to std::array<?>. Type traits explore the exact array type. */ \
+			/* Hacky part: right side is explicit conversion from nlohmann::json object
+			 * to std::array<?,?>. Type traits explore the exact array type. */ \
 			tpc_param->at(i).get<X>() = params[keys[X]] \
-				.template get< \
+				.get< \
 					std::remove_reference_t< \
 						decltype( std::declval<TPCParam&>().get<X>() ) \
 					> \
@@ -79,11 +81,15 @@ void TFRSCalCont::Init(TDictInfo info) {
 		UNROLL_TPC_JSON_PARAM(1)
 		UNROLL_TPC_JSON_PARAM(2)
 		UNROLL_TPC_JSON_PARAM(3)
+		UNROLL_TPC_JSON_PARAM(4)
+		UNROLL_TPC_JSON_PARAM(5)
 	}
-	
+
 	setupName = RegisterObject<std::string>("setup_file", it->second);
 }
 
-ClassImp(RNFRSCal::Position);
+ClassImp(RNSciCal);
+ClassImp(RNTPCCal);
+ClassImp(RNTPCCal::Measurement);
 ClassImp(RNFRSCal);
 ClassImp(TPCParam);

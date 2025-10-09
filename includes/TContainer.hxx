@@ -97,7 +97,7 @@ public:
 		std::unique_ptr<TOnce<U>> obj = std::make_unique<TOnce<U>>(name, il);
 		TOnce<U>* p = obj.get();
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
-		p->SetName( ::sstrcat(this->GetName(), "_", obj->GetName()) );
+		p->SetName( util::sstrcat(this->GetName(), "_", obj->GetName()) );
 		_vc.push_back(std::move(obj));
 		
 		return p->operator->();
@@ -108,7 +108,7 @@ public:
 		std::unique_ptr<TOnce<U>> obj = std::make_unique<TOnce<U>>(std::forward<Ts>(args)...);
 		TOnce<U>* p = obj.get();
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
-		p->SetName( ::sstrcat(this->GetName(), "_", obj->GetName()) );
+		p->SetName( util::sstrcat(this->GetName(), "_", obj->GetName()) );
 		_vc.push_back(std::move(obj));
 		
 		return p->operator->();

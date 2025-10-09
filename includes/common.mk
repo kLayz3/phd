@@ -9,5 +9,6 @@ else
 CXXFLAGS += -O3 -march=native
 endif
 
+#CXXFLAGS += -g -fno-omit-frame-pointer -fno-inline # For callgrind.
 #CXXFLAGS +=  -std=c++20 
 #CXXFLAGS += -Wno-cpp

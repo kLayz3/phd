@@ -19,34 +19,49 @@ struct RNSciMap {
 	ClassDef(RNSciMap, 1);
 };
 
+/* This struct is layed out the following way to help cache locality.
+ * Initially the layout was:
+ *	std::array<std::vector<i32>, 2> tdc_l{};
+ *	std::array<std::vector<i32>, 2> tdc_r{};
+ *	std::array<std::vector<i32>, 4> tdc_a{};
+ *	std::vector<i32> tdc_ref{};
+ * -> This is diabolically bad, since we always take differences `tdc_l[??] - tdc_r[??]` and these references
+ *  aren't on the same cache line. Worst yet - this heap allocated sequence could share close line with some FOOT
+ *  data too, making congestion insane, and basically most values aren't (initially) cached in L1d.
+ *  Having this layout and doing the simple loop above, slows down the whole program by a factor 100 !
+ *
+ *  A great read to the whole L1d locality + cache congestion and how indeed malloc works under the hood:
+ *  https://people.freebsd.org/~lstewart/articles/cpumemory.pdf
+ */
+
 struct RNTPCMap {
-	static constexpr int MAX_SIZE = 64;
-	std::array<std::vector<i32>, 2> tdc_l{};
-	std::array<std::vector<i32>, 2> tdc_r{};
-	std::array<std::vector<i32>, 4> tdc_a{};
-	std::vector<i32> tdc_ref{};
+	static constexpr i32 MAX_SIZE = 8;
+	static_assert(MAX_SIZE > 0 && MAX_SIZE < 64, "64 is what Go4 gives us. Don't make higher capacity!");
+
+	struct Measurement {
+		static constexpr int TDC_INVALID = -1;
+		std::array<i32, 2> tdc_l { TDC_INVALID, TDC_INVALID }; /* 8  bytes. */
+		std::array<i32, 2> tdc_r { TDC_INVALID, TDC_INVALID }; /* 8  bytes. */
+		std::array<i32, 4> tdc_a { TDC_INVALID, TDC_INVALID, 
+			           TDC_INVALID, TDC_INVALID }; /* 16 bytes. */
+		i32 tdc_ref   = TDC_INVALID;               /* 4  bytes. */
+		/* + 4-byte alignment field. */
+
+		void Sort() noexcept;
+		Measurement() = default;
+		virtual ~Measurement() = default;
+		ClassDef(Measurement, 1);
+	}; static_assert(sizeof(Measurement) == 48, "Huh?");
+
+	std::vector<Measurement> tdc{};
 	u16 adc[4]{};
 
-	RNTPCMap() { 
-		for(auto& t : tdc_l) 
-			t.reserve(MAX_SIZE);
-		for(auto& t : tdc_r)
-			t.reserve(MAX_SIZE);
-		for(auto& t : tdc_a)
-			t.reserve(MAX_SIZE);
-		tdc_ref.reserve(MAX_SIZE);
-	}
-	inline void Clean() noexcept { 
-		for(auto& t : tdc_l)
-			t.clear();
-		for(auto& t : tdc_r)
-			t.clear();
-		for(auto& t : tdc_a) 
-			t.clear();
-		tdc_ref.clear();
-
+	RNTPCMap() { tdc.reserve(MAX_SIZE); }
+	inline void Clean() noexcept {
+		tdc.clear();
 		memset(adc, 0, sizeof(adc));
 	}
+
 	virtual ~RNTPCMap() = default;
 	ClassDef(RNTPCMap, 1);
 };
@@ -128,6 +143,7 @@ public:
 	TH1I* h1_tpc_ma1[7];
 	TH1I* h1_tpc_ma2[7];
 	TH1I* h1_tpc_csum[7][4];
+	TH1I* h1_tpc_ydiff[7][4];
 
 	TFRSMapCont();
 };

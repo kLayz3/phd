@@ -23,16 +23,16 @@ struct RNFOOTCluster {
 	ClusterType fCT{}; /* Cluster type. */
 
 	template<std::size_t I>
-	decltype(auto) get() & { return get_helper<I>(*this); }
+	decltype(auto) get() &        noexcept { return get_helper<I>(*this); }
 
 	template<std::size_t I>
-	decltype(auto) get() && { return get_helper<I>(*this); }
+	decltype(auto) get() const &  noexcept { return get_helper<I>(*this); }
 
 	template<std::size_t I>
-	decltype(auto) get() const & { return get_helper<I>(*this); }
+	decltype(auto) get() &&       noexcept { return get_helper<I>(std::move(*this)); }
 
 	template<std::size_t I>
-	decltype(auto) get() const && { return get_helper<I>(*this); }
+	decltype(auto) get() const && noexcept { return get_helper<I>(std::move(*this)); }
 
 	RNFOOTCluster(double x, double e, double m, ClusterType t);
 	RNFOOTCluster() = default;
@@ -40,17 +40,17 @@ struct RNFOOTCluster {
 	ClassDef(RNFOOTCluster, 1);
 
 private:
-	template<std::size_t I, typename T>
-	decltype(auto) get_helper(T&& t) {
-		if constexpr(I == 0)      return (std::forward<T>(t).fCX);
-		else if constexpr(I == 1) return (std::forward<T>(t).fCE);
-		else if constexpr(I == 2) return (std::forward<T>(t).fCM);
-		else if constexpr(I == 3) return (std::forward<T>(t).fCT);
+	template<std::size_t I, typename Self>
+	static decltype(auto) get_helper(Self&& self) noexcept {
+		if constexpr(I == 0)      return (std::forward<Self>(self).fCX);
+		else if constexpr(I == 1) return (std::forward<Self>(self).fCE);
+		else if constexpr(I == 2) return (std::forward<Self>(self).fCM);
+		else if constexpr(I == 3) return (std::forward<Self>(self).fCT);
 		else static_assert(I < 4, "Index out of bounds for RNFOOTCluster::get");
 	} 
 };
 
-/* Hacks to make it structured-binding decomposable. */
+/* Make it structured-binding decomposable. */
 namespace std {
 	template<> struct tuple_size<::RNFOOTCluster> : integral_constant<size_t, 4> {};
 	template<> struct tuple_element<0, ::RNFOOTCluster> { using type = double; };

@@ -16,6 +16,7 @@
 
 using namespace CMDLineParser;
 using namespace std::literals;
+using namespace util;
 
 extern const char* calibrate_help;
 
@@ -42,8 +43,8 @@ constexpr i32 N_FOOT = LEN(static_detectors);
 
 int main(int argc, char* argv[]) {
 	using namespace indicators;
-	signal(SIGINT , util::sig_callback_handler);
-	signal(SIGSEGV, util::sig_callback_handler);
+	signal(SIGINT , sig_callback_handler);
+	signal(SIGSEGV, sig_callback_handler);
 	CMDLineParser::Mandatory::SetDefMessage(calibrate_help);
 	auto& def_msg = CMDLineParser::Mandatory::DefMessage;
 
@@ -127,7 +128,7 @@ int main(int argc, char* argv[]) {
 	pool.Start();
 	for(u64 ev = 0; ev < nentries; ++ev) {
 		pool.GetEntry(ev);
-		PrintProgress(bar, ev, nentries);
+		PrintProgress(bar, ev, nentries, 500);
 		pool.AssignWork();
 		pool.Await();
 		pool.Fill();

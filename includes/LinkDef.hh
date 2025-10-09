@@ -7,11 +7,15 @@
 
 #pragma link C++ class RNSciMap+;
 #pragma link C++ class RNTPCMap+;
+#pragma link C++ class RNTPCMap::Measurement+;
 #pragma link C++ class RNMUSICMap<8>+;
 #pragma link C++ class RNFRSMap+;
+
+#pragma link C++ class RNSciCal+;
+#pragma link C++ class RNTPCCal+;
+#pragma link C++ class RNTPCCal::Measurement+;
 #pragma link C++ class RNFRSCal+;
 #pragma link C++ class TPCParam+;
-#pragma link C++ class RNFRSCal::Position+;
 
 #pragma link C++ class RNFOOTMap++;
 #pragma link C++ class RNFOOTCluster+;

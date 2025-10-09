@@ -8,9 +8,9 @@
 #include <type_traits>
 #include <unistd.h>
 #include <utility>
+#include <variant>
 #include <vector>
 #include "libs.hh"
-#include "indicators.hh"
 #include <fstream>
 #include "nlohmann/json.hpp"
 #include <regex>
@@ -19,57 +19,53 @@
 #	include <cxxabi.h>
 #endif
 
-inline void PrintProgress(indicators::ProgressBar& bar,	u64 n_entry, u64 max_entries, u64 step = 250) noexcept {
+
+#if __has_include("indicators.hh")
+#include "indicators.hh"
+namespace util{
+inline void 
+PrintProgress(indicators::ProgressBar& bar,	const u64 n_entry, const u64 max_entries, const u64 step = 250) noexcept {
 	static u64 n_entry_called = 0;
 	if(n_entry - n_entry_called < step) return;
 	bar.set_progress( (n_entry*100) / max_entries );
 
 	n_entry_called = n_entry;
 }
-
-/* ------------------------- */
-inline u64 SortEntries(u64& firstEvent, u64& maxEvents, TTree* h101) {
-	firstEvent = std::min(firstEvent, (u64)h101->GetEntries());
-    u64 n = (maxEvents==0 || firstEvent+maxEvents > (u64)h101->GetEntries()) ? (h101->GetEntries()) : (firstEvent+maxEvents);
-    maxEvents = n - firstEvent;
-	return n;
 }
+#endif
 
-/* ------------------------- */
-template<class A, class B>
-void TGraphFromVector(TGraph& t, std::vector<A>& vX, std::vector<B>& vY) {
-	auto s = std::min(vX.size(), vY.size());
-	for(auto i=0; i<s; ++i) {
-		t.AddPoint((double)vX[i], (double)vY[i]);
-	}
-}
+namespace util {
 
-/* ------------------------- */
-template<class T>  
+template<typename T>  
 void QuickSwap(std::vector<T>& v, int i, int j) {
 	if(!v.size()) return;
     std::swap(v[i], v[j]);
 }
 
-/* ------------------------- */
-template<class T>  
+template<typename T>  
 void QuickErase(std::vector<T> &v, int i) {
     std::swap(v[i], v.back());
     v.pop_back();
 }
 
-/* ------------------------- */
-template<class T>
-void ReleaseMalloc(T x) {
-	free(x);
+template<typename T>
+void Append(std::vector<T>& dst, const std::vector<T>& src) {
+	dst.reserve(dst.size() + src.size());
+	dst.insert(dst.end(), src.begin(), src.end());
 }
-template<class T, class... Args>
-void ReleaseMalloc(T x, Args... args) {
-	free(x); ReleaseMalloc(args...);
+
+template<typename T>
+void Append(std::vector<T>& dst, std::vector<T>&& src) {
+	if (&dst == &src) return;
+	dst.reserve(dst.size() + src.size());
+	dst.insert(dst.end(),
+			std::make_move_iterator(src.begin()),
+			std::make_move_iterator(src.end()));
+	/* src vector left in undefined state. */
 }
 
 /* ------------------------- */
-template<class T>
+template<typename T>
 T rround(double x) noexcept { return static_cast<T>(x + 0.5); }
 
 using std::chrono::duration_cast;
@@ -77,13 +73,13 @@ using std::chrono::seconds;
 using std::chrono::milliseconds;
 
 #define timeNow() std::chrono::high_resolution_clock::now()
-
 struct TimePoint {
 	std::chrono::high_resolution_clock::time_point t;
 	std::string tag;
 	TimePoint() : t(timeNow()), tag("?") {};
 	TimePoint(std::string s) : t(timeNow()), tag(s) {};
 };
+#undef timeNow
 
 enum TimingVariant : u64 {
 	kMINUTE = 1,
@@ -154,79 +150,81 @@ std::string sstrcat(Args&&... args) {
 	return oss.str();
 }
 
-namespace util {
-	template<typename T>
-	struct is_an_array : std::false_type {};
+template<typename T>
+//using Maybe = std::variant<std::monostate, T>;
+using Maybe = std::optional<T>;
 
-	template<typename T, size_t N>
-	struct is_an_array<T[N]> : std::true_type { using value_type = T; static constexpr size_t size = N; };
+template<typename T>
+struct is_an_array : std::false_type {};
 
-	template<typename T, size_t N>
-	struct is_an_array<std::array<T,N>> : std::true_type { using value_type = T; static constexpr size_t size = N; };
+template<typename T, size_t N>
+struct is_an_array<T[N]> : std::true_type { using value_type = T; static constexpr size_t size = N; };
 
-	template<typename T>
-	constexpr bool is_an_array_v = is_an_array<T>::value;
-	
-	template<typename T, typename = void>
-	struct has_clean_noexcept : std::false_type {};
+template<typename T, size_t N>
+struct is_an_array<std::array<T,N>> : std::true_type { using value_type = T; static constexpr size_t size = N; };
 
-	template<typename T>
-	struct has_clean_noexcept<T, 
-		std::void_t<decltype(std::declval<T&>().Clean())>>
-		: std::bool_constant<
-			std::is_same_v<void, decltype(std::declval<T&>().Clean())> &&
-			noexcept(std::declval<T&>().Clean())
-		> {};
+template<typename T>
+constexpr bool is_an_array_v = is_an_array<T>::value;
 
-	template<typename T>
-	constexpr bool is_pathlike_arg_v =
-		std::is_base_of_v<std::ifstream, std::decay_t<T>> ||
+template<typename T, typename = void>
+struct has_clean_noexcept : std::false_type {};
+
+template<typename T>
+struct has_clean_noexcept<T, 
+	std::void_t<decltype(std::declval<T&>().Clean())>>
+	: std::bool_constant<
+		std::is_same_v<void, decltype(std::declval<T&>().Clean())> &&
+		noexcept(std::declval<T&>().Clean())
+	> {};
+
+template<typename T>
+constexpr bool is_pathlike_arg_v =
+	std::is_base_of_v<std::ifstream, std::decay_t<T>> ||
+	std::is_constructible_v<std::ifstream, T&&> ||
+	std::is_constructible_v<std::string, T&&> ||
+	std::is_constructible_v<std::filesystem::path, T&&>;
+
+template<typename T,
+	typename U = std::decay_t<T>,
+	typename std::enable_if<is_pathlike_arg_v<T>>::type* = nullptr
+> std::optional<std::ifstream> get_maybe_ifstream(T&& arg) {
+	if constexpr(std::is_base_of_v<std::istream, U>) {
+		if(arg.is_open()) return arg;
+		else return {};
+	}
+	else if constexpr(
 		std::is_constructible_v<std::ifstream, T&&> ||
-		std::is_constructible_v<std::string, T&&> ||
-		std::is_constructible_v<std::filesystem::path, T&&>;
-	
-	template<typename T,
-		typename U = std::decay_t<T>,
-		typename std::enable_if<is_pathlike_arg_v<T>>::type* = nullptr
-	> std::optional<std::ifstream> get_maybe_ifstream(T&& arg) {
-		if constexpr(std::is_base_of_v<std::istream, U>) {
-			if(arg.is_open()) return arg;
-			else return {};
-		}
-		else if constexpr(
-			std::is_constructible_v<std::ifstream, T&&> ||
-			std::is_constructible_v<std::filesystem::path, T&&>
-		) {
-			auto f = std::ifstream(std::forward<T>(arg));
-			if(f.is_open()) return f;
-			else return {};
-		}
-		else if constexpr(std::is_constructible_v<std::string, T&&>) {
-			auto f = std::ifstream(std::string(std::forward<T>(arg)));
-			if(f.is_open()) return f;
-			else return {};
-		}
-		else 
-			static_assert(std::is_constructible_v<std::string, T&&>,
-				"Type not constructible to ifstream or path-like type.");
+		std::is_constructible_v<std::filesystem::path, T&&>
+	) {
+		auto f = std::ifstream(std::forward<T>(arg));
+		if(f.is_open()) return f;
+		else return {};
 	}
+	else if constexpr(std::is_constructible_v<std::string, T&&>) {
+		auto f = std::ifstream(std::string(std::forward<T>(arg)));
+		if(f.is_open()) return f;
+		else return {};
+	}
+	else 
+		static_assert(std::is_constructible_v<std::string, T&&>,
+			"Type not constructible to ifstream or path-like type.");
+}
 
-	template<typename T>	
-	bool is_file_readable(T&& arg) {
-		return get_maybe_ifstream(std::forward<T>(arg)).has_value();
-	}
+template<typename T>	
+bool is_file_readable(T&& arg) {
+	return get_maybe_ifstream(std::forward<T>(arg)).has_value();
+}
 
-	template<typename T,
-		typename U = std::decay_t<T>,
-		typename std::enable_if<is_pathlike_arg_v<T>>::type* = nullptr
-	> std::optional<std::string> get_file_path(T&& arg) {
-		if constexpr(std::is_base_of_v<std::istream, U>) 
-			return {};
-		else if constexpr(std::is_constructible_v<std::string, T&&>)
-			return std::string(std::forward<T>(arg));
-		else if constexpr(std::is_constructible_v<std::filesystem::path, T&&>)
-			return std::filesystem::path(std::forward<T>(arg)).string();
-	}
+template<typename T,
+	typename U = std::decay_t<T>,
+	typename std::enable_if<is_pathlike_arg_v<T>>::type* = nullptr
+> std::optional<std::string> get_file_path(T&& arg) {
+	if constexpr(std::is_base_of_v<std::istream, U>) 
+		return {};
+	else if constexpr(std::is_constructible_v<std::string, T&&>)
+		return std::string(std::forward<T>(arg));
+	else if constexpr(std::is_constructible_v<std::filesystem::path, T&&>)
+		return std::filesystem::path(std::forward<T>(arg)).string();
 }
 
 template<typename T,
@@ -238,6 +236,35 @@ template<typename T,
 		return arr[(N-1) / 2];
 	else 
 		return ( arr[(N-1) / 2] + arr[N/2] ) / 2;
+}
+
+template<typename T, typename... Ts>
+constexpr auto min(T t, Ts... ts) noexcept {
+	static_assert(std::is_arithmetic_v<
+		std::remove_reference_t<T>
+	> &&
+	(std::is_arithmetic_v<
+		std::remove_reference_t<Ts>
+	> && ...), "Types passed must be arithmetic, basic types.");
+
+	using R = std::common_type_t<T, Ts...>;
+	R r = static_cast<R>(t);
+	((r = std::min<R>(r, static_cast<R>(ts))), ...);
+	return r;
+}
+template<typename T, typename... Ts>
+constexpr auto max(T t, Ts... ts) noexcept {
+	static_assert(std::is_arithmetic_v<
+		std::remove_reference_t<T>
+	> &&
+	(std::is_arithmetic_v<
+		std::remove_reference_t<Ts>
+	> && ...), "Types passed must be arithmetic, basic types.");
+
+	using R = std::common_type_t<T, Ts...>;
+	R r = static_cast<R>(t);
+	((r = std::max<R>(r, static_cast<R>(ts))), ...);
+	return r;
 }
 
 template<typename T,
@@ -275,7 +302,7 @@ static inline void parse_json_string(std::vector<int>& out, std::string s) {
 	);
 
 
-	::Trim(s);
+	Trim(s);
 
 	/* Strings can be passed either as:
 	 * 1) raw numbers
@@ -312,7 +339,7 @@ static inline void parse_json_string(std::vector<int>& out, std::string s) {
  * */
 static inline void parse_json_as_int_vec(std::vector<int>& out, const json& j) {
 	if(j.is_string()) {
-		::parse_json_string(out, j.get<std::string>());
+		parse_json_string(out, j.get<std::string>());
 	}
 	else if(j.is_number()) {
 		out.push_back(j.get<int>());	
@@ -320,7 +347,7 @@ static inline void parse_json_as_int_vec(std::vector<int>& out, const json& j) {
 	else if(j.is_array()) {
 		out.reserve(j.size());
 		for(const auto& jsub : j) 
-			::parse_json_as_int_vec(out, jsub);
+			parse_json_as_int_vec(out, jsub);
 	}
 	else ERROR("Passed a json object '%s' which isn't: string/array/number.\n", j.dump().c_str());
 }
@@ -353,8 +380,6 @@ static inline void append_flat_json(json& dst, const json& src) {
 #if __has_include(<new>)
 #	include <new>
 #endif
-
-namespace util  {
 
 /* Returns the name of the type passed, also adding 
  * ref-cv qualifiers. Useful for templated types. */
@@ -400,7 +425,7 @@ inline void sig_callback_handler(int signum) {
 }
 
 constexpr std::size_t CL = 
-#if defined(__cpp_lib_hardware_interference_size)
+#if defined(__cpp_lib_hardware_interference_size) && defined(__clang__)
 	std::hardware_destructive_interference_size
 #elif defined(__x86_64__)
 	64 // fallback, for sure.
@@ -409,4 +434,4 @@ constexpr std::size_t CL =
 #endif
 	;
 
-}
+} // namespace util

@@ -1,7 +1,6 @@
 #include "libs.hh"
 #include <algorithm>
 #include <csignal>
-#include <iostream>
 
 #include "indicators.hh"
 #include <csignal>
@@ -14,8 +13,8 @@
 #include "TFRSMapProc.h"
 #include "TFRSMapCont.h"
 
-using namespace std;
 using namespace CMDLineParser;
+using namespace util;
 
 extern const char* map_help;
 
@@ -66,18 +65,18 @@ constexpr i32 N_FOOT = LEN(static_detectors);
 
 int main(i32 argc, char* argv[]) {
 	using namespace indicators;
-	signal(SIGINT , util::sig_callback_handler);
-	signal(SIGSEGV, util::sig_callback_handler);
+	signal(SIGINT , sig_callback_handler);
+	signal(SIGSEGV, sig_callback_handler);
 	auto& def_msg = CMDLineParser::Mandatory::DefMessage;
 
 	srand(time(NULL));
 
-	string pStr, outFile;
-	vector<string> fileName{};
+	std::string pStr, outFile;
+	std::vector<std::string> fileName{};
 	u64 maxEvents = -1;
 
 	CMDLineParser::Mandatory::SetDefMessage(map_help);
-	if(IsCmdArg("help", argc, argv)) { cout << def_msg(); return 0; }
+	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
 	ParseCmdLine("file", fileName, argc, argv, true);
 	if(!ParseCmdLine("output", outFile, argc, argv)) {
 		auto& ref = fileName[0];
@@ -86,11 +85,13 @@ int main(i32 argc, char* argv[]) {
 	}
 	if(ParseCmdLine("max-events", pStr, argc, argv)) {
 		try { maxEvents = stoi(pStr); }
-		catch(exception& e) { WARN("Unparsable " EMPH(max-events) " argument to u64"); cout << e.what() << endl; }
+		catch(std::exception const& e) { 
+			WARN("Unparsable " EMPH(max-events) " argument to u64. Err: %s\n", e.what()); 
+		}
 	}
 
 	VerifyNoArgumentsLeft(argc, argv);
-	vector<TimePoint> tv;
+	std::vector<TimePoint> tv;
 
 	TChain* h101 = new TChain(_tree_base_name);
 	for(auto& name : fileName) {
@@ -210,7 +211,7 @@ int main(i32 argc, char* argv[]) {
 	pool.Start();
 	for(u64 ev = 0; ev < nentries; ++ev) {
 		pool.GetEntry(ev);
-		PrintProgress(bar1, ev, nentries);
+		util::PrintProgress(bar1, ev, nentries);
 		pool.AssignWork();
 		pool.Await();
 	}
@@ -255,7 +256,7 @@ int main(i32 argc, char* argv[]) {
 	pool.Start();
 	for(u64 ev = 0; ev < nentries; ++ev) {
 		pool.GetEntry(ev);
-		PrintProgress(bar2, ev, nentries);
+		util::PrintProgress(bar2, ev, nentries, 500);
 		pool.AssignWork();
 		pool.Await();
 		pool.Fill();

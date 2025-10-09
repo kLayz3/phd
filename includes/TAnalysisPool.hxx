@@ -295,18 +295,16 @@ public:
 			ERROR("Must be in a stopped state before calling start.");
 		if(_in_reader.valueless_by_exception()) 
 			ERROR("Valueless input TTree/TChain/RNTuple. Invalid");
-		else if(std::holds_alternative<Empty>(_in_reader)) 
-			ERROR("Empty input TTree/TChain/RNTuple. Invalid");
 	
 		/* Check if the reader state isn't Empty, and the pointer variant valid. */
-		if(! std::visit([](const auto& v) { 
+		if(std::visit([](const auto& v) { 
 			using X = std::decay_t<decltype(v)>;
 			if constexpr(std::is_same_v<X, Empty>)
-				return false;
+				return true;
 			else
-				return (!!v); 
+				return !v; 
 		}, _in_reader ) ) {
-			ERROR("Reader input is in valued, but empty/null state?\n");
+			ERROR("Reader input is in valued, but either empty or null state?\n");
 		}
 
 		_stop = false;
@@ -388,15 +386,10 @@ public:
 		/* First write the RNTuple. */
 		_out_writer->CommitCluster();
 		_out_writer.reset();
-		{
-			std::unique_ptr<ROOT::Experimental::RNTupleWriter> 
-				_out_w = std::move(this->_out_writer); // can be nullptr.
-		}
-		/* RNTupleWriter gets dropped here. */
 
 		/* Tail calls of following sequence:
-		 * TAnalysisWorker<Whatever>::Write calls
-		 * Whatever::Write usually calls TContainer<???>::Write().
+		 * `TAnalysisWorker<Whatever>::Write` calls
+		 * `Whatever::Write` calls `TContainer<???>::Write`.
 		 * Now, this **should** write to the same file as RNTupleWriter, or it could be
 		 * a different file, but then weird things happen. */
 

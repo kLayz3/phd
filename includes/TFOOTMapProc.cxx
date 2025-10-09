@@ -93,7 +93,7 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 
 		std::sort(ped_offset.begin(), ped_offset.end());
 
-		ped_off_med = median(ped_offset); 
+		ped_off_med = util::median(ped_offset); 
 		ped_off_avg = std::accumulate(ped_offset.cbegin() + N_TRIM_FINE_PED_LO, ped_offset.cend() - N_TRIM_FINE_PED_HI, (double)0.0);
 		ped_off_avg /= (N_STRIPS_PER_ASIC - N_TRIM_FINE_PED_LO - N_TRIM_FINE_PED_HI);
 
@@ -159,7 +159,7 @@ int TFOOTMapProc::ParseStaticBadStrips() {
 	const char* key = Form("FOOT%d", data->FOOT_N);
 	std::vector<int> parsed{};
 	if(auto it = _bad_strips.find(key); it != _bad_strips.end())
-		::parse_json_as_int_vec(parsed, *it);
+		util::parse_json_as_int_vec(parsed, *it);
 	
 	auto& v = *data->bad_strips;
 	v.insert(v.end(),
