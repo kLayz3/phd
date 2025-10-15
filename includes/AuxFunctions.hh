@@ -20,8 +20,8 @@
 #endif
 
 
-#if __has_include("indicators.hh")
-#include "indicators.hh"
+#if __has_include("indicators/indicators.hh")
+#include "indicators/indicators.hh"
 namespace util{
 inline void 
 PrintProgress(indicators::ProgressBar& bar,	const u64 n_entry, const u64 max_entries, const u64 step = 250) noexcept {

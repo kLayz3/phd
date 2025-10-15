@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <csignal>
 
-#include "indicators.hh"
+#include "indicators/indicators.hh"
 #include <csignal>
 
 #include "CMDLineParser.h"
