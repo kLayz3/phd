@@ -1,9 +1,9 @@
 #pragma once
 
-#include "TProcessor.h"
+#include "TProcessorBase.h"
 #include "TFRSMapCont.h"
 
-struct TFRSMapProc : TProcessor {
+struct TFRSMapProc : TProcessorBase {
 public:
 	TFRSMapCont* data;
 	TFRSMapProc(TFRSMapCont& data, int do_analysis = 1) : 

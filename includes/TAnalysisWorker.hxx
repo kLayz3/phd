@@ -6,7 +6,7 @@
 #include "AuxFunctions.hh"
 #include <immintrin.h>
 
-class TProcessor;
+class TProcessorBase;
 
 namespace util {
 	template<typename T, typename = void>
@@ -33,7 +33,7 @@ class TAnalysisWorker final : public T {
 	static_assert(util::has_process_entry<T>::value, "Type <T> needs a public `void ProcessEntry()` method implemented!");
 	static_assert(std::is_move_constructible<T>::value,  "Type <T> needs a move ctor.");
 	static_assert(std::is_move_assignable<T>::value, "Type <T> needs move assignment op.");
-	static_assert(std::is_base_of<TProcessor, T>::value, "Type <T> must inherit from TProcessor!.");
+	static_assert(std::is_base_of<TProcessorBase, T>::value, "Type <T> must inherit from TProcessorBase!.");
 
 	template<typename... Ts> friend class TAnalysisPool;
 

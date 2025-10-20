@@ -7,7 +7,7 @@
 #include "TH1D.h"
 #include "TTree.h"
 #include "libs.hh"
-#include "TProcessor.h"
+#include "TProcessorBase.h"
 #include "TFOOTMapCont.h"
 #include "TOnce.hxx"
 #include <utility>
@@ -16,7 +16,10 @@
 #include <type_traits>
 #include "nlohmann/json.hpp"
 
-class TFOOTMapProc : public TProcessor {
+struct TFOOTMapProc : TProcessor <
+	TFOOTMapCont
+	(TFOOTGo4Cont)
+> {
 public:
 	static constexpr int N_STRIPS          = TFOOTMapCont::N_STRIPS;          /* 640 */
 	static constexpr int N_ASIC            = TFOOTMapCont::N_ASIC;            /* 10  */

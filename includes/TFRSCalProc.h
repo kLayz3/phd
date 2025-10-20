@@ -2,9 +2,9 @@
 
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
-#include "TProcessor.h"
+#include "TProcessorBase.h"
 
-class TFRSCalProc : public TProcessor {
+class TFRSCalProc : public TProcessorBase {
 	constexpr static auto N_VALID_TPC = RNFRSCal::N_VALID_TPC;
 	static inline u64 ncalled = 0;
 public:

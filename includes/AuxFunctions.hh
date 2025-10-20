@@ -22,7 +22,8 @@
 
 #if __has_include("indicators/indicators.hh")
 #include "indicators/indicators.hh"
-namespace util{
+
+namespace util {
 inline void 
 PrintProgress(indicators::ProgressBar& bar,	const u64 n_entry, const u64 max_entries, const u64 step = 250) noexcept {
 	static u64 n_entry_called = 0;
@@ -31,32 +32,32 @@ PrintProgress(indicators::ProgressBar& bar,	const u64 n_entry, const u64 max_ent
 
 	n_entry_called = n_entry;
 }
-}
+} // namespace util
 #endif
 
 namespace util {
 
 template<typename T>  
-void QuickSwap(std::vector<T>& v, int i, int j) {
+void QuickSwap(std::vector<T>& v, int i, int j) noexcept {
 	if(!v.size()) return;
     std::swap(v[i], v[j]);
 }
 
 template<typename T>  
-void QuickErase(std::vector<T> &v, int i) {
+void QuickErase(std::vector<T> &v, int i) noexcept {
     std::swap(v[i], v.back());
     v.pop_back();
 }
 
 template<typename T>
-void Append(std::vector<T>& dst, const std::vector<T>& src) {
+void Append(std::vector<T>& dst, const std::vector<T>& src) noexcept {
 	dst.reserve(dst.size() + src.size());
 	dst.insert(dst.end(), src.begin(), src.end());
 }
 
 template<typename T>
-void Append(std::vector<T>& dst, std::vector<T>&& src) {
-	if (&dst == &src) return;
+void Append(std::vector<T>& dst, std::vector<T>&& src) noexcept {
+	if(&dst == &src) return;
 	dst.reserve(dst.size() + src.size());
 	dst.insert(dst.end(),
 			std::make_move_iterator(src.begin()),
@@ -150,9 +151,37 @@ std::string sstrcat(Args&&... args) {
 	return oss.str();
 }
 
+using Empty = std::monostate;
+
 template<typename T>
-//using Maybe = std::variant<std::monostate, T>;
 using Maybe = std::optional<T>;
+
+template<typename... Ts>
+using Variant = std::variant<Empty, Ts...>;
+
+template<typename... Ts>
+constexpr bool IsEmpty(const Variant<Ts...>& v) {
+	return v.valueless_by_exception() or std::holds_alternative<Empty>(v);
+}
+
+/**
+ * Apply 'std::visit' https://en.cppreference.com/w/cpp/utility/variant/visit2.html
+ * to the util::Variant type. Throws if the 'util::Empty' type is encountered. 
+ */
+template<typename Visitor, typename Var>
+decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
+	return std::visit(
+		[&](auto&& value) -> decltype(auto) {
+			using T = std::decay_t<decltype(value)>;
+			if constexpr(std::is_same_v<T, Empty>)
+				throw std::runtime_error("util::visit except: `Empty` type encountered.");
+			else 
+				return std::invoke(std::forward<Visitor>(vs),
+					std::forward<decltype(value)>(value));
+		},
+		std::forward<Var>(var)
+	);
+}
 
 template<typename T>
 struct is_an_array : std::false_type {};
@@ -176,6 +205,17 @@ struct has_clean_noexcept<T,
 		std::is_same_v<void, decltype(std::declval<T&>().Clean())> &&
 		noexcept(std::declval<T&>().Clean())
 	> {};
+
+template< template<typename...> class Base, typename Derived>
+struct _is_base_of_template_impl {
+	template<typename... Ts>
+	static constexpr std::true_type test(Base<Ts...>& );
+	static constexpr std::false_type test(...);
+	using type = decltype(test(std::declval<Derived&>()));
+};
+
+template< template<typename...> class Base, typename Derived>
+using is_base_of_template = typename _is_base_of_template_impl<Base, Derived>::type;
 
 template<typename T>
 constexpr bool is_pathlike_arg_v =
@@ -276,10 +316,11 @@ template<typename T,
 		if(arr[i] == val) return i;
 	return -1;
 }
+
 template<typename T,
-	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
-	typename std::enable_if<util::is_an_array_v<U>>::type* = nullptr
+	typename U = std::remove_cv_t<std::remove_reference_t<T>>
 > constexpr int len(const T& arr) {
+	static_assert(is_an_array_v<U>, "Passed type must either be an array reference &(T[N]) or &std::array<T,N>.");
 	return static_cast<int>(util::is_an_array<U>::size);	
 }
 
@@ -300,7 +341,6 @@ static inline void parse_json_string(std::vector<int>& out, std::string s) {
 	static const std::regex re_seq(
 		R"(^(\d+)n(\+\d+)?$)"
 	);
-
 
 	Trim(s);
 
@@ -382,7 +422,7 @@ static inline void append_flat_json(json& dst, const json& src) {
 #endif
 
 /* Returns the name of the type passed, also adding 
- * ref-cv qualifiers. Useful for templated types. */
+ * ref-cv qualifiers. Demangles templated types, too :-) */
 template<typename T,
 	typename U = std::decay_t<T>	
 > std::string type_name() {
@@ -414,7 +454,8 @@ template<typename T,
  * if the program dies due to a system signal,
  * execute this to bring it back. Only POSIX async-safe 
  * calls are allowed. NOTE: this *might* disable standard ROOT
- * stack trace dump in case of SIGSEGV catch. */
+ * stack trace dump in case of SIGSEGV catch. Unmap it in this case.
+ * and in Linux execute 'tput cnorm' to get the cursor back. */
 inline void sig_callback_handler(int signum) {
 	const char show[] = "\x1b[?25h";
     const char nl   = '\n';

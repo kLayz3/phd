@@ -2,11 +2,11 @@
 
 #include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"
-#include "TProcessor.h"
+#include "TProcessorBase.h"
 
 class TFOOTMapCont;
 
-class TFOOTCalProc : public TProcessor {
+class TFOOTCalProc : public TProcessorBase {
 public:
 	static constexpr int N_STRIPS    = TFOOTCalCont::N_STRIPS; /* 640 */
 	static constexpr int MAX_CL_SIZE = 40; /* Maximal allowed cluster size. */
