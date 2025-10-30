@@ -2,7 +2,11 @@ SRC_DIR = $(shell pwd -P)
 BUILD_DIR = $(SRC_DIR)/build_$(shell gcc -dumpmachine)_$(shell gcc -dumpversion)
 DICT_DIR = $(SRC_DIR)/dict
 
-CXXFLAGS := $(shell root-config --cflags) -Wall -MMD -MP -fPIC
+GO4_SRC_DIR = $(shell pwd -P)/../../go4/src
+CXXFLAGS := $(shell root-config --cflags) -Wall -MMD -MP -fPIC \
+	-I$(SRC_DIR)/core \
+	-I$(GO4_SRC_DIR) \
+	-I$(GO4SYS)/include
 
 include common.mk
 
@@ -23,6 +27,7 @@ GEN_LIB = $(BUILD_DIR)/lib$(TARGET).so
 GEN_MAP = $(BUILD_DIR)/lib$(TARGET).rootmap
 
 RDFLAGS = -I./ -I../ -v3 \
+		  -I$(GO4_SRC_DIR) \
 		  -Wall -MMD -MP -rml $(GEN_LIB) -rmf $(GEN_MAP)
 
 .PHONY: all symlink clean

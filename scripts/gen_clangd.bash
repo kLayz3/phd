@@ -14,6 +14,7 @@ echo \
   Add:
     - -I$(root-config --incdir)
     - -I$INC_DIR
+    - -I$INC_DIR/core
     - -std=c++20
   Remove: [-std=*]
 " >> $CLANGD

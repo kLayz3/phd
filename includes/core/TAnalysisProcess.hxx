@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TContainer.hxx"
 #include "libs.hh"
 #include "TTree.h"
 #include "TChain.h"
@@ -13,7 +14,6 @@
 #include "AuxFunctions.hh"
 #include <variant>
 #include "TProcessor.hxx"
-#include "TContainer.hxx"
 #include "TFile.h"
 #include "TKey.h"
 #include "ROOT/RNTuple.hxx"
@@ -28,22 +28,28 @@
 #include <thread>
 #include "boost/lockfree/spsc_queue.hpp"
 
+#if __has_include(<immintrin.h>)
+#   define __HAS_SMALL_INTEL_SPIN
+#	include <immintrin.h>
+#endif
+
 #define N_EVENTS_PER_BATCH 512;
 
+/* For ROOT 6.36+, change this to ROOT instead of `ROOT::Experimental`. */
 template<u32, u32, typename...> class TAnalysisPool;
 namespace RExp = ROOT::Experimental;
 
 namespace util {
 
-template<typename Tuple, typename F, std::size_t... Is>
-void _for_each_in_tuple_impl(Tuple&& t, F&& f, std::index_sequence<Is...>) {
+template<typename Tuple, typename Callable, std::size_t... Is>
+void _for_each_in_tuple_impl(Tuple&& t, Callable&& f, std::index_sequence<Is...>) {
 	(f (std::get<Is>(std::forward<Tuple>(t))), ...);
 }
 
-template<typename Tuple, typename F>
-void for_each_in_tuple(Tuple&& t, F&& f) {
+template<typename Tuple, typename Callable>
+void for_each_in_tuple(Tuple&& t, Callable&& f) {
 	constexpr std::size_t N = std::tuple_size_v<std::decay_t<Tuple>>;
-	_for_each_in_tuple_impl(std::forward<Tuple>(t), std::forward<F>(f), 
+	_for_each_in_tuple_impl(std::forward<Tuple>(t), std::forward<Callable>(f), 
 		std::make_index_sequence<N>{});
 }
 
@@ -57,7 +63,7 @@ struct has_process_entry<T, std::void_t<decltype(std::declval<T&>().ProcessEntry
 		void
 	> {};
 
-struct Job { u32 first, last; };
+struct Job { u64 first, last; };
 using JobQueue = boost::lockfree::spsc_queue <
 	Job, boost::lockfree::capacity<128>
 >;
@@ -122,6 +128,14 @@ struct PerThreadWriter {
 	std::shared_ptr<RExp::RNTupleFillContext> ctx;
 	std::unique_ptr<RExp::REntry> entry;
 
+	void Reset() {
+		entry.reset();
+		ctx.reset();
+		auto* p = std::get_if<std::unique_ptr<RExp::RNTupleParallelWriter>>(&pwriter);
+		if(p != nullptr)
+			p->reset();
+	}
+
 	/** 
 	 * Return codes:
 	 * 0 => properly set-up.
@@ -157,7 +171,9 @@ struct PerThreadWriter {
  * all the resources a worker thread will need.
  */
 template<typename... Ts>
-struct TAnalysisProcess final {
+struct alignas(util::CL) TAnalysisProcess final {
+	template<u32, u32, typename...> friend class TAnalysisPool;
+
 	static_assert((util::is_base_of_template<TProcessor, Ts>::value && ...),
 		"All the inderlying subprocess types <Ts> must inherit from TProcessor<...>.");
 	static_assert((util::has_process_entry<Ts>::value && ...),
@@ -177,6 +193,7 @@ struct TAnalysisProcess final {
 private:
 	util::JobQueue q;
 	std::atomic<bool> _running {false}; // Flagging this will join the workers' threads back to the main
+	bool _do_write {true};
 	std::thread _thread;
 
 	std::tuple<Ts...> _proc;
@@ -202,27 +219,44 @@ private:
 
 public:
 	TAnalysisProcess() = default;
+	TAnalysisProcess(std::string file_in, std::string file_out, std::string rn_out) :
+		TAnalysisProcess() {
+			info.in.fname  = std::move(file_in);
+			info.out.fname = std::move(file_out);
+			info.out.out_rnname = std::move(rn_out);
+		}
 	
 	explicit TAnalysisProcess(
 		std::tuple<Ts...>&& w,
 		util::IOInfo&& _info,
 		util::PerThreadReader&& _reader,
 		util::PerThreadWriter&& _writer
-	) : _proc(std::move(w)), info(std::move(_info)), reader(std::move(_reader)), writer(std::move(_writer))
-	{}
+	) : _proc(std::move(w)), info(std::move(_info)), 
+		reader(std::move(_reader)), writer(std::move(_writer)) {}
 
+protected:
 	/* To make things explicit; to issue compiler error in case we accidentally try
-	 * to (re)assign the object - we delete the copy ctors.
-	 * True copying is possible via the `Clone()` method. */
+	 * to (re)assign the object - we hard-error on the copy assignment call.
+	 * Could be deleted maybe? 
+	 * The copy-ctor shouldn't ever be called outside of the `Clone()` method! */
+	TAnalysisProcess(const TAnalysisProcess& rhs) : 
+		q{}, _running{}, _thread{}, 
+		_proc(rhs._proc),
+		info(rhs.info), reader{}, writer{} {}
 
-	TAnalysisProcess(const TAnalysisProcess& )            = delete;
-	TAnalysisProcess& operator=(const TAnalysisProcess& ) = delete;
+	TAnalysisProcess& operator=(const TAnalysisProcess& rhs) {
+		_proc = rhs._proc;
+		info = rhs.info;
+		return *this;
+	}
+
+public:
 	TAnalysisProcess(TAnalysisProcess&& )            noexcept = default;
 	TAnalysisProcess& operator=(TAnalysisProcess&& ) noexcept = default;
 
 	~TAnalysisProcess() = default;
 
-	/* Hacky part. Adding a new proc changes the type of the object. */
+	/* Adding a new proc mutates the type of the object. */
 
 	/** 
 	 * Reference-qualified: take an l/rvalue ref of an existing process object and
@@ -260,24 +294,20 @@ public:
 	 * A true independent copy of the object, meant to populate the pool singleton
 	 * with clones of the initial processor object. 
 	 */
-	auto Clone() {
-		/* Only clone from the original object. */
-		auto p = std::get_if<std::unique_ptr<RExp::RNTupleParallelWriter>>(&writer.pwriter);
+	TAnalysisProcess Clone() const { /* Only clone from the original object. */
+		auto* p = std::get_if<std::unique_ptr<RExp::RNTupleParallelWriter>>(&writer.pwriter);
 		/* ^^^ type: *std::unique_ptr<..> */
-
-		if(!p)
-			ERROR("Calling clone but original processor object is either unitialized or set to wrong state."
+		if(!p) ERROR("Calling clone but original processor object is either unitialized or set to wrong state."
 				"State = %zu, 0 = Empty; 1 = Owning pointer; 2 = Raw pointer. Should be: " EMPH(1\n), writer.pwriter.index());
-		TAnalysisProcess clone{};
-		clone._proc = _proc; /* Each (sub)process type is copy-assignable. */
-		clone.info = info;
+
+		TAnalysisProcess clone(*this);
 		clone.writer.pwriter = p->get();
 		
 		clone.Setup();
 		return clone;
 	}
 
-	bool IsStopped() const noexcept { return ! _running; }
+	bool IsStopped() const noexcept { return ! _running && ! _thread.joinable(); }
 
 	/**
 	 * Returns the pointer 'T*' of the object wrapped up in the 'TAnalysisWorker<T>',
@@ -301,6 +331,16 @@ public:
 		return table[i](this);
 	}
 
+	/**
+	 * Return a table of processes, upcasted to the common parent.
+	 */
+	std::array<TProcessorBase*, Size()> GetProcesses() {
+		std::array<TProcessorBase*, Size()> rv{};
+		for(size_t i=0; i<Size(); ++i)
+			rv[i] = this->GetProcess(i);
+		return rv;
+	}
+
 	Int_t GetEntry(Long64_t entry) const { 
 		if(util::IsEmpty(reader))
 			ERROR("Empty input TTree/RNTuple. Invalid");
@@ -315,33 +355,31 @@ public:
 		}
 	}
 
-	Long64_t GetEntries() const { 
+	u64 GetEntries() const { 
 		if(util::IsEmpty(reader)) 
 			ERROR("Empty input TTree/RNTuple in GetEntries call. Invalid");
 		else if(std::holds_alternative<util::RNPerThreadReader>(reader)) {
-			return static_cast<Long64_t>( std::get <
+			return static_cast<u64>( std::get <
 				util::RNPerThreadReader
 			> (reader)._reader->GetNEntries());
 		}
 		else {
-			return std::get<util::TTreePerThreadReader>(reader)
-			._tree->GetEntries();
+			return static_cast<u64> (
+				std::get<util::TTreePerThreadReader>(reader)._tree->GetEntries()
+			);
 		}
 	}
 	
 	/* Run the setup. */
-	void Setup() {
-		SetupReader();
-		SetupWriter();
-	}
+	void Setup() { SetupReader(); SetupWriter(); }
 
 	void Start() {
 		if(_running) 
 			ERROR("Start called but worker thread is still marked as running? (%s)", _SELF_TYPE_CSTR);
 		if(int v = writer.GetValidity(); v != 0) 
-			ERROR("Calling start but writer handle isn't valid (v != 0). v = 0b %05b. Check API for GetValidity().", v); 
+			ERROR("Calling start but writer handle isn't valid (v != 0). v = 0x%02x. Check API for GetValidity().", v); 
 		if(int r = util::GetValidity(reader); r != 0)
-			ERROR("Calling start but reader handle isn't valid (r != 0). r = 0b %05b. Check API for util::GetValidity().", r); 
+			ERROR("Calling start but reader handle isn't valid (r != 0). r = 0x%02x. Check API for util::GetValidity().", r); 
 		
 		_running = true;
 	
@@ -349,32 +387,64 @@ public:
 			[this] {
 				util::Job j;
 				while(_running.load(std::memory_order_relaxed)) {
-					if(!q.pop(j)) {
-						for(u32 evId = j.first; evId < j.last; ++evId) {
+					if( q.pop(j) ) {
+						for(u64 evId = j.first; evId < j.last; ++evId) {
+							this->GetEntry( static_cast<Long64_t>(evId) );
+							
 							std::apply([](auto&... ps) {
 								(..., ps.ProcessEntry()); 
 							}, this->_proc);
+					
+							if(this->_do_write)
+								this->writer.ctx->Fill(*this->writer.entry);
 						}
-						this->writer.ctx->Fill(*this->writer.entry);	
-					}
-					else {
-						std::this_thread::yield();
+					} else {
+#ifdef __HAS_SMALL_INTEL_SPIN
+						_mm_pause(); /* Short pause, 100-150 clock cycles. */
+#else
+						{}           /* Do nothing; don't yield or reschedule - this is ~100 us latency. */
+#endif
 					}
 				}
 
 				/* On shutdown, drain the remainder of the queue. */
-				while(q.pop(j)) {
-					for(u32 evId = j.first; evId < j.last; ++evId) {
+				while( q.pop(j) ) {
+					for(u64 evId = j.first; evId < j.last; ++evId) {
+						this->GetEntry( static_cast<Long64_t>(evId) );
+						
 						std::apply([](auto&... ps) {
 								(..., ps.ProcessEntry()); 
 						}, this->_proc);
-						this->writer.ctx->Fill(*this->writer.entry);	
+
+						if(this->_do_write)
+							this->writer.ctx->Fill(*this->writer.entry);	
 					}
 				}
 			}
 		);
 	}
 
+	void Stop() {
+		_running.store(false, std::memory_order_relaxed);
+		if(_thread.joinable()) _thread.join();
+	}
+
+	template<u32 N, u32 NSlice>
+	auto MakePool() && -> TAnalysisPool<N, NSlice, Ts...> {
+		return TAnalysisPool<N, NSlice, Ts...>( std::move(*this) );	
+	}
+
+	void Collect(const TAnalysisProcess& rhs) {
+		std::tuple <
+			std::pair<Ts&, const Ts&>...
+		> pairs = util::zip_refs(this->_proc, rhs._proc);
+		
+		std::apply([](auto&... pr) {
+				(..., pr.first.Collect( pr.second ));
+			}, pairs
+		);
+	}
+	
 private:
 
 	void SetupWriter() {
@@ -391,8 +461,8 @@ private:
 			
 			util::for_each_in_tuple(this->_proc, [this, &model](auto& p /* TProcessor<Out(In...)>) */ ) 
 				{
-					std::string& name = p.out.GetName();
-					if(name.empty()) ERROR("Setting up the writer but an output container is unnamed. (%s)", _SELF_TYPE_CSTR);
+					const char* name = p.out.GetName();
+					if(strlen(name) == 0) ERROR("Setting up the writer but an output container is unnamed. (%s)", _SELF_TYPE_CSTR);
 
 					model->MakeField<typename decltype(p.out)::inner_type>( name );
 				}
@@ -416,8 +486,8 @@ private:
 
 		util::for_each_in_tuple(this->_proc, [this](auto& p /* TProcessor<Out(In...)>) */ ) 
 			{
-				p.out._inner = this->writer
-					.entry->GetPtr<typename decltype(p.out)::inner_type>();
+				p.out._inner = this->writer.entry
+					->GetPtr< typename decltype(p.out)::inner_type >( p.out.GetName() );
 			}
 		);
 	}
@@ -430,12 +500,12 @@ private:
 		/* Reader object must be in empty state, */
 		if(! util::IsEmpty(reader)) 
 			ERROR("Trying to setup a fresh reader, but the object is already created with index: %zu. "
-				"1 => RNReader; 2 => TTreeReader. (%s)", _SELF_TYPE_CSTR);
+				"1 => RNReader; 2 => TTreeReader. (%s)", reader.index(), _SELF_TYPE_CSTR);
 		
-		std::string obj_name; bool is_ttree;
-		auto _file = std::make_unique<TFile>( info.in.fname , "READ");
+		std::string obj_name; bool is_ttree{};
+		auto _file = std::make_unique<TFile>( info.in.fname.c_str() , "READ");
 		if(!_file || _file->IsZombie() || !_file->IsOpen())
-			ERROR("Setting up the reader but unable to make a TFile hook for \'%s\'. (%s)", info.in.fname, _SELF_TYPE_CSTR);
+			ERROR("Setting up the reader but unable to make a TFile hook for \'%s\'. (%s)", info.in.fname.c_str(), _SELF_TYPE_CSTR);
 
 		/* Try finding the read container. Can be either TTree or RNTuple. */
 		for(TObject* _k : *_file->GetListOfKeys()) {
@@ -452,7 +522,9 @@ private:
 		}
 
 		if(obj_name.empty())
-			ERROR("File %s opened fine, but cannot find a 'ROOT::RNTuple' or 'TTree' object inside? (%s)", info.in.fname, _SELF_TYPE_CSTR);
+			ERROR("File %s opened fine, but cannot find a 'ROOT::RNTuple' or 'TTree' object inside? (%s)", 
+				info.in.fname.c_str(), _SELF_TYPE_CSTR);
+		
 		_file.reset(nullptr);
 
 		if(! is_ttree) {
@@ -466,21 +538,26 @@ private:
 				{
 					util::for_each_in_tuple(p.in, [this, &r](auto& cont /* In : TRawContainer */ )
 						{
-							if(! strlen(cont.GetName()) )
-								ERROR("Input container (RN-meant) unnamed? (%s)", _SELF_TYPE_CSTR);
-							/* If the column has already been mapped, MakeField throws a 'RExp::RException'.
-							 * In this case, just retrieve it and map it to the inner. */
-							try {
-								cont._inner = r._model->MakeField <
-									typename decltype(cont)::inner_type
-								> ( cont.GetName() );
-							} catch(std::exception const& e) {
-								cont._inner = r._model->GetDefaultEntry().GetPtr <
-									typename decltype(cont)::inner_type
-								> ( cont.GetName() );	
-							} catch(...) {
-								ERROR("Unknown exception caught? When trying to assing RNTuple column. (%s)",
-									_SELF_TYPE_CSTR);
+							/* Compile out the block if it's not a TContainer. */
+							using ContType = typename std::remove_reference_t<decltype(cont)>;
+							
+							if constexpr( util::is_base_of_template<TContainer, ContType>::value ) {
+								if(! strlen(cont.GetName()) )
+									ERROR("Input container (RN-meant) unnamed? (%s)", _SELF_TYPE_CSTR);
+								/* If the column has already been mapped, MakeField throws a 'RExp::RException'.
+								 * In this case, just retrieve it and map it to the inner. */
+								try {
+									cont._inner = r._model->MakeField <
+										typename ContType::inner_type
+									> ( cont.GetName() );
+								} catch(std::exception const& e) {
+									cont._inner = r._model->GetDefaultEntry().GetPtr <
+										typename ContType::inner_type
+									> ( cont.GetName() );	
+								} catch(...) {
+									ERROR("Unknown exception caught? When trying to assing RNTuple column. (%s)",
+										_SELF_TYPE_CSTR);
+								}
 							}
 						}
 					);
@@ -495,14 +572,14 @@ private:
 			reader = util::TTreePerThreadReader();
 			auto& r = std::get<util::TTreePerThreadReader>(reader);
 
-			r._file = std::make_unique<TFile>( info.in.fname , "READ");
+			r._file = std::make_unique<TFile>( info.in.fname.c_str() , "READ");
 			if(!r._file || r._file->IsZombie() || !r._file->IsOpen())
-				ERROR("Unable to make a TFile hook for \'%s\'. (%s)", info.in.fname, _SELF_TYPE_CSTR);
+				ERROR("Unable to make a TFile hook for \'%s\'. (%s)", info.in.fname.c_str(), _SELF_TYPE_CSTR);
 
 			r._tree = dynamic_cast<TTree*>(r._file->Get(obj_name.c_str()));
 			if(!r._tree || r._tree->IsZombie())
 				ERROR("Unable to make a TTree hook for \'%s\'. "
-					"Even though TTree verified with name \'%s\'. (%s)", info.in.fname, obj_name.c_str(), _SELF_TYPE_CSTR);
+					"Even though TTree verified with name \'%s\'. (%s)", info.in.fname.c_str(), obj_name.c_str(), _SELF_TYPE_CSTR);
 			
 			/* Ok, TTree API *sigh*.
 			 * Namely, once we map a branch via `tree->SetBranchAddress(name, &ptr)`, then we can retrieve the pointers'
@@ -516,35 +593,43 @@ private:
 				{
 					util::for_each_in_tuple(p.in, [this, &r](auto& cont /* In : TRawContainer */ )
 						{
-							if(! strlen(cont.GetName()) )
-								ERROR("Input container (TTree-meant) unnamed? (%s)", _SELF_TYPE_CSTR);
-							TBranch* b = r._tree->GetBranch( cont.GetName() );
-							if(!b) 
-								ERROR("File: \'%s\', TTree: \'%s\', branch \'%s\' not found. (%s)",
-									this->info.in.fname, r._tree->GetName(), cont.GetName(), _SELF_TYPE_CSTR);
-							
-							if(b->GetAddress()) { /* Means the branch is mapped already. */
-								/* Try to check if types match. */
-								const char* b_type = b->GetClassName();
-								const char* c_type = (const char*)util::type_name <
-										typename decltype(cont)::inner_type
-									> ();
-								if(! strcmp(b_type, c_type)) 
-									WARN("File: \'%s\', TTree: \'%s\', branch \'%s\'. Types mismatch"
-										"TTree inspection gives branch type: \'%s\', but we're requesting type: \'%s\'. (%s)",
-										this->info.in.fname, r._tree->GetName(), cont.GetName(),
-										b_type, c_type, _SELF_TYPE_CSTR);
+							/* Compile out the block if it's not a TRawContainer. */
+							using ContType = typename std::remove_reference_t<decltype(cont)>;
 
-								cont._inner = *b->GetAddress();
-							}
-							else {
-								r._tree->SetBranchAddress( cont.GetName(), &cont._inner);
-							}
-						}
-					);
-				}
-			);
-		}
+							if constexpr( util::is_base_of_template<TRawContainer, ContType>::value ) {
+								if(! strlen(cont.GetName()) )
+									ERROR("Input container (TTree-meant) unnamed? (%s)", _SELF_TYPE_CSTR);
+								TBranch* b = r._tree->GetBranch( cont.GetName() );
+								if(!b) 
+									ERROR("File: \'%s\', TTree: \'%s\', branch \'%s\' not found. (%s)",
+										this->info.in.fname.c_str(), r._tree->GetName(), cont.GetName(), _SELF_TYPE_CSTR);
+								
+								if(b->GetAddress()) { /* Means the branch is mapped already. */
+									/* Try to check if types match. */
+									using T = typename ContType::inner_type;
+									const char* b_type = b->GetClassName();
+									std::string c_type = util::type_name<T>();
+
+									if(strcmp(b_type, c_type.c_str()) != 0)
+										WARN("Setting up the container \'%s\'. "
+											"File: \'%s\', TTree: \'%s\', branch \'%s\'. Types mismatch: "
+											"TTree inspection gives branch type \'%s\', but we're requesting type \'%s\'. "
+											"Is this correct? (%s)\n",
+											cont.GetName(), this->info.in.fname.c_str(), r._tree->GetName(),
+											b->GetName(), b_type, c_type.c_str(), _SELF_TYPE_CSTR);
+									
+									cont._inner = reinterpret_cast<T*>( *(void**)b->GetAddress() );
+								} 
+								else { 
+									// Branch isn't mapped yet. Map it now.
+									r._tree->SetBranchAddress( cont.GetName(), &cont._inner);
+								}
+							} // if constexpr
+						} 
+					); // loop over input containers, per subprocess
+				} 
+			); // loop over subprocesses
+		} // TTree version end
 	}
 	
 }; // TAnalysisProcess

@@ -7,6 +7,7 @@ GO4_SRC_DIR = $(shell pwd -P)/../go4/src
 CXXFLAGS := $(shell root-config --cflags) \
 	-Wall -MMD -MP -fPIC \
 	-I$(INC_DIR) \
+	-I$(INC_DIR)/core \
 	-I$(GO4_SRC_DIR) \
 	-I$(GO4SYS)/include \
 

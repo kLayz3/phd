@@ -1,43 +1,56 @@
 #pragma once
 
-#include "AuxFunctions.hh"
+#include <utility>
+#include <filesystem>
+#include <fstream>
+
 #include "Rtypes.h"
 #include "RtypesCore.h"
 #include "TH2I.h"
 #include "TH1D.h"
 #include "TTree.h"
-#include "libs.hh"
-#include "TProcessorBase.h"
-#include "TFOOTMapCont.h"
-#include "TOnce.hxx"
-#include <utility>
-#include <filesystem>
-#include <fstream>
-#include <type_traits>
+
 #include "nlohmann/json.hpp"
+
+#include "core/libs.hh"
+#include "core/TOnce.hxx"
+#include "core/TProcessor.hxx"
+
+#include "TFOOTMapCont.h"
+#include "TFRSGo4Cont.hxx"
 
 struct TFOOTMapProc : TProcessor <
 	TFOOTMapCont
-	(TFOOTGo4Cont)
+	(TFRSGo4Cont)
 > {
-public:
 	static constexpr int N_STRIPS          = TFOOTMapCont::N_STRIPS;          /* 640 */
 	static constexpr int N_ASIC            = TFOOTMapCont::N_ASIC;            /* 10  */
 	static constexpr int N_STRIPS_PER_ASIC = TFOOTMapCont::N_STRIPS_PER_ASIC; /* 64  */
 	
 	static constexpr double BAD_STRIP_CUTOFF_HI = 2.8;	
 	static constexpr double BAD_STRIP_CUTOFF_LO = 1.2;
+
+	/* Every now and then, recalculate the global pedestal. */
+	static constexpr int N_BATCH_PEDESTAL = 1024;
+
+	using Base = TProcessor<TFOOTMapCont(TFRSGo4Cont)>;
+
 public:
 	enum ProcessType {
-		kGPED,
-		kEPED
-	} process_type = kGPED;
+		kINITIAL_BATCH,
+		kMAIN
+	} process_type = kINITIAL_BATCH;
 		
-	TFOOTMapCont* data;
 	bool is_swapped;
+	
+	int N; // Corresponds to FOOT_N from the output container.
+	uint32_t nsampled = 0;
 
-	TFOOTMapProc(TFOOTMapCont& data, bool is_cabling_swapped = false) :  
-		data(&data), is_swapped(is_cabling_swapped) {}
+	TFOOTMapProc() = default;
+	TFOOTMapProc(TFOOTMapCont&& data, const TFRSGo4Cont& input, bool is_cabling_swapped = false) : 
+		Base(std::move(data), input), is_swapped(is_cabling_swapped) {
+			N = out.FOOT_N;
+		}
 
 	/* Rule-of-five: if a destructor or a custom move ctor/assignment
 	 * is declared, then all three (dtor/move ctor/move assignment) must be declared,
@@ -48,14 +61,23 @@ public:
 	~TFOOTMapProc() = default;
 	*/
 
-	void ProcessGlobalPedestal() noexcept;
-	void CalcGlobalPedestal();
+	void ProcessInitialPedestal() noexcept;
+	
+	struct GaussFitParams {
+		double /* A, */ mu, sigma;
+	};
+	struct ParabolaFitParams {
+		double a, b, c; /* a - bx - cx^2 */
+	};
+	using Points = std::vector<std::pair<double,double>>;
+	static GaussFitParams FitGauss(const TH1D* h);
+	static ParabolaFitParams FitParabolaLeastSquares(Points&& p);
+
 	void ProcessEventPedestal() noexcept;
+	void CalcGlobalPedestal();
 	void CalcFinalPedestal();
 
 	void ProcessEntry() noexcept;
-
-	inline Int_t Write() override { return data->Write(); }
 
 	int GetRawADC(int chn);
 	static constexpr inline int GetChannel(int asic, int offset) { return asic * N_STRIPS_PER_ASIC + offset; }
@@ -97,5 +119,13 @@ public:
 	int ParseStaticBadStrips();
 
 private:
+	std::array<double, N_STRIPS> current_gped = {0.0};
 	std::array<double, N_STRIPS_PER_ASIC> ped_offset = {0.0};
+
+	struct FOOTView {
+		bool TSBad; u32 TLO; u32 THI; u32 SY;
+		u32 Ndata; u32* E;
+	};
+
+	static const FOOTView GetPtrs(const TFRSSortEvent* e, int N);
 };

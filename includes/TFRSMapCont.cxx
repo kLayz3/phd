@@ -1,7 +1,10 @@
 #include "TFRSMapCont.h"
 #include "Rtypes.h"
 
-TFRSMapCont::TFRSMapCont() : TContainer("FRS") {
+TFRSMapCont::TFRSMapCont() : TContainer("FRS") {}
+
+
+void TFRSMapCont::Setup() {
 	for(int i=0; i<4; ++i) {
 		h1_sci_ml[i] = RegisterObject<TH1I>(
 			Form("SCI%d_ML", i), Form("Multipl. SCI%d left", i), 10, 0, 10

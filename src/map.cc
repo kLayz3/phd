@@ -4,6 +4,7 @@
 
 #include "indicators/indicators.hh"
 #include <csignal>
+#include <unistd.h>
 
 #include "CMDLineParser.h"
 #include "AuxFunctions.hh"
@@ -71,16 +72,16 @@ int main(i32 argc, char* argv[]) {
 
 	srand(time(NULL));
 
-	std::string pStr, outFile;
-	std::vector<std::string> fileName{};
+	std::string pStr, outFile, inFile;
 	u64 maxEvents = -1;
 
 	CMDLineParser::Mandatory::SetDefMessage(map_help);
 	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
-	ParseCmdLine("file", fileName, argc, argv, true);
+	
+	ParseCmdLine("file", inFile, argc, argv, true /* Necessary arg. */);
+	
 	if(!ParseCmdLine("output", outFile, argc, argv)) {
-		auto& ref = fileName[0];
-		outFile = ref.substr(0, ref.find('.')) + "_map.root"; 
+		outFile = inFile.substr(0, inFile.find('.')) + "_map.root"; 
 		WARN("No output file specified. Writing to file: %s\n", outFile.c_str());
 	}
 	if(ParseCmdLine("max-events", pStr, argc, argv)) {
@@ -93,40 +94,23 @@ int main(i32 argc, char* argv[]) {
 	VerifyNoArgumentsLeft(argc, argv);
 	std::vector<TimePoint> tv;
 
-	TChain* h101 = new TChain(_tree_base_name);
-	for(auto& name : fileName) {
-		TFile* in = new TFile(name.c_str(), "READ");
-		if(!in or in->IsZombie())
-			ERROR("Bad input ROOT file: %s\n", name.c_str());
-		h101->Add(name.c_str());
-	}
-
-	h101->LoadTree(0);
-
 #ifdef FRS_GO4
-	TFRSSortEvent* sort{};
-	int r = h101->SetBranchAddress(_branch_base_name, &sort);
-	if(r != 0) ERROR("SetBranchAddress failed. \'%s\', RC = %d\n", _branch_base_name, r);
+	TFRSGo4Cont sort{};
 #else
-	// Pass an h101 generated struct.
-	EXT_STR_h101 _sort;
-	EXT_STR_h101 *sort = &_sort;
-	int r = h101->SetBranchAddress(_branch_base_name, sort);
-	if(r != 0) ERROR("SetBranchAddress failed. \'%s\', RC = %d\n", _branch_base_name, r);
+	static_assert(sizeof(u8) == sizeof(u32), 
+		"Cannot handle non-FRS structures (yet)"); 
 #endif
 
 	std::unordered_map<std::string, std::string> info;
 	TFOOTMapCont foot[N_FOOT];
 #define INIT_FOOT_(ID) \
 	{ \
-		int i = ::FindIndex(static_detectors, ID); \
+		int i = util::FindIndex(static_detectors, ID); \
 		if(i < 0) ERROR("Index cannot be found: ID=%d, i=%d", ID, i); \
 		TFOOTMapCont& f = foot[i]; \
 		info["FOOT_ID"] = #ID; \
 		f.Init(info); \
-		f.Setup(ContainerIO::kOUTPUT, outFile); \
-		f._FOOT = &sort->FOOT##ID; \
-		f._FOOTE = sort->FOOT##ID##E; \
+		f.Setup(); \
 	}
 #define INIT_FOOT(x) INIT_FOOT_(x)
 
@@ -140,105 +124,47 @@ int main(i32 argc, char* argv[]) {
 	INIT_FOOT(FOOT_ID_7);
 
 	TFRSMapCont frs{};
-	frs.Setup(ContainerIO::kOUTPUT, outFile);
-
-#define MAP_SCI(x, SCI_LABEL) \
-	frs.sci[x]._nhit_raw[0] = &sort->tdc_nhit_sc##SCI_LABEL##l; \
-	frs.sci[x]._nhit_raw[1] = &sort->tdc_nhit_sc##SCI_LABEL##r; \
-	frs.sci[x]._data_raw[0] = &sort->tdc_sc##SCI_LABEL##l[0]; \
-	frs.sci[x]._data_raw[1] = &sort->tdc_sc##SCI_LABEL##r[0]; \
-	frs.sci[x]._qdc_raw[0]  = &sort->de_##SCI_LABEL##l; \
-	frs.sci[x]._qdc_raw[1]  = &sort->de_##SCI_LABEL##r;
-	
-	MAP_SCI(0, 21);
-	MAP_SCI(1, 22);
-	MAP_SCI(2, 31);
-	MAP_SCI(3, 41);
-		
-	for(int i=0; i < (int)frs.tpc.size(); ++i) {
-		TFRSMapCont::TPC& tpc = frs.tpc[i];
-		tpc._tpc_aa = &sort->tpc_a[i][0];
-		for(int j=0; j<2; ++j) {
-			tpc._tpc_lt[j]  = &sort->tpc_lt[i][j][0];
-			tpc._tpc_rt[j]  = &sort->tpc_rt[i][j][0];
-			tpc._tpc_ltn[j] = &sort->tpc_nhit_lt[i][j];
-			tpc._tpc_rtn[j] = &sort->tpc_nhit_rt[i][j];
-		}
-		for(int j=0; j<4; ++j) { 
-			tpc._tpc_at[j]  = &sort->tpc_dt[i][j][0];
-			tpc._tpc_atn[j] = &sort->tpc_nhit_dt[i][j];
-		}
-		tpc._sci_timerefn = &sort->tpc_nhit_timeref[i];
-		tpc._sci_timeref = &sort->tpc_timeref[i][0];
-	}
-
-	frs.music[0]._music_raw = &sort->music_e1[0];
-	frs.music[1]._music_raw = &sort->music_e2[0];
-	frs._pattern = &sort->pattern;
+	frs.Setup();
 
 	TFOOTMapProc::LoadBadStripsFile(PROG_PATH "/params/bad_strips.json");
-	auto pool = TAnalysisPool<>(h101, outFile, "h102")
-		.emplace_worker<TFOOTMapProc>(foot[0])
-		.emplace_worker<TFOOTMapProc>(foot[1])
-		.emplace_worker<TFOOTMapProc>(foot[2])
-		.emplace_worker<TFOOTMapProc>(foot[3])
-		.emplace_worker<TFOOTMapProc>(foot[4])
-		.emplace_worker<TFOOTMapProc>(foot[5])
-		.emplace_worker<TFOOTMapProc>(foot[6])
-		.emplace_worker<TFOOTMapProc>(foot[7])
-		.emplace_worker<TFRSMapProc>(frs, 0);
+	
+	auto pool = TAnalysisProcess<>(inFile, outFile, "h103")
+		.emplace_process<TFOOTMapProc>( std::move(foot[0]), sort)
+		.emplace_process<TFOOTMapProc>( std::move(foot[1]), sort)
+		.emplace_process<TFOOTMapProc>( std::move(foot[2]), sort)
+		.emplace_process<TFOOTMapProc>( std::move(foot[3]), sort)
+		.emplace_process<TFOOTMapProc>( std::move(foot[4]), sort)
+		.emplace_process<TFOOTMapProc>( std::move(foot[5]), sort)
+		.emplace_process<TFOOTMapProc>( std::move(foot[6]), sort)
+		.emplace_process<TFOOTMapProc>( std::move(foot[7]), sort)
+		.emplace_process<TFRSMapProc>( std::move(frs), sort, TFRSMapProc::DoAnalysis::NO)
+		.MakePool<1, 1024>();
 
-	tv.emplace_back(TimePoint("start"));
-	u64 nentries = std::min((u64)pool.GetEntries(), maxEvents);
-	WARN("Doing global pedestal analysis with (%lu:%s) entries", nentries, util::type_name<u64>().c_str());
-	
-	show_console_cursor(false);	
-	ProgressBar bar1 {
-		option::BarWidth{50},
-		option::Start{"["},
-		option::Fill{"="},
-		option::Lead{">"},
-		option::Remainder{" "},
-		option::End{"]"},
-		option::PostfixText{"Global Pedestal"},
-		option::ForegroundColor{Color::green},
-		option::ShowPercentage{true},
-		option::ShowElapsedTime{true},
-		option::ShowRemainingTime{true},
-		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
-	};
- 
-	pool.Start();
-	for(u64 ev = 0; ev < nentries; ++ev) {
-		pool.GetEntry(ev);
-		util::PrintProgress(bar1, ev, nentries);
-		pool.AssignWork();
-		pool.Await();
-	}
-	pool.Stop(); bar1.mark_as_completed();
-	
-	tv.emplace_back(TimePoint("after gped"));
-	PrintElapsed<kSECOND>(tv);
-	
-	/* Perform fitting for the global pedestal calculation. 
-	 * Cannot be (obviously) paralellized. */
-	for(size_t i=0; i < pool.Size(); ++i) { 
-		TFOOTMapProc* p = dynamic_cast<TFOOTMapProc*>(pool.GetWorker(i));
-		if(!p) {
-			TFRSMapProc* pfrs = dynamic_cast<TFRSMapProc*>(pool.GetWorker(i));
-			if(pfrs) pfrs->do_analysis = 1;
-			continue;
+	/* To register the initial FOOT global pedestals. */
+	pool.SendOneBatch(1024);
+	WARN("Done with batching, going on to process (initial) guess for global pedestal in FOOT\n");
+
+	/* Loop over all workers, get their processes,
+	 * and set them correspondingly (FOOT). */
+	for(auto& process : pool.GetPool()) {
+		auto subprocesses = process.GetProcesses(); 
+		/* ^^^^ std::array<TProcessorBase, _> */
+
+		for(TProcessorBase* subproc : subprocesses) { 
+			TFOOTMapProc* pfoot = dynamic_cast<TFOOTMapProc*>(subproc);
+			if(pfoot) {
+				pfoot->CalcGlobalPedestal();
+				pfoot->process_type = TFOOTMapProc::kMAIN;
+			} else {
+				TFRSMapProc* pfrs = dynamic_cast<TFRSMapProc*>(subproc);
+				//if(pfrs) pfrs->do_analysis = TFRSMapProc::DoAnalysis::YES;
+				if(pfrs) pfrs->do_analysis = TFRSMapProc::DoAnalysis::NO;
+			}
 		}
-		p->CalcGlobalPedestal();
-		p->process_type = TFOOTMapProc::kEPED;
-		WARN("Finished with one global pedestal fitting: %zu\n", i+1);
 	}
+	WARN("Done w/ guessing initial global ped per FOOT, per strip.\n");
 
-	tv.emplace_back(TimePoint("post fit"));
-	PrintElapsed<kSECOND>(tv);
-
-	WARN("Doing finer pedestal analysis now...\n");
-	ProgressBar bar2 {
+	ProgressBar bar {
 		option::BarWidth{50},
 		option::Start{"["},
 		option::Fill{"-"},
@@ -252,33 +178,25 @@ int main(i32 argc, char* argv[]) {
 		option::ShowRemainingTime{true},
 		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 	};
+	
+	tv.emplace_back(TimePoint("start"));
 
-	pool.Start();
-	for(u64 ev = 0; ev < nentries; ++ev) {
-		pool.GetEntry(ev);
-		util::PrintProgress(bar2, ev, nentries, 500);
-		pool.AssignWork();
-		pool.Await();
-		pool.Fill();
+	pool.Start(bar, maxEvents);
+	
+	pool.Collect();
+
+	/* Perform final fit for the crrected pedestal sigma calculation. */ 
+	auto& process = pool.Ref();
+	for(TProcessorBase* subproc : process.GetProcesses()) { 
+		TFOOTMapProc* pfoot = dynamic_cast<TFOOTMapProc*>(subproc);
+	//	if(pfoot)
+	//		pfoot->CalcFinalPedestal();
 	}
-	pool.Stop(); bar2.mark_as_completed();
+	/* Write gets called here, on pool's dtor. */
 
-	tv.emplace_back(TimePoint("after fineped"));
+	tv.emplace_back(TimePoint("end"));
 	PrintElapsed<kSECOND>(tv);
 
-	/* Perform final fit for the corrected pedestal sigma calculation. */ 
-	for(size_t i=0; i < pool.Size(); ++i) { 
-		TFOOTMapProc* p = dynamic_cast<TFOOTMapProc*>(pool.GetWorker(i));
-		if(!p) continue;
-		p->CalcFinalPedestal();
-	}
-	tv.emplace_back(TimePoint("post fineped fit"));
-	PrintElapsed<kSECOND>(tv);
-
-	PrintElapsed<kSECOND>(std::move(tv));
-
-	pool.Write();
-	show_console_cursor(true);
 }
 
 const char* map_help =
@@ -286,7 +204,7 @@ const char* map_help =
 Key-value options can be passed Windows style (-tag value1 value2 ...) or Unix style (--tag=value1,value2,...)\n\
 For either single or multiple values.\n\
 \n\
--file input1.root input2.root...   ..Input file(s) from Go4/UCESB.\n\
+-file input1.root           ..Input file from Go4/UCESB.\n\
 -output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_map' suffix.\n\
 -help                       ..Print this message to stdout. \n\
 -max-events N               ..Specify how many events to process in the ROOT file. Default all.\n\

@@ -73,14 +73,11 @@ int main(int argc, char* argv[]) {
 	TFOOTMapCont foot[N_FOOT]{}; // input container.
 	for(int i=0; i<N_FOOT; ++i) {
 		foot[i].Init( {{"FOOT_ID"s, std::to_string(::static_detectors[i])}} );
-		foot[i].Setup(ContainerIO::kINPUT_FULL, fileName);
 	}
 
 	TFRSMapCont frs{};
-	frs.Setup(ContainerIO::kINPUT_RNONLY, fileName);
 
 	TFRSCalCont cfrs{};
-	cfrs.Setup(ContainerIO::kOUTPUT, outFile); 
 	cfrs.Init( {{"Setup", PROG_PATH "/params/frs_setup.json"}} );
 
 	TFOOTCalCont cfoot[N_FOOT]; // output container.
@@ -89,25 +86,21 @@ int main(int argc, char* argv[]) {
 			{ "FOOT_ID"s, std::to_string(::static_detectors[i]) }, 
 			{ "FOOT_POS"s, std::to_string(i) }
 		});
-		cfoot[i].Setup(ContainerIO::kOUTPUT, outFile);
 	}
 
-	/* Set up the processing pool. */
-	auto pool = TAnalysisPool<>()
-		.emplace_worker<TFOOTCalProc>(foot[0], cfoot[0], 4, 1)
-		.emplace_worker<TFOOTCalProc>(foot[1], cfoot[1], 4, 1)
-		.emplace_worker<TFOOTCalProc>(foot[2], cfoot[2], 4, 1)
-		.emplace_worker<TFOOTCalProc>(foot[3], cfoot[3], 4, 1)
-		.emplace_worker<TFOOTCalProc>(foot[4], cfoot[4], 4, 1)
-		.emplace_worker<TFOOTCalProc>(foot[5], cfoot[5], 4, 1)
-		.emplace_worker<TFOOTCalProc>(foot[6], cfoot[6], 4, 1)
-		.emplace_worker<TFOOTCalProc>(foot[7], cfoot[7], 4, 1)
-		.emplace_worker<TFRSCalProc>(frs, cfrs);
-	pool.SetInput(fileName);
-	pool.SetOutput(outFile, "h103");
-
-	tv.emplace_back(TimePoint("start"));
-	u64 nentries = std::min((u64)pool.GetEntries(), maxEvents);
+	/* Set up the process pool. */
+	auto pool = TAnalysisProcess<>(fileName, outFile, "h103")
+		.emplace_process<TFOOTCalProc>(foot[0], cfoot[0], 4, 1)
+		.emplace_process<TFOOTCalProc>(foot[1], cfoot[1], 4, 1)
+		.emplace_process<TFOOTCalProc>(foot[2], cfoot[2], 4, 1)
+		.emplace_process<TFOOTCalProc>(foot[3], cfoot[3], 4, 1)
+		.emplace_process<TFOOTCalProc>(foot[4], cfoot[4], 4, 1)
+		.emplace_process<TFOOTCalProc>(foot[5], cfoot[5], 4, 1)
+		.emplace_process<TFOOTCalProc>(foot[6], cfoot[6], 4, 1)
+		.emplace_process<TFOOTCalProc>(foot[7], cfoot[7], 4, 1)
+		.emplace_process<TFRSCalProc>(frs, cfrs)
+		.MakePool<8, 1024>();
+		/* Number of subthreads , Chuck size. */
 
 	ProgressBar bar {
 		option::BarWidth{50},
@@ -124,22 +117,13 @@ int main(int argc, char* argv[]) {
 		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 	};
 
-	show_console_cursor(false);
-	pool.Start();
-	for(u64 ev = 0; ev < nentries; ++ev) {
-		pool.GetEntry(ev);
-		PrintProgress(bar, ev, nentries, 500);
-		pool.AssignWork();
-		pool.Await();
-		pool.Fill();
-	}
-	pool.Stop(); bar.mark_as_completed();
+	tv.emplace_back(TimePoint("start"));
+
+	pool.Start(bar, maxEvents);	
+
 	tv.emplace_back(TimePoint("end"));
 
 	PrintElapsed<kSECOND>(std::move(tv));
-
-	show_console_cursor(true);
-	pool.Write();
 }
 
 const char* calibrate_help =

@@ -2,8 +2,6 @@
 
 #include <chrono>
 #include <cstdio>
-#include "TTree.h"
-#include "TGraph.h"
 #include <sstream>
 #include <type_traits>
 #include <unistd.h>
@@ -12,18 +10,26 @@
 #include <vector>
 #include "libs.hh"
 #include <fstream>
-#include "nlohmann/json.hpp"
 #include <regex>
 #include <typeinfo>
+#include <optional>
+
+#include "nlohmann/json.hpp"
+
 #ifndef _MSC_VER
 #	include <cxxabi.h>
 #endif
 
+class TObject;
 
 #if __has_include("indicators/indicators.hh")
-#include "indicators/indicators.hh"
+#	define __HAS_INDICATORS
+#	include "indicators/indicators.hh"
+#endif
 
 namespace util {
+
+#ifdef __HAS_INDICATORS
 inline void 
 PrintProgress(indicators::ProgressBar& bar,	const u64 n_entry, const u64 max_entries, const u64 step = 250) noexcept {
 	static u64 n_entry_called = 0;
@@ -32,10 +38,7 @@ PrintProgress(indicators::ProgressBar& bar,	const u64 n_entry, const u64 max_ent
 
 	n_entry_called = n_entry;
 }
-} // namespace util
 #endif
-
-namespace util {
 
 template<typename T>  
 void QuickSwap(std::vector<T>& v, int i, int j) noexcept {
@@ -151,6 +154,7 @@ std::string sstrcat(Args&&... args) {
 	return oss.str();
 }
 
+/* ----- std::variant trickery. ----- */
 using Empty = std::monostate;
 
 template<typename T>
@@ -174,7 +178,7 @@ decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
 		[&](auto&& value) -> decltype(auto) {
 			using T = std::decay_t<decltype(value)>;
 			if constexpr(std::is_same_v<T, Empty>)
-				throw std::runtime_error("util::visit except: `Empty` type encountered.");
+				throw std::runtime_error("util::visit_non_empty except: `Empty` type encountered.");
 			else 
 				return std::invoke(std::forward<Visitor>(vs),
 					std::forward<decltype(value)>(value));
@@ -185,19 +189,15 @@ decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
 
 template<typename T>
 struct is_an_array : std::false_type {};
-
 template<typename T, size_t N>
 struct is_an_array<T[N]> : std::true_type { using value_type = T; static constexpr size_t size = N; };
-
 template<typename T, size_t N>
 struct is_an_array<std::array<T,N>> : std::true_type { using value_type = T; static constexpr size_t size = N; };
-
 template<typename T>
-constexpr bool is_an_array_v = is_an_array<T>::value;
+inline constexpr bool is_an_array_v = is_an_array<T>::value;
 
 template<typename T, typename = void>
 struct has_clean_noexcept : std::false_type {};
-
 template<typename T>
 struct has_clean_noexcept<T, 
 	std::void_t<decltype(std::declval<T&>().Clean())>>
@@ -206,7 +206,81 @@ struct has_clean_noexcept<T,
 		noexcept(std::declval<T&>().Clean())
 	> {};
 
-template< template<typename...> class Base, typename Derived>
+template<typename, typename = std::void_t<>>
+struct has_value_type : std::false_type {};
+template<typename U>
+struct has_value_type<U, std::void_t<typename U::value_type>> : std::true_type {};
+
+template<typename T>
+struct is_std_array : std::false_type{};
+template<typename T, std::size_t N>
+struct is_std_array<std::array<T, N>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_clone : std::false_type {};
+template<typename T>
+struct has_clone<T, std::void_t<decltype(std::declval<const T&>().Clone())>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_setname : std::false_type {};
+template<typename T>
+struct has_setname<T, std::void_t<
+	decltype( std::declval<T&>().SetName(std::declval<const char*>() ) )
+>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_copy : std::false_type {};
+template<typename T>
+struct has_copy<T, std::void_t<
+	decltype( std::declval<const T&>().Copy( std::declval<TObject&>() ) )
+>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_set_directory : std::false_type {};
+template<typename T>
+struct has_set_directory<T, std::void_t<
+	decltype( std::declval<const T&>().SetDirectory( std::declval<const char*>() ) )
+>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_dyadic_add_ref : std::false_type {};
+template<typename T>
+struct has_dyadic_add_ref<T, std::void_t<
+	decltype( std::declval<T&>().Add( std::declval<const T&>() ) )
+>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_dyadic_add_ptr : std::false_type {};
+template<typename T>
+struct has_dyadic_add_ptr<T, std::void_t<
+	decltype( std::declval<T&>().Add( std::declval<const T*>() ) )
+>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_free_add_fn : std::false_type {};
+template<typename T>
+struct has_free_add_fn<T, std::void_t<
+	decltype( Add( std::declval<T&>(), std::declval<const T&>() ) )
+>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_free_mean_fn : std::false_type {};
+template<typename T>
+struct has_free_mean_fn<T, std::void_t<
+	decltype( Mean( std::declval<T&>(), std::declval<const T&>() ) )
+>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_add_div_unary_op : std::false_type {};
+template<typename T>
+struct has_add_div_unary_op<T, std::void_t <
+	std::conjunction <
+		decltype( std::declval<T&>().operator+=(std::declval<const T&>() ) ) ,
+		decltype( std::declval<T&>().operator/=(std::declval<const int>() ) )
+	>
+>> : std::true_type {};
+
+template< template<typename...> typename Base, typename Derived>
 struct _is_base_of_template_impl {
 	template<typename... Ts>
 	static constexpr std::true_type test(Base<Ts...>& );
@@ -214,8 +288,31 @@ struct _is_base_of_template_impl {
 	using type = decltype(test(std::declval<Derived&>()));
 };
 
-template< template<typename...> class Base, typename Derived>
+template< template<typename...> typename Base, typename Derived>
 using is_base_of_template = typename _is_base_of_template_impl<Base, Derived>::type;
+
+template<typename Tuple, std::size_t... Is>
+auto zip_refs_impl(Tuple& t1, const Tuple t2, std::index_sequence<Is...>) {
+	using R = std::tuple <
+		std::pair <
+			std::add_lvalue_reference_t<std::tuple_element_t<Is, Tuple>>,
+			std::add_lvalue_reference_t<std::add_const_t<std::tuple_element_t<Is, Tuple>>>
+		>...
+	>;
+	
+	return R {
+		std::pair <
+			std::add_lvalue_reference_t<std::tuple_element_t<Is, Tuple>>,
+			std::add_lvalue_reference_t<std::add_const_t<std::tuple_element_t<Is, Tuple>>>
+		> { std::get<Is>(t1), std::get<Is>(t2) }...
+	};
+}
+
+template<typename Tuple>
+auto zip_refs(Tuple& t1, const Tuple& t2) {
+	constexpr std::size_t N = std::tuple_size_v<Tuple>;
+	return zip_refs_impl( t1, t2, std::make_index_sequence<N>{} );
+}
 
 template<typename T>
 constexpr bool is_pathlike_arg_v =
@@ -256,9 +353,9 @@ bool is_file_readable(T&& arg) {
 }
 
 template<typename T,
-	typename U = std::decay_t<T>,
-	typename std::enable_if<is_pathlike_arg_v<T>>::type* = nullptr
+	typename U = std::decay_t<T>
 > std::optional<std::string> get_file_path(T&& arg) {
+	static_assert(is_pathlike_arg_v<U>, "Type <T> must be path-like");
 	if constexpr(std::is_base_of_v<std::istream, U>) 
 		return {};
 	else if constexpr(std::is_constructible_v<std::string, T&&>)
@@ -269,14 +366,15 @@ template<typename T,
 
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
-	typename std::enable_if<util::is_an_array_v<U>>::type* = nullptr
-> auto median(const T& arr) {
-	constexpr std::size_t N = util::is_an_array<U>::size;
-	if constexpr(N % 2)
-		return arr[(N-1) / 2];
-	else 
-		return ( arr[(N-1) / 2] + arr[N/2] ) / 2;
-}
+	std::size_t N = is_an_array<U>::size,
+	char(*)[N % 2] = nullptr // Odd
+> auto median(const T& sorted_arr) { return sorted_arr[(N-1)/2]; }
+
+template<typename T,
+	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
+	std::size_t N = is_an_array<U>::size,
+	char(*)[!(N % 2)] = nullptr // Even
+> auto median(const T& sorted_arr) { return ( sorted_arr[(N-1)/2] + sorted_arr[N/2] ) / 2; }
 
 template<typename T, typename... Ts>
 constexpr auto min(T t, Ts... ts) noexcept {
@@ -308,10 +406,10 @@ constexpr auto max(T t, Ts... ts) noexcept {
 }
 
 template<typename T,
-	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
-	typename std::enable_if<util::is_an_array_v<U>>::type* = nullptr
-> constexpr int FindIndex(const T& arr, const typename util::is_an_array<U>::value_type& val) {
-	constexpr std::size_t N = util::is_an_array<U>::size;
+	typename U = std::remove_cv_t<std::remove_reference_t<T>>
+> constexpr int FindIndex(const T& arr, const typename is_an_array<U>::value_type& val) {
+	static_assert(is_an_array_v<U>, "Type T must be a C-style array or \'std::array<T,N>\'");
+	constexpr std::size_t N = is_an_array<U>::size;
 	for(int i=0; i < (int)N; ++i)
 		if(arr[i] == val) return i;
 	return -1;
@@ -321,7 +419,7 @@ template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>
 > constexpr int len(const T& arr) {
 	static_assert(is_an_array_v<U>, "Passed type must either be an array reference &(T[N]) or &std::array<T,N>.");
-	return static_cast<int>(util::is_an_array<U>::size);	
+	return static_cast<int>(is_an_array<U>::size);	
 }
 
 static inline void Trim(std::string& s) {
@@ -331,7 +429,6 @@ static inline void Trim(std::string& s) {
 using nlohmann::json;
 
 static inline void parse_json_string(std::vector<int>& out, std::string s) {
-	
 	static const std::regex re_num(
 		R"(^(0x|0b)?(\d+)$)"
 	);

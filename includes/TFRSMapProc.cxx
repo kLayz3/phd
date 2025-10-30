@@ -1,32 +1,80 @@
 #include "TFRSMapProc.h"
 #include "TFRSMapCont.h"
-#include "libs.hh"
+#include "core/libs.hh"
 #include <algorithm>
 #include <cstring>
 
+#if defined(__GNUC__)
+#	pragma GCC diagnostic push
+#	pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#	pragma GCC diagnostic pop
+#endif
+
+void TFRSMapProc::SetupPointers() {
+	TFRSGo4Cont & input = std::get<0>( this->in );
+	if(input.raw() == nullptr) ERROR("TFRSGo4Cont, underlying pointer is null?");
+
+	TFRSSortEvent* sort = input.raw();
+#define MAP_SCI(x, SCI_LABEL) \
+	this->sci[x]._nhit_raw[0] = &sort->tdc_nhit_sc##SCI_LABEL##l; \
+	this->sci[x]._nhit_raw[1] = &sort->tdc_nhit_sc##SCI_LABEL##r; \
+	this->sci[x]._data_raw[0] = &sort->tdc_sc##SCI_LABEL##l[0]; \
+	this->sci[x]._data_raw[1] = &sort->tdc_sc##SCI_LABEL##r[0]; \
+	this->sci[x]._qdc_raw[0]  = &sort->de_##SCI_LABEL##l; \
+	this->sci[x]._qdc_raw[1]  = &sort->de_##SCI_LABEL##r;
+	
+	MAP_SCI(0, 21);
+	MAP_SCI(1, 22);
+	MAP_SCI(2, 31);
+	MAP_SCI(3, 41);
+
+	for(int i=0; i < (int)this->tpc.size(); ++i) {
+		TFRSMapProc::TPC& tpc = this->tpc[i];
+		tpc._tpc_aa = &sort->tpc_a[i][0];
+		for(int j=0; j<2; ++j) {
+			tpc._tpc_lt[j]  = &sort->tpc_lt[i][j][0];
+			tpc._tpc_rt[j]  = &sort->tpc_rt[i][j][0];
+			tpc._tpc_ltn[j] = &sort->tpc_nhit_lt[i][j];
+			tpc._tpc_rtn[j] = &sort->tpc_nhit_rt[i][j];
+		}
+		for(int j=0; j<4; ++j) { 
+			tpc._tpc_at[j]  = &sort->tpc_dt[i][j][0];
+			tpc._tpc_atn[j] = &sort->tpc_nhit_dt[i][j];
+		}
+		tpc._sci_timerefn = &sort->tpc_nhit_timeref[i];
+		tpc._sci_timeref = &sort->tpc_timeref[i][0];
+	}
+
+	this->music[0]._music_raw = &sort->music_e1[0];
+	this->music[1]._music_raw = &sort->music_e2[0];
+	this->_pattern = &sort->pattern;
+}
+
+
 void TFRSMapProc::ProcessEntry() noexcept {
 	switch(do_analysis) {
-		case 1: 
+		case DoAnalysis::YES: 
 			_ProcessEntry();
-		default:
+		case DoAnalysis::NO:
 			break;
 	}
 }
 
 void TFRSMapProc::_ProcessEntry() noexcept {
-	data->Clean();
+	SetupPointers();
+	out.Clean();
 
-	data->inner().tpat = static_cast<u32>(*data->_pattern);
+	out.inner().tpat = static_cast<u32>(*_pattern);
 
-	for(int s=0; s < (int)data->sci.size(); ++s) {
-		auto& sci_go4 = data->sci[s];
-		auto& sci_raw = data->inner().sci[s];
+	for(int s=0; s < (int)sci.size(); ++s) {
+		const auto& sci_go4 = this->sci[s];
+		auto& sci_raw = out.inner().sci[s];
 		
 		for(int i=0; i<2; ++i) { // [0] => left, [1] => right
 			Int_t nhits = *sci_go4._nhit_raw[i];
-			if(nhits < 0 || nhits > TFRSMapCont::Sci::MAX_SIZE) {
+			if(nhits < 0 || nhits > RNSciMap::MAX_SIZE) {
 				WARN("Go4 reads: %d hits in Sci[%d] > %d or negative. Dumping it.\n", 
-					nhits, s, TFRSMapCont::Sci::MAX_SIZE);
+					nhits, s, RNSciMap::MAX_SIZE);
 				return;
 			}
 			auto& vec = sci_raw.tdc[i];
@@ -37,13 +85,13 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 			sci_raw.qdc[i] = static_cast<u16>( *sci_go4._qdc_raw[i] );
 		}
 
-		data->h1_sci_ml[s]->Fill( sci_raw.tdc[0].size() );	
-		data->h1_sci_mr[s]->Fill( sci_raw.tdc[1].size() );	
+		out.h1_sci_ml[s]->Fill( sci_raw.tdc[0].size() );	
+		out.h1_sci_mr[s]->Fill( sci_raw.tdc[1].size() );	
 	}
 
-	for(int s=0; s < (int)data->tpc.size(); ++s) {
-		auto const& tpc_go4 = data->tpc[s];
-		auto& tpc_raw = data->inner().tpc[s];
+	for(int s=0; s < (int)tpc.size(); ++s) {
+		const auto& tpc_go4 = this->tpc[s];
+		auto& tpc_raw = out.inner().tpc[s];
 		auto& tdc = tpc_raw.tdc; 
 
 		/* Find how many elements we have to allocate. 
@@ -134,10 +182,10 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 			tdc.at(n).tdc_ref = _temp[n];
 
 		/* ----------------------------------- */
-		data->h1_tpc_ml[s] ->Fill( _nhits_l[0] );
-		data->h1_tpc_mr[s] ->Fill( _nhits_r[1] );
-		data->h1_tpc_ma1[s]->Fill( _nhits_a[1] );
-		data->h1_tpc_ma2[s]->Fill( _nhits_a[2] );
+		out.h1_tpc_ml[s] ->Fill( _nhits_l[0] );
+		out.h1_tpc_mr[s] ->Fill( _nhits_r[1] );
+		out.h1_tpc_ma1[s]->Fill( _nhits_a[1] );
+		out.h1_tpc_ma2[s]->Fill( _nhits_a[2] );
 	
 		/* Only fill if N_max > 1. */
 		if(N_max == 0) continue;
@@ -149,14 +197,14 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 				_nhits_r[ndelay] == 1 &&
 				_nhits_l[ndelay] == 1)
 			{
-				data->h1_tpc_csum[s][a] -> Fill(
+				out.h1_tpc_csum[s][a] -> Fill(
 					tdc[0].tdc_l[ndelay] + tdc[0].tdc_r[ndelay] - 
 					(tdc[0].tdc_a[a] << 1)
 				);
 			}
 			if(_nhits_s == 1)
 			{
-				data->h1_tpc_ydiff[s][a] -> Fill(
+				out.h1_tpc_ydiff[s][a] -> Fill(
 					tdc[0].tdc_a[a] -
 					tdc[0].tdc_ref
 				);
@@ -164,9 +212,9 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 		}
 	} /* End loop over TPC's (s) */
 
-	for(int s=0; s < (int)data->music.size(); ++s) {
-		auto& music_go4 = data->music[s];
-		auto& music_raw = data->inner().music[s];
+	for(int s=0; s < (int)music.size(); ++s) {
+		const auto& music_go4 = this->music[s];
+		auto& music_raw = out.inner().music[s];
 	
 		for(int i=0; i < music_raw.size(); ++i)
 			music_raw.e[i] = static_cast<u16>(music_go4._music_raw[i]);
