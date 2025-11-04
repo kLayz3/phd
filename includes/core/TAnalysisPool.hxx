@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AuxFunctions.hh"
+#include "TROOT.h"
 #include "libs.hh"
 #include "TAnalysisProcess.hxx"
 #include <thread>
@@ -39,7 +40,7 @@ template <
 		pool[0] = std::move(base);
 		pool[0].Setup();
 		for(u32 i=1; i<N; ++i)
-			pool[i] = pool[0].Clone();
+			pool[0].Clone(pool[i]);
 	}
 
 	/* On destructor sweep, write the single objects directly in the file. */
@@ -119,8 +120,6 @@ template <
 			w.Start();
 		}
 
-		auto& ref_process = Ref();
-
 		for(u32 i=0; i<N; ++i) {
 			int n_tries = 0;
 			auto& w = pool[i];
@@ -151,13 +150,14 @@ template <
 			max_entries
 		);
 
-		u32 next = 0;
+		ROOT::EnableThreadSafety();
 		for(auto& w : pool)
 			w.Start();
 
 #ifdef __HAS_INDICATORS
 		indicators::show_console_cursor(false);
 #endif
+		u32 next = 0;
 		for(u64 i = 0; i < nentries; i+=NSlice) {
 			util::Job j {
 				i,                             // Starting index, included.

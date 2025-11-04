@@ -63,7 +63,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 			for(const std::shared_ptr<TOnceBase>& v  : rhs.out._vc)
 				out._vc.emplace_back( v->Clone() );
 
-			/* Previous for-loop constructs the objects, this next call
+			/* Previous for-loop constructs the objects, this next dynamic dispatch
 			 * will just give the raw pointer handles back to the user. */ 
 			out.Setup();
 		}
@@ -102,7 +102,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 		return ( std::get<N>(in).inner() );
 	}
 	
-	/* These calls are sent during the final collection. Stringent checks
+	/* These calls are sent during the final collection. Stringent type checks
 	 * are kept, as runtime isn't sacrificed too much. */
 	void Collect(const TProcessor& rhs) {
 		std::vector<std::shared_ptr<TOnceBase>>       & lvc = this->out._vc;

@@ -14,6 +14,8 @@
 #include "TFRSMapProc.h"
 #include "TFRSMapCont.h"
 
+#include "core/ROOTAux.hh"
+
 using namespace CMDLineParser;
 using namespace util;
 
@@ -48,6 +50,10 @@ constexpr i32 static_detectors[] = {
 constexpr i32 N_FOOT = LEN(static_detectors);
 
 int main(i32 argc, char* argv[]) {
+	util::CreateClingCache();
+	gSystem->Load("libStructures.so");
+	gSystem->Load("libGo4UserAnalysis.so");
+
 	using namespace indicators;
 	signal(SIGINT , sig_callback_handler);
 	signal(SIGSEGV, sig_callback_handler);

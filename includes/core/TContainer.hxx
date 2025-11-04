@@ -140,17 +140,6 @@ public:
 	TContainer& operator=(TContainer&& ) noexcept = default;
 	~TContainer()                                 = default;
 	
-	/* This constuctor is defined simply because if containers ought to be cloned,
-	 * reassigning the shared_ptr drops/collects values, all fine.
-	 * But the `_vc` vector is tricky. Read containers from different threads share 
-	 * the pointers, and users get back this respective handles, unwrapped.
-	 * -> The write container in each thread must own its own unique set of objects it writes to.
-	 * To keep the API identical, A.K.A. same structure can be used as both Read and Write TContainer<T>,
-	 * there is a special constructor which deep-copies the underlying objects to the new container. */
-	TContainer(const TContainer& rhs, MTDeepCopy) : _inner(rhs._inner) {
-		
-	}
-	
 	const TOnceBaseVec& GetTOnceVec() noexcept { return this->_vc; }
 
 	T& operator*()             noexcept { return *_inner; }

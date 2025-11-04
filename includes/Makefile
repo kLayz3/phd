@@ -50,8 +50,9 @@ $(DICT) : $(HEADERS) LinkDef.hh
 
 symlink : $(DICT) $(GEN_LIB)
 	ln -sf $(DICT_PCM) $(BUILD_DIR)
-	ln -sf $(GEN_LIB) ../
-	ln -sf $(GEN_MAP) ../
+	ln -sf $(GEN_LIB)  ../
+	ln -sf $(GEN_MAP)  ../
+	ln -sf $(DICT_PCM) ../
 
 clean:
 	rm -rf $(BUILD_DIR)

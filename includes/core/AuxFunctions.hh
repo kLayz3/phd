@@ -187,6 +187,18 @@ decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
 	);
 }
 
+template<typename Tuple, typename Callable, std::size_t... Is>
+void _for_each_in_tuple_impl(Tuple&& t, Callable&& f, std::index_sequence<Is...>) {
+	(..., f (std::get<Is>(std::forward<Tuple>(t))));
+}
+
+template<typename Tuple, typename Callable>
+void for_each_in_tuple(Tuple&& t, Callable&& f) {
+	constexpr std::size_t N = std::tuple_size_v<std::decay_t<Tuple>>;
+	_for_each_in_tuple_impl(std::forward<Tuple>(t), std::forward<Callable>(f), 
+		std::make_index_sequence<N>{});
+}
+
 template<typename T>
 struct is_an_array : std::false_type {};
 template<typename T, size_t N>
@@ -568,7 +580,7 @@ constexpr std::size_t CL =
 #elif defined(__x86_64__)
 	64 // fallback, for sure.
 #else
-	64 // Suppose
+	64 // Suppose.
 #endif
 	;
 

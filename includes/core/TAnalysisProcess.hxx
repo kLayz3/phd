@@ -41,18 +41,6 @@ namespace RExp = ROOT::Experimental;
 
 namespace util {
 
-template<typename Tuple, typename Callable, std::size_t... Is>
-void _for_each_in_tuple_impl(Tuple&& t, Callable&& f, std::index_sequence<Is...>) {
-	(f (std::get<Is>(std::forward<Tuple>(t))), ...);
-}
-
-template<typename Tuple, typename Callable>
-void for_each_in_tuple(Tuple&& t, Callable&& f) {
-	constexpr std::size_t N = std::tuple_size_v<std::decay_t<Tuple>>;
-	_for_each_in_tuple_impl(std::forward<Tuple>(t), std::forward<Callable>(f), 
-		std::make_index_sequence<N>{});
-}
-
 template<typename T, typename = void>
 struct has_process_entry : std::false_type {};
 
@@ -392,7 +380,17 @@ public:
 			ERROR("Calling start but reader handle isn't valid (r != 0). r = 0x%02x. Check API for util::GetValidity().", r); 
 		
 		_running = true;
-	
+		
+		WARN("Thread worker: TTree/RNTuple input: file %s, TFile* : 0x%016lx "
+			"TTree* : 0x%016lx\n",
+			info.in.fname.c_str(), (uintptr_t)std::get<util::TTreePerThreadReader>(reader)._file.get(),
+			(uintptr_t)std::get<util::TTreePerThreadReader>(reader)._tree);
+		std::apply([](auto&... ps) {
+					(..., printf( "-- 0x%016lx [OUT:%s]\n-- 0x%016lx [IN:%s]\n", 
+						(uintptr_t)ps.out.raw(), ps.out.GetName(), 
+						(uintptr_t)std::get<0>(ps.in).raw(), std::get<0>(ps.in).GetName() ) );
+				}, this->_proc);
+
 		_thread = std::thread ( 
 			[this] {
 				util::Job j;
@@ -456,7 +454,9 @@ public:
 	}
 	
 private:
-
+	
+	/* Each subthread writer is a slave to the initial one, who
+	 * holds the true unique pointer handle. */
 	void SetupWriter() {
 		if(info.out.fname.empty() || info.out.out_rnname.empty())
 			ERROR("Cannot proceed with setting up the writer if output (file,rnname) string information isn't given. (%s)", _SELF_TYPE_CSTR);
@@ -574,12 +574,16 @@ private:
 				}
 			);
 
-			r._reader = RExp::RNTupleReader::Open(
-				std::move(r._model), info.in.fname, obj_name);
+			r._reader = RExp::RNTupleReader::Open(std::move(r._model), info.in.fname, obj_name);
 		}
 
 		else { /* TTree version. */
-			reader = util::TTreePerThreadReader();
+			(void)TClass::GetClass("TTree");
+			(void)TClass::GetClass("TChain");
+			(void)TClass::GetClass("TBranch");
+			(void)TClass::GetClass("TBasket");
+			
+			this->reader = util::TTreePerThreadReader();
 			auto& r = std::get<util::TTreePerThreadReader>(reader);
 
 			r._file = std::make_unique<TFile>( info.in.fname.c_str() , "READ");
@@ -591,6 +595,8 @@ private:
 				ERROR("Unable to make a TTree hook for \'%s\'. "
 					"Even though TTree verified with name \'%s\'. (%s)", info.in.fname.c_str(), obj_name.c_str(), _SELF_TYPE_CSTR);
 			
+			r._tree->SetCacheSize(64*1024*1024);
+
 			/* Ok, TTree API *sigh*.
 			 * Namely, once we map a branch via `tree->SetBranchAddress(name, &ptr)`, then we can retrieve the pointers'
 			 * address via: tree->GetBranch(name)->GetAddress . The return type is `char**` (???). 
@@ -599,6 +605,8 @@ private:
 			 * Checking the type does indeed work, if underlying type isn't templated. 
 			 * It *should* demangle correctly. */
 
+			WARN("~~~ New setup reader called, TFile* = 0x%016lx, TTree* = 0x%016lx <<<\n",
+				(uintptr_t)r._file.get(), (uintptr_t)r._tree);
 			util::for_each_in_tuple(this->_proc, [this, &r](auto& p /* TProcessor<Out(In...)>) */ )
 				{
 					util::for_each_in_tuple(p.in, [this, &r](auto& cont /* In : TRawContainer */ )
@@ -614,11 +622,12 @@ private:
 									ERROR("File: \'%s\', TTree: \'%s\', branch \'%s\' not found. (%s)",
 										this->info.in.fname.c_str(), r._tree->GetName(), cont.GetName(), _SELF_TYPE_CSTR);
 								
+								using T = typename ContType::inner_type;
+								std::string c_type = util::type_name<T>();
+
 								if(b->GetAddress()) { /* Means the branch is mapped already. */
 									/* Try to check if types match. */
-									using T = typename ContType::inner_type;
 									const char* b_type = b->GetClassName();
-									std::string c_type = util::type_name<T>();
 
 									if(strcmp(b_type, c_type.c_str()) != 0)
 										WARN("Setting up the container \'%s\'. "
@@ -629,16 +638,31 @@ private:
 											b->GetName(), b_type, c_type.c_str(), _SELF_TYPE_CSTR);
 									
 									cont._inner = reinterpret_cast<T*>( *(void**)b->GetAddress() );
+									WARN("Branch '%s', addr: 0x%016lx (TTree* addr: 0x%016lx), mapped to: 0x%016lx\n", 
+										b->GetName(), (uintptr_t)b, (uintptr_t)r._tree, (uintptr_t)cont._inner); 
 								} 
-								else { 
-									// Branch isn't mapped yet. Map it now.
+								else { // Branch isn't mapped yet. Map it now.
+									/* Important to set to null. Else ROOT will not do anything, as it already
+									 * dereferences to a valid T. 🤷 */
+									cont._inner = nullptr; 
+									
+									(void)TClass::GetClass(c_type.c_str());
+									
 									r._tree->SetBranchAddress( cont.GetName(), &cont._inner);
+									b->SetAutoDelete(kFALSE);
+									WARN(">>>[N] '%s', addr: 0x%016lx (TTree* addr: 0x%016lx), mapped to: 0x%016lx\n", 
+										b->GetName(), (uintptr_t)b, (uintptr_t)r._tree, (uintptr_t)cont._inner); 
 								}
 							} // if constexpr
 						} 
 					); // loop over input containers, per subprocess
 				} 
 			); // loop over subprocesses
+		
+			/* Warm-up. */
+			Long64_t _n_entries = std::min(10LL, r._tree->GetEntries());
+			for(Long64_t i=0; i<_n_entries; ++i) r._tree->GetEntry(i);
+
 		} // TTree version end
 	} // void SetupReader()
 	
