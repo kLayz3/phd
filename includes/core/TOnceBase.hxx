@@ -1,9 +1,9 @@
 #pragma once
 #include "TFile.h"
+#include "TH1.h"
 
 struct TOnceBase {
-
-	TOnceBase() = default;
+	TOnceBase() { TH1::AddDirectory(kFALSE); }
 	TOnceBase(const char* name)  : _name(name) {}
 	TOnceBase(std::string name) : _name(std::move(name)) {}
 

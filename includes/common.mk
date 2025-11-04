@@ -1,4 +1,4 @@
-OPTIMIZATION = 0
+OPTIMIZATION = 1
 
 CXXFLAGS += -DPOOL_MAX_THREADS_=$(shell nproc) \
 			-DPROG_PATH=\"$(shell pwd -P)\"

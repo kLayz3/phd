@@ -8,18 +8,15 @@ struct TFRSMapProc : TProcessor <
 	TFRSMapCont
 	(TFRSGo4Cont)
 > {
-	enum class DoAnalysis : u8 { YES, NO };
-
 	using Base = TProcessor<TFRSMapCont(TFRSGo4Cont)>;
+	enum class DoAnalysis : u8 { YES, NO } do_analysis;
 
 	TFRSMapProc() = default;
-	TFRSMapProc(TFRSMapCont&& out, const TFRSGo4Cont& in, DoAnalysis y_or_n) 
-		: Base(std::move(out), in), do_analysis(y_or_n) {}
+	TFRSMapProc(TFRSMapCont& out, const TFRSGo4Cont& in, DoAnalysis y_or_n) 
+		: Base(out, in), do_analysis(y_or_n) {}
 	
 	void  ProcessEntry() noexcept; 
 	void _ProcessEntry() noexcept; 
-
-	DoAnalysis do_analysis;
 
 private:
 	struct Sci {

@@ -22,7 +22,7 @@ struct TProcessorBase {
 template<typename T> struct TContainer;
 template<typename T> struct TRawContainer;
 
-template< class >
+template<class>
 struct TProcessor; /* Undefined. */
 
 /**
@@ -45,37 +45,39 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 
 	/** 
 	 * Only other acceptable param ctor is to take ownership from an existing output object.
-	 * The output object need to be specifically `std::move`'ed to be perfectly clear in user code.
+	 * The output object doesn't need to be specifically `std::move`'ed to be less verbose in user code.
+	 * But the Processor does take full ownership of the resource behind this reference.
 	 * Input objects, might be shared between different subprocesses - here we simply make our own copy.
 	 */
-	explicit TProcessor(Out&& _out, const Ins&... ins) : 
+	explicit TProcessor(Out& _out, const Ins&... ins) : 
 		out(std::move(_out)), in(std::make_tuple(ins...)) {}
 
 	TProcessor(const TProcessor& rhs) : TProcessorBase(rhs), 
 		out(rhs.out), 
-		in(rhs.in /* _vc from each will just get copied - sharing the *same* pointers. */ )
+		in(rhs.in) /* _vc from each input will just get copied - sharing the *same* pointers. */ 
 		{
 			out._vc.clear();
+
+			/* https://en.cppreference.com/w/cpp/memory/shared_ptr/shared_ptr.html -- Case [13]
+			 * template< class Y, class Deleter > shared_ptr( std::unique_ptr<Y, Deleter>&& r );*/
 			for(const std::shared_ptr<TOnceBase>& v  : rhs.out._vc)
 				out._vc.emplace_back( v->Clone() );
 
+			/* Previous for-loop constructs the objects, this next call
+			 * will just give the raw pointer handles back to the user. */ 
 			out.Setup();
 		}
 	/*  ^^^^^ Now, each `_vc` is completely unique in the output container. */
 	
+	/* Identical logic for copy-assignment op */
 	TProcessor& operator=(const TProcessor& rhs) {
-		ERROR("Assignment operator for \'%s\' called. "
-			"This will leave the `TOnce<..>` read objects potentially hanging "
-			"in the user code! ", _SELF_TYPE_CSTR);
-		/* ^^^ TODO, do we need this even? */ 
-
 		this->in = rhs.in;
 		this->out = rhs.out;
 		this->out._vc.clear();
 		
 		for(const std::shared_ptr<TOnceBase>& v  : rhs.out._vc)
 			out._vc.emplace_back( v->Clone() );
-
+		
 		out.Setup();
 		return *this;
 	}

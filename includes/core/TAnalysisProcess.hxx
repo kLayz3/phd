@@ -36,7 +36,7 @@
 #define N_EVENTS_PER_BATCH 512;
 
 /* For ROOT 6.36+, change this to ROOT instead of `ROOT::Experimental`. */
-template<u32, u32, typename...> class TAnalysisPool;
+template<u32, typename...> class TAnalysisPool;
 namespace RExp = ROOT::Experimental;
 
 namespace util {
@@ -172,8 +172,6 @@ struct PerThreadWriter {
  */
 template<typename... Ts>
 struct alignas(util::CL) TAnalysisProcess final {
-	template<u32, u32, typename...> friend class TAnalysisPool;
-
 	static_assert((util::is_base_of_template<TProcessor, Ts>::value && ...),
 		"All the inderlying subprocess types <Ts> must inherit from TProcessor<...>.");
 	static_assert((util::has_process_entry<Ts>::value && ...),
@@ -187,7 +185,7 @@ struct alignas(util::CL) TAnalysisProcess final {
 	static_assert((std::is_move_assignable_v<Ts> && ...),
 		"All the inderlying subprocess types <Ts> need move assignment op.");
 
-	template<u32, u32, typename...> friend class TAnalysisPool;
+	template<u32, typename...> friend class TAnalysisPool;
 	static constexpr size_t Size() { return sizeof...(Ts); }
 
 private:
@@ -234,25 +232,37 @@ public:
 	) : _proc(std::move(w)), info(std::move(_info)), 
 		reader(std::move(_reader)), writer(std::move(_writer)) {}
 
-protected:
-	/* To make things explicit; to issue compiler error in case we accidentally try
-	 * to (re)assign the object - we hard-error on the copy assignment call.
-	 * Could be deleted maybe? 
-	 * The copy-ctor shouldn't ever be called outside of the `Clone()` method! */
-	TAnalysisProcess(const TAnalysisProcess& rhs) : 
-		q{}, _running{}, _thread{}, 
-		_proc(rhs._proc),
-		info(rhs.info), reader{}, writer{} {}
+	TAnalysisProcess(const TAnalysisProcess& rhs) : TAnalysisProcess{} {
+		rhs.Clone(*this);
+	}
 
 	TAnalysisProcess& operator=(const TAnalysisProcess& rhs) {
-		_proc = rhs._proc;
-		info = rhs.info;
+		rhs.Clone(*this);
 		return *this;
 	}
 
-public:
-	TAnalysisProcess(TAnalysisProcess&& )            noexcept = default;
-	TAnalysisProcess& operator=(TAnalysisProcess&& ) noexcept = default;
+	/* Move ops cannot be defaulted due to std::atomic<T> */
+	TAnalysisProcess(TAnalysisProcess&& rhs) :
+		q        {},
+		_running ( false                  ), 
+		_do_write( rhs._do_write          ),
+		_thread  ( std::move(rhs._thread) ),
+		_proc    ( std::move(rhs._proc)   ),
+		info     ( std::move(rhs.info)    ),
+		reader   ( std::move(rhs.reader)  ),
+		writer   ( std::move(rhs.writer)  ) {}
+	
+	TAnalysisProcess& operator=(TAnalysisProcess&& rhs) noexcept {
+		if(this == &rhs) return *this;
+		_running  = false                 ;  
+		_do_write = rhs._do_write         ; 
+		_thread   = std::move(rhs._thread); 
+		_proc     = std::move(rhs._proc)  ; 
+		info      = std::move(rhs.info)   ; 
+		reader    = std::move(rhs.reader) ; 
+		writer    = std::move(rhs.writer) ; 
+		return *this;
+	}
 
 	~TAnalysisProcess() = default;
 
@@ -294,17 +304,17 @@ public:
 	 * A true independent copy of the object, meant to populate the pool singleton
 	 * with clones of the initial processor object. 
 	 */
-	TAnalysisProcess Clone() const { /* Only clone from the original object. */
+	void Clone(TAnalysisProcess& dest) const { /* Only clone from the original object. */
 		auto* p = std::get_if<std::unique_ptr<RExp::RNTupleParallelWriter>>(&writer.pwriter);
 		/* ^^^ type: *std::unique_ptr<..> */
-		if(!p) ERROR("Calling clone but original processor object is either unitialized or set to wrong state."
+		if(!p) ERROR("Calling clone but original processor object is either unitialized or set to wrong state. "
 				"State = %zu, 0 = Empty; 1 = Owning pointer; 2 = Raw pointer. Should be: " EMPH(1\n), writer.pwriter.index());
 
-		TAnalysisProcess clone(*this);
-		clone.writer.pwriter = p->get();
+		dest._proc = this->_proc;
+		dest.info  = this->info;
+		dest.writer.pwriter = p->get();
 		
-		clone.Setup();
-		return clone;
+		dest.Setup();
 	}
 
 	bool IsStopped() const noexcept { return ! _running && ! _thread.joinable(); }
@@ -429,9 +439,9 @@ public:
 		if(_thread.joinable()) _thread.join();
 	}
 
-	template<u32 N, u32 NSlice>
-	auto MakePool() && -> TAnalysisPool<N, NSlice, Ts...> {
-		return TAnalysisPool<N, NSlice, Ts...>( std::move(*this) );	
+	template<u32 N>
+	auto MakePool(u32 NSlice) && -> TAnalysisPool<N, Ts...> {
+		return TAnalysisPool<N, Ts...>( *this, NSlice );	
 	}
 
 	void Collect(const TAnalysisProcess& rhs) {
@@ -583,7 +593,7 @@ private:
 			
 			/* Ok, TTree API *sigh*.
 			 * Namely, once we map a branch via `tree->SetBranchAddress(name, &ptr)`, then we can retrieve the pointers'
-			 * address via: tree->GetBranch(name)->GetAddress . The return type is `T**`. 
+			 * address via: tree->GetBranch(name)->GetAddress . The return type is `char**` (???). 
 			 * The only thing is that type safety isn't checked at runtime. Basically the other argument is `void**`
 			 * somewhere down the line. This is really ugly, don't try this at home. 
 			 * Checking the type does indeed work, if underlying type isn't templated. 
@@ -630,6 +640,6 @@ private:
 				} 
 			); // loop over subprocesses
 		} // TTree version end
-	}
+	} // void SetupReader()
 	
 }; // TAnalysisProcess

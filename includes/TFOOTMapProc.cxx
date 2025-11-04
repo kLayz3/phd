@@ -24,9 +24,9 @@ static_assert(TFOOTMapProc::N_STRIPS == TFOOTMapProc::N_ASIC * TFOOTMapProc::N_S
 using nlohmann::json;
 json TFOOTMapProc::_bad_strips{};
 
-	//struct FOOTView {
-	//	bool* TSBad; u32* TLO; u32* THI; u32* SY;
-	//	u32* Ndata; u32* E;
+//struct FOOTView {
+//	bool* TSBad; u32* TLO; u32* THI; u32* SY;
+//	u32* Ndata; u32* E;
 const TFOOTMapProc::FOOTView TFOOTMapProc::GetPtrs(const TFRSSortEvent* e, int N) {
 #define GET_FOOT_GO4(N) \
 	case(N): { \
@@ -75,34 +75,34 @@ const TFOOTMapProc::FOOTView TFOOTMapProc::GetPtrs(const TFRSSortEvent* e, int N
 
 /* Assumption is that each bin is exactly 1 units wide. Can work also generally,
  * but has to be tweaked a bit. */
-
 TFOOTMapProc::GaussFitParams TFOOTMapProc::FitGauss(const TH1D* h) {
 	constexpr double RATIO_THR = 0.2;
 
 	/* First find the histogram max bin. */
 	const int maxBin = h->GetMaximumBin();
-	const double binWidth2 = h->GetBinWidth(maxBin) / 2;
+	const double binWidth = h->GetBinWidth(maxBin);
 
 	const double N0 = h->GetBinContent(maxBin);
 
 	/* Idea is to fit a parabola to log(count), around 1-2 sigma. */
+	/* maxBin corresponds to ADC value of: maxBin - 1 ; AKA. value == 0 falls into bin number 1. */
 	std::vector<std::pair<double, double>> points;
-	points.emplace_back(maxBin + binWidth2, std::log(N0));
+	points.emplace_back(maxBin - binWidth, std::log(N0));
 
 	int i;
 	
 	i= maxBin + 1;
 	while( h->GetBinContent(i) / N0 > RATIO_THR ) {
-		points.emplace_back(i + binWidth2, std::log(h->GetBinContent(i)) );
+		points.emplace_back(i - binWidth, std::log(h->GetBinContent(i)) );
 		++i;
 	}
 	i = maxBin - 1;
 	while( h->GetBinContent(i) / N0 > RATIO_THR ) {
-		points.emplace_back(i + binWidth2, std::log(h->GetBinContent(i)) );
+		points.emplace_back(i - binWidth, std::log(h->GetBinContent(i)) );
 		--i;
 	}
 
-	auto [a,b,c] = FitParabolaLeastSquares(std::move(points));
+	auto [a,b,c] = FitParabolaLeastSquares(points);
 	
 	return { - b / (2*c) , 1 / sqrt(-2*c) }; 
 }
@@ -113,33 +113,42 @@ TFOOTMapProc::GaussFitParams TFOOTMapProc::FitGauss(const TH1D* h) {
  * ( Σxi^2  Σxi^3  Σxi^4 ) ( c )   ( Σxi^2yi )
  */
 TFOOTMapProc::ParabolaFitParams
-TFOOTMapProc::FitParabolaLeastSquares(TFOOTMapProc::Points&& points) {
+TFOOTMapProc::FitParabolaLeastSquares(const TFOOTMapProc::Points& points) {
 	if(points.size() < 3) return { std::nan(""), std::nan(""), std::nan("") };
 
-	double Sx = 0, Sx2 = 0, Sx3 = 0, Sx4 = 0;
-	double Sy = 0, Sxy = 0, Sx2y = 0;
 	const int n = (int)points.size();
-	
-	for(int i=0; i<n; ++i) {
-		auto [x,y] = points[i];
-		double x2 = x * x;
-		Sx += x;
-		Sx2 += x2;
-		Sx3 += x2 * x;
-		Sx4 += x2 * x2;
-		Sy += y;
-		Sxy += x * y;
-		Sx2y += x2 * y;
-	}
-	Eigen::Matrix3d M;
-	M << n,   Sx,  Sx2,
-	     Sx,  Sx2, Sx3,
-	     Sx2, Sx3, Sx4;
-	
-	Eigen::Vector3d v(Sy, Sxy, Sx2y);
+	/* [1] : compute mean in x, which we center around, to ease calculations... */
+	double meanx = 0;
+	for(const auto& [x,y] : points) meanx += x;
+	meanx /= n;
 
-	M.colPivHouseholderQr().solve(v);
-	return { v(0,0), v(1,0), v(2,0) };
+	/* [2] : build design matrix in centered coordinates z = x - meanx. */
+	Eigen::MatrixXd X(n, 3);
+	Eigen::VectorXd y(n);
+	for(int i=0; i<n; ++i) {
+		const auto [x0, y0] = points[i];
+		double x = x0 - meanx;
+		X(i,0) = 1.0;
+		X(i,1) = x;
+		X(i,2) = x*x;
+		y(i)   = y0;
+	}
+
+	Eigen::Vector3d beta = X.colPivHouseholderQr().solve(y);
+	/* beta = (a0, b0, c0) for model y = a0 + b0*x' + c0*(x')^2 */
+	/* but x' = x - meanx => expand back to original a + b x + c x^2: */
+
+	double a0 = beta(0), b0 = beta(1), c0 = beta(2);
+
+	//printf("Was solving (x,y) : "); 
+	//for(const auto [x,y] : points) printf("(%.3f, %.3f), ", x,y); 
+	//printf("... coeffs (mu, sigma): " EMPH(%.3f %.3f\n), -(b0 - 2*c0*meanx)/(2*c0), 1/sqrt(-2*c0));
+
+	return {
+		/* a: */ a0 - b0*meanx + c0*meanx*meanx,
+		/* b: */ b0 - 2*c0*meanx,
+		/* c: */ c0
+	};
 };
 
 void TFOOTMapProc::ProcessEntry() noexcept {
@@ -156,7 +165,7 @@ void TFOOTMapProc::ProcessEntry() noexcept {
 void TFOOTMapProc::CalcGlobalPedestal() {
 	TH2I* h = out.h2_raw_tmp;
 	if(h->GetEntries() == 0) {
-		ERROR("Ran over the TTree initial batch, but found 0 events with data? " EMPH(FOOT: %d) ", Setting all pedestals to 0.", N);
+		WARN("Ran over the TTree batch, but found 0 events with data? " EMPH(FOOT: %d) ", Setting keeping old pedestals / setting to 0.", N);
 		return;
 	}
 	FOR(i, N_STRIPS) {
@@ -172,9 +181,6 @@ void TFOOTMapProc::CalcGlobalPedestal() {
 	h->Reset("ICESM");
 }
 
-/* Ok weirdest hack ever, how to get pointer access to .FOOT##N##E if `N`
- * isn't in a preproc or hardcoded? Behold, breaking the universe, and my own sanity.
- * (FYI I wrote the unpacker, too ¯\_(ツ)_/¯ ) */
 void TFOOTMapProc::ProcessInitialPedestal() noexcept {
 	if(N <= 0) ERROR("Starting to process, but local foot label <= 0 ?");
 
@@ -185,7 +191,7 @@ void TFOOTMapProc::ProcessInitialPedestal() noexcept {
 	
 	int iraw;	
 	FOR(i, N_STRIPS) {
-		iraw = is_swapped ? ((i + N_STRIPS/2) % N_STRIPS) : i;
+		iraw = (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
 		out.h2_raw_tmp->Fill(i, data[iraw]);
 	}
 }
@@ -222,11 +228,12 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 		int i, iraw; 
 		
 		FOR(strip, N_STRIPS_PER_ASIC /* 0..=63 */) {
-			i = i0 + strip; // <--- 'true strip'
-			iraw = is_swapped ? ((i + N_STRIPS/2) % N_STRIPS) : i;
+			i = i0 + strip; // <--- 'true strip' : 0..=640
+			iraw = (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
 			
 			out.h2_raw_tmp->Fill(i, data[iraw]);
-			
+			out.h2_raw    ->Fill(i, data[iraw]);
+
 			/* Calculate the systematic shift per asic (group of 64 strips). */
 			ped_offset[strip] = data[iraw] - current_gped[i];
 		}
@@ -252,9 +259,9 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 		/* Repeat the loop, subtract the collective small offset (fine correction). */
 		FOR(strip, N_STRIPS_PER_ASIC /* 0..=63 */) {
 			i = i0 + strip;
-			int iraw = is_swapped ? ((i + N_STRIPS/2) % N_STRIPS) : i;
+			iraw = (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
 
-			adc_final = data[iraw] - current_gped[iraw];
+			adc_final = data[iraw] - current_gped[i];
 			
 			if(strip > 0) {
 				adc_final -=
@@ -274,7 +281,7 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 	}
 
 	/* If we sample enough events, recalculate the global pedestal quickly from the batch. */
-	if((++nsampled) == N_BATCH_PEDESTAL) {
+	if((++nsampled) == n_batch_pedestal.amount) {
 		CalcGlobalPedestal();	
 		nsampled = 0;
 	}
@@ -317,12 +324,17 @@ int TFOOTMapProc::ParseStaticBadStrips() {
 
 void TFOOTMapProc::CalcFinalPedestal() {
 	if(out.h2_corr->GetEntries() == 0) {
-		WARN("Ran over the TTree, but found 0 events with calibrated data?" EMPH(FOOT: %d\n), N);
+		WARN("Ran over the data, but found 0 events with calibrated data?" EMPH(FOOT: %d\n), N);
 		return;
 	}
 	FOR(i, N_STRIPS) {
 		auto slice = std::unique_ptr<TH1D>( out.h2_corr->ProjectionY(_MSG("_py%d-%d", N, i), i+1, i+1) );
 		slice->SetDirectory(nullptr);
+
+		if(slice->GetEntries() < 100) {
+			WARN("FOOT%d, strip %d, found no entries in y-projection of calibrated data? Skipping.\n", N, i);
+			continue;
+		}
 		
 		int maxBin = slice->GetMaximumBin();
 		double fitMin = slice->GetBinCenter(maxBin - 10);
@@ -330,6 +342,11 @@ void TFOOTMapProc::CalcFinalPedestal() {
 
 		slice->Fit("gaus", "Q", "", fitMin, fitMax);
 		TF1* fitF = slice->GetFunction("gaus");
+		if(fitF == nullptr) {
+			WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of calibrated data? Skipping. "
+				"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
+			continue;
+		}
 		
 		out.gped_sf->at(i) = fitF->GetParameter(2);
 		out.gr_s1->SetPoint(i, i, out.gped_sf->at(i));

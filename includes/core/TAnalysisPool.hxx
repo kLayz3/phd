@@ -22,7 +22,7 @@
 #endif
 
 template <
-	u32 N, u32 NSlice,
+	u32 N,
 	typename... Processors
 > struct TAnalysisPool final {
 	static_assert(N <= POOL_MAX_THREADS_, 
@@ -30,9 +30,13 @@ template <
 	static_assert(N >= 1, "TAnalysisProcess template parameter [1] size < 1? To run singlethreaded, "
 		"put first integer template parameter to 1.");
 	static_assert(!(N & (N-1)), "TAnalysisProcess template parameter [1] (n-processes) must be a power of two.");
-	static_assert(NSlice > 63, "TAnalysisProcess template parameter [2] (slice size) must be bigger than 63 to be efficient.");
 
-	TAnalysisPool(TAnalysisProcess<Processors...>&& base) : pool{ std::move(base) } {
+	/* Only allowed ctor. */ 
+	explicit TAnalysisPool(TAnalysisProcess<Processors...>& base, u32 _NSlice) : 
+		pool{}, NSlice(_NSlice) 
+	{
+		assert((NSlice > 63) &&  "TAnalysisProcess constructor parameter [2] (slice size) must be bigger than 63 to be efficient.");
+		pool[0] = std::move(base);
 		pool[0].Setup();
 		for(u32 i=1; i<N; ++i)
 			pool[i] = pool[0].Clone();
@@ -102,7 +106,14 @@ template <
 	 * Send a batch of identical `NBatch` number of first entries 
 	 * to each of the threads, to set up some initial parameters.
 	 */
-	void SendOneBatch(u32 Nbatch = NSlice) {
+	void SendOneBatch(u64 startingIndex = 0, u32 NBatch = 0) {
+		if(NBatch == 0) NBatch = NSlice;
+		
+		u64 nLast = std::min (
+			pool[0].GetEntries(),
+			(u64)NBatch + startingIndex
+		);
+
 		for(auto& w : pool) {
 			w._do_write = false;
 			w.Start();
@@ -110,15 +121,10 @@ template <
 
 		auto& ref_process = Ref();
 
-		u64 nentries = std::min (
-			ref_process.GetEntries(),
-			(u64)Nbatch
-		);
-		
 		for(u32 i=0; i<N; ++i) {
 			int n_tries = 0;
 			auto& w = pool[i];
-			util::Job job { 0, nentries };
+			util::Job job { startingIndex, nLast };
 			while(! w.q.push(job) ) {
 				std::this_thread::yield();
 				++n_tries;
@@ -195,7 +201,8 @@ private:
 	std::array <
 		TAnalysisProcess<Processors...>, N
 	> pool;
-	
+	u32 NSlice;
+
 	bool _is_collected { false };
 	bool _is_written   { false };
 
@@ -215,17 +222,20 @@ private:
 
 		dyadic_fold(next);
 	}
-
 };
 
 /* ===============================================================
  * =============================================================== */
 /* Invariant API for both multithreaded and singlethreaded modes.  */
+/* NSlice field is not really used, but still keep it to keep identical calls across the
+ * specialization. */
+template<typename... Processors>
+struct TAnalysisPool<1, Processors...> final {
 
-template<u32 NSlice, typename... Processors>
-struct TAnalysisPool<1, NSlice, Processors...> final {
-
-	TAnalysisPool(TAnalysisProcess<Processors...>&& base) : pool{ std::move(base) } {
+	TAnalysisPool(TAnalysisProcess<Processors...>& base, u32 _NSlice) : 
+		pool{}, NSlice(_NSlice) 
+	{
+		pool[0] = std::move(base);
 		pool[0].Setup();
 	}
 
@@ -273,14 +283,15 @@ struct TAnalysisPool<1, NSlice, Processors...> final {
 	 * Send a batch of identical `NBatch` number of first entries 
 	 * to each of the threads, to set up some initial parameters.
 	 */
-	void SendOneBatch(u64 startingIndex = 0, u32 Nbatch = NSlice) {
+	void SendOneBatch(u64 startingIndex = 0, u32 NBatch = 0) {
+		if(NBatch == 0) NBatch = (NSlice > 0) ? NSlice : 2048;
 		auto& process = Ref();
-		u64 nlast = std::min (
+		u64 nLast = std::min (
 			process.GetEntries(),
-			(u64)Nbatch + startingIndex
+			(u64)NBatch + startingIndex
 		);
 		WARN("Single-threaded: sending a batch! NSubProc = %zu\n", process.Size());	
-		for(u64 evId = startingIndex; evId < nlast; ++evId) {
+		for(u64 evId = startingIndex; evId < nLast; ++evId) {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
 			std::apply([](auto&... ps) {
@@ -305,11 +316,12 @@ struct TAnalysisPool<1, NSlice, Processors...> final {
 			process.GetEntries(),
 			max_entries
 		);
+		u64 n_print_every = ((NSlice > 0) ? NSlice : 512); 
 		for(u64 evId = 0; evId < nentries; ++evId) {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
 #ifdef __HAS_INDICATORS
-			util::PrintProgress(bar, evId, nentries, (u64)NSlice);
+			util::PrintProgress(bar, evId, nentries, n_print_every);
 #endif
 			std::apply([](auto&... ps) {
 					(..., ps.ProcessEntry()); 
@@ -331,6 +343,7 @@ private:
 	std::array <
 		TAnalysisProcess<Processors...>, 1
 	> pool;
+	u32 NSlice;
 
 	/* bool _is_collected { false }; */
 	bool _is_written   { false };

@@ -15,8 +15,21 @@
 class TH1;
 class TTree;
 
-/* Different threads will have their own unique exclusive objects of this wrapper type,
- * e.g. TH1I's. Once their work is done, there has to be a way to collect and combine them into a single object.
+/**
+ * A wrapper type for objects (such as TVectorD, THXX, TArray, TCutG, etc)
+ * but also stl-containers such as std::vector<int>, std::array<double, T>, etc that might carry 
+ * a name or maybe not. This class expands them so that all of these classes' instances carry a name,
+ * which shall be serialized (once) into a `TFile`,
+ * unlike `TContainer`'s other parts which will be serialized row-wise into the RNTuple.
+ * Instances are differentiated by their unique string key `_name`.
+ *
+ * Available types to be wrapped are limited to only the ones that can be either Summed or Averaged together.
+ * Or you supply a custom collector to the constructor of this wrapper type.
+ */
+
+/* Different threads will have their own unique exclusive objects of this wrapper type (for writing),
+ * e.g. TH1I's. Once their work is done, there has to be a way to collect and combine them into a single object,
+ * that is to be then written into a ROOT file.
  * Here we differentiate two such categories.
  * [1] Sum type - T must implement one of the following, checked in order:
  *         void T::Add(const T& rhs)   (such as 'TH1')
@@ -27,19 +40,18 @@ class TTree;
  *         T& operator+=(const T& rhs) and T& operator/=(const int) (such as 'int', 'double')
  *
  *  The collector will sum up all the instances of identical Sum type, 
- *  and make a mean value of all the instances of identical Mean type 
- *  Instances are differentiated by their unique string key `_name`.
- */
-
-/**
- * A wrapper type for objects (such as TVectorD, THXX, TArray, TCutG, etc)
- * but also stl-containers such as std::vector<int>, std::array<double, T>, etc that might carry 
- * a name or maybe not. This class expands them so that all of these classes' instances carry a name,
- * which shall be serialized (once) into a `TFile`,
- * unlike `TContainer`'s other parts which will be serialized row-wise into the RNTuple.
- *
- * Types are limited also to only the ones that can be either Summed or Averaged together.
- * Or you supply a custom collector to the constructor of this wrapper type.
+ *  and make a mean value of all the instances of identical Mean type.
+ *  Collecting is done via a dyadic fold, e.g. for 8 instances of TOnce<T> objects:
+ *  a0, a1, a2, a3, a4, a5, a6, a7 
+ *    \/      \/      \/      \/    
+ *   a01,    a23,    a45,    a67
+ *      \   /           \   /
+ *      a0123     ,     a4567
+ *           \         /
+ *            a01234567
+ * It is done in-place, a0 now carries the summed/mean'ed up value, while the other (N-1)
+ * instances carry possibly intermediate calculations, and should not be used. 
+ * In the master Pool class, it's asserted that N forms a perfect log(2) (N == 2^n, for some n).
  */
 
 template<typename T>
@@ -126,6 +138,7 @@ public:
 			if(!f || f->IsZombie() || !f->IsOpen())
 				ERROR("%s (label: \'%s\') : output ROOT file not supplied or invalid and gDirectory holds no open valid file. (f=0x%016lx)", _name.c_str(), name, (uintptr_t)f);
 		}
+
 		if constexpr(std::is_base_of_v<TObject, T>)
 			return f->WriteTObject(&_internal, *name ? name : _name.c_str());
 		else 
@@ -178,7 +191,7 @@ std::unique_ptr<TOnceBase> TOnce<T>::Clone() const {
 
 	if constexpr(std::is_base_of_v<TH1, T>) {
 		copy = std::make_unique<TOnce<T>>( this->GetName() );
-		this->_internal.Copy( copy->_internal /* Gives back T& -> TH1& -> TObject& */ );
+		this->_internal.Copy( copy->_internal); /* T& -> TH1& -> TObject& */
 		copy->_internal.SetDirectory(nullptr);
 	}
 
@@ -244,7 +257,7 @@ void TOnce<T>::Collect(const TOnceBase& rhs) {
 	if(_collector != nullptr)
 		return _collector( this->_internal, cvt->_internal );
 
-	/* Go over type traits, try to figure out which call to use, in priority. */
+	/* Go over type traits, try to figure out which call to make, in priority. */
 	if constexpr(util::has_dyadic_add_ref<T>::value) {
 		return (void)this->_internal.Add( cvt->operator()() );
 	}

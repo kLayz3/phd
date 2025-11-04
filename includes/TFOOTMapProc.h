@@ -30,8 +30,7 @@ struct TFOOTMapProc : TProcessor <
 	static constexpr double BAD_STRIP_CUTOFF_HI = 2.8;	
 	static constexpr double BAD_STRIP_CUTOFF_LO = 1.2;
 
-	/* Every now and then, recalculate the global pedestal. */
-	static constexpr int N_BATCH_PEDESTAL = 1024;
+	static constexpr int N_BATCH_PEDESTAL = 16384;
 
 	using Base = TProcessor<TFOOTMapCont(TFRSGo4Cont)>;
 
@@ -40,26 +39,25 @@ public:
 		kINITIAL_BATCH,
 		kMAIN
 	} process_type = kINITIAL_BATCH;
-		
-	bool is_swapped;
+	enum class CableSwapped { 
+		NO = 0, 
+		YES = 1
+	} is_swapped = CableSwapped::NO;
 	
+	struct NBatchPedestal {
+		u32 amount;
+	} n_batch_pedestal;
+
 	int N; // Corresponds to FOOT_N from the output container.
 	uint32_t nsampled = 0;
 
 	TFOOTMapProc() = default;
-	TFOOTMapProc(TFOOTMapCont&& data, const TFRSGo4Cont& input, bool is_cabling_swapped = false) : 
-		Base(std::move(data), input), is_swapped(is_cabling_swapped) {
-			N = out.FOOT_N;
-		}
-
-	/* Rule-of-five: if a destructor or a custom move ctor/assignment
-	 * is declared, then all three (dtor/move ctor/move assignment) must be declared,
-	 * even if `= default;`. The copies are implicitly deleted, due to the base class. */
-	 /* 
-	TFOOTMapProc(TFOOTMapProc&& ) noexcept = default;
-	TFOOTMapProc& operator=(TFOOTMapProc&& ) noexcept = default;
-	~TFOOTMapProc() = default;
-	*/
+	TFOOTMapProc(TFOOTMapCont& data, const TFRSGo4Cont& input, 
+		NBatchPedestal n_batch = { N_BATCH_PEDESTAL },
+		CableSwapped is_cabling_swapped = CableSwapped::NO ) : Base(data, input), 
+		is_swapped(is_cabling_swapped),
+		n_batch_pedestal(n_batch), 
+		N(out.FOOT_N) {}
 
 	void ProcessInitialPedestal() noexcept;
 	
@@ -67,11 +65,11 @@ public:
 		double /* A, */ mu, sigma;
 	};
 	struct ParabolaFitParams {
-		double a, b, c; /* a - bx - cx^2 */
+		double a, b, c; /* a + bx + cx^2 */
 	};
 	using Points = std::vector<std::pair<double,double>>;
 	static GaussFitParams FitGauss(const TH1D* h);
-	static ParabolaFitParams FitParabolaLeastSquares(Points&& p);
+	static ParabolaFitParams FitParabolaLeastSquares(const Points& p);
 
 	void ProcessEventPedestal() noexcept;
 	void CalcGlobalPedestal();

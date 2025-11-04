@@ -21,7 +21,7 @@ struct TContainerBase {
 	virtual void Init(TDictInfo info) { (void)info; }
 
 	/**
-	 * Delegating ctors to objects. Override it in the derived classes.
+	 * Delayed construction of TOnce objects. Possibly override it in the derived classes.
 	 */
 	virtual void Setup() = 0;
 };
@@ -36,10 +36,10 @@ struct MTDeepCopy { explicit MTDeepCopy() = default; };
  */
 template<typename T>
 struct TContainer : TContainerBase {
-	static_assert( std::is_copy_constructible_v<T>, "Type must be copy constructible.");
-	static_assert( std::is_copy_assignable_v<T>, "Type must be copy assignable.");
-	static_assert( std::is_move_constructible_v<T>, "Type must be move constructible.");
-	static_assert( std::is_move_assignable_v<T>, "Type must be move assignable.");
+	//static_assert( std::is_copy_constructible_v<T>, "Type must be copy constructible.");
+	//static_assert( std::is_copy_assignable_v<T>, "Type must be copy assignable.");
+	//static_assert( std::is_move_constructible_v<T>, "Type must be move constructible.");
+	//static_assert( std::is_move_assignable_v<T>, "Type must be move assignable.");
 	static_assert(!std::is_void_v<T>, "Hello?");
 	static_assert(!std::is_array_v<T>, "Must not pass raw C-style arrays. Pass an `std::array<T,N>` instead.");
 	static_assert(!std::is_pointer_v<T>, "Must not pass pointer type (T*).");
@@ -64,17 +64,18 @@ public:
 	TContainer(std::string name) : TContainerBase(name) {}
 
 	/* Ok, some clarification. Lets say `struct Derived : TContainer<T>` is the child class.
-	 * Then the next two methods below usually get called sequentially either in `Derived::Derived(..)` or `Derived::Init(..)` 
-	 * We create the objects, pulling the read object from disk, and receiving a shared handle of the resource. 
+	 * Then the next two methods below must get called in `Derived::Setup()`
+	 * We create the objects, pulling the read objects from disk, and receiving back a shared handle of the resource. 
 	 * This works fine for the original TContainer<T> instance.
-	 * But when cloning a TAnalysisProcess, it clones the underlying 'TProcessor<Out(Ins...)>' types. *this* instance for the reader is created via the copy ctor of the TContainer<T>,
+	 * But when cloning a TAnalysisProcess, it clones the underlying 'TProcessor<Out(Ins...)>' types. 
+	 * Instance behind *this* pointer, for the reader, is created via the copy ctor of the TContainer<T>,
 	 * while the write instances are default constructed. The clone's ctor will also call this sequence initially, each pulling its own
 	 * copy of the read-objects from disk into RAM. Using unnecessary disk space, if simply all the clones own a 
 	 * read-only shared pointer to a single instance of such objects.
 	 * - key difference is that then the Original singleton will simply switch the clones' variant to non-owning
 	 * type, and the temporarily created (unique) objects of the clone will get deleted. 
 	 * This is important for read containers - as only one set of these `TOnce<T>` objects will get (de)serialized.
-	 * Clones will only hold a raw pointer vector variant, and the original holds the owning pointers. 
+	 * Clones will only hold a raw pointer vector variant, and the original Container holds the owning pointers. 
 	 * For write containers, each clone has its own unique copy. */
 
 	/**
@@ -83,31 +84,10 @@ public:
 	 */
 	template<typename U>
 	[[nodiscard]] U* RegisterObject(const char* name, std::initializer_list<typename U::value_type> il) {
-		for(auto& o : _vc) {
-			if(! strcmp(o->GetName(), name)) {
-				TOnce<U> *dcast = dynamic_cast<TOnce<U>*>( o.get() );
-				if(!dcast)
-					ERROR("Attempted to retrieve object named \'%s\' from %zu-sized list of owned TOnce<..> objects."
-						"Found at address 0x%lx 'TOnceBase' object but dynamic_cast failed? Same name different type requested multiple times? (%s)",
-						name, _vc.size(), (uintptr_t)o.get(), _SELF_TYPE_CSTR);
-				return dcast->operator->();
-			};
-		}
-
-		std::shared_ptr<TOnce<U>> obj = std::make_shared<TOnce<U>>(name, il);
-		TOnce<U>* p = obj.get();
-
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
-		obj->SetName( util::sstrcat(this->GetName(), "_", obj->GetName()) );
-		_vc.push_back(obj);
-
-		return p->operator->();
-	}
-
-	template<typename U, typename... Ts>
-	[[nodiscard]] U* RegisterObject(const char* name, Ts&&... args) {
+		std::string obj_name = util::sstrcat(this->GetName(), "_", name); 
 		for(auto& o : _vc) {
-			if(! strcmp(o->GetName(), name)) {
+			if(! strcmp(o->GetName(), obj_name.c_str())) {
 				TOnce<U> *dcast = dynamic_cast<TOnce<U>*>( o.get() );
 				if(!dcast)
 					ERROR("Attempted to retrieve object named \'%s\' from %zu-sized list of owned TOnce<..> objects."
@@ -117,13 +97,32 @@ public:
 			};
 		}
 		
-		std::shared_ptr<TOnce<U>> obj = std::make_shared<TOnce<U>>(name, std::forward<Ts>(args)...);
+		std::shared_ptr<TOnce<U>> obj = std::make_shared<TOnce<U>>(obj_name.c_str(), il);
 		TOnce<U>* p = obj.get();
 
+		_vc.push_back( std::move(obj) );
+		return p->operator->();
+	}
+
+	template<typename U, typename... Ts>
+	[[nodiscard]] U* RegisterObject(const char* name, Ts&&... args) {
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
-		obj->SetName( util::sstrcat(this->GetName(), "_", obj->GetName()) );
-		_vc.push_back(std::move(obj));
+		std::string obj_name = util::sstrcat(this->GetName(), "_", name); 
+		for(auto& o : _vc) {
+			if(! strcmp(o->GetName(), obj_name.c_str())) {
+				TOnce<U> *dcast = dynamic_cast<TOnce<U>*>( o.get() );
+				if(!dcast)
+					ERROR("Attempted to retrieve object named \'%s\' from %zu-sized list of owned TOnce<..> objects."
+						"Found at address 0x%lx a 'TOnceBase' but dynamic_cast failed? Same object registered multiple times? (%s)",
+						name, _vc.size(), (uintptr_t)o.get(), _SELF_TYPE_CSTR);
+				return dcast->operator->();
+			};
+		}
 		
+		std::shared_ptr<TOnce<U>> obj = std::make_shared<TOnce<U>>(obj_name.c_str(), std::forward<Ts>(args)...);
+		TOnce<U>* p = obj.get();
+
+		_vc.push_back( std::move(obj) );
 		return p->operator->();
 	}
 

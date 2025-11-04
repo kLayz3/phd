@@ -26,23 +26,6 @@ extern const char* map_help;
 	#define FRS_GO4
 #endif
 
-#include "TFRSSortEvent.h"
-
-constexpr const char* _tree_base_name = 
-#ifdef FRS_GO4
-	 "SortxTree"
-#else
-	"h101"
-#endif 
-	;
-constexpr const char* _branch_base_name =
-#ifdef FRS_GO4
-	 "FRSSortEvent."
-#else
-	""
-#endif 
-	;
-
 #define FOOT_ID_0 10
 #define FOOT_ID_1 19
 #define FOOT_ID_2 17
@@ -97,7 +80,7 @@ int main(i32 argc, char* argv[]) {
 #ifdef FRS_GO4
 	TFRSGo4Cont sort{};
 #else
-	static_assert(sizeof(u8) == sizeof(u32), 
+	static_assert(false, 
 		"Cannot handle non-FRS structures (yet)"); 
 #endif
 
@@ -128,20 +111,22 @@ int main(i32 argc, char* argv[]) {
 
 	TFOOTMapProc::LoadBadStripsFile(PROG_PATH "/params/bad_strips.json");
 	
-	auto pool = TAnalysisProcess<>(inFile, outFile, "h103")
-		.emplace_process<TFOOTMapProc>( std::move(foot[0]), sort)
-		.emplace_process<TFOOTMapProc>( std::move(foot[1]), sort)
-		.emplace_process<TFOOTMapProc>( std::move(foot[2]), sort)
-		.emplace_process<TFOOTMapProc>( std::move(foot[3]), sort)
-		.emplace_process<TFOOTMapProc>( std::move(foot[4]), sort)
-		.emplace_process<TFOOTMapProc>( std::move(foot[5]), sort)
-		.emplace_process<TFOOTMapProc>( std::move(foot[6]), sort)
-		.emplace_process<TFOOTMapProc>( std::move(foot[7]), sort)
-		.emplace_process<TFRSMapProc>( std::move(frs), sort, TFRSMapProc::DoAnalysis::NO)
-		.MakePool<1, 1024>();
+	u32 n_batch = 16384;
+
+	auto pool = TAnalysisProcess<>(inFile, outFile, "h102")
+		.emplace_process<TFOOTMapProc>( foot[0], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::YES)
+		.emplace_process<TFOOTMapProc>( foot[1], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
+		.emplace_process<TFOOTMapProc>( foot[2], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
+		.emplace_process<TFOOTMapProc>( foot[3], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
+		.emplace_process<TFOOTMapProc>( foot[4], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
+		.emplace_process<TFOOTMapProc>( foot[5], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
+		.emplace_process<TFOOTMapProc>( foot[6], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
+		.emplace_process<TFOOTMapProc>( foot[7], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
+		.emplace_process<TFRSMapProc >( frs,     sort, TFRSMapProc::DoAnalysis::NO)
+		.MakePool<1>(512);
 
 	/* To register the initial FOOT global pedestals. */
-	pool.SendOneBatch(1024);
+	pool.SendOneBatch(15000);
 	WARN("Done with batching, going on to process (initial) guess for global pedestal in FOOT\n");
 
 	/* Loop over all workers, get their processes,
@@ -157,12 +142,11 @@ int main(i32 argc, char* argv[]) {
 				pfoot->process_type = TFOOTMapProc::kMAIN;
 			} else {
 				TFRSMapProc* pfrs = dynamic_cast<TFRSMapProc*>(subproc);
-				//if(pfrs) pfrs->do_analysis = TFRSMapProc::DoAnalysis::YES;
-				if(pfrs) pfrs->do_analysis = TFRSMapProc::DoAnalysis::NO;
+				if(pfrs) pfrs->do_analysis = TFRSMapProc::DoAnalysis::YES;
 			}
 		}
 	}
-	WARN("Done w/ guessing initial global ped per FOOT, per strip.\n");
+	WARN("Done w/ guessing initial global ped per FOOT, per strip. Proceeding to main mapping step.\n");
 
 	ProgressBar bar {
 		option::BarWidth{50},
@@ -189,8 +173,7 @@ int main(i32 argc, char* argv[]) {
 	auto& process = pool.Ref();
 	for(TProcessorBase* subproc : process.GetProcesses()) { 
 		TFOOTMapProc* pfoot = dynamic_cast<TFOOTMapProc*>(subproc);
-	//	if(pfoot)
-	//		pfoot->CalcFinalPedestal();
+		if(pfoot) pfoot->CalcFinalPedestal();
 	}
 	/* Write gets called here, on pool's dtor. */
 
