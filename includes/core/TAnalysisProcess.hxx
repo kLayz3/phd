@@ -22,7 +22,6 @@
 #include <ROOT/RNTupleFillContext.hxx>
 #include <ROOT/RNTupleModel.hxx>
 #include <ROOT/RNTupleParallelWriter.hxx>
-#include <ROOT/RNTupleReader.hxx>
 
 #include <atomic>
 #include <thread>
@@ -36,7 +35,7 @@
 #define N_EVENTS_PER_BATCH 512;
 
 /* For ROOT 6.36+, change this to ROOT instead of `ROOT::Experimental`. */
-template<u32, typename...> class TAnalysisPool;
+template<u32, typename...> struct TAnalysisPool;
 namespace RExp = ROOT::Experimental;
 
 namespace util {
@@ -308,7 +307,7 @@ public:
 	bool IsStopped() const noexcept { return ! _running && ! _thread.joinable(); }
 
 	/**
-	 * Returns the pointer 'T*' of the object wrapped up in the 'TAnalysisWorker<T>',
+	 * Returns the pointer to type 'TProcessor<Out(Ins..)>',
 	 * at the tuple index 'I'
 	 */
 	template<std::size_t I>

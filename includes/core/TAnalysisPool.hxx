@@ -41,6 +41,22 @@ template <
 		pool[0].Setup();
 		for(u32 i=1; i<N; ++i)
 			pool[0].Clone(pool[i]);
+
+		/* Once created, force reading of first few events to poke cling. */
+		auto& w = this->Ref();
+		w._do_write = false;
+		
+		u64 nLast = std::min (
+			w.GetEntries(), (u64)20
+		);
+		
+		volatile int sink = 0;
+		for(u64 evId = 0; evId < nLast; ++evId) {
+			w.GetEntry( static_cast<Long64_t>(evId) );
+			sink += 1;
+		}
+
+		w._do_write = true;
 	}
 
 	/* On destructor sweep, write the single objects directly in the file. */

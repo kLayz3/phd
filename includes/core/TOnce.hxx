@@ -42,6 +42,7 @@ class TTree;
  *  The collector will sum up all the instances of identical Sum type, 
  *  and make a mean value of all the instances of identical Mean type.
  *  Collecting is done via a dyadic fold, e.g. for 8 instances of TOnce<T> objects:
+ *
  *  a0, a1, a2, a3, a4, a5, a6, a7 
  *    \/      \/      \/      \/    
  *   a01,    a23,    a45,    a67
@@ -49,6 +50,7 @@ class TTree;
  *      a0123     ,     a4567
  *           \         /
  *            a01234567
+ *
  * It is done in-place, a0 now carries the summed/mean'ed up value, while the other (N-1)
  * instances carry possibly intermediate calculations, and should not be used. 
  * In the master Pool class, it's asserted that N forms a perfect log(2) (N == 2^n, for some n).

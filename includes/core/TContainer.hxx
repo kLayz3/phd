@@ -2,7 +2,11 @@
 
 #include "AuxFunctions.hh"
 #include <unordered_map>
+#include "RtypesCore.h"
 #include "TOnce.hxx"
+
+#include "TBuffer.h"
+#include "TBufferFile.h"
 
 using TDictInfo = std::unordered_map<std::string, std::string>;
 
@@ -154,7 +158,9 @@ public:
  * for UCESB. 
  * Namely, UCESB splits all the trees directly into leaves, so address has to be mapped
  * sequentally.
- * Encapsulates a type needed to be used as a deserialization target from a TTree branch. 
+ * Encapsulates a type needed to be used as a deserialization target from a TTree branch,
+ * that ended up as raw-baked into an RNTuple. Once an object gets materialized and we get
+ * back a byte-array, uset the Streamer to materialize the concrete object.
  */
 template<typename T>
 struct TRawContainer : TContainerBase {
@@ -165,9 +171,16 @@ struct TRawContainer : TContainerBase {
 	
 	template<typename>    friend struct TProcessor;
 	template<typename...> friend struct TAnalysisProcess;
+	
+	//using TRaw = std::vector<unsigned char>;
+	//using inner_type = TRaw;
 	using inner_type = T;
 
 private:
+	//std::shared_ptr <
+	//	std::vector<unsigned char>
+	//> _inner;
+	//std::shared_ptr<T> _inner_raw;
 	T* _inner;
 
 public:
@@ -175,6 +188,14 @@ public:
 	TRawContainer(std::string name) : TContainerBase(name) {}
 
 	void Setup() override {}
+
+	//void Materialize() {
+	//	TBufferFile buf(TBuffer::kRead, _inner->size(),
+	//		_inner->data(), /*own=*/kFALSE);
+
+	//	T* obj = static_cast<T*>( buf.ReadObject(T::Class()) );
+	//	_inner.reset(obj);
+	//}
 
 	T& operator*()             noexcept { return *_inner; }
 	const T& operator*() const noexcept { return *_inner; }
