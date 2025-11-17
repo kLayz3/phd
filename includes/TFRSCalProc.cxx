@@ -1,10 +1,11 @@
+#include "core/AuxFunctions.hh"
+
 #include "TFRSCalProc.h"
-#include "AuxFunctions.hh"
 #include "TFRSMapCont.h"
 
 constexpr auto INVALID = RNTPCMap::Measurement::TDC_INVALID;
 
-TFRSCalProc::TFRSCalProc(TFRSMapCont& in, TFRSCalCont& out) : input(&in), output(&out) {
+TFRSCalProc::TFRSCalProc(TFRSCalCont& out, const TFRSMapCont& in) : TFRSCalProc::Base(out, in) {
 	tpc_hits.reserve(HIT_LIST_CAPACITY);
 	for(auto& anode_list : candidate_list)
 		anode_list.reserve(CANDIDATE_LIST_CAPACITY);
@@ -12,8 +13,8 @@ TFRSCalProc::TFRSCalProc(TFRSMapCont& in, TFRSCalCont& out) : input(&in), output
 		anode_list.reserve(CANDIDATE_LIST_CAPACITY);
 	
 	for(int i=0; i<N_VALID_TPC; ++i) {
-		if(! output->tpc_param) ERROR("TPC parameter field not constructed?\n");
-		tpc_param[i] = (*output->tpc_param)[i];
+		if(! out.tpc_param) ERROR("TPC parameter field not constructed?\n");
+		tpc_param[i] = (*out.tpc_param)[i];
 	}
 }
 
@@ -27,11 +28,12 @@ void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {
 	tpc_hits.clear();
 	for(auto& c : candidate_list) c.clear();
 	for(auto& c : initial_candidate_list) c.clear();
-
-	RNTPCMap const& in = input->inner().tpc[_i_tpc];
+	
+	const TFRSMapCont& input = std::get<0>( this->in );
+	const RNTPCMap& in = input.inner().tpc[_i_tpc];
 	auto const& hits = in.tdc; 
 
-	RNTPCCal& out = output->inner().tpc[_i_tpc];
+	RNTPCCal& out = this->out.inner().tpc[_i_tpc];
 
 	/* For a general multihit combination, try to see which falls into Control Sum limits.
 	 * Ideally a hit lights up a delay line (LR), corresponding 1-2 anodes and the referent scintillator. */

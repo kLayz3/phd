@@ -1,10 +1,11 @@
 #pragma once
 
-#include "TContainer.hxx"
-#include "TFOOTMapCont.h"
+#include "core/TContainer.hxx"
 #include <cstddef>
 #include <tuple>
 #include <type_traits>
+
+#include "TFOOTMapCont.h"
 
 class TH1D;
 
@@ -99,9 +100,8 @@ struct alignas(util::CL) RNFOOTCal {
 	ClassDef(RNFOOTCal, 1);
 };
 
-class TFOOTCalCont : public TContainer<RNFOOTCal> {
-	friend class TFOOTCalProc;
-public:	
+struct TFOOTCalCont : TContainer<RNFOOTCal> {
+	friend struct TFOOTCalProc;
 	static constexpr int N_STRIPS = RNFOOTCal::N_STRIPS;
 	using Orientation = RNFOOTCal::Orientation;	
 	
@@ -122,5 +122,6 @@ public:
 
 	TFOOTCalCont() = default;
 
-	void Init(TDictInfo info) /* override */;
+	void Init(TDictInfo info) override;
+	void Setup() override;
 };

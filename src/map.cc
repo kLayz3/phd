@@ -50,21 +50,17 @@ constexpr i32 static_detectors[] = {
 constexpr i32 N_FOOT = LEN(static_detectors);
 
 int main(i32 argc, char* argv[]) {
-	util::CreateClingCache();
-	gSystem->Load("libStructures.so");
-	gSystem->Load("libGo4UserAnalysis.so");
-
 	using namespace indicators;
 	signal(SIGINT , sig_callback_handler);
 	signal(SIGSEGV, sig_callback_handler);
 	auto& def_msg = CMDLineParser::Mandatory::DefMessage;
+	CMDLineParser::Mandatory::SetDefMessage(map_help);
 
 	srand(time(NULL));
 
 	std::string pStr, outFile, inFile;
 	u64 maxEvents = -1;
 
-	CMDLineParser::Mandatory::SetDefMessage(map_help);
 	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
 	
 	ParseCmdLine("file", inFile, argc, argv, true /* Necessary arg. */);
@@ -117,7 +113,7 @@ int main(i32 argc, char* argv[]) {
 
 	TFOOTMapProc::LoadBadStripsFile(PROG_PATH "/params/bad_strips.json");
 	
-	u32 n_batch = 16384;
+	u32 n_batch = 25'000;
 
 	auto pool = TAnalysisProcess<>(inFile, outFile, "h102")
 		.emplace_process<TFOOTMapProc>( foot[0], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::YES)
@@ -129,10 +125,10 @@ int main(i32 argc, char* argv[]) {
 		.emplace_process<TFOOTMapProc>( foot[6], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
 		.emplace_process<TFOOTMapProc>( foot[7], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
 		.emplace_process<TFRSMapProc >( frs,     sort, TFRSMapProc::DoAnalysis::NO)
-		.MakePool<4>( n_batch );
+		.MakePool<1>( 500 );
 
 	/* To register the initial FOOT global pedestals. */
-	pool.SendOneBatch(15000);
+	pool.SendOneBatch( n_batch );
 	WARN("Done with batching, going on to process (initial) guess for global pedestal in FOOT\n");
 
 	/* Loop over all workers, get their processes,

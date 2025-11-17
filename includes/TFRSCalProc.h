@@ -2,18 +2,21 @@
 
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
-#include "TProcessorBase.h"
+#include "core/TProcessor.hxx"
 
-class TFRSCalProc : public TProcessorBase {
+struct TFRSCalProc : TProcessor <
+	TFRSCalCont
+	(TFRSMapCont)
+> {
+	using Base = TProcessor<TFRSCalCont(TFRSMapCont)>;
+
 	constexpr static auto N_VALID_TPC = RNFRSCal::N_VALID_TPC;
 	static inline u64 ncalled = 0;
-public:
-	TFRSMapCont* input;
-	TFRSCalCont* output;
 	
-	TFRSCalProc(TFRSMapCont& , TFRSCalCont& );
+	TFRSCalProc(TFRSCalCont& , const TFRSMapCont& );
+	TFRSCalProc() = default;
+
 	void ProcessEntry() noexcept;
-	inline Int_t Write() override { return output->Write(); }
 
 private:
 	/* Encapsulating viable data from single TPC, single anode channel */

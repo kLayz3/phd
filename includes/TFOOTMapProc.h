@@ -13,6 +13,7 @@
 #include "nlohmann/json.hpp"
 
 #include "core/libs.hh"
+#include "core/AuxFunctions.hh"
 #include "core/TOnce.hxx"
 #include "core/TProcessor.hxx"
 
@@ -30,7 +31,7 @@ struct TFOOTMapProc : TProcessor <
 	static constexpr double BAD_STRIP_CUTOFF_HI = 2.8;	
 	static constexpr double BAD_STRIP_CUTOFF_LO = 1.2;
 
-	static constexpr int N_BATCH_PEDESTAL = 16384;
+	static constexpr int N_BATCH_PEDESTAL = 20000;
 
 	using Base = TProcessor<TFOOTMapCont(TFRSGo4Cont)>;
 
@@ -52,25 +53,15 @@ public:
 	uint32_t nsampled = 0;
 
 	TFOOTMapProc() = default;
-	TFOOTMapProc(TFOOTMapCont& data, const TFRSGo4Cont& input, 
+	TFOOTMapProc(TFOOTMapCont& out, const TFRSGo4Cont& in, 
 		NBatchPedestal n_batch = { N_BATCH_PEDESTAL },
-		CableSwapped is_cabling_swapped = CableSwapped::NO ) : Base(data, input), 
+		CableSwapped is_cabling_swapped = CableSwapped::NO ) : Base(out, in), 
 		is_swapped(is_cabling_swapped),
 		n_batch_pedestal(n_batch), 
 		N(out.FOOT_N) {}
 
 	void ProcessInitialPedestal() noexcept;
 	
-	struct GaussFitParams {
-		double /* A, */ mu, sigma;
-	};
-	struct ParabolaFitParams {
-		double a, b, c; /* a + bx + cx^2 */
-	};
-	using Points = std::vector<std::pair<double,double>>;
-	static GaussFitParams FitGauss(const TH1D* h);
-	static ParabolaFitParams FitParabolaLeastSquares(const Points& p);
-
 	void ProcessEventPedestal() noexcept;
 	void CalcGlobalPedestal();
 	void CalcFinalPedestal();
@@ -102,7 +93,7 @@ public:
 
 		try {
 			nlohmann::json j = nlohmann::json::parse(f);
-			util::append_flat_json(TFOOTMapProc::_bad_strips, j);	
+			append_flat_json(TFOOTMapProc::_bad_strips, j);	
 		} catch(std::exception const& e) {
 			WARN("Json parsing failed. Reason: %s\n", e.what());
 			throw;
@@ -117,13 +108,22 @@ public:
 	int ParseStaticBadStrips();
 
 private:
+	std::array<double, N_STRIPS> initial_gped = {0.0};
 	std::array<double, N_STRIPS> current_gped = {0.0};
+	
+	bool initial_calculated = false;
+	u32 batch_index = 0;
+
 	std::array<double, N_STRIPS_PER_ASIC> ped_offset = {0.0};
 
 	struct FOOTView {
 		bool TSBad; u32 TLO; u32 THI; u32 SY;
 		u32 Ndata; u32* E;
 	};
-
+	
 	static const FOOTView GetPtrs(const TFRSSortEvent* e, int N);
+
+	static void parse_json_string(std::vector<int>& out, std::string s);
+	static void parse_json_as_int_vec(std::vector<int>& out, const nlohmann::json& j);
+	static void append_flat_json(nlohmann::json& dst, const nlohmann::json& src);
 };

@@ -2,12 +2,15 @@
 
 #include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"
-#include "TProcessorBase.h"
+#include "core/TProcessor.hxx"
 
-class TFOOTMapCont;
+struct TFOOTMapCont;
 
-class TFOOTCalProc : public TProcessorBase {
-public:
+struct TFOOTCalProc : TProcessor <
+	TFOOTCalCont
+	(TFOOTMapCont)
+> {
+	using Base = TProcessor<TFOOTCalCont(TFOOTMapCont)>;
 	static constexpr int N_STRIPS    = TFOOTCalCont::N_STRIPS; /* 640 */
 	static constexpr int MAX_CL_SIZE = 40; /* Maximal allowed cluster size. */
 	static constexpr int MASSIVE_CLUSTER_CUTOFF = 20; /* After which multiplicity a cluster is called 'massive' */
@@ -35,18 +38,15 @@ public:
 	static_assert(X_CENTRE_THR_STATIC > X_NEIGHB_THR_STATIC, 
 		"Cannot cluster correctly if seed strip threshold cutoff is smaller than neighbouring strip's threshold (AMS paper).");
 
-	TFOOTMapCont* input;
-	TFOOTCalCont* output;
-
 	double X_CENTRE_THR;
 	double X_NEIGHB_THR;
 	
-	TFOOTCalProc(TFOOTMapCont& in, TFOOTCalCont& out, 
+	TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, 
 			double x_seed  = X_CENTRE_THR_STATIC, 
 			double x_neigh = X_NEIGHB_THR_STATIC);
+	TFOOTCalProc() = default;
 
 	void ProcessEntry() noexcept;
-	inline Int_t Write() override { return output->Write(); }
 
 	template<LookAhead> bool _IsAddibleToCluster(const int );
 
@@ -71,7 +71,7 @@ private:
 	inline void _AddHit(int i) noexcept {
 		if(_cl_cnt >= MAX_CL_SIZE) {
 			WARN("(%s => %s) cluster size exceeded: " EMPH(max = %d) ". Ignoring the hit (strip:ADC): " EMPH(%d: %7.2f; N-Thr: %5.2f (X=%.1f)) ". Consider increasing the buffer size.\n", 
-				input->GetName(), output->GetName(), MAX_CL_SIZE,
+				std::get<0>(in).GetName(), out.GetName(), MAX_CL_SIZE,
 				i, e[i], n_thr[i], X_NEIGHB_THR);
 			return;
 		}

@@ -52,7 +52,7 @@ struct has_process_entry<T, std::void_t<decltype(std::declval<T&>().ProcessEntry
 
 struct Job { u64 first, last; };
 using JobQueue = boost::lockfree::spsc_queue <
-	Job, boost::lockfree::capacity<128>
+	Job, boost::lockfree::capacity<8>
 >;
 
 struct IOInfo {
@@ -147,7 +147,10 @@ struct PerThreadWriter {
 		return r;
 	}
 };
+
 } // namespace util
+
+inline std::unordered_set<std::string> g_loaded_containers {};
 
 /**
  * Represents the full analysis process, where an input entry 
@@ -275,11 +278,17 @@ public:
 	/** 
 	 * Emplace-style construction, again move *this* object into a new one. 
 	 */
-	template<typename U, typename... Args> 
-	auto emplace_process(Args&&... args) && -> TAnalysisProcess<Ts..., U> {
-		auto new_proc = std::tuple_cat(
+	template <
+		typename U,      /* U = TProcessor<Out(Ins...)> */
+		typename Out,    /* Output container type. */
+		typename... Args /* Other args, following it. */
+	> auto emplace_process(Out&& out, Args&&... args) && -> TAnalysisProcess<Ts..., U> {
+		/* In the varargs following, load the input containers, *before* constructing the processor. */
+		(..., LoadTOnceInputs(args));
+
+		auto new_proc = std::tuple_cat (
 			std::move(_proc),
-			std::make_tuple( U(std::forward<Args>(args)... ) )
+			std::make_tuple( U(std::forward<Out>(out), std::forward<Args>(args)... ) )
 		);
 		return TAnalysisProcess<Ts..., U> ( 
 			std::move(new_proc), std::move(info), 
@@ -293,9 +302,11 @@ public:
 	 */
 	void Clone(TAnalysisProcess& dest) const { /* Only clone from the original object. */
 		auto* p = std::get_if<std::unique_ptr<RExp::RNTupleParallelWriter>>(&writer.pwriter);
-		/* ^^^ type: *std::unique_ptr<..> */
+		/*^^^ type: std::unique_ptr<..> *  */
 		if(!p) ERROR("Calling clone but original processor object is either unitialized or set to wrong state. "
 				"State = %zu, 0 = Empty; 1 = Owning pointer; 2 = Raw pointer. Should be: " EMPH(1\n), writer.pwriter.index());
+		if(this->reader.index() == 2)
+			ERROR("Cannot use multithreaded op with TTree readers. Not implemented yet! Compile singlethreaded please!");
 
 		dest._proc = this->_proc;
 		dest.info  = this->info;
@@ -380,17 +391,7 @@ public:
 		
 		_running = true;
 		
-		WARN("Thread worker: TTree/RNTuple input: file %s, TFile* : 0x%016lx "
-			"TTree* : 0x%016lx\n",
-			info.in.fname.c_str(), (uintptr_t)std::get<util::TTreePerThreadReader>(reader)._file.get(),
-			(uintptr_t)std::get<util::TTreePerThreadReader>(reader)._tree);
-		std::apply([](auto&... ps) {
-					(..., printf( "-- 0x%016lx [OUT:%s]\n-- 0x%016lx [IN:%s]\n", 
-						(uintptr_t)ps.out.raw(), ps.out.GetName(), 
-						(uintptr_t)std::get<0>(ps.in).raw(), std::get<0>(ps.in).GetName() ) );
-				}, this->_proc);
-
-		_thread = std::thread ( 
+		_thread = std::thread (
 			[this] {
 				util::Job j;
 				while(_running.load(std::memory_order_relaxed)) {
@@ -409,7 +410,7 @@ public:
 #ifdef __HAS_SMALL_INTEL_SPIN
 						_mm_pause(); /* Short pause, 100-150 clock cycles. */
 #else
-						{}           /* Do nothing; don't yield or reschedule - this is ~100 us latency. */
+						{}           /* Do nothing; don't yield or reschedule. */
 #endif
 					}
 				}
@@ -536,7 +537,7 @@ private:
 		
 		_file.reset(nullptr);
 
-		if(! is_ttree) {
+		if(! is_ttree) { /* RNTuple version. */
 			reader = util::RNPerThreadReader();
 			auto& r = std::get<util::RNPerThreadReader>(reader);
 			r._model = RExp::RNTupleModel::Create();
@@ -545,14 +546,14 @@ private:
 			 * Newer ROOT 6.26 API could be different? */
 			util::for_each_in_tuple(this->_proc, [this, &r](auto& p /* TProcessor<Out(In...)>) */ )
 				{
-					util::for_each_in_tuple(p.in, [this, &r](auto& cont /* In : TRawContainer */ )
+					util::for_each_in_tuple(p.in, [this, &r](auto& cont /* In : TContainer / TRawContainer */ )
 						{
 							/* Compile out the block if it's not a TContainer. */
 							using ContType = typename std::remove_reference_t<decltype(cont)>;
 							
 							if constexpr( util::is_base_of_template<TContainer, ContType>::value ) {
 								if(! strlen(cont.GetName()) )
-									ERROR("Input container (RN-meant) unnamed? (%s)", _SELF_TYPE_CSTR);
+									ERROR("Input container (RN-meant) unnamed? (%s)", util::type_name<ContType>().c_str());
 								/* If the column has already been mapped, MakeField throws a 'RExp::RException'.
 								 * In this case, just retrieve it and map it to the inner. */
 								try {
@@ -565,7 +566,7 @@ private:
 									> ( cont.GetName() );	
 								} catch(...) {
 									ERROR("Unknown exception caught? When trying to assing RNTuple column. (%s)",
-										_SELF_TYPE_CSTR);
+										util::type_name<ContType>().c_str());
 								}
 							}
 						}
@@ -573,7 +574,7 @@ private:
 				}
 			);
 
-			r._reader = RExp::RNTupleReader::Open(std::move(r._model), info.in.fname, obj_name);
+			r._reader = RExp::RNTupleReader::Open(std::move(r._model), obj_name, info.in.fname);
 		}
 
 		else { /* TTree version. */
@@ -599,13 +600,11 @@ private:
 			/* Ok, TTree API *sigh*.
 			 * Namely, once we map a branch via `tree->SetBranchAddress(name, &ptr)`, then we can retrieve the pointers'
 			 * address via: tree->GetBranch(name)->GetAddress . The return type is `char**` (???). 
-			 * The only thing is that type safety isn't checked at runtime. Basically the other argument is `void**`
-			 * somewhere down the line. This is really ugly, don't try this at home. 
-			 * Checking the type does indeed work, if underlying type isn't templated. 
-			 * It *should* demangle correctly. */
+			 * Type safety isn't checked at runtime. Basically the other argument is `void**`somewhere down the line. 
+			 * This is really ugly, don't try this at home. 
+			 * Checking the type does indeed work, if underlying type isn't templated.
+			 * It *should* demangle correctly. C++ ABI can change, but it must reflect the same in Cling! */
 
-			WARN("~~~ New setup reader called, TFile* = 0x%016lx, TTree* = 0x%016lx <<<\n",
-				(uintptr_t)r._file.get(), (uintptr_t)r._tree);
 			util::for_each_in_tuple(this->_proc, [this, &r](auto& p /* TProcessor<Out(In...)>) */ )
 				{
 					util::for_each_in_tuple(p.in, [this, &r](auto& cont /* In : TRawContainer */ )
@@ -616,10 +615,10 @@ private:
 							if constexpr( util::is_base_of_template<TRawContainer, ContType>::value ) {
 								if(! strlen(cont.GetName()) )
 									ERROR("Input container (TTree-meant) unnamed? (%s)", _SELF_TYPE_CSTR);
+								
 								TBranch* b = r._tree->GetBranch( cont.GetName() );
-								if(!b) 
-									ERROR("File: \'%s\', TTree: \'%s\', branch \'%s\' not found. (%s)",
-										this->info.in.fname.c_str(), r._tree->GetName(), cont.GetName(), _SELF_TYPE_CSTR);
+								if(!b) ERROR("File: \'%s\', TTree: \'%s\', branch \'%s\' not found. (%s)",
+									this->info.in.fname.c_str(), r._tree->GetName(), cont.GetName(), _SELF_TYPE_CSTR);
 								
 								using T = typename ContType::inner_type;
 								std::string c_type = util::type_name<T>();
@@ -637,8 +636,6 @@ private:
 											b->GetName(), b_type, c_type.c_str(), _SELF_TYPE_CSTR);
 									
 									cont._inner = reinterpret_cast<T*>( *(void**)b->GetAddress() );
-									WARN("Branch '%s', addr: 0x%016lx (TTree* addr: 0x%016lx), mapped to: 0x%016lx\n", 
-										b->GetName(), (uintptr_t)b, (uintptr_t)r._tree, (uintptr_t)cont._inner); 
 								} 
 								else { // Branch isn't mapped yet. Map it now.
 									/* Important to set to null. Else ROOT will not do anything, as it already
@@ -649,8 +646,6 @@ private:
 									
 									r._tree->SetBranchAddress( cont.GetName(), &cont._inner);
 									b->SetAutoDelete(kFALSE);
-									WARN(">>>[N] '%s', addr: 0x%016lx (TTree* addr: 0x%016lx), mapped to: 0x%016lx\n", 
-										b->GetName(), (uintptr_t)b, (uintptr_t)r._tree, (uintptr_t)cont._inner); 
 								}
 							} // if constexpr
 						} 
@@ -664,5 +659,35 @@ private:
 
 		} // TTree version end
 	} // void SetupReader()
-	
+
+	template<typename T,
+		typename std::enable_if<util::is_base_of_template<TContainer, T>::value>::type* = nullptr
+	> void LoadTOnceInputs(const T& cont) {
+		const char* fname = info.in.fname.c_str();
+		auto f = std::make_unique<TFile>(fname, "READ");
+		if(!f)            ERROR("Bad input file handle: %s", fname); 
+		if(f->IsZombie()) ERROR("Input file %s can be read, but is zombied. Is it used somewhere else?", fname);
+		if(!f->IsOpen())  ERROR("Input file %s can be read, but isn't opened. Is it used somewhere else?", fname);
+
+		if(g_loaded_containers.find(cont._name) == g_loaded_containers.end()) {
+			g_loaded_containers.insert(cont._name);
+			for(auto& base : cont._vc)
+				base->Load(f.get());
+		}
+
+		 /* When the clones are created, they will just share the pointer to these objects.
+		 * Namely, each thread has a view over the object to conserve memory. 
+		 * These objects aren't really flagged as const, and users should abhold this 'contract' */
+
+		/* It does re-open a ROOT file, but this is done on order of ~10 times, which is insignificant overhead
+		 * in the setup. */
+	}
+
+	/* All other non-TContainer overloads default to a no-op. */
+	template<typename T,
+		typename std::enable_if<!util::is_base_of_template<TContainer, T>::value>::type* = nullptr
+	> void LoadTOnceInputs(const T& cont) {
+		(void)cont;
+	}
+
 }; // TAnalysisProcess

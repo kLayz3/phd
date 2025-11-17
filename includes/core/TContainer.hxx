@@ -30,8 +30,6 @@ struct TContainerBase {
 	virtual void Setup() = 0;
 };
 
-struct MTDeepCopy { explicit MTDeepCopy() = default; };
-
 /**
  * Encapsulates a type needed to be used as a (de)serialization target
  * from/to RNTuple column. It still is an abstract type, since the `Setup()` method isn't defined.
@@ -40,10 +38,6 @@ struct MTDeepCopy { explicit MTDeepCopy() = default; };
  */
 template<typename T>
 struct TContainer : TContainerBase {
-	//static_assert( std::is_copy_constructible_v<T>, "Type must be copy constructible.");
-	//static_assert( std::is_copy_assignable_v<T>, "Type must be copy assignable.");
-	//static_assert( std::is_move_constructible_v<T>, "Type must be move constructible.");
-	//static_assert( std::is_move_assignable_v<T>, "Type must be move assignable.");
 	static_assert(!std::is_void_v<T>, "Hello?");
 	static_assert(!std::is_array_v<T>, "Must not pass raw C-style arrays. Pass an `std::array<T,N>` instead.");
 	static_assert(!std::is_pointer_v<T>, "Must not pass pointer type (T*).");
@@ -79,7 +73,7 @@ public:
 	 * - key difference is that then the Original singleton will simply switch the clones' variant to non-owning
 	 * type, and the temporarily created (unique) objects of the clone will get deleted. 
 	 * This is important for read containers - as only one set of these `TOnce<T>` objects will get (de)serialized.
-	 * Clones will only hold a raw pointer vector variant, and the original Container holds the owning pointers. 
+	 * Clones and the original holds the shared pointers. 
 	 * For write containers, each clone has its own unique copy. */
 
 	/**
@@ -106,6 +100,15 @@ public:
 
 		_vc.push_back( std::move(obj) );
 		return p->operator->();
+	}
+
+	template<typename U>
+	[[nodiscard]] U* RegisterObject(const char* name, void (*fn)(U&, const U&), std::initializer_list<typename U::value_type> il) {
+		U* obj = this->template RegisterObject<U>(name, il);
+		TOnce<U>* wrapped_obj = static_cast<TOnce<U>*>( _vc.back().get() );	
+		wrapped_obj->_collector = fn;
+
+		return obj;
 	}
 
 	template<typename U, typename... Ts>
@@ -144,7 +147,7 @@ public:
 	TContainer& operator=(TContainer&& ) noexcept = default;
 	~TContainer()                                 = default;
 	
-	const TOnceBaseVec& GetTOnceVec() noexcept { return this->_vc; }
+	const TOnceBaseVec& GetTOnceVec() const noexcept { return this->_vc; }
 
 	T& operator*()             noexcept { return *_inner; }
 	const T& operator*() const noexcept { return *_inner; }

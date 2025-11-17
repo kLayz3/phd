@@ -8,13 +8,13 @@
 #include <utility>
 #include <variant>
 #include <vector>
-#include "libs.hh"
 #include <fstream>
-#include <regex>
 #include <typeinfo>
 #include <optional>
+#include <filesystem>
+#include <cstring>
 
-#include "nlohmann/json.hpp"
+#include "libs.hh"
 
 #ifndef _MSC_VER
 #	include <cxxabi.h>
@@ -174,7 +174,7 @@ constexpr bool IsEmpty(const Variant<Ts...>& v) {
  */
 template<typename Visitor, typename Var>
 decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
-	return std::visit(
+	return std::visit (
 		[&](auto&& value) -> decltype(auto) {
 			using T = std::decay_t<decltype(value)>;
 			if constexpr(std::is_same_v<T, Empty>)
@@ -300,11 +300,12 @@ struct _is_base_of_template_impl {
 	using type = decltype(test(std::declval<Derived&>()));
 };
 
-template< template<typename...> typename Base, typename Derived>
-using is_base_of_template = typename _is_base_of_template_impl<Base, Derived>::type;
+template< template<typename...> typename Base, typename Derived,
+	typename Bare = std::remove_reference_t<std::remove_cv_t<Derived>>>
+using is_base_of_template = typename _is_base_of_template_impl<Base, Bare>::type;
 
 template<typename Tuple, std::size_t... Is>
-auto zip_refs_impl(Tuple& t1, const Tuple t2, std::index_sequence<Is...>) {
+auto zip_refs_impl(Tuple& t1, const Tuple& t2, std::index_sequence<Is...>) {
 	using R = std::tuple <
 		std::pair <
 			std::add_lvalue_reference_t<std::tuple_element_t<Is, Tuple>>,
@@ -438,94 +439,6 @@ static inline void Trim(std::string& s) {
 	s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c){return std::isspace(c);}), s.end());
 }
 
-using nlohmann::json;
-
-static inline void parse_json_string(std::vector<int>& out, std::string s) {
-	static const std::regex re_num(
-		R"(^(0x|0b)?(\d+)$)"
-	);
-	static const std::regex re_range(
-		R"(^(\d+)\.\.(=)?(\d+)$)"
-	);
-	static const std::regex re_seq(
-		R"(^(\d+)n(\+\d+)?$)"
-	);
-
-	Trim(s);
-
-	/* Strings can be passed either as:
-	 * 1) raw numbers
-	 * 2) range x1..x2 (x2 excluded) or x1..=x2 (x2 included)
-	 * 3) sequence: an+b ('a', 'b' are the parameters, '+b' optional; 'n' fixed token). 
-	 *    Meaning: strips: b, a+b, 2*a+b, etc. */
-	std::smatch m;
-	if(std::regex_match(s, m, re_num)) {
-		if(m[1].matched) {
-			if(m[1].str() == "0x") out.push_back(std::stoi(m[2].str(), nullptr, 16));
-			else out.push_back(std::stoi(m[2].str(), nullptr, 2));
-		}
-		else out.push_back(std::stoi(m[2].str()));
-	} else if(std::regex_match(s, m, re_range)) {
-		int a = std::stoi(m[1].str());
-		int b = std::stoi(m[3].str());
-		if(a > b) ERROR("%d < %d found while parsing json: \'%s\'\n", a,b,s.c_str());
-		for(int i=a; i<b; ++i) out.push_back(i);
-		if(m[2].matched) out.push_back(b);
-	} else if(std::regex_match(s, m, re_seq)) {
-		int a = std::stoi(m[1].str());
-		int b = m[2].matched ? std::stoi(m[2].str()) : 0;
-		for(int i=b; i <	 640; i+=a)
-			out.push_back(i);
-	} else {
-		WARN("String \'%s\' doesn't match a: number, range or sequence regular expression.", s.c_str());
-	}
-}
-
-/**
- * Json Custom range parser, accepting raw numbers or strings (or arrays of the same)
- * parsable as int or as a range:
- * 'a1..a2' left-inclusive, or 'a1..=a2' right inclusive.
- * */
-static inline void parse_json_as_int_vec(std::vector<int>& out, const json& j) {
-	if(j.is_string()) {
-		parse_json_string(out, j.get<std::string>());
-	}
-	else if(j.is_number()) {
-		out.push_back(j.get<int>());	
-	}
-	else if(j.is_array()) {
-		out.reserve(j.size());
-		for(const auto& jsub : j) 
-			parse_json_as_int_vec(out, jsub);
-	}
-	else ERROR("Passed a json object '%s' which isn't: string/array/number.\n", j.dump().c_str());
-}
-
-static inline void append_flat_json(json& dst, const json& src) {
-	if(!dst.empty() && !dst.is_object())
-		ERROR("Destination object \'%s\' cannot store sources appended to it. Non-empty and not-an-object!", dst.dump().c_str());
-	if(!src.is_object())
-		ERROR("Source json: \'%s\' must be an object.", src.dump().c_str());
-
-	for(const auto& [k, v] : src.items()) {
-		auto it = dst.find(k);
-		if(it == dst.end() || it->is_null()) {
-			dst[k] = v;
-			continue;
-		}
-
-		if(!it->is_array()) {
-			*it = json::array({ *it }); // [old]
-		}
-
-		if(v.is_array()) {
-			it->insert(it->end(), v.begin(), v.end()); // "k": [..., v[0], v[1], v[n-1] ]
-		} else {
-			it->push_back(v); // "k": [..., v]
-		}
-	}
-}
-
 #if __has_include(<new>)
 #	include <new>
 #endif
@@ -564,7 +477,7 @@ template<typename T,
  * execute this to bring it back. Only POSIX async-safe 
  * calls are allowed. NOTE: this *might* disable standard ROOT
  * stack trace dump in case of SIGSEGV catch. Unmap it in this case.
- * and in Linux execute 'tput cnorm' to get the cursor back. */
+ * and in Linux shell execute 'tput cnorm' to get the cursor back. */
 inline void sig_callback_handler(int signum) {
 	const char show[] = "\x1b[?25h";
     const char nl   = '\n';

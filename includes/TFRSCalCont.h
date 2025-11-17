@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TContainer.hxx"
+#include "core/TContainer.hxx"
 #include "nlohmann/json.hpp"
 class TH2I;
 
@@ -106,8 +106,9 @@ namespace std {
 
 class TFRSCalCont: public TContainer<RNFRSCal> {
 public:
-	static nlohmann::json setup; 
-	
+	inline static nlohmann::json setup {}; 
+	inline static std::array<TPCParam, 7> _tpc_param {};
+		
 	TH2I* h1_xy_s2_before_target;
 	TH2I* h1_ab_s2_before_target;
 	TH2I* h1_xy_s2_after_target;
@@ -116,6 +117,7 @@ public:
 	std::string *setupName{};
 	std::array<TPCParam, 7> *tpc_param{};
 
-	TFRSCalCont() ;
-	void Init(TDictInfo info) /* override */;
+	TFRSCalCont();
+	void Setup() override;
+	void Init(TDictInfo info) override;
 };

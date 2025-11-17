@@ -8,14 +8,10 @@ void pretty_plot_ped(const char* fileName = "", int N=20) {
 		#x, #EXT, Form("FOOT%d_%s", N, #EXT), #TYPE); exit(3); } 
 
 	GET_OBJ(TH2I, raw, h2_raw);
-	GET_OBJ(TH2D, mid, h2_mid);
 	GET_OBJ(TH2D, corr, h2_corr);
 
 	raw->GetXaxis()->SetTitle("Strip number");
 	raw->GetYaxis()->SetTitle("ADC value (12-bit)");
-
-	mid->GetXaxis()->SetTitle("Strip number");
-	mid->GetYaxis()->SetTitle("ADC value minus global pedestal");
 
 	corr->GetXaxis()->SetTitle("Strip number");
 	corr->GetYaxis()->SetTitle("Corrected ADC value");
@@ -48,16 +44,6 @@ void pretty_plot_ped(const char* fileName = "", int N=20) {
 	}
 
 	cped->cd(2);
-	gPad->SetLogz();
-	mid->Draw("COLZ");
-	for(auto* l0 : vlines) {
-		TLine* l = dynamic_cast<TLine*>(l0->Clone());
-		l->SetY1(mid->GetYaxis()->GetXmin());
-		l->SetY2(mid->GetYaxis()->GetXmax());
-		l->Draw("SAME");
-	}
-
-	cped->cd(3);
 	gPad->SetLogz();
 	corr->Draw("COLZ");
 	for(auto* l0 : vlines) {

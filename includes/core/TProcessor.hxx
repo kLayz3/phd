@@ -22,13 +22,13 @@ struct TProcessorBase {
 template<typename T> struct TContainer;
 template<typename T> struct TRawContainer;
 
-template<class>
+template<typename>
 struct TProcessor; /* Undefined. */
 
 /**
  * Base class of a single analysis subprocess.
  * Children will implement `ProcessEntry(...)` method to map the data
- * from combination of Input structures to the one unique Output structure.
+ * from combination of Input structures (type `Ins...` to the one unique Output (type `Out`) structure.
  */
 template<typename Out, typename... Ins>
 struct TProcessor<Out(Ins...)> : TProcessorBase {
@@ -63,7 +63,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 			for(const std::shared_ptr<TOnceBase>& v  : rhs.out._vc)
 				out._vc.emplace_back( v->Clone() );
 
-			/* Previous for-loop constructs the objects, this next dynamic dispatch
+			/* Previous for-loop constructs the objects, the next dynamic dispatch
 			 * will just give the raw pointer handles back to the user. */ 
 			out.Setup();
 		}
@@ -102,17 +102,17 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 		return ( std::get<N>(in).inner() );
 	}
 	
-	/* These calls are sent during the final collection. Stringent type checks
+	/* These calls are sent during the final collection. Strict type checks
 	 * are kept, as runtime isn't sacrificed too much. */
 	void Collect(const TProcessor& rhs) {
-		std::vector<std::shared_ptr<TOnceBase>>       & lvc = this->out._vc;
-		const std::vector<std::shared_ptr<TOnceBase>> & rvc = rhs.out._vc;
-		if( lvc.size() !=  rvc.size() )
+		std::vector<std::shared_ptr<TOnceBase>>       & lvc =     out._vc;
+		const std::vector<std::shared_ptr<TOnceBase>> & rvc = rhs.out.GetTOnceVec();
+		if( lvc.size() != rvc.size() )
 			ERROR("(%s) trying to collect but output object named \'%s\' has unmatching sizes. %zu != %zu",
 				_SELF_TYPE_CSTR, this->out.GetName(), lvc.size(), rvc.size());
 		
 		for(int i=0; i<(int)lvc.size(); ++i)
-			lvc[i]->Collect( *rvc[i] );
+			lvc[i]->Collect( *(rvc[i]) );
 	}
 
 }; // TProcessor 

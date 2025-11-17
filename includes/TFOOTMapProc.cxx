@@ -1,23 +1,18 @@
 #include "TFOOTMapProc.h"
+#include "TFOOTMapCont.h"
 #include "TFRSGo4Cont.hxx"
+
 #include "TF1.h"
 #include "TGraph.h"
-#include "eigen/Eigen/Core"
-#include "libs.hh"
+
+#include <algorithm>
 #include <cassert>
 #include <cfloat>
-#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <numeric>
 #include <cmath>
-#include "AuxFunctions.hh"
-
-#include "eigen/Eigen/Dense"
-
-#if defined(__GNUC__)
-#	pragma GCC diagnostic push
-#	pragma GCC diagnostic ignored "-Winvalid-offsetof"
-#endif
+#include <regex>
 
 static_assert(TFOOTMapProc::N_STRIPS == TFOOTMapProc::N_ASIC * TFOOTMapProc::N_STRIPS_PER_ASIC, "Failed build: nstrip != nasic*nstrip_per_asic!\n");
 
@@ -73,84 +68,6 @@ const TFOOTMapProc::FOOTView TFOOTMapProc::GetPtrs(const TFRSSortEvent* e, int N
 	}
 }
 
-/* Assumption is that each bin is exactly 1 units wide. Can work also generally,
- * but has to be tweaked a bit. */
-TFOOTMapProc::GaussFitParams TFOOTMapProc::FitGauss(const TH1D* h) {
-	constexpr double RATIO_THR = 0.2;
-
-	/* First find the histogram max bin. */
-	const int maxBin = h->GetMaximumBin();
-	const double binWidth = h->GetBinWidth(maxBin);
-
-	const double N0 = h->GetBinContent(maxBin);
-
-	/* Idea is to fit a parabola to log(count), around 1-2 sigma. */
-	/* maxBin corresponds to ADC value of: maxBin - 1 ; AKA. value == 0 falls into bin number 1. */
-	std::vector<std::pair<double, double>> points;
-	points.emplace_back(maxBin - binWidth, std::log(N0));
-
-	int i;
-	
-	i= maxBin + 1;
-	while( h->GetBinContent(i) / N0 > RATIO_THR ) {
-		points.emplace_back(i - binWidth, std::log(h->GetBinContent(i)) );
-		++i;
-	}
-	i = maxBin - 1;
-	while( h->GetBinContent(i) / N0 > RATIO_THR ) {
-		points.emplace_back(i - binWidth, std::log(h->GetBinContent(i)) );
-		--i;
-	}
-
-	auto [a,b,c] = FitParabolaLeastSquares(points);
-	
-	return { - b / (2*c) , 1 / sqrt(-2*c) }; 
-}
-
-// To fit `n` points (xi,yi) with parabola, solve the following 3x3:
-/* ( n      Σxi    Σxi^2 ) ( a )   ( Σyi     )
- * ( Σxi    Σxi^2  Σxi^3 ) ( b ) = ( Σxiyi   )
- * ( Σxi^2  Σxi^3  Σxi^4 ) ( c )   ( Σxi^2yi )
- */
-TFOOTMapProc::ParabolaFitParams
-TFOOTMapProc::FitParabolaLeastSquares(const TFOOTMapProc::Points& points) {
-	if(points.size() < 3) return { std::nan(""), std::nan(""), std::nan("") };
-
-	const int n = (int)points.size();
-	/* [1] : compute mean in x, which we center around, to ease calculations... */
-	double meanx = 0;
-	for(const auto& [x,y] : points) meanx += x;
-	meanx /= n;
-
-	/* [2] : build design matrix in centered coordinates z = x - meanx. */
-	Eigen::MatrixXd X(n, 3);
-	Eigen::VectorXd y(n);
-	for(int i=0; i<n; ++i) {
-		const auto [x0, y0] = points[i];
-		double x = x0 - meanx;
-		X(i,0) = 1.0;
-		X(i,1) = x;
-		X(i,2) = x*x;
-		y(i)   = y0;
-	}
-
-	Eigen::Vector3d beta = X.colPivHouseholderQr().solve(y);
-	/* beta = (a0, b0, c0) for model y = a0 + b0*x' + c0*(x')^2 */
-	/* but x' = x - meanx => expand back to original a + b x + c x^2: */
-
-	double a0 = beta(0), b0 = beta(1), c0 = beta(2);
-
-	//printf("Was solving (x,y) : "); 
-	//for(const auto [x,y] : points) printf("(%.3f, %.3f), ", x,y); 
-	//printf("... coeffs (mu, sigma): " EMPH(%.3f %.3f\n), -(b0 - 2*c0*meanx)/(2*c0), 1/sqrt(-2*c0));
-
-	return {
-		/* a: */ a0 - b0*meanx + c0*meanx*meanx,
-		/* b: */ b0 - 2*c0*meanx,
-		/* c: */ c0
-	};
-};
-
 void TFOOTMapProc::ProcessEntry() noexcept {
 	switch(process_type) {
 		case kINITIAL_BATCH: 
@@ -165,20 +82,53 @@ void TFOOTMapProc::ProcessEntry() noexcept {
 void TFOOTMapProc::CalcGlobalPedestal() {
 	TH2I* h = out.h2_raw_tmp;
 	if(h->GetEntries() == 0) {
-		WARN("Ran over the TTree batch, but found 0 events with data? " EMPH(FOOT: %d) ", Setting keeping old pedestals / setting to 0.", N);
+		WARN("Ran over the raw Go4 FOOT data batch, but found 0 events with data? " EMPH(FOOT: %d) ", Setting keeping old pedestals / setting to 0.", N);
 		return;
 	}
+
 	FOR(i, N_STRIPS) {
 		auto slice = std::unique_ptr<TH1D>( h->ProjectionY(_MSG("_py%d-%d", N, i), i+1, i+1) );
 		slice->SetDirectory(nullptr);
 		
-		auto [pedestal, sigma0] = FitGauss(slice.get());
-		out.h2_ped0->Fill(i, pedestal);
-		out.h2_sigma0->Fill(i, sigma0);
+		int maxBin = slice->GetMaximumBin();
+		double fitMin = slice->GetBinCenter(maxBin - 10);
+		double fitMax = slice->GetBinCenter(maxBin + 10);
+
+		slice->Fit("gaus", "Q", "", fitMin, fitMax);
+		TF1* fitF = slice->GetFunction("gaus");
 		
+		double pedestal, sigma;
+		if(fitF == nullptr) {
+			WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of raw data? Skipping. "
+				"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
+			pedestal = slice->GetBinContent(maxBin);
+			sigma = BAD_STRIP_CUTOFF_HI + 10;
+		} else {
+			pedestal = fitF->GetParameter(1);
+			sigma    = fitF->GetParameter(2);
+		}
+	
+		out.h2_gped->Fill(i, pedestal);
+		out.h2_gped_sigma->Fill(i, sigma);
+	
 		current_gped[i] = pedestal;
 	}
+
 	h->Reset("ICESM");
+
+	if(!initial_calculated) {
+		memcpy(initial_gped.data(), current_gped.data(), N_STRIPS * sizeof(double));
+		initial_calculated = true;
+	}
+
+	FOR(i, N_STRIPS) {
+		out.h2_gped_per_batch->Fill (
+			batch_index,
+			i * 2 * TFOOTMapCont::N_GPED_CHANGE_TOLERANCE 
+			+ (current_gped[i] - initial_gped[i]) + 0.000000001
+		);
+		// ^^^^^ last small increment is to prevent any double-rounding fiasco's.
+	}
 }
 
 void TFOOTMapProc::ProcessInitialPedestal() noexcept {
@@ -275,6 +225,17 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 			else { /* Just for the initial strip that's uncoupled, wash away binning all the values into a single bin. */
 				adc_final += rand() / (double)RAND_MAX ;
 			}
+			if(adc_final < -1000 or adc_final > 4000)  {
+				WARN("FOOT%d, strip %d, final adc = %.2f weird? Pedestal = %.2f, ASIC offset = %.2f\n", 
+					N, i, adc_final, current_gped[i], ped_off_avg);
+				FOR(strip1, N_STRIPS_PER_ASIC) {
+					i = i0 + strip1;
+					iraw= (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
+					fprintf(stderr, "R:%d, gped[i]: %.2f   ", data[iraw], current_gped[i]);
+				}
+				ERROR("BRO");
+			}
+
 			out.h2_corr->Fill(i, adc_final);
 			out.inner().FOOTE[i] = adc_final;
 		}
@@ -296,7 +257,7 @@ int TFOOTMapProc::ParseStaticBadStrips() {
 	const char* key = Form("FOOT%d", N);
 	std::vector<int> parsed{};
 	if(auto it = _bad_strips.find(key); it != _bad_strips.end())
-		util::parse_json_as_int_vec(parsed, *it);
+		parse_json_as_int_vec(parsed, *it);
 	
 	std::vector<int>& v = *output.bad_strips; 
 	v.insert(v.end(),
@@ -327,6 +288,7 @@ void TFOOTMapProc::CalcFinalPedestal() {
 		WARN("Ran over the data, but found 0 events with calibrated data?" EMPH(FOOT: %d\n), N);
 		return;
 	}
+	
 	FOR(i, N_STRIPS) {
 		auto slice = std::unique_ptr<TH1D>( out.h2_corr->ProjectionY(_MSG("_py%d-%d", N, i), i+1, i+1) );
 		slice->SetDirectory(nullptr);
@@ -345,18 +307,104 @@ void TFOOTMapProc::CalcFinalPedestal() {
 		if(fitF == nullptr) {
 			WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of calibrated data? Skipping. "
 				"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
-			continue;
+			out.ped_s->at(i) = BAD_STRIP_CUTOFF_HI + 10;
+		} else {
+			out.ped_s->at(i) = fitF->GetParameter(2);
 		}
-		
-		out.gped_sf->at(i) = fitF->GetParameter(2);
-		out.gr_s1->SetPoint(i, i, out.gped_sf->at(i));
 	
-		if(fitF->GetParameter(2) > BAD_STRIP_CUTOFF_HI or 
-			fitF->GetParameter(2) < BAD_STRIP_CUTOFF_LO) {
+		if(out.ped_s->at(i) > BAD_STRIP_CUTOFF_HI or 
+			out.ped_s->at(i) < BAD_STRIP_CUTOFF_LO) {
 			out.bad_strips->push_back(i);
 		}
 	}
+
 	ParseStaticBadStrips();
 }
 
+/* ============= EXTRA AUX JSON FUNCTIONS ================= */
 
+void TFOOTMapProc::parse_json_string(std::vector<int>& out, std::string s) {
+	static const std::regex re_num(
+		R"(^(0x|0b)?(\d+)$)"
+	);
+	static const std::regex re_range(
+		R"(^(\d+)\.\.(=)?(\d+)$)"
+	);
+	static const std::regex re_seq(
+		R"(^(\d+)n(\+\d+)?$)"
+	);
+
+	util::Trim(s);
+
+	/* Strings can be passed either as:
+	 * 1) raw numbers
+	 * 2) range x1..x2 (x2 excluded) or x1..=x2 (x2 included)
+	 * 3) sequence: an+b ('a', 'b' are the parameters, '+b' optional; 'n' fixed token). 
+	 *    Meaning: strips: b, a+b, 2*a+b, etc. */
+	std::smatch m;
+	if(std::regex_match(s, m, re_num)) {
+		if(m[1].matched) {
+			if(m[1].str() == "0x") out.push_back(std::stoi(m[2].str(), nullptr, 16));
+			else out.push_back(std::stoi(m[2].str(), nullptr, 2));
+		}
+		else out.push_back(std::stoi(m[2].str()));
+	} else if(std::regex_match(s, m, re_range)) {
+		int a = std::stoi(m[1].str());
+		int b = std::stoi(m[3].str());
+		if(a > b) ERROR("%d < %d found while parsing json: \'%s\'\n", a,b,s.c_str());
+		for(int i=a; i<b; ++i) out.push_back(i);
+		if(m[2].matched) out.push_back(b);
+	} else if(std::regex_match(s, m, re_seq)) {
+		int a = std::stoi(m[1].str());
+		int b = m[2].matched ? std::stoi(m[2].str()) : 0;
+		for(int i=b; i < 640; i+=a)
+			out.push_back(i);
+	} else {
+		WARN("String \'%s\' doesn't match a: number, range or sequence regular expression.", s.c_str());
+	}
+}
+
+/**
+ * Json Custom range parser, accepting raw numbers or strings (or arrays of the same)
+ * parsable as int or as a range:
+ * 'a1..a2' left-inclusive, or 'a1..=a2' right inclusive.
+ * */
+void TFOOTMapProc::parse_json_as_int_vec(std::vector<int>& out, const json& j) {
+	if(j.is_string()) {
+		parse_json_string(out, j.get<std::string>());
+	}
+	else if(j.is_number()) {
+		out.push_back(j.get<int>());	
+	}
+	else if(j.is_array()) {
+		out.reserve(j.size());
+		for(const auto& jsub : j) 
+			parse_json_as_int_vec(out, jsub);
+	}
+	else ERROR("Passed a json object '%s' which isn't: string/array/number.\n", j.dump().c_str());
+}
+
+void TFOOTMapProc::append_flat_json(json& dst, const json& src) {
+	if(!dst.empty() && !dst.is_object())
+		ERROR("Destination object \'%s\' cannot store sources appended to it. Non-empty and not-an-object!", dst.dump().c_str());
+	if(!src.is_object())
+		ERROR("Source json: \'%s\' must be an object.", src.dump().c_str());
+
+	for(const auto& [k, v] : src.items()) {
+		auto it = dst.find(k);
+		if(it == dst.end() || it->is_null()) {
+			dst[k] = v;
+			continue;
+		}
+
+		if(!it->is_array()) {
+			*it = json::array({ *it }); // [old]
+		}
+
+		if(v.is_array()) {
+			it->insert(it->end(), v.begin(), v.end()); // "k": [..., v[0], v[1], v[n-1] ]
+		} else {
+			it->push_back(v); // "k": [..., v]
+		}
+	}
+}

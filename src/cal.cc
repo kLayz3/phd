@@ -45,8 +45,8 @@ int main(int argc, char* argv[]) {
 	using namespace indicators;
 	signal(SIGINT , sig_callback_handler);
 	signal(SIGSEGV, sig_callback_handler);
-	CMDLineParser::Mandatory::SetDefMessage(calibrate_help);
 	auto& def_msg = CMDLineParser::Mandatory::DefMessage;
+	CMDLineParser::Mandatory::SetDefMessage(calibrate_help);
 
 	srand(time(NULL));	
 
@@ -70,15 +70,18 @@ int main(int argc, char* argv[]) {
 	std::vector<TimePoint> tv;
 
 	/* Set up the containers. */
-	TFOOTMapCont foot[N_FOOT]{}; // input container.
+	TFOOTMapCont mfoot[N_FOOT]{}; // input map container.
 	for(int i=0; i<N_FOOT; ++i) {
-		foot[i].Init( {{"FOOT_ID"s, std::to_string(::static_detectors[i])}} );
+		mfoot[i].Init( {{"FOOT_ID"s, std::to_string(::static_detectors[i])}} );
+		mfoot[i].Setup();
 	}
 
-	TFRSMapCont frs{};
+	TFRSMapCont mfrs{};
+	mfrs.Setup();
 
 	TFRSCalCont cfrs{};
 	cfrs.Init( {{"Setup", PROG_PATH "/params/frs_setup.json"}} );
+	cfrs.Setup();
 
 	TFOOTCalCont cfoot[N_FOOT]; // output container.
 	for(int i=0; i<N_FOOT; ++i) {
@@ -86,21 +89,22 @@ int main(int argc, char* argv[]) {
 			{ "FOOT_ID"s, std::to_string(::static_detectors[i]) }, 
 			{ "FOOT_POS"s, std::to_string(i) }
 		});
+		cfoot[i].Setup();
 	}
 
 	/* Set up the process pool. */
 	auto pool = TAnalysisProcess<>(fileName, outFile, "h103")
-		.emplace_process<TFOOTCalProc>(foot[0], cfoot[0], 4, 1)
-		.emplace_process<TFOOTCalProc>(foot[1], cfoot[1], 4, 1)
-		.emplace_process<TFOOTCalProc>(foot[2], cfoot[2], 4, 1)
-		.emplace_process<TFOOTCalProc>(foot[3], cfoot[3], 4, 1)
-		.emplace_process<TFOOTCalProc>(foot[4], cfoot[4], 4, 1)
-		.emplace_process<TFOOTCalProc>(foot[5], cfoot[5], 4, 1)
-		.emplace_process<TFOOTCalProc>(foot[6], cfoot[6], 4, 1)
-		.emplace_process<TFOOTCalProc>(foot[7], cfoot[7], 4, 1)
-		.emplace_process<TFRSCalProc>(frs, cfrs)
-		.MakePool<8, 1024>();
-		/* Number of subthreads , Chuck size. */
+		.emplace_process<TFOOTCalProc>(cfoot[0], mfoot[0], 4, 1)
+		.emplace_process<TFOOTCalProc>(cfoot[1], mfoot[1], 4, 1)
+		.emplace_process<TFOOTCalProc>(cfoot[2], mfoot[2], 4, 1)
+		.emplace_process<TFOOTCalProc>(cfoot[3], mfoot[3], 4, 1)
+		.emplace_process<TFOOTCalProc>(cfoot[4], mfoot[4], 4, 1)
+		.emplace_process<TFOOTCalProc>(cfoot[5], mfoot[5], 4, 1)
+		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6], 4, 1)
+		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7], 4, 1)
+		.emplace_process<TFRSCalProc >(cfrs    , mfrs)
+		.MakePool<1>( 4096 );
+		/* Number of subthreads, chunk size. */
 
 	ProgressBar bar {
 		option::BarWidth{50},
@@ -120,6 +124,7 @@ int main(int argc, char* argv[]) {
 	tv.emplace_back(TimePoint("start"));
 
 	pool.Start(bar, maxEvents);	
+	pool.Collect();
 
 	tv.emplace_back(TimePoint("end"));
 

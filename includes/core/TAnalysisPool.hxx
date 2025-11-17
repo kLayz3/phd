@@ -5,6 +5,7 @@
 #include "libs.hh"
 #include "TAnalysisProcess.hxx"
 #include <thread>
+#include <tuple>
 
 /* Passing in this define to purposefully undef
 * the singlethreaded-ness. */
@@ -47,7 +48,7 @@ template <
 		w._do_write = false;
 		
 		u64 nLast = std::min (
-			w.GetEntries(), (u64)20
+			w.GetEntries(), (u64)10
 		);
 		
 		volatile int sink = 0;
@@ -60,10 +61,10 @@ template <
 	}
 
 	/* On destructor sweep, write the single objects directly in the file. */
-	~TAnalysisPool() { Collect(); Write(); }
+	~TAnalysisPool() { Collect(); Write(); g_loaded_containers.clear(); }
 
 	/**
-	 * Create the dyadic fold of the Output containers, of each full process. 
+	 * Perform the dyadic fold of the Output containers, of each full process. 
 	 * Process indexed with [0] contains the complete fold. Others are half-folded,
 	 * and shouldn't be used any more. Idempotent function. 
 	 */
@@ -94,16 +95,20 @@ template <
 		TAnalysisProcess<Processors...>& process = Ref();
 		util::IOInfo& info = process.info;
 		
-		/* First write the RNTuple. */
-		process.writer.Reset();	
+		/* First write the RNTuple. Gotta loop over all workers to close their
+		 * RNTupleFillContext handles, only then destruct the RNTupleParallelWriter. */
+		for(auto it = std::rbegin(pool); it != std::rend(pool); ++it) 
+			it->writer.Reset();
 
 		std::unique_ptr<TFile> f = std::make_unique<TFile>( info.out.fname.c_str(), "UPDATE");
-		if(!f || f->IsZombie()) 
+		if(!f) 
 			ERROR("Cannot open output file at end to write the single- wise objects. %s", info.out.fname.c_str());
+		if(f->IsZombie()) 
+			ERROR("Opened output file at end to write the single- wise objects is zombied?. %s", info.out.fname.c_str());
 		if(!f->IsOpen()) 
 			ERROR("Opened output file at end to write the single- wise objects, but is not `IsOpen()` %s", info.out.fname.c_str());
 		if(!f->IsWritable())
-			ERROR("Opened output file at end to write the single- wise objects, but is not writable %s", info.out.fname.c_str());
+			ERROR("Opened output file at end to write the single- wise objects, but is not writable? %s", info.out.fname.c_str());
 		
 		/* Fold the Write call over all subprocesses in pool[0] */
 		util::for_each_in_tuple(process._proc /* tuple<TProcessor<Out(Ins..)> */, [&f](auto& subprocess)
@@ -233,7 +238,8 @@ private:
 		std::vector<T*> next(half);
 
 		for(size_t i=0; i<half; ++i) {
-			v[2*i] -> Collect( (const T&)(*v[2*i + 1]) );
+			v[ 2*i ] -> Collect( (const T&)(*v[2*i + 1]) );
+			next[i] = v[2*i];
 		}
 
 		dyadic_fold(next);
@@ -245,10 +251,10 @@ private:
 /* Invariant API for both multithreaded and singlethreaded modes.  */
 /* NSlice field is not really used, but still keep it to keep identical calls across the
  * specialization. */
+
 template<typename... Processors>
 struct TAnalysisPool<1, Processors...> final {
-
-	TAnalysisPool(TAnalysisProcess<Processors...>& base, u32 _NSlice) : 
+	explicit TAnalysisPool(TAnalysisProcess<Processors...>& base, u32 _NSlice) : 
 		pool{}, NSlice(_NSlice) 
 	{
 		pool[0] = std::move(base);
@@ -297,7 +303,7 @@ struct TAnalysisPool<1, Processors...> final {
 	
 	/**
 	 * Send a batch of identical `NBatch` number of first entries 
-	 * to each of the threads, to set up some initial parameters.
+	 * to the underlying process, to set up some initial parameters.
 	 */
 	void SendOneBatch(u64 startingIndex = 0, u32 NBatch = 0) {
 		if(NBatch == 0) NBatch = (NSlice > 0) ? NSlice : 2048;
@@ -306,7 +312,7 @@ struct TAnalysisPool<1, Processors...> final {
 			process.GetEntries(),
 			(u64)NBatch + startingIndex
 		);
-		WARN("Single-threaded: sending a batch! NSubProc = %zu\n", process.Size());	
+		WARN("A quick singlethreaded, sending a batch and processing! NSubProc = %zu\n", process.Size());	
 		for(u64 evId = startingIndex; evId < nLast; ++evId) {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
@@ -318,8 +324,8 @@ struct TAnalysisPool<1, Processors...> final {
 		}
 	}
 
-	/* In this case, don't call the underlying start of each thread,
-	 * just call ProcessEntry() directly on the wrapped worker. */
+	/* In singlethreaded case, don't poke the underlying std::thread of the process,
+	 * just call ProcessEntry() directly. */
 	void Start (
 #ifdef __HAS_INDICATORS 
 		indicators::ProgressBar& bar,

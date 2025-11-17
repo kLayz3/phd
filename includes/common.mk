@@ -4,12 +4,12 @@ CXXFLAGS += -DPOOL_MAX_THREADS_=$(shell nproc) \
 			-DPROG_PATH=\"$(shell pwd -P)\"
 
 ifneq ($(OPTIMIZATION), 1)
-CXXFLAGS += -ggdb -g3 -O0 -fno-omit-frame-pointer -fno-inline -DANALYSIS_SINGLETHREADED
+CXXFLAGS += -ggdb3 -g3 -O0 -fno-omit-frame-pointer -fno-inline
 
 export ASAN_OPTIONS=detect_leaks=1,strict_string_checks=1,alloc_dealloc_mismatch=1
 export MALLOC_CHECK_=3
 
-# Optional: disable tcache to get earlier crash sites
+# Disable tcache to get earlier crash sites.
 export GLIBC_TUNABLES=glibc.malloc.tcache_count=0
 
 else

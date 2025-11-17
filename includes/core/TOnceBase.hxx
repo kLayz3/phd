@@ -1,6 +1,7 @@
 #pragma once
-#include "TFile.h"
+
 #include "TH1.h"
+class TFile;
 
 struct TOnceBase {
 	TOnceBase() { TH1::AddDirectory(kFALSE); }
@@ -15,14 +16,14 @@ struct TOnceBase {
 
 	virtual Int_t Write(TFile* file = nullptr, const char* target = "") = 0;
 	virtual void* Load(TFile* file, const char* target = "") = 0;
-
-	virtual	std::unique_ptr<TOnceBase> Clone() const = 0;
 	virtual void Collect(const TOnceBase& ) = 0;
+	virtual	std::unique_ptr<TOnceBase> Clone() const = 0;
 
 	inline virtual void SetName(std::string name, const char* title = "") { 
 		(void)title;
 		_name = std::move(name); 
 	}
+
 	inline const char* GetName() const noexcept { return this->_name.c_str(); }
 
 protected:

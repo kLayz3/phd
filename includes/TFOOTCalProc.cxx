@@ -1,4 +1,8 @@
 #include "TFOOTCalProc.h"
+#include "TFOOTMapCont.h"
+
+#include "TGraph.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -45,43 +49,55 @@ TFOOTCalProc::ClusterType TFOOTCalProc::GetClusterType() {
 }
 
 /* Input and output should be properly assigned a priori. */
-TFOOTCalProc::TFOOTCalProc(TFOOTMapCont& in, TFOOTCalCont& out, double x_seed, double x_neigh) : 
-	input(&in), output(&out),
-	X_CENTRE_THR(x_seed), X_NEIGHB_THR(x_neigh),
-	_e(&input->inner().FOOTE[0])
+TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, double x_seed, double x_neigh) : 
+	TFOOTCalProc::Base(out, in), 
+	X_CENTRE_THR(x_seed), X_NEIGHB_THR(x_neigh)
 {
-	if(!input->gr_s1 || input->gr_s1->GetN() != N_STRIPS)
-		ERROR("Input sigma graph not initialized? State (null|entries): \'%s\' . Did you call TFOOTMapCont::Setup() ?\n",
-				input->gr_s1 ? "null" : Form("%d", input->gr_s1->GetN()));
+	TFOOTMapCont& input = std::get<0>(this->in);
+	if(!input.ped_s || input.ped_s->size() != N_STRIPS)
+		ERROR("Input sigma array not initialized? State (null|entries): \'%s\' . Did you call TFOOTMapCont::Setup() ?\n",
+				input.ped_s ? "null" : Form("%zu", input.ped_s->size()));
 
-	if(output->FOOT_N < 0 || output->POS < 0) 
-		ERROR("Output object (TFOOTCalCont): \'%s\' uninitialized. Did you call ::Setup?", output->GetName());
+	if(out.FOOT_N < 0 || out.POS < 0) 
+		ERROR("Output object (TFOOTCalCont): \'%s\' uninitialized. Did you call ::Setup?", out.GetName());
 
-	const double* sigma = input->gr_s1->GetY();
+	const auto& sigma = *input.ped_s;
 	for(int i=0; i<N_STRIPS; ++i) {
 		c_thr[i] = sigma[i] * X_CENTRE_THR; 
 		n_thr[i] = sigma[i] * X_NEIGHB_THR; 
-	}
+		//fprintf(stderr, "%.2f ", sigma[i]);
+	} //fprintf(stderr, "\n");
 
 	/* Bad/dead strips just label them with large thresholds.. */
-	const std::vector<int>& bad_strips = *input->bad_strips;
+	const std::vector<int>& bad_strips = *input.bad_strips;
 	for(auto i : bad_strips) {
 		c_thr[i] = BAD_STRIP_FAKE_THRESHOLD; 
 		n_thr[i] = BAD_STRIP_FAKE_THRESHOLD; 
 	}
+
+	for(int i=0; i<N_STRIPS; ++i) {
+		if(n_thr[i] < 0.01)
+			ERROR("IDK bro: FOOT%d, strip = %d, n_thr = %.2f. Fix it.\n", input.FOOT_N, i, n_thr[i]);
+		if(c_thr[i] < 0.01)
+			ERROR("IDK bro: FOOT%d, strip = %d, c_thr = %.2f. Fix it.\n", input.FOOT_N, i, c_thr[i]);
+	}
+
+	/* Set the _e pointer. */
+	_e = &input.inner().FOOTE[0];
+
 #define _ALTER_TITLE(x) \
 	x->SetTitle(Form("%s : S=%.1f N=%1.f", x->GetTitle(), X_CENTRE_THR, X_NEIGHB_THR))
-	_ALTER_TITLE(output->h1_cl_type);
-	_ALTER_TITLE(output->h1_raw_mult);
-	_ALTER_TITLE(output->h1_mult);
-	_ALTER_TITLE(output->h1_X);
-	_ALTER_TITLE(output->h1_dE);
-	_ALTER_TITLE(output->h1_sn_ratio);
+	_ALTER_TITLE(out.h1_cl_type);
+	_ALTER_TITLE(out.h1_raw_mult);
+	_ALTER_TITLE(out.h1_mult);
+	_ALTER_TITLE(out.h1_X);
+	_ALTER_TITLE(out.h1_dE);
+	_ALTER_TITLE(out.h1_sn_ratio);
 }
 
 void TFOOTCalProc::ProcessEntry() noexcept {
-	output->Clean();
-	_e = &input->inner().FOOTE[0]; /* Don't know if rebinding is really necessary... */
+	out.Clean();
+	_e = &std::get<0>(in).inner().FOOTE[0]; /* Don't know if rebinding is really necessary... */
 
 	if( std::isnan(_e[0]) ) return; /* Missing data; in previous step marked it NAN by default. */
 	
@@ -207,27 +223,26 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	double cl_m = cl_e / cl_max_e;
 
 	ClusterType ct = this->GetClusterType();
-	output->inner().AddCluster(cl_wx, cl_e, cl_m, ct);
+	out.inner().AddCluster(cl_wx, cl_e, cl_m, ct);
+	out.h1_raw_mult->Fill(_cl_cnt);
+	out.h1_mult->Fill(cl_m);
+	out.h1_dE->Fill(cl_e);
+	out.h1_X->Fill(cl_wx);
+	out.h1_cl_type->Fill(ct);
 
-	output->h1_raw_mult->Fill(_cl_cnt);
-	output->h1_mult->Fill(cl_m);
-	output->h1_dE->Fill(cl_e);
-	output->h1_X->Fill(cl_wx);
-	output->h1_cl_type->Fill(ct);
-
-	if(_cl_cnt >= MASSIVE_CLUSTER_CUTOFF && output->inner()._fBadE.size() == 0) {
-		output->inner()._fBadE.assign(e, e + N_STRIPS); 
+	if(_cl_cnt >= MASSIVE_CLUSTER_CUTOFF && out.inner()._fBadE.size() == 0) {
+		out.inner()._fBadE.assign(e, e + N_STRIPS); 
 	}
 
 	switch(_cl_cnt) {
 		case 1:
-			output->h1_dE_m1->Fill(cl_e);
+			out.h1_dE_m1->Fill(cl_e);
 			break;
 		case 2:
-			output->h1_dE_m2->Fill(cl_e);
+			out.h1_dE_m2->Fill(cl_e);
 			break;
 		case 3:
-			output->h1_dE_m3->Fill(cl_e);
+			out.h1_dE_m3->Fill(cl_e);
 			break;
 		default:
 			break;
@@ -241,14 +256,14 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		double e_left  = _buf[cl_max_i - 1].e;
 		double e_right = _buf[cl_max_i + 1].e;
 		double sn = 1 / log( cl_max_e * cl_max_e / (e_left*e_right) );
-		output->h1_sn_ratio->Fill(sn);
+		out.h1_sn_ratio->Fill(sn);
 	}
 
 	if(cl_max_e > 30 and _cl_cnt == 1 and 
-		output->inner()._fHeClSize1.size() == 0 and 
-		output->inner()._fBadE.size() == 0) 
+		out.inner()._fHeClSize1.size() == 0 and 
+		out.inner()._fBadE.size() == 0) 
 	{
-		output->inner()._fHeClSize1.assign(e, e + N_STRIPS);
+		out.inner()._fHeClSize1.assign(e, e + N_STRIPS);
 	}
 }
 
