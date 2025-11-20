@@ -12,6 +12,9 @@ void TFRSMapCont::Setup() {
 		h1_sci_mr[i] = RegisterObject<TH1I>(
 			Form("SCI%d_MR", i), Form("Multipl. SCI%d right", i), 10, 0, 10
 		);
+		h1_sci_diff_lr[i] = RegisterObject<TH1I>(
+			Form("SCI%d_diff_lr", i), Form("TDC diff. SCI%d L-R (multp=1)", i), 2000, -1000, 1000
+		);
 	}
 
 	for(int i=0; i<7; ++i) {
@@ -39,6 +42,7 @@ void TFRSMapCont::Setup() {
 };
 
 ClassImp(RNSciMap);
+ClassImp(RNSciMap::Measurement);
 ClassImp(RNTPCMap);
 ClassImp(RNTPCMap::Measurement);
 ClassImp(RNMUSICMap<8>);

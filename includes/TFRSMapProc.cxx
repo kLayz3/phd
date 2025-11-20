@@ -66,29 +66,51 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 
 	out.inner().tpat = static_cast<u32>(*_pattern);
 
+	/* Scintillators. */
 	for(int s=0; s < (int)sci.size(); ++s) {
 		const auto& sci_go4 = this->sci[s];
 		auto& sci_raw = out.inner().sci[s];
-		
+		auto& tdc = sci_raw.tdc;
+	
+		int nhits[2] = {0};      // [0] => left, [1] => right
 		for(int i=0; i<2; ++i) { // [0] => left, [1] => right
-			Int_t nhits = *sci_go4._nhit_raw[i];
-			if(nhits < 0 || nhits > RNSciMap::MAX_SIZE) {
+			nhits[i] = *sci_go4._nhit_raw[i];
+			if(nhits[i] < 0 || nhits[i]> RNSciMap::MAX_SIZE) {
 				WARN("Go4 reads: %d hits in Sci[%d] > %d or negative. Dumping it.\n", 
-					nhits, s, RNSciMap::MAX_SIZE);
+					nhits[i], s, RNSciMap::MAX_SIZE);
 				return;
 			}
-			auto& vec = sci_raw.tdc[i];
-
-			vec.resize(nhits);
-			std::memcpy(vec.data(),	sci_go4._data_raw[i], nhits * sizeof(i32));
-			std::sort(vec.begin(), vec.end());
 			sci_raw.qdc[i] = static_cast<u16>( *sci_go4._qdc_raw[i] );
 		}
+		Int_t N_max = std::min (
+			std::max(nhits[0], nhits[1]),
+			RNSciMap::MAX_SIZE
+		);
 
-		out.h1_sci_ml[s]->Fill( sci_raw.tdc[0].size() );	
-		out.h1_sci_mr[s]->Fill( sci_raw.tdc[1].size() );	
+		tdc.resize(N_max);
+		std::fill_n(tdc.begin(), N_max, RNSciMap::Measurement{});
+	
+		std::array<Int_t, RNSciMap::MAX_SIZE> _tmp;
+		int _n_elems;
+
+		for(int i=0; i<2; ++i) { // [0] => left, [1] => right
+			_n_elems = std::min(nhits[i], N_max);
+			for(int n=0; n < _n_elems; ++n) 
+				_tmp[n] = sci_go4._data_raw[i][n];
+			
+			std::sort(_tmp.begin(), _tmp.begin() + _n_elems);
+			
+			if(i == 0) for(int n=0; n < _n_elems; ++n) tdc[n].tdc_l = _tmp[n];
+			else       for(int n=0; n < _n_elems; ++n) tdc[n].tdc_r = _tmp[n];
+		}
+
+		out.h1_sci_ml[s]->Fill( nhits[0] );	
+		out.h1_sci_mr[s]->Fill( nhits[1] );	
+		if(nhits[0] == nhits[1])
+			out.h1_sci_diff_lr[s]->Fill( tdc[0].tdc_l - tdc[0].tdc_r );
 	}
 
+	/* TPC's */
 	for(int s=0; s < (int)tpc.size(); ++s) {
 		const auto& tpc_go4 = this->tpc[s];
 		auto& tpc_raw = out.inner().tpc[s];
@@ -117,6 +139,10 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 		if(_nhits_s < 0) {
 			WARN("Go4 reads: %d < 0 hits in TPC[%d], sci ref.\n", _nhits_s, s);
 			return;
+		}
+		if(s == 5 || s == 6) {
+			if(_nhits_s > 0)
+				WARN("Found a sci-ref hit in TPC%d - nhit = %d\n", s, _nhits_s);
 		}
 		
 		/* We don't really care about more than RNTPCMap::MAX_SIZE elements. 
@@ -212,6 +238,7 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 		}
 	} /* End loop over TPC's (s) */
 
+	/* MUSIC's */
 	for(int s=0; s < (int)music.size(); ++s) {
 		const auto& music_go4 = this->music[s];
 		auto& music_raw = out.inner().music[s];

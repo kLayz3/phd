@@ -18,10 +18,10 @@ template<typename T> struct TContainer;
 
 /**
  * A wrapper type for objects (such as TVectorD, THXX, TArray, TCutG, etc)
- * but also stl-containers such as std::vector<int>, std::array<double, T>, etc that might carry 
- * a name or maybe not. This class expands them so that all of these classes' instances carry a name,
- * which shall be serialized (once) into a `TFile`,
- * unlike `TContainer`'s other parts which will be serialized row-wise into the RNTuple.
+ * but also stl-containers such as std::vector<T>, std::array<T, N>, etc that might carry 
+ * a name or maybe not. This class wraps them so that all of these types' instances carry a name,
+ * which shall be serialized (once) into a `TFile`.
+ * Unlike `TContainer`'s other parts which will be serialized row-wise (per-event) into the RNTuple.
  * Instances are differentiated by their unique string key `_name`.
  *
  * Available types to be wrapped are limited to only the ones that can be either Summed or Averaged together.
@@ -54,11 +54,11 @@ template<typename T> struct TContainer;
  *
  * It is done in-place, a0 now carries the summed/mean'ed up value, while the other (N-1)
  * instances carry possibly intermediate calculations, and should not be used. 
- * In the master Pool instantization, it's asserted that N forms a perfect log(2) (N == 2^n, for some n).
+ * In the master Pool instantization, it's asserted that N forms a perfect log2 (N == 2^n | ∃n ∈ Naturals).
  */
 
 template<typename T>
-class TOnce : public TOnceBase {
+struct alignas(util::CL) TOnce : TOnceBase {
 	static_assert(! std::is_pointer_v<T>, "Mst not pass pointer type (T*) to TOnce<T>");
 	static_assert(! std::is_fundamental_v<T>, "Must not pass trivial type. Wrap it in e.g. TParameter<T> first.");
 	static_assert(! std::is_void_v<T>, "Hello?");
@@ -67,6 +67,7 @@ class TOnce : public TOnceBase {
 	static_assert(  std::is_copy_assignable_v<T>, "Type T must be copy-assignable");
 	template<typename U> friend struct TContainer;
 
+private:
 	void (*_collector)(T&, const T&) = nullptr;
 	T _internal;
 
@@ -249,7 +250,7 @@ public:
 			_internal /= 2;
 		}
 		else {
-			ERROR("(%s) - Name: '\%s\' ; Underlying type \'%s\' doesn't define how to add or mean-up two values, "
+			ERROR("(%s) - Name: '\%s\' ; Underlying type \'%s\' doesn't define how to add or mean-up two instances, "
 					"and also its been constructed without a runtime callback. "
 					"Define a `void Add(T&, const T& )` function or pass a lambda as second argument "
 					"of \'RegisterObject(..)\' (or other ctor).", 

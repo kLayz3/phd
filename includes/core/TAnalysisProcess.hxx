@@ -279,9 +279,9 @@ public:
 	 * Emplace-style construction, again move *this* object into a new one. 
 	 */
 	template <
-		typename U,      /* U = TProcessor<Out(Ins...)> */
-		typename Out,    /* Output container type. */
-		typename... Args /* Other args, following it. */
+		typename U,      /* U = child of TProcessor<Out(Ins...)> */
+		typename Out,    /* Output container type. Deduced */
+		typename... Args 
 	> auto emplace_process(Out&& out, Args&&... args) && -> TAnalysisProcess<Ts..., U> {
 		/* In the varargs following, load the input containers, *before* constructing the processor. */
 		(..., LoadTOnceInputs(args));
@@ -381,7 +381,7 @@ public:
 	/* Run the setup. */
 	void Setup() { SetupReader(); SetupWriter(); }
 
-	void Start() {
+	void Start() noexcept { /* ERROR(...) will call std::abort, so it's sane to mark it noexcept. */
 		if(_running) 
 			ERROR("Start called but worker thread is still marked as running? (%s)", _SELF_TYPE_CSTR);
 		if(int v = writer.GetValidity(); v != 0) 
@@ -505,7 +505,6 @@ private:
 	void SetupReader() {
 		if(info.in.fname.empty())
 			ERROR("Info given, but input file name empty. (%s)", _SELF_TYPE_CSTR);
-		/* Based on the boolean inside, switch to either RN or TTree reader. */
 
 		/* Reader object must be in empty state, */
 		if(! util::IsEmpty(reader)) 
@@ -672,7 +671,7 @@ private:
 		if(g_loaded_containers.find(cont._name) == g_loaded_containers.end()) {
 			g_loaded_containers.insert(cont._name);
 			for(auto& base : cont._vc)
-				base->Load(f.get());
+				base->Load( f.get() );
 		}
 
 		 /* When the clones are created, they will just share the pointer to these objects.

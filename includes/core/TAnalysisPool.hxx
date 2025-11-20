@@ -43,7 +43,7 @@ template <
 		for(u32 i=1; i<N; ++i)
 			pool[0].Clone(pool[i]);
 
-		/* Once created, force reading of first few events to poke cling. */
+		/* Once created, force reading of first few events to poke cling again. */
 		auto& w = this->Ref();
 		w._do_write = false;
 		
@@ -73,9 +73,9 @@ template <
 
 		/* Check that all threads are safely merged. */
 		for(const auto& p : pool)
-			if(! p.IsStopped()) ERROR("Subthread isn't stopped while collector of the pool runs. Not allowed.");
+			if(! p.IsStopped()) ERROR("Subthread isn't stopped while collector of the pool wants to run.");
 
-		std::vector<
+		std::vector <
 			TAnalysisProcess<Processors...> *
 		> refs {};
 
@@ -111,7 +111,7 @@ template <
 			ERROR("Opened output file at end to write the single- wise objects, but is not writable? %s", info.out.fname.c_str());
 		
 		/* Fold the Write call over all subprocesses in pool[0] */
-		util::for_each_in_tuple(process._proc /* tuple<TProcessor<Out(Ins..)> */, [&f](auto& subprocess)
+		util::for_each_in_tuple(process._proc, [&f](auto& subprocess)
 			{
 				/* subprocess: TProcessor<Out(Ins...)>& */
 				for(auto& o : subprocess.out.GetTOnceVec()) {
@@ -186,7 +186,7 @@ template <
 			};
 
 			/* Choose a process thread; round-robin. 
-			 * If currently selected thread has full queue, do a short spin and try next one. */
+			 * If currently selected thread has capped queue, do a short spin and try next one. */
 			for(auto& w = pool[next]; ! w.q.push(j); ++next, next %= N) {
 #ifdef __HAS_SMALL_INTEL_SPIN
 				_mm_pause(); /* Short pause, 100-150 clock cycles. */
@@ -312,7 +312,7 @@ struct TAnalysisPool<1, Processors...> final {
 			process.GetEntries(),
 			(u64)NBatch + startingIndex
 		);
-		WARN("A quick singlethreaded, sending a batch and processing! NSubProc = %zu\n", process.Size());	
+
 		for(u64 evId = startingIndex; evId < nLast; ++evId) {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 

@@ -11,3 +11,7 @@ includes/dict
 rootfiles
 *.png
 params/justus_tpc.json
+mapdir
+caldir
+merged
+stash

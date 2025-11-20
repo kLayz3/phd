@@ -7,21 +7,32 @@
 
 struct RNSciMap {
 	static constexpr int MAX_SIZE = 10;
-	std::array<std::vector<i32>, 2> tdc{}; // [0] = left, [1] = right;
-	u16 qdc[2]{};                          // [0] = left, [1] = right;
 	
-	RNSciMap() {
-		for(auto& t : tdc) t.reserve(MAX_SIZE);
-	}
+	struct Measurement {
+		static constexpr int TDC_INVALID = -1;
+		int tdc_l = TDC_INVALID;
+		int tdc_r = TDC_INVALID;
+		
+		Measurement() = default;
+		virtual ~Measurement() = default;
+
+		ClassDef(Measurement, 1);
+	};
+
+	std::vector<Measurement> tdc{}; 
+	u16 qdc[2]{}; // [0] = left, [1] = right;
+	
+	RNSciMap() { tdc.reserve(MAX_SIZE); }
 	inline void Clean() noexcept { 
-		for(auto& t : tdc) t.clear(); 
+		tdc.clear(); 
 		memset(qdc, 0, sizeof(qdc)); 
 	}
+
 	virtual ~RNSciMap() = default;
 	ClassDef(RNSciMap, 1);
 };
 
-/* This struct is layed out the following way to help cache locality.
+/* The structs are layed out the following way to help cache locality.
  * Initially the layout was:
  *	std::array<std::vector<i32>, 2> tdc_l{};
  *	std::array<std::vector<i32>, 2> tdc_r{};
@@ -30,7 +41,7 @@ struct RNSciMap {
  * -> This is diabolically bad, since we always take differences `tdc_l[??] - tdc_r[??]` and these references
  *  aren't on the same cache line. Worst yet - this heap allocated sequence could share close line with some FOOT
  *  data too, making congestion insane, and basically most values aren't (initially) cached in L1d.
- *  Having this layout and doing the simple loop above, slows down the whole program by a factor 100 !
+ *  Having this layout and doing the simple loop above, slows down the whole program by a factor 101 !
  *
  *  A great read to the whole L1d locality + cache congestion and how indeed malloc works under the hood:
  *  https://people.freebsd.org/~lstewart/articles/cpumemory.pdf
@@ -49,7 +60,6 @@ struct RNTPCMap {
 		i32 tdc_ref   = TDC_INVALID;               /* 4  bytes. */
 		/* + 4-byte alignment field. */
 
-		void Sort() noexcept;
 		Measurement() = default;
 		virtual ~Measurement() = default;
 		ClassDef(Measurement, 1);
@@ -105,6 +115,8 @@ public:
 
 	TH1I* h1_sci_ml[4];
 	TH1I* h1_sci_mr[4];
+	TH1I* h1_sci_diff_lr[4];
+
 	TH1I* h1_tpc_ml[7];
 	TH1I* h1_tpc_mr[7];
 	TH1I* h1_tpc_ma1[7];

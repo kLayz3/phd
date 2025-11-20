@@ -91,6 +91,7 @@ enum TimingVariant : u64 {
 	kMILLISECOND = 60'000,
 	kMICROSECOND = 60'000'000,
 };
+using UT = std::underlying_type_t<TimingVariant>;
 
 template<TimingVariant E = kMILLISECOND>
 void PrintElapsed(const TimePoint& end, const TimePoint& start) {
@@ -100,19 +101,19 @@ void PrintElapsed(const TimePoint& end, const TimePoint& start) {
 	int mode_i = 0;
 	double elapsed;
 	if constexpr(E == kMINUTE) {
-		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count()) * static_cast<double>(kMINUTE) / kMICROSECOND;
+		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count()) * static_cast<double>(kMINUTE) / static_cast<UT>(kMICROSECOND);
 		mode_i = 3;
 	}
 	else if constexpr(E == kSECOND) {
-		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count()) * static_cast<double>(kSECOND) / kMICROSECOND;
+		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count()) * static_cast<double>(kSECOND) / static_cast<UT>(kMICROSECOND);
 		if(elapsed > 60) {
-			elapsed *= static_cast<double>(kMINUTE) / kSECOND;
+			elapsed *= static_cast<double>(kMINUTE) / static_cast<UT>(kSECOND);
 			mode_i = 3;
 		} else 
 			mode_i = 2;
 	}
 	else if constexpr(E == kMILLISECOND) {
-		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count()) * static_cast<double>(kMILLISECOND) / kMICROSECOND;
+		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count()) * static_cast<double>(kMILLISECOND) / static_cast<UT>(kMICROSECOND);
 		mode_i = 1;
 	}
 	else if constexpr(E == kMICROSECOND) {
@@ -135,7 +136,6 @@ inline void PrintElapsed(std::vector<TimePoint>&& v) {
 	PrintElapsed<E>(v.back(), v.front());
 }
 
-
 inline void __concat_impl__(std::ostringstream& ) {}
 
 template<typename T, typename... Args>
@@ -145,7 +145,7 @@ void __concat_impl__(std::ostringstream& oss, T&& first, Args&&... args) {
 }
 
 /**
- * Concatenates bunch of arguments which can be lvalues, statics, etc. and returns an owned std::string. 
+ * Concatenates bunch of string arguments which can be lvalues, statics, etc. and returns an owned std::string. 
  */
 template<typename... Args>
 std::string sstrcat(Args&&... args) {
@@ -381,16 +381,16 @@ template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
 	std::size_t N = is_an_array<U>::size,
 	char(*)[N % 2] = nullptr // Odd
-> auto median(const T& sorted_arr) { return sorted_arr[(N-1)/2]; }
+> auto median(const T& sorted_arr) noexcept { return sorted_arr[(N-1)/2]; }
 
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
 	std::size_t N = is_an_array<U>::size,
 	char(*)[!(N % 2)] = nullptr // Even
-> auto median(const T& sorted_arr) { return ( sorted_arr[(N-1)/2] + sorted_arr[N/2] ) / 2; }
+> auto median(const T& sorted_arr) noexcept { return ( sorted_arr[(N-1)/2] + sorted_arr[N/2] ) / 2; }
 
 template<typename T, typename... Ts>
-constexpr auto min(T t, Ts... ts) noexcept {
+constexpr auto min(T t, Ts... ts) {
 	static_assert(std::is_arithmetic_v<
 		std::remove_reference_t<T>
 	> &&
@@ -404,7 +404,7 @@ constexpr auto min(T t, Ts... ts) noexcept {
 	return r;
 }
 template<typename T, typename... Ts>
-constexpr auto max(T t, Ts... ts) noexcept {
+constexpr auto max(T t, Ts... ts) {
 	static_assert(std::is_arithmetic_v<
 		std::remove_reference_t<T>
 	> &&
@@ -435,7 +435,7 @@ template<typename T,
 	return static_cast<int>(is_an_array<U>::size);	
 }
 
-static inline void Trim(std::string& s) {
+static inline void Trim(std::string& s) noexcept {
 	s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c){return std::isspace(c);}), s.end());
 }
 

@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
 		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6], 4, 1)
 		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7], 4, 1)
 		.emplace_process<TFRSCalProc >(cfrs    , mfrs)
-		.MakePool<1>( 4096 );
+		.MakePool<8>( 4096 );
 		/* Number of subthreads, chunk size. */
 
 	ProgressBar bar {

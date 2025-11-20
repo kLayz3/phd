@@ -14,41 +14,70 @@ void tpc_xy_explo(std::string fileName = "") {
 	auto frs = model->MakeField<RNFRSCal>("FRS"); // shared_ptr.
 	auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
 
-	constexpr auto N_TPC = RNFRSCal::N_VALID_TPC;
-	TH2I* h1_tpc_x[N_TPC];
-	TH2I* h1_tpc_y[N_TPC];
+	//constexpr auto N_TPC = RNFRSCal::N_VALID_TPC;
+	constexpr auto N_TPC = 3;
+
+	TH1I* h1_tpc_x[N_TPC][2];
+	TH1I* h1_tpc_y[N_TPC][4];
 
 	for(int i=0; i<N_TPC; ++i) {
-		h1_tpc_x[i] = new TH2I(Form("TPC%d_X", i), Form("TPC%d x", i), 2,0,2, 200, -100, 100);
-		h1_tpc_y[i] = new TH2I(Form("TPC%d_Y", i), Form("TPC%d y", i), 4,0,4, 200, -100, 100);
+		for(int j=0; j<2; ++j) {
+			h1_tpc_x[i][j] = new TH1I(Form("TPC%d_X%d", i, j), Form("TPC%d x (dline %d)", i, j), 180, -30, 30);
+			h1_tpc_x[i][j]->GetXaxis()->SetTitle("mm");
+			h1_tpc_x[i][j]->GetYaxis()->SetTitle("count");
+			h1_tpc_x[i][j]->SetFillColor(2+i);
+			h1_tpc_x[i][j]->SetLineColor(kBlack);
+		}
+		for(int j=0; j<4; ++j) {
+			h1_tpc_y[i][j] = new TH1I(Form("TPC%d_Y%d", i, j), Form("TPC%d y (anode %d)", i, j), 180, -30, 30);
+			h1_tpc_y[i][j]->GetXaxis()->SetTitle("mm");
+			h1_tpc_y[i][j]->GetYaxis()->SetTitle("count");
+			h1_tpc_y[i][j]->SetFillColor(2+i);
+			h1_tpc_y[i][j]->SetLineColor(kBlack);
+		}
 	}
-	uint64_t nvalid = 0;
+
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
-		printf("Caught %lu hit\n", ++nvalid);
 		
 		for(int i=0; i<N_TPC; ++i) {
 			const auto& tpc = frs->tpc[i];
-			for(const auto& p : tpc.val) {
-				printf("Caught TPC%d - %lu hit\n", i, ++nvalid);
-				assert(p.delay_line_i < 2 && Form("%d delay_line_i >= 2 ?? Is: %d", i, p.delay_line_i));
-				assert(p.anode_i < 4      && Form("%d anode_i >= 4 ?? Is: %d"     , i, p.anode_i));
-
-				h1_tpc_x[i]->Fill(p.delay_line_i, p.x);
-				h1_tpc_x[i]->Fill(p.anode_i, p.y);
+			for(const auto& hit_a4 : tpc.hits) {
+				for(int a=0; a<4; ++a) {
+					const auto& hit = hit_a4[a];
+					int dl = (a >> 1);
+					h1_tpc_x[i][dl] -> Fill(hit.x);
+					h1_tpc_y[i][a]  -> Fill(hit.y);
+				}
 			}
 		}
 	}
 
-	TCanvas *c[N_TPC];
+	TCanvas *cX[N_TPC];
+	TCanvas *cY[N_TPC];
 	for(int i=0; i<N_TPC; ++i) {
-		c[i] = new TCanvas(Form("TPC-%d", i), Form("TPC-%d", i), 1600, 1200);
-		c[i]->Divide(1,2);
+		cX[i] = new TCanvas(Form("TPC%d-X", i), Form("TPC%d-X", i), 1600, 1200);
+		cX[i]->Divide(1,2);
 
-		c[i]->cd(1);
-		h1_tpc_x[i]->Draw("COLZ");
+		cX[i]->cd(1);
+		h1_tpc_x[i][0]->Draw();
 
-		c[i]->cd(2);
-		h1_tpc_y[i]->Draw("COLZ");
+		cX[i]->cd(2);
+		h1_tpc_x[i][1]->Draw();
+
+		cY[i] = new TCanvas(Form("TPC%d-Y", i), Form("TPC%d-Y", i), 1600, 1200);
+		cY[i]->Divide(2,2);
+		
+		cY[i]->cd(1);
+		h1_tpc_y[i][0]->Draw();
+		
+		cY[i]->cd(2);
+		h1_tpc_y[i][1]->Draw();
+		
+		cY[i]->cd(3);
+		h1_tpc_y[i][2]->Draw();
+		
+		cY[i]->cd(4);
+		h1_tpc_y[i][3]->Draw();
 	}
 }

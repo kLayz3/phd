@@ -11,7 +11,7 @@ struct TFRSCalProc : TProcessor <
 	using Base = TProcessor<TFRSCalCont(TFRSMapCont)>;
 
 	constexpr static auto N_VALID_TPC = RNFRSCal::N_VALID_TPC;
-	static inline u64 ncalled = 0;
+	constexpr static auto N_VALID_SCI = RNFRSCal::N_VALID_SCI;
 	
 	TFRSCalProc(TFRSCalCont& , const TFRSMapCont& );
 	TFRSCalProc() = default;
@@ -27,14 +27,11 @@ private:
 		int ref_tdc;
 		TPCHitCandidate(int a_tdc, int dl_tdc, int dr_tdc, int ref_tdc) noexcept :
 			a_tdc(a_tdc), dl_tdc(dl_tdc), dr_tdc(dr_tdc), ref_tdc(ref_tdc) {}
+
 		inline int CSum() noexcept { return dl_tdc + dr_tdc - (a_tdc << 1); }
-	};
-	struct TPCHit {
-		int anode_i;
-		double x;
-		double y;
-		TPCHit(int i, double x, double y) noexcept :
-			anode_i(i), x(x), y(y) {}
+		inline bool operator<(const TPCHitCandidate& rhs) const noexcept {
+			return ref_tdc < rhs.ref_tdc;
+		}
 	};
 
 	constexpr static std::size_t CANDIDATE_LIST_CAPACITY = 8;
@@ -44,14 +41,10 @@ private:
 	std::array<TPCHitCandidateList, 4> initial_candidate_list {};
 
 	constexpr static std::size_t HIT_LIST_CAPACITY = 10; 
-	using TPCHitList = std::vector<TPCHit>;
-	TPCHitList tpc_hits;
-
-	/* Keep a copy locally on the stack of *this* instance. 
-	 * Indeed, the param array should exist here in the Proc, but we keep 
-	 * original anyway in Cont to hold it in a ROOT file. */
-	std::array<TPCParam, N_VALID_TPC> tpc_param;
 
 	void ProcessTPC(int ) noexcept;
 	bool IsUniqueTPCMeasurement(const TPCHitCandidateList&, const TPCHitCandidate& ) noexcept;
+
+	/* === SCI analysis helper fnc's. === */
+	void ProcessSci(int ) noexcept;
 };

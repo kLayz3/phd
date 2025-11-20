@@ -156,7 +156,6 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 
 	auto [_0, _1, _2, _3, footN, data] = GetPtrs(sortev, N);
 	if(footN == 0) return;
-		
 
 	/* Subtract the global pedestal. */
 	/* Algorithm (per groups of 64-strips) is the following: j=0,1,2, ... 63
@@ -225,16 +224,6 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 			else { /* Just for the initial strip that's uncoupled, wash away binning all the values into a single bin. */
 				adc_final += rand() / (double)RAND_MAX ;
 			}
-			if(adc_final < -1000 or adc_final > 4000)  {
-				WARN("FOOT%d, strip %d, final adc = %.2f weird? Pedestal = %.2f, ASIC offset = %.2f\n", 
-					N, i, adc_final, current_gped[i], ped_off_avg);
-				FOR(strip1, N_STRIPS_PER_ASIC) {
-					i = i0 + strip1;
-					iraw= (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
-					fprintf(stderr, "R:%d, gped[i]: %.2f   ", data[iraw], current_gped[i]);
-				}
-				ERROR("BRO");
-			}
 
 			out.h2_corr->Fill(i, adc_final);
 			out.inner().FOOTE[i] = adc_final;
@@ -285,7 +274,9 @@ int TFOOTMapProc::ParseStaticBadStrips() {
 
 void TFOOTMapProc::CalcFinalPedestal() {
 	if(out.h2_corr->GetEntries() == 0) {
-		WARN("Ran over the data, but found 0 events with calibrated data?" EMPH(FOOT: %d\n), N);
+		WARN("Ran over the data, but found 0 events with calibrated data? Setting all pedestals ridiculously high." 
+			EMPH(FOOT: %d\n), N);
+		FOR(i, N_STRIPS) out.ped_s->at(i) = 10'000;
 		return;
 	}
 	
@@ -295,6 +286,7 @@ void TFOOTMapProc::CalcFinalPedestal() {
 
 		if(slice->GetEntries() < 100) {
 			WARN("FOOT%d, strip %d, found no entries in y-projection of calibrated data? Skipping.\n", N, i);
+			out.ped_s->at(i) = 10'000; /* Random number for high pedestal. */
 			continue;
 		}
 		
