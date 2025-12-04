@@ -1,9 +1,10 @@
 #pragma once
 
-#include "core/TContainer.hxx"
+#include "monad/monad.hxx"
 #include "nlohmann/json.hpp"
-class TH2I;
+#include "TFRSMapCont.h"
 
+class TH2I;
 
 #define GET_HELP_AUX_IMPL  \
 	template<std::size_t I> \
@@ -61,16 +62,16 @@ struct RNTPCCal {
 	ClassDef(RNTPCCal, 1);
 };
 
-struct alignas(util::CL) RNFRSCal {
-	constexpr static i32 N_VALID_TPC = 7;
-	constexpr static i32 N_VALID_SCI = 4;
+struct alignas(mnd::CL) RNFRSCal {
+	constexpr static i32 N_VALID_SCI = RNFRSMap::N_VALID_SCI;
+	constexpr static i32 N_VALID_TPC = RNFRSMap::N_VALID_TPC;
 
-	std::array<RNTPCCal, N_VALID_TPC> tpc;
 	std::array<RNSciCal, N_VALID_SCI> sci;
+	std::array<RNTPCCal, N_VALID_TPC> tpc;
 
 	inline void Clean() noexcept { 
-		for(auto& t : tpc) t.Clean();
 		for(auto& s : sci) s.Clean();
+		for(auto& t : tpc) t.Clean();
 	}
 	virtual ~RNFRSCal() = default;
 	ClassDef(RNFRSCal, 1);

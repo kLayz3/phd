@@ -11,7 +11,7 @@ CXXFLAGS := $(shell root-config --cflags) \
 	-I$(GO4_SRC_DIR) \
 	-I$(GO4SYS)/include \
 
-include includes/common.mk
+include includes/monad/common.mk
 
 LDFLAGS := $(shell root-config --ldflags) 
 LIBS := $(shell root-config --libs) \

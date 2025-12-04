@@ -1,12 +1,10 @@
-#include "libs.hh"
+#include "monad/monad.hxx"
+
 #include <algorithm>
 #include <iostream>
-
-#include "indicators/indicators.hh"
 #include <csignal>
+
 #include "CMDLineParser.h"
-#include "AuxFunctions.hh"
-#include "TAnalysisPool.hxx"
 #include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"
 #include "TFOOTCalProc.h"
@@ -16,7 +14,7 @@
 
 using namespace CMDLineParser;
 using namespace std::literals;
-using namespace util;
+using namespace mnd;
 
 extern const char* calibrate_help;
 
@@ -39,7 +37,7 @@ constexpr i32 static_detectors[] = {
 	FOOT_ID_6,
 	FOOT_ID_7
 };
-constexpr i32 N_FOOT = LEN(static_detectors);
+constexpr i32 N_FOOT = mnd::len(static_detectors);
 
 int main(int argc, char* argv[]) {
 	using namespace indicators;

@@ -2,19 +2,19 @@
 
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
-#include "core/TProcessor.hxx"
+#include "monad/monad.hxx"
 
 struct TFRSCalProc : TProcessor <
 	TFRSCalCont
 	(TFRSMapCont)
 > {
 	using Base = TProcessor<TFRSCalCont(TFRSMapCont)>;
-
-	constexpr static auto N_VALID_TPC = RNFRSCal::N_VALID_TPC;
-	constexpr static auto N_VALID_SCI = RNFRSCal::N_VALID_SCI;
 	
 	TFRSCalProc(TFRSCalCont& , const TFRSMapCont& );
 	TFRSCalProc() = default;
+
+	constexpr static auto N_VALID_TPC = RNFRSCal::N_VALID_TPC;
+	constexpr static auto N_VALID_SCI = RNFRSCal::N_VALID_SCI;
 
 	void ProcessEntry() noexcept;
 

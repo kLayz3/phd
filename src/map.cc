@@ -1,23 +1,19 @@
-#include "libs.hh"
+#include "monad/monad.hxx"
+
 #include <algorithm>
 #include <csignal>
 
-#include "indicators/indicators.hh"
 #include <csignal>
 #include <unistd.h>
 
 #include "CMDLineParser.h"
-#include "AuxFunctions.hh"
-#include "TAnalysisPool.hxx"
 #include "TFOOTMapProc.h"
 #include "TFOOTMapCont.h"
 #include "TFRSMapProc.h"
 #include "TFRSMapCont.h"
 
-#include "core/ROOTAux.hh"
-
 using namespace CMDLineParser;
-using namespace util;
+using namespace mnd;
 
 extern const char* map_help;
 
@@ -47,7 +43,7 @@ constexpr i32 static_detectors[] = {
 	FOOT_ID_6,
 	FOOT_ID_7
 };
-constexpr i32 N_FOOT = LEN(static_detectors);
+constexpr i32 N_FOOT = mnd::len(static_detectors);
 
 int main(i32 argc, char* argv[]) {
 	using namespace indicators;
@@ -90,7 +86,7 @@ int main(i32 argc, char* argv[]) {
 	TFOOTMapCont foot[N_FOOT];
 #define INIT_FOOT_(ID) \
 	{ \
-		int i = util::FindIndex(static_detectors, ID); \
+		int i = mnd::FindIndex(static_detectors, ID); \
 		if(i < 0) ERROR("Index cannot be found: ID=%d, i=%d", ID, i); \
 		TFOOTMapCont& f = foot[i]; \
 		info["FOOT_ID"] = #ID; \

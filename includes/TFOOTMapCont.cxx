@@ -3,7 +3,6 @@
 #include "TH2I.h"
 #include "TGraph.h"
 #include <cmath>
-#include <string>
 
 TFOOTMapCont::TFOOTMapCont(int N) : TContainer(Form("FOOT%d", N)), FOOT_N(N) {}
 

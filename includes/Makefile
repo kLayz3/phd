@@ -8,7 +8,7 @@ CXXFLAGS := $(shell root-config --cflags) -Wall -MMD -MP -fPIC \
 	-I$(GO4_SRC_DIR) \
 	-I$(GO4SYS)/include
 
-include common.mk
+include monad/common.mk
 
 LDFLAGS := $(shell root-config --ldflags)
 LIBS := $(shell root-config --libs) -lROOTNTuple

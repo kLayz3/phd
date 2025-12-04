@@ -1,10 +1,6 @@
 #include "TFRSCalCont.h"
-#include "core/AuxFunctions.hh"
 #include "TH2I.h"
 #include <stdexcept>
-#include <string>
-#include <tuple>
-#include <type_traits>
 
 using nlohmann::json;
 
@@ -13,9 +9,9 @@ TFRSCalCont::TFRSCalCont() : TContainer("FRS") {}
 void TFRSCalCont::Init(TDictInfo info) {
 	auto it = info.find("Setup");	
 	if(it == info.end()) 
-		ERROR("Setup key not found for info (%s).\n", util::type_name<TDictInfo>().c_str());
+		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
 	const std::string& file_name = it->second;
-	auto f = util::get_maybe_ifstream(file_name);
+	auto f = mnd::get_maybe_ifstream(file_name);
 	if(!f.has_value())
 		ERROR("File \'%s\' not found or not openable.\n", file_name.c_str());
 	
@@ -45,7 +41,7 @@ void TFRSCalCont::Init(TDictInfo info) {
 			"csum_lim",
 			"sci_ref_lim",
 		};
-		static_assert(TPCParam::N_PARAMS == LEN(keys),
+		static_assert(TPCParam::N_PARAMS == mnd::len(keys),
 			"Broken parameter mapping construction (tuple sizes b/w JSON representation and code mismatch)\n");
 		
 		/* Manually unroll here using a macro. Either that or do aerobatics getting runtime indexing. */
@@ -89,7 +85,7 @@ void TFRSCalCont::Init(TDictInfo info) {
 			"x_factor",
 			"cdiff_lim"
 		};
-		static_assert(SCIParam::N_PARAMS == LEN(keys),
+		static_assert(SCIParam::N_PARAMS == mnd::len(keys),
 			"Broken parameter mapping construction (tuple sizes b/w JSON representation and code mismatch)\n");
 
 		/* Copy-pasta from above. */
@@ -142,7 +138,7 @@ void TFRSCalCont::Setup() {
 	if(SCIParam::channel_to_ns < 0)
 		ERROR("Conversion between channel number to ns not given (or parsed) in \'%s\'", setup["file_name"].get_ref<const std::string&>().c_str());
 
-	setupName = RegisterObject<std::string>("setup_file", util::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
+	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 
 	h2_ab_s2_before_target->GetXaxis()->SetTitle("X [mm]");
 	h2_ab_s2_before_target->GetYaxis()->SetTitle("Y [mm]");

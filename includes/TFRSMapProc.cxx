@@ -1,8 +1,5 @@
 #include "TFRSMapProc.h"
-#include "TFRSMapCont.h"
-#include "core/libs.hh"
 #include <algorithm>
-#include <cstring>
 
 #if defined(__GNUC__)
 #	pragma GCC diagnostic push
@@ -16,12 +13,14 @@ void TFRSMapProc::SetupPointers() {
 
 	TFRSSortEvent* sort = input.raw();
 #define MAP_SCI(x, SCI_LABEL) \
-	this->sci[x]._nhit_raw[0] = &sort->tdc_nhit_sc##SCI_LABEL##l; \
-	this->sci[x]._nhit_raw[1] = &sort->tdc_nhit_sc##SCI_LABEL##r; \
-	this->sci[x]._data_raw[0] = &sort->tdc_sc##SCI_LABEL##l[0]; \
-	this->sci[x]._data_raw[1] = &sort->tdc_sc##SCI_LABEL##r[0]; \
-	this->sci[x]._qdc_raw[0]  = &sort->de_##SCI_LABEL##l; \
-	this->sci[x]._qdc_raw[1]  = &sort->de_##SCI_LABEL##r;
+	if(x < N_VALID_SCI) { \
+		this->sci[x]._nhit_raw[0] = &sort->tdc_nhit_sc##SCI_LABEL##l; \
+		this->sci[x]._nhit_raw[1] = &sort->tdc_nhit_sc##SCI_LABEL##r; \
+		this->sci[x]._data_raw[0] = &sort->tdc_sc##SCI_LABEL##l[0]; \
+		this->sci[x]._data_raw[1] = &sort->tdc_sc##SCI_LABEL##r[0]; \
+		this->sci[x]._qdc_raw[0]  = &sort->de_##SCI_LABEL##l; \
+		this->sci[x]._qdc_raw[1]  = &sort->de_##SCI_LABEL##r; \
+	}
 	
 	MAP_SCI(0, 21);
 	MAP_SCI(1, 22);
@@ -148,7 +147,7 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 		/* We don't really care about more than RNTPCMap::MAX_SIZE elements. 
 		 * Usually, that multiplicity indicates an inconsistent multi-hit event. */
 		Int_t N_max = std::min (
-			util::max (
+			mnd::max (
 				*std::max_element(std::begin(_nhits_l), std::end(_nhits_l)),
 				*std::max_element(std::begin(_nhits_r), std::end(_nhits_r)),
 				*std::max_element(std::begin(_nhits_a), std::end(_nhits_a)),

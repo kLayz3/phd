@@ -10,12 +10,8 @@
 #include "TH1D.h"
 #include "TTree.h"
 
+#include "monad/monad.hxx"
 #include "nlohmann/json.hpp"
-
-#include "core/libs.hh"
-#include "core/AuxFunctions.hh"
-#include "core/TOnce.hxx"
-#include "core/TProcessor.hxx"
 
 #include "TFOOTMapCont.h"
 #include "TFRSGo4Cont.hxx"
@@ -80,13 +76,13 @@ public:
 	 */
 	template<typename T, typename... Ts>
 	static void LoadBadStripsFile(T&& arg, Ts&&... other) {
-		static_assert(util::is_pathlike_arg_v<T>,
+		static_assert(mnd::is_pathlike_arg_v<T>,
 				"LoadBadStripsFile args must be std::ifstream or a path-like "
 				"(const char*, std::string, std::filesystem::path, std::string_view)");
 
 		std::ifstream f{}; 
 		try {
-			f = util::get_maybe_ifstream(std::forward<T>(arg)).value();
+			f = mnd::get_maybe_ifstream(std::forward<T>(arg)).value();
 		} catch(const std::exception& e) {
 			ERROR("Cannot open JSON file. It probably doesn't exist or unauthorized read.");
 		}

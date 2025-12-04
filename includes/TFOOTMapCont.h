@@ -1,8 +1,6 @@
 #pragma once
 
-#include "core/TContainer.hxx"
-#include "core/libs.hh"
-#include "core/TOnce.hxx"
+#include "monad/monad.hxx"
 
 #include <array>
 #include <vector>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/TProcessor.hxx"
+#include "monad/monad.hxx"
 #include "TFRSMapCont.h"
 #include "TFRSGo4Cont.hxx"
 
@@ -18,6 +18,9 @@ struct TFRSMapProc : TProcessor <
 	void  ProcessEntry() noexcept; 
 	void _ProcessEntry() noexcept; 
 
+	constexpr static i32 N_VALID_SCI = RNFRSMap::N_VALID_SCI;
+	constexpr static i32 N_VALID_TPC = RNFRSMap::N_VALID_TPC;
+
 private:
 	struct Sci {
 		static constexpr int MAX_SIZE = RNSciMap::MAX_SIZE;
@@ -29,15 +32,7 @@ private:
 	// --------------------------------------------------- //
 	struct TPC {
 		static constexpr int MAX_SIZE = RNTPCMap::MAX_SIZE;
-		static constexpr u32 tpc_ref[MAX_SIZE] {
-			0, // TPC21 => SCI21
-			0, // TPC22 => SCI21
-			0, // TPC23 => SCI21
-			1, // TPC24 => SCI22
-			2, // TPC31 => SCI31
-			3, // TPC41 => SCI41
-			3  // TPC42 => SCI41
-		};
+		
 		Int_t *_tpc_aa{};
 		Int_t *_tpc_lt[2], *_tpc_rt[2], *_tpc_at[4];
 		Int_t *_tpc_ltn[2], *_tpc_rtn[2], *_tpc_atn[4];
@@ -51,8 +46,8 @@ private:
 	// --------------------------------------------------- //
 	
 	Int_t* _pattern;	
-	std::array<Sci, 4> sci;
-	std::array<TPC, 7> tpc;
+	std::array<Sci, N_VALID_SCI> sci;
+	std::array<TPC, N_VALID_TPC> tpc;
 	std::array<MUSIC, 2> music;
 
 	void SetupPointers();

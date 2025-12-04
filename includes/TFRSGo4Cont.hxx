@@ -3,7 +3,7 @@
 class TFRSSortEvent;
 
 #include "TFRSSortEvent.h"
-#include "core/TContainer.hxx"
+#include "monad/monad.hxx"
 
 struct TFRSGo4Cont : TRawContainer<TFRSSortEvent> {
 	TFRSGo4Cont() {

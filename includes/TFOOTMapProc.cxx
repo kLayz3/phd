@@ -87,7 +87,7 @@ void TFOOTMapProc::CalcGlobalPedestal() {
 	}
 
 	FOR(i, N_STRIPS) {
-		auto slice = std::unique_ptr<TH1D>( h->ProjectionY(_MSG("_py%d-%d", N, i), i+1, i+1) );
+		auto slice = std::unique_ptr<TH1D>( h->ProjectionY(mnd::msg("_py%d-%d", N, i), i+1, i+1) );
 		slice->SetDirectory(nullptr);
 		
 		int maxBin = slice->GetMaximumBin();
@@ -193,7 +193,7 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 
 		std::sort(ped_offset.begin(), ped_offset.end());
 
-		ped_off_med = util::median( ped_offset ); 
+		ped_off_med = mnd::median( ped_offset ); 
 
 		ped_off_avg = std::accumulate (
 			ped_offset.cbegin() + N_TRIM_FINE_PED_LO, 
@@ -281,7 +281,7 @@ void TFOOTMapProc::CalcFinalPedestal() {
 	}
 	
 	FOR(i, N_STRIPS) {
-		auto slice = std::unique_ptr<TH1D>( out.h2_corr->ProjectionY(_MSG("_py%d-%d", N, i), i+1, i+1) );
+		auto slice = std::unique_ptr<TH1D>( out.h2_corr->ProjectionY(mnd::msg("_py%d-%d", N, i), i+1, i+1) );
 		slice->SetDirectory(nullptr);
 
 		if(slice->GetEntries() < 100) {
@@ -326,7 +326,7 @@ void TFOOTMapProc::parse_json_string(std::vector<int>& out, std::string s) {
 		R"(^(\d+)n(\+\d+)?$)"
 	);
 
-	util::Trim(s);
+	mnd::Trim(s);
 
 	/* Strings can be passed either as:
 	 * 1) raw numbers

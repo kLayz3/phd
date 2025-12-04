@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
 				(unsigned char*)buf.Buffer() + buf.Length());
 		*fEvt = buffer;
 		writer->Fill();
-		util::PrintProgress(bar, (u64)i, nEntries, 500);
+		mnd::PrintProgress(bar, (u64)i, nEntries, 500);
 	}
 	printf("\n");	
 	return 0;

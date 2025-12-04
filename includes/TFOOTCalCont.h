@@ -1,9 +1,7 @@
 #pragma once
 
-#include "core/TContainer.hxx"
+#include "monad/monad.hxx"
 #include <cstddef>
-#include <tuple>
-#include <type_traits>
 
 #include "TFOOTMapCont.h"
 
@@ -60,7 +58,7 @@ namespace std {
     template<> struct tuple_element<3, ::RNFOOTCluster> { using type = RNFOOTCluster::ClusterType; };
 }
 
-struct alignas(util::CL) RNFOOTCal {
+struct alignas(mnd::CL) RNFOOTCal {
 	static constexpr size_t INIT_CAPACITY = _FOOT_N_STRIPS_PER_ASIC;
 	static constexpr int N_STRIPS = _FOOT_N_STRIPS;
 

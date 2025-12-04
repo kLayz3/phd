@@ -1,6 +1,5 @@
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
-#include <cstdlib>
 #include "TFRSCalProc.h"
 
 /* Return a number in interval: [0,1> */ 
@@ -16,10 +15,10 @@ TFRSCalProc::TFRSCalProc(TFRSCalCont& out, const TFRSMapCont& in) : TFRSCalProc:
 }
 
 void TFRSCalProc::ProcessEntry() noexcept {
-	for(int i=0; i < N_VALID_TPC; ++i)
-		this->ProcessTPC(i);
 	for(int i=0; i < N_VALID_SCI; ++i)
 		this->ProcessSci(i);
+	for(int i=0; i < N_VALID_TPC; ++i)
+		this->ProcessTPC(i);
 }
 
 void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {	

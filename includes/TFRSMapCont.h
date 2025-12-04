@@ -1,7 +1,6 @@
 #pragma once
 
-#include "core/AuxFunctions.hh"
-#include "core/TContainer.hxx"
+#include "monad/monad.hxx"
 #include "TH1I.h"
 #include "TH2I.h"
 
@@ -92,9 +91,12 @@ struct RNMUSICMap {
 	ClassDef(RNMUSICMap, 1);
 };
 
-struct alignas(util::CL) RNFRSMap {
-	std::array<RNSciMap, 4> sci;
-	std::array<RNTPCMap, 7> tpc;
+struct alignas(mnd::CL) RNFRSMap {
+	constexpr static i32 N_VALID_SCI = 3;
+	constexpr static i32 N_VALID_TPC = 5;
+
+	std::array<RNSciMap, N_VALID_SCI> sci;
+	std::array<RNTPCMap, N_VALID_TPC> tpc;
 	std::array<RNMUSICMap<8>, 2> music;
 	uint32_t tpat;
 

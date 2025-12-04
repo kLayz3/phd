@@ -1,8 +1,6 @@
 #include "TFRSMapCont.h"
-#include "Rtypes.h"
 
 TFRSMapCont::TFRSMapCont() : TContainer("FRS") {}
-
 
 void TFRSMapCont::Setup() {
 	for(int i=0; i<4; ++i) {
