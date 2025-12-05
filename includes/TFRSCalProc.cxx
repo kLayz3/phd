@@ -3,7 +3,7 @@
 #include "TFRSCalProc.h"
 
 /* Return a number in interval: [0,1> */ 
-double uniform() noexcept {
+static double uniform() noexcept {
 	return static_cast<double>(rand()) / static_cast<double>(RAND_MAX + 1ULL); 
 }
 

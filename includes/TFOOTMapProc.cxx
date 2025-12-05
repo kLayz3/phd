@@ -13,11 +13,14 @@
 #include <numeric>
 #include <cmath>
 #include <regex>
+#include <mutex>
 
 static_assert(TFOOTMapProc::N_STRIPS == TFOOTMapProc::N_ASIC * TFOOTMapProc::N_STRIPS_PER_ASIC, "Failed build: nstrip != nasic*nstrip_per_asic!\n");
 
 using nlohmann::json;
 json TFOOTMapProc::_bad_strips{};
+
+static std::mutex g_foot_fit_mtx{};
 
 //struct FOOTView {
 //	bool* TSBad; u32* TLO; u32* THI; u32* SY;
@@ -79,6 +82,7 @@ void TFOOTMapProc::ProcessEntry() noexcept {
 	}
 }
 
+/* By default, this isn't thread safe, so we guard it. */
 void TFOOTMapProc::CalcGlobalPedestal() {
 	TH2I* h = out.h2_raw_tmp;
 	if(h->GetEntries() == 0) {
@@ -232,7 +236,8 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 
 	/* If we sample enough events, recalculate the global pedestal quickly from the batch. */
 	if((++nsampled) == n_batch_pedestal.amount) {
-		CalcGlobalPedestal();	
+		std::lock_guard<std::mutex> lock(g_foot_fit_mtx);
+		CalcGlobalPedestal();
 		nsampled = 0;
 	}
 }
