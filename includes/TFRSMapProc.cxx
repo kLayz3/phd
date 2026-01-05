@@ -224,7 +224,7 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 			{
 				out.h1_tpc_csum[s][a] -> Fill(
 					tdc[0].tdc_l[ndelay] + tdc[0].tdc_r[ndelay] - 
-					(tdc[0].tdc_a[a] << 1)
+					  2 * tdc[0].tdc_a[a]
 				);
 			}
 			if(_nhits_s == 1)

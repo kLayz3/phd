@@ -44,13 +44,12 @@ struct RNTPCCal {
 	struct Measurement {
 		double x = NAN;
 		double y = NAN;
-		int ref_tdc = -1;
-
 		Measurement() = default;
-		Measurement(double x, double y, int r) : 
-			x(x), y(y), ref_tdc(r) {}
+		Measurement(double _x, double _y) : 
+			x(_x), y(_y) {}
 		virtual ~Measurement() = default;
-	}; /* ^^^ Per anode measurement. */
+	}; /* ^^^ Per anode measurement. [0] and [1]; same as [2] and [3]
+	    have duplicate measurement for x. */
 	
 	using Measurements = std::vector <
 		std::array<Measurement, 4>
@@ -82,7 +81,7 @@ struct alignas(mnd::CL) RNFRSCal {
  * to have it as an object in the ROOT file for later. */
 
 struct TPCParam {
-	constexpr static std::size_t N_PARAMS = 6;
+	constexpr static std::size_t N_PARAMS = 7;
 
 	std::array<double, 2> x_offset;
 	std::array<double, 2> x_factor;
@@ -90,7 +89,9 @@ struct TPCParam {
 	std::array<double, 4> y_factor;
 	std::array<std::array<double, 2>, 4> csum_lim;
 	std::array<std::array<double, 2>, 4> sci_ref_lim; // for y-calculation.
-
+	
+	double z0; // nominal z position.
+	
 	GET_HELP_AUX_IMPL
 
 	virtual ~TPCParam() = default;
@@ -101,24 +102,26 @@ private:
 	static decltype(auto) get_helper(Self&& self) noexcept {
 		/* Brackets around return value because of decltype deduction rules. Check link:
 		 * https://stackoverflow.com/questions/27557369/why-does-decltypeauto-return-a-reference-here */
-		if constexpr(I == 0)      return (std::forward<Self>(self).x_offset);
+		if      constexpr(I == 0) return (std::forward<Self>(self).x_offset);
 		else if constexpr(I == 1) return (std::forward<Self>(self).x_factor);
 		else if constexpr(I == 2) return (std::forward<Self>(self).y_offset);
 		else if constexpr(I == 3) return (std::forward<Self>(self).y_factor);
 		else if constexpr(I == 4) return (std::forward<Self>(self).csum_lim);
 		else if constexpr(I == 5) return (std::forward<Self>(self).sci_ref_lim);
+		else if constexpr(I == 6) return (std::forward<Self>(self).z0);
 		else static_assert(I < N_PARAMS, "Index out of bounds.");
 	} 
 };
 
 struct SCIParam {
-	constexpr static std::size_t N_PARAMS = 3;
+	constexpr static std::size_t N_PARAMS = 4;
 	constexpr static double channel_to_ns = 0.025;
 
 	double x_offset;
 	double x_factor;
 	std::array<double, 2> cdiff_lim;
-
+	
+	double z0; // nominal z position, w.r.t. 'Abstaende S2 Strahlzeit 2024'.
 	GET_HELP_AUX_IMPL
 
 	virtual ~SCIParam() = default;
@@ -127,9 +130,10 @@ struct SCIParam {
 private:
 	template<std::size_t I, typename Self>
 	static decltype(auto) get_helper(Self&& self) noexcept {
-		if constexpr(I == 0)      return (std::forward<Self>(self).x_offset);
+		if      constexpr(I == 0) return (std::forward<Self>(self).x_offset);
 		else if constexpr(I == 1) return (std::forward<Self>(self).x_factor);
 		else if constexpr(I == 2) return (std::forward<Self>(self).cdiff_lim);
+		else if constexpr(I == 3) return (std::forward<Self>(self).z0);
 		else static_assert(I < N_PARAMS, "Index out of bounds.");
 	}
 };
@@ -142,11 +146,13 @@ namespace std {
 	template<> struct tuple_element<3, TPCParam> { using type = array<double, 4>; };
 	template<> struct tuple_element<4, TPCParam> { using type = array<array<double, 2>, 4>; };
 	template<> struct tuple_element<5, TPCParam> { using type = array<array<double, 2>, 4>; };
+	template<> struct tuple_element<6, TPCParam> { using type = double; };
 
 	template<> struct tuple_size<SCIParam> : integral_constant<size_t, SCIParam::N_PARAMS> {};
 	template<> struct tuple_element<0, SCIParam> { using type = double; };
 	template<> struct tuple_element<1, SCIParam> { using type = double; };
 	template<> struct tuple_element<2, SCIParam> { using type = array<double, 2>; };
+	template<> struct tuple_element<3, SCIParam> { using type = double; };
 }
 
 struct TFRSCalCont : TContainer<RNFRSCal> {
@@ -156,8 +162,9 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
 	inline static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
 	
 	// Which name corresponds to which index in later naming convention.
+	// Note, we keep this to match Go4.
 	inline static const std::map<std::string, u32> tpc_moniker { 
-		{"21", 0}, {"22", 1}, {"23", 2}, {"24", 3}, {"31", 4}, {"41", 5}, {"42", 6}
+		{"21", 0}, {"22", 1}, {"23", 2}, {"24", 3}, {"41", 4}, {"42", 5}, {"31", 6}
 	}; 
 	inline static const std::map<std::string, u32> sci_moniker { 
 		{"21", 0}, {"22", 1},                       {"31", 2}, {"41", 3}
@@ -171,6 +178,9 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
 	TH2I* h2_xy_s2_after_target;
 	TH2I* h2_ab_s2_after_target;
 	
+	TH2I* h2_xy_s4;
+	TH2I* h2_ab_s4;
+
 	TH1I* h1_x_sc21_before_target;
 	TH1I* h1_x_sc22_after_target;
 

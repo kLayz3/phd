@@ -25,6 +25,8 @@ private:
 		int dl_tdc;
 		int dr_tdc;
 		int ref_tdc;
+		
+		TPCHitCandidate() = default;
 		TPCHitCandidate(int a_tdc, int dl_tdc, int dr_tdc, int ref_tdc) noexcept :
 			a_tdc(a_tdc), dl_tdc(dl_tdc), dr_tdc(dr_tdc), ref_tdc(ref_tdc) {}
 
@@ -33,16 +35,29 @@ private:
 			return ref_tdc < rhs.ref_tdc;
 		}
 	};
+	struct TPCHitCandidateExtended {
+		int index; 
+		TPCHitCandidate hit; 
+		TPCHitCandidateExtended() = default;
+		TPCHitCandidateExtended(int _i, const TPCHitCandidate& _hit) : 
+			index(_i), hit(_hit) {};
+		
+		inline bool operator<(const TPCHitCandidateExtended& rhs) const noexcept {
+			return hit < rhs.hit;
+		}
+	};
 
 	constexpr static std::size_t CANDIDATE_LIST_CAPACITY = 8;
 	using TPCHitCandidateList = std::vector<TPCHitCandidate>;
 	
-	std::array<TPCHitCandidateList, 4> candidate_list {};
 	std::array<TPCHitCandidateList, 4> initial_candidate_list {};
+	std::array<TPCHitCandidateList, 4> candidate_list {};
 
-	constexpr static std::size_t HIT_LIST_CAPACITY = 10; 
-
+	std::vector<TPCHitCandidateExtended> full_candidate_list {};
+	
 	void ProcessTPC(int ) noexcept;
+	void ProcessS2Angle() noexcept;
+	void ProcessS4Angle() noexcept;
 	bool IsUniqueTPCMeasurement(const TPCHitCandidateList&, const TPCHitCandidate& ) noexcept;
 
 	/* === SCI analysis helper fnc's. === */

@@ -38,7 +38,7 @@ bool operator!=(TFOOTCalProc::ClusterFullType& full, TFOOTCalProc::ClusterType t
 	return !(full == t) ; 
 }
 
-TFOOTCalProc::ClusterType TFOOTCalProc::GetClusterType() {
+auto TFOOTCalProc::GetClusterType() -> ClusterType {
 	using E = TFOOTCalProc::ClusterType;
 	if(_ct == E::kGOOD)       return E::kGOOD;
 	if(_ct == E::kMERGED)     return E::kMERGED;

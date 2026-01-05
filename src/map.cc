@@ -132,7 +132,7 @@ int main(i32 argc, char* argv[]) {
 	 * and set them correspondingly (FOOT). */
 	for(auto& process : pool.GetPool()) {
 		auto subprocesses = process.GetProcesses(); 
-		/* ^^^^ std::array<TProcessorBase, _> */
+		/* ^^^^ std::array<TProcessorBase*, _> */
 
 		for(TProcessorBase* subproc : subprocesses) { 
 			TFOOTMapProc* pfoot = dynamic_cast<TFOOTMapProc*>(subproc);

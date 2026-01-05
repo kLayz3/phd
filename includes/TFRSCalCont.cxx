@@ -40,15 +40,13 @@ void TFRSCalCont::Init(TDictInfo info) {
 			"y_factor",
 			"csum_lim",
 			"sci_ref_lim",
+			"z0"
 		};
 		static_assert(TPCParam::N_PARAMS == mnd::len(keys),
 			"Broken parameter mapping construction (tuple sizes b/w JSON representation and code mismatch)\n");
 		
 		/* Manually unroll here using a macro. Either that or do aerobatics getting runtime indexing. */
 #define UNROLL_TPC_JSON_PARAM(X) \
-		if(! params.at(keys[X]).is_array()) { \
-			ERROR("TPC%d; Key \'%s\' not array in: %s\n", i, keys[X], pinfo.c_str());	 \
-		} \
 		try { \
 			/* Hacky part: right side is explicit conversion from nlohmann::json object
 			 * to std::array<?,?>. Type traits explore the exact array type. */ \
@@ -69,6 +67,7 @@ void TFRSCalCont::Init(TDictInfo info) {
 		UNROLL_TPC_JSON_PARAM(3)
 		UNROLL_TPC_JSON_PARAM(4)
 		UNROLL_TPC_JSON_PARAM(5)
+		UNROLL_TPC_JSON_PARAM(6)
 	}
 
 	for(const auto& [_sci_i, params] : setup.at("SCI").items()) {
@@ -83,7 +82,8 @@ void TFRSCalCont::Init(TDictInfo info) {
 		static const char* keys[] = {
 			"x_offset",
 			"x_factor",
-			"cdiff_lim"
+			"cdiff_lim",
+			"z0"
 		};
 		static_assert(SCIParam::N_PARAMS == mnd::len(keys),
 			"Broken parameter mapping construction (tuple sizes b/w JSON representation and code mismatch)\n");
@@ -105,13 +105,14 @@ void TFRSCalCont::Init(TDictInfo info) {
 		UNROLL_SCI_JSON_PARAM(0)
 		UNROLL_SCI_JSON_PARAM(1)
 		UNROLL_SCI_JSON_PARAM(2)
+		UNROLL_SCI_JSON_PARAM(3)
 	}
 }
 
 /* A small Add function for this type, which is a no-op. If it's not defined,
  * then folding `Collect` over this type will be compile error. */
-using T1 = std::remove_reference_t<decltype(TFRSCalCont::_tpc_param)>; // std::array<TPCParam, 7>
-using T2 = std::remove_reference_t<decltype(TFRSCalCont::_sci_param)>; // std::array<SCIParam, 3>
+using T1 = std::remove_reference_t<decltype(TFRSCalCont::_tpc_param)>; // std::array<TPCParam, _>
+using T2 = std::remove_reference_t<decltype(TFRSCalCont::_sci_param)>; // std::array<SCIParam, _>
 void Add(T1&, const T1&) {}
 void Add(T2&, const T2&) {}
 
@@ -123,6 +124,9 @@ void TFRSCalCont::Setup() {
 	h1_tpc_s2_after_target_nhit = RegisterObject<TH1I>("h1_tpc_s2_after_target_nhit", "Multiplicity of good hits (after target)", 10,0,10);
 	h2_xy_s2_after_target = RegisterObject<TH2I>("h2_xy_s2_after_target", "XY after target (mm x mm)", 200, -50, 50, 200, -50, 50);
 	h2_ab_s2_after_target = RegisterObject<TH2I>("h2_ab_s2_after_target", "Angle after target (mrad x mrad)", 200, -50, 50, 200, -50, 50);
+
+	h2_xy_s4 = RegisterObject<TH2I>("h2_xy_s4", "XY S4 (mm x mm)", 200, -50, 50, 200, -50, 50);
+	h2_ab_s4 = RegisterObject<TH2I>("h2_ab_s4", "Angle S4 (mrad x mrad)", 200, -50, 50, 200, -50, 50);
 	h1_x_sc21_before_target = RegisterObject<TH1I>("h1_x_sc21_before_target", "Position (from Scintillator) before target (mm)", 400,-100,100);
 	h1_x_sc22_after_target = RegisterObject<TH1I>("h1_x_sc22_after_target", "Position (from Scintillator) after target (mm)", 400,-100,100);
 
@@ -140,8 +144,11 @@ void TFRSCalCont::Setup() {
 
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 
-	h2_ab_s2_before_target->GetXaxis()->SetTitle("X [mm]");
-	h2_ab_s2_before_target->GetYaxis()->SetTitle("Y [mm]");
+	h2_ab_s4->GetXaxis()->SetTitle("Ax [mrad]");
+	h2_ab_s4->GetYaxis()->SetTitle("Ay [mrad]");
+
+	h2_ab_s2_before_target->GetXaxis()->SetTitle("Ax [mrad]");
+	h2_ab_s2_before_target->GetYaxis()->SetTitle("Ay [mrad]");
 
 	h1_x_sc21_before_target->GetXaxis()->SetTitle("X [mm]");
 	h1_x_sc22_after_target->GetXaxis()->SetTitle("X [mm]");

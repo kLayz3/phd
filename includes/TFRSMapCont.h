@@ -47,7 +47,7 @@ struct RNSciMap {
  */
 
 struct RNTPCMap {
-	static constexpr i32 MAX_SIZE = 8;
+	static constexpr i32 MAX_SIZE = 6;
 	static_assert(MAX_SIZE > 0 && MAX_SIZE < 64, "64 is what Go4 gives us. Don't make higher capacity!");
 
 	struct Measurement {
@@ -92,8 +92,8 @@ struct RNMUSICMap {
 };
 
 struct alignas(mnd::CL) RNFRSMap {
-	constexpr static i32 N_VALID_SCI = 3;
-	constexpr static i32 N_VALID_TPC = 5;
+	constexpr static i32 N_VALID_SCI = 4;
+	constexpr static i32 N_VALID_TPC = 7;
 
 	std::array<RNSciMap, N_VALID_SCI> sci;
 	std::array<RNTPCMap, N_VALID_TPC> tpc;

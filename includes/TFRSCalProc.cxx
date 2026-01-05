@@ -1,6 +1,8 @@
+#include "Eigen/Core"
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
 #include "TFRSCalProc.h"
+#include "Eigen/Dense"
 
 /* Return a number in interval: [0,1> */ 
 static double uniform() noexcept {
@@ -12,6 +14,8 @@ TFRSCalProc::TFRSCalProc(TFRSCalCont& out, const TFRSMapCont& in) : TFRSCalProc:
 		anode_list.reserve(CANDIDATE_LIST_CAPACITY);
 	for(auto& anode_list : initial_candidate_list)
 		anode_list.reserve(CANDIDATE_LIST_CAPACITY);
+	
+	full_candidate_list.reserve(CANDIDATE_LIST_CAPACITY * mnd::len(candidate_list));
 }
 
 void TFRSCalProc::ProcessEntry() noexcept {
@@ -19,6 +23,9 @@ void TFRSCalProc::ProcessEntry() noexcept {
 		this->ProcessSci(i);
 	for(int i=0; i < N_VALID_TPC; ++i)
 		this->ProcessTPC(i);
+
+	this->ProcessS2Angle();
+	this->ProcessS4Angle();
 }
 
 void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {	
@@ -26,6 +33,7 @@ void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {
 
 	for(auto& c : candidate_list) c.clear();
 	for(auto& c : initial_candidate_list) c.clear();
+	full_candidate_list.clear();
 	
 	const TFRSMapCont& input = std::get<0>( this->in );
 	const RNTPCMap& in = input.inner().tpc[_i_tpc];
@@ -36,7 +44,8 @@ void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {
 	/* For a general multihit combination, try to see which falls into Control Sum limits.
 	 * Ideally a hit will light up a delay line (LR), corresponding 1 or both anodes, and the referent scintillator. */
 	
-	const auto& [bx, ax, by, ay, csum_lim, sci_ref_lim] = TFRSCalCont::_tpc_param[_i_tpc]; 
+	[[maybe_unused]]
+	const auto& [bx, ax, by, ay, csum_lim, sci_ref_lim, _] = TFRSCalCont::_tpc_param[_i_tpc]; 
 	
 	/* Go over all recorded hits from map. Different channels can have different multihit value.
 	 * They're padded with `INVALID` value to indicate it's missing from a channel.
@@ -63,13 +72,13 @@ void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {
 							h1.tdc_a[a], /* Anode TDC value. */
 							INVALID,     /* Delay-left  TDC (to-be-found). */
 							INVALID,     /* Delay-right TDC (to-be-found). */ 
-							h0.tdc_ref /* Scintillator reference. */
+							h0.tdc_ref   /* Scintillator reference. */
 						);
 					}
 				}
-			}
-		}
-	}
+			} // loop over anodes
+		} // loop over all hits; only anode parts interesting 
+	} // loop over all hits; only SCI part interesting
 	
 	/* Second selection - go over all four anodes (a), and the corresponding
 	 * candidate hit list: (a, _, _, tdc_ref), 
@@ -103,42 +112,58 @@ void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {
 						if( IsUniqueTPCMeasurement(candidate_list[a], candidate) )
 							candidate_list[a].push_back(candidate);
 					}
-				}
-			}
+				} // loop over potential candidates
+			} // loop over initial candidates
 		}
-	}
+	} // loop over anodes indices 0,1,2,3
 
 	/* For each anode (a = 0,1,2,3) the corresponding hit list is complete.
 	 * But it's possible it isn't completely sorted. So just sort it now. 
-	 * Sorting is done based on referent (Sci) TDC value. */
-	for(int a=0; a<4; ++a) {
-		auto& list = candidate_list[a];	
-		std::sort(list.begin(), list.end());
-	}
+	 * Sorting is done based on referent (Sci) TDC value. Check bool operator<(...) function in the header. */
+	/* We extend the hitcandidate type to also attach the anode index with it. */
 
-	/* Write the values to the output. */
-
-	/* [1] Find how many elements we need to allocate,
+	/* [1] Create this extended hit list. */ 
+	/* [2] Find how many elements we need to allocate,
 	 * for each complete anode measurement(s). */
-	size_t _n_measurements = 0;
-	for(int a=0; a<4; ++a)
-		_n_measurements = std::max (
-			candidate_list[a].size(),
-			_n_measurements
-		);
-
-	out.hits.resize(_n_measurements);
-
 	for(int a=0; a<4; ++a) {
-		auto ref = a >> 1;
-		for(int n=0; n < (int)candidate_list[a].size(); ++n) {
-			TPCHitCandidate& valid_hit = candidate_list[a][n];
-			out.hits.at(n).at(a) = {
-				/* x-pos: */ ax[ref] * ( valid_hit.dl_tdc - valid_hit.dr_tdc)  + bx[ref],
-				/* y-pos: */ ay[ a ] * ( valid_hit.a_tdc  - valid_hit.ref_tdc) + by[ a ],
-				/* ref  : */ valid_hit.ref_tdc
-			};
+		const auto& list = candidate_list[a];	
+		for(const auto& hit : list)
+			full_candidate_list.emplace_back(a, hit);
+	}
+	/* [3] Sort the list w.r.t. sci reference TDC. */
+	std::sort(full_candidate_list.begin(), full_candidate_list.end());
+	
+	/* [4] Calculate how many output elements we need to allocate. */
+	size_t _n_measurements = 0;
+	int curr_ref_tdc = -1; 
+	for(const auto& hit_extended : full_candidate_list) {
+		if(hit_extended.hit.ref_tdc != curr_ref_tdc) {
+			++_n_measurements;
+			curr_ref_tdc = hit_extended.hit.ref_tdc;
 		}
+	}
+	//static u64 _n = 0;
+	//WARN("Ev: [%lu] _n_measurements = %zu\n", _n, _n_measurements);
+
+	/* [5] Resize output container. */
+	out.hits.assign(_n_measurements, { /* Default ctor == nan all fields */ });
+
+	/* [6] Sort out the hits into the output container. Do the linear calibration. */
+	curr_ref_tdc = -1;
+	int n = -1; 
+	for(const auto& ehit : full_candidate_list) {
+		const auto a   = ehit.index; /* Anode index: 0,1,2,3. */	
+		const auto ref = a >> 1;     /* Corresponding delay line index: 0,1. */
+		const TPCHitCandidate& valid_hit = ehit.hit;
+		
+		if(valid_hit.ref_tdc != curr_ref_tdc) {
+			++n;
+			curr_ref_tdc = valid_hit.ref_tdc;
+		}
+		out.hits.at(n).at(a) = {
+			/* x-pos: */ ax[ref] * ( valid_hit.dl_tdc - valid_hit.dr_tdc)  + bx[ref],
+			/* y-pos: */ ay[ a ] * ( valid_hit.a_tdc  - valid_hit.ref_tdc) + by[ a ],
+		};
 	}
 	
 	/* Make a preliminary plot of (x,y), only if _n_measurements is 1. */
@@ -158,6 +183,7 @@ void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {
 	}
 }
 
+/* This gets checked only per anode. */
 bool TFRSCalProc::IsUniqueTPCMeasurement(const TPCHitCandidateList& list, const TPCHitCandidate& candidate) noexcept {
 	/* Candidate must be completely unique to qualify a good measurement.
 	 * Do a small linear search to see if it can be added. */
@@ -168,6 +194,63 @@ bool TFRSCalProc::IsUniqueTPCMeasurement(const TPCHitCandidateList& list, const 
 		   e.ref_tdc == candidate.ref_tdc
 		) return false;
 	return true;
+}
+
+/* Preliminary angle analysis at S2. */
+void TFRSCalProc::ProcessS2Angle() noexcept {
+	constexpr int n = 3;
+
+	static const auto& tpc_param = this->out._tpc_param;
+	static const std::array<double, n> z = {
+		tpc_param[0].z0,
+		tpc_param[1].z0,
+		tpc_param[2].z0
+	};
+	
+	static const Eigen::Matrix<double, n, 2> A = [] {
+		Eigen::Matrix<double,n,2> tmp;
+		for(int i=0; i<n; ++i) {
+			tmp(i,0)  = z[i];
+			tmp(i,1) = 1.0;
+		}
+		return tmp;
+	}();
+
+	const auto& tpc = this->out.inner().tpc;
+	if(tpc[0].hits.size() == 1 and
+		tpc[1].hits.size() == 1 and
+		tpc[2].hits.size() == 1 )
+	{
+		
+		double x[n] = {0}, y[n] = {0};
+		for(int i=0; i<n; ++i) {
+			for(int a=0; a<4; ++a) {
+				x[i] += tpc[i].hits[0][a].x;
+				y[i] += tpc[i].hits[0][a].y;
+			}
+			x[i] /= 4;
+			y[i] /= 4;
+		}
+		Eigen::VectorXd X(n);
+		Eigen::VectorXd Y(n);
+
+		for(int i=0; i<n; ++i) {
+			X(i)    = x[i];
+			Y(i)    = y[i];
+		}
+		Eigen::Vector2d coeffs_x = A.colPivHouseholderQr().solve(X);
+		Eigen::Vector2d coeffs_y = A.colPivHouseholderQr().solve(Y);
+		double a = coeffs_x(0);
+		double b = coeffs_y(0);
+		
+		out.h2_ab_s2_before_target->Fill(1000*a, 1000*b);
+	}
+
+}
+
+/* Preliminary angle analysis at S2. */
+void TFRSCalProc::ProcessS4Angle() noexcept {
+	
 }
 
 void TFRSCalProc::ProcessSci(int _i_sci) noexcept {
@@ -183,7 +266,8 @@ void TFRSCalProc::ProcessSci(int _i_sci) noexcept {
 
 	const auto& hits = in.tdc;
 
-	const auto& [bx, ax, lim] = TFRSCalCont::_sci_param.at(_i_sci);
+	[[maybe_unused]]
+	const auto& [bx, ax, lim, _] = TFRSCalCont::_sci_param.at(_i_sci);
 
 	double d_l, d_r;
 
