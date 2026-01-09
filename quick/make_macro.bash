@@ -24,7 +24,7 @@ echo -e "using namespace std;"
 
 echo -e "int main(int argc, char* argv[]) {" >> $file
 echo -e "\tROOT::EnableImplicitMT();" >> $file
-echo -e "\tTApplication* app = new TApplication(\"myApp\", 0, 0);" >> $file
+echo -e "\tTApplication* app = new TApplication(\"myApp\", 0, 0);" >> $fie
 echo -e "\n\tprintf(\"End of main.\");" >> $file
 echo -e "\tapp->Run();" >> $file
 echo -e "\treturn 0;\n}" >> $file

@@ -5,6 +5,16 @@
 
 #include "TFOOTMapCont.h"
 
+#define GET_HELP_AUX_IMPL  \
+	template<std::size_t I> \
+    decltype(auto) get() &       noexcept { return get_helper<I>(*this); } \
+    template<std::size_t I>  \
+    decltype(auto) get() const & noexcept { return get_helper<I>(*this); } \
+    template<std::size_t I>  \
+    decltype(auto) get() &&      noexcept { return get_helper<I>(std::move(*this)); } \
+    template<std::size_t I> \
+    decltype(auto) get() const&& noexcept { return get_helper<I>(std::move(*this)); }
+
 class TH1D;
 
 struct RNFOOTCluster {
@@ -63,13 +73,6 @@ struct alignas(mnd::CL) RNFOOTCal {
 	static constexpr int N_STRIPS = _FOOT_N_STRIPS;
 
 	using ClusterType = RNFOOTCluster::ClusterType;
-	enum Orientation {
-		kUNSPECIFIED = 0,
-		kX           = 1,
-		kY           = 2,
-	};
-
-	Orientation o{};
 	std::vector<RNFOOTCluster> fCl{}; 
 
 	/* Record whole event in a vector, if we find a large cluster, for some reason. */
@@ -100,12 +103,17 @@ struct alignas(mnd::CL) RNFOOTCal {
 
 struct TFOOTCalCont : TContainer<RNFOOTCal> {
 	friend struct TFOOTCalProc;
-	static constexpr int N_STRIPS = RNFOOTCal::N_STRIPS;
-	using Orientation = RNFOOTCal::Orientation;	
-	
-	Orientation o = RNFOOTCal::kUNSPECIFIED; 
+
+	constexpr static int N_STRIPS = RNFOOTCal::N_STRIPS;
+	constexpr static double CENTRE_THR_DEFAULT = 3.3;
+	constexpr static double NEIGHB_THR_DEFAULT = 1.3;
+
+	/* These values will not get serialized. */
 	int FOOT_N = -1; /* Comes from sort step. */
 	int POS = -1; /* Force the FOOT's to be labelled 0,1,2,3,4,5,6,7 from now onward. */
+
+	double c_threshold = CENTRE_THR_DEFAULT;
+	double n_threshold = NEIGHB_THR_DEFAULT;
 
 	TH1I* h1_raw_mult; 
 	TH1I* h1_mult; 
@@ -117,6 +125,8 @@ struct TFOOTCalCont : TContainer<RNFOOTCal> {
 	TH1I* h1_dE_m2; 
 	TH1I* h1_dE_m3; 
 	TH1I* h1_sn_ratio; 
+
+	std::array<double,2> *threshold;
 
 	TFOOTCalCont() = default;
 

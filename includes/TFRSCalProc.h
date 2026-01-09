@@ -58,6 +58,7 @@ private:
 	void ProcessTPC(int ) noexcept;
 	void ProcessS2Angle() noexcept;
 	void ProcessS4Angle() noexcept;
+
 	bool IsUniqueTPCMeasurement(const TPCHitCandidateList&, const TPCHitCandidate& ) noexcept;
 
 	/* === SCI analysis helper fnc's. === */

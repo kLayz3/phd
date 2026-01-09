@@ -10,7 +10,7 @@ TFOOTMapCont::TFOOTMapCont(int N) : TContainer(Form("FOOT%d", N)), FOOT_N(N) {}
 
 using TA = std::array<double, _FOOT_N_STRIPS>;
 template<> void Add(TA& lhs, const TA& rhs) {
-	FOR(i, _FOOT_N_STRIPS) {
+	for(int i=0; i < _FOOT_N_STRIPS; ++i) {
 		lhs[i] += rhs[i], lhs[i] /= 2;
 	}
 }

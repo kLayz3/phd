@@ -90,7 +90,7 @@ void TFOOTMapProc::CalcGlobalPedestal() {
 		return;
 	}
 
-	FOR(i, N_STRIPS) {
+	for(int i=0; i < N_STRIPS; ++i) {
 		auto slice = std::unique_ptr<TH1D>( h->ProjectionY(mnd::msg("_py%d-%d", N, i), i+1, i+1) );
 		slice->SetDirectory(nullptr);
 		
@@ -98,15 +98,17 @@ void TFOOTMapProc::CalcGlobalPedestal() {
 		double fitMin = slice->GetBinCenter(maxBin - 10);
 		double fitMax = slice->GetBinCenter(maxBin + 10);
 
-		slice->Fit("gaus", "Q", "", fitMin, fitMax);
-		TF1* fitF = slice->GetFunction("gaus");
+		if(slice->GetEffectiveEntries() > 3)
+			slice->Fit("gaus", "Q", "", fitMin, fitMax);
+
+		TF1* fitF = slice->GetFunction("gaus"); // Quiet null if no fit performed for empty data.
 		
 		double pedestal, sigma;
 		if(fitF == nullptr) {
-			WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of raw data? Skipping. "
-				"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
+			//WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of raw data? Skipping. "
+			//	"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
 			pedestal = slice->GetBinContent(maxBin);
-			sigma = BAD_STRIP_CUTOFF_HI + 10;
+			sigma    = BAD_STRIP_CUTOFF_HI + 10;
 		} else {
 			pedestal = fitF->GetParameter(1);
 			sigma    = fitF->GetParameter(2);
@@ -125,7 +127,7 @@ void TFOOTMapProc::CalcGlobalPedestal() {
 		initial_calculated = true;
 	}
 
-	FOR(i, N_STRIPS) {
+	for(int i=0; i < N_STRIPS; ++i) {
 		out.h2_gped_per_batch->Fill (
 			batch_index,
 			i * 2 * TFOOTMapCont::N_GPED_CHANGE_TOLERANCE 
@@ -144,7 +146,7 @@ void TFOOTMapProc::ProcessInitialPedestal() noexcept {
 	if(footN == 0) return; 
 	
 	int iraw;	
-	FOR(i, N_STRIPS) {
+	for(int i=0; i < N_STRIPS; ++i) {
 		iraw = (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
 		out.h2_raw_tmp->Fill(i, data[iraw]);
 	}
@@ -176,11 +178,11 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 
 	double ped_off_med, ped_off_avg, adc_final; 
 	
-	FOR(asic, N_ASIC) /* 0..=9 */ {
+	for(int asic=0; asic < N_ASIC; ++asic) /* 0..=9 */ {
 		const int i0 = asic * N_STRIPS_PER_ASIC;
 		int i, iraw; 
 		
-		FOR(strip, N_STRIPS_PER_ASIC /* 0..=63 */) {
+		for(int strip=0; strip < N_STRIPS_PER_ASIC; ++strip) /* 0..=63 */ {
 			i = i0 + strip; // <--- 'true strip' : 0..=640
 			iraw = (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
 			
@@ -210,7 +212,7 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 		out.h2_ped_off_diff->Fill(asic, ped_off_avg - ped_off_med);
 	
 		/* Repeat the loop, subtract the collective small offset (fine correction). */
-		FOR(strip, N_STRIPS_PER_ASIC /* 0..=63 */) {
+		for(int strip=0; strip < N_STRIPS_PER_ASIC; ++strip) /* 0..=63 */ {
 			i = i0 + strip;
 			iraw = (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
 
@@ -281,17 +283,17 @@ void TFOOTMapProc::CalcFinalPedestal() {
 	if(out.h2_corr->GetEntries() == 0) {
 		WARN("Ran over the data, but found 0 events with calibrated data? Setting all pedestals ridiculously high." 
 			EMPH(FOOT: %d\n), N);
-		FOR(i, N_STRIPS) out.ped_s->at(i) = 10'000;
+		for(int i=0; i < N_STRIPS; ++i) out.ped_s->at(i) = 10'000;
 		return;
 	}
 	
-	FOR(i, N_STRIPS) {
+	for(int i=0; i < N_STRIPS; ++i) {
 		auto slice = std::unique_ptr<TH1D>( out.h2_corr->ProjectionY(mnd::msg("_py%d-%d", N, i), i+1, i+1) );
 		slice->SetDirectory(nullptr);
 
 		if(slice->GetEntries() < 100) {
 			WARN("FOOT%d, strip %d, found no entries in y-projection of calibrated data? Skipping.\n", N, i);
-			out.ped_s->at(i) = 10'000; /* Random number for high pedestal. */
+			out.ped_s->at(i) = 10'000'000; /* Random number for high pedestal. */
 			continue;
 		}
 		
@@ -300,7 +302,9 @@ void TFOOTMapProc::CalcFinalPedestal() {
 		double fitMax = slice->GetBinCenter(maxBin + 10);
 
 		slice->Fit("gaus", "Q", "", fitMin, fitMax);
-		TF1* fitF = slice->GetFunction("gaus");
+
+		TF1* fitF = slice->GetFunction("gaus"); // Quiet null if no fit performed for empty data.
+
 		if(fitF == nullptr) {
 			WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of calibrated data? Skipping. "
 				"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
@@ -318,7 +322,7 @@ void TFOOTMapProc::CalcFinalPedestal() {
 	ParseStaticBadStrips();
 }
 
-/* ============= EXTRA AUX JSON FUNCTIONS ================= */
+/* ============= Extra aux JSON functions. ================= */
 
 void TFOOTMapProc::parse_json_string(std::vector<int>& out, std::string s) {
 	static const std::regex re_num(

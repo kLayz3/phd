@@ -121,8 +121,8 @@ int main(i32 argc, char* argv[]) {
 		.emplace_process<TFOOTMapProc>( foot[6], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
 		.emplace_process<TFOOTMapProc>( foot[7], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
 		.emplace_process<TFRSMapProc >( frs,     sort, TFRSMapProc::DoAnalysis::NO)
-		.MakePool<8>( n_batch );
-		//.MakePool<1>( 500 );
+		.MakePool<4>( n_batch );
+		//.MakePool<1>( 512 );
 
 	/* To register the initial FOOT global pedestals. */
 	pool.SendOneBatch( n_batch );

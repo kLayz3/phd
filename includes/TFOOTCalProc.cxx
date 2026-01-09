@@ -49,9 +49,8 @@ auto TFOOTCalProc::GetClusterType() -> ClusterType {
 }
 
 /* Input and output should be properly assigned a priori. */
-TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, double x_seed, double x_neigh) : 
-	TFOOTCalProc::Base(out, in), 
-	X_CENTRE_THR(x_seed), X_NEIGHB_THR(x_neigh)
+TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) : 
+	TFOOTCalProc::Base(out, in) 
 {
 	TFOOTMapCont& input = std::get<0>(this->in);
 	if(!input.ped_s || input.ped_s->size() != N_STRIPS)
@@ -60,15 +59,17 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, double x_seed, d
 
 	if(out.FOOT_N < 0 || out.POS < 0) 
 		ERROR("Output object (TFOOTCalCont): \'%s\' uninitialized. Did you call ::Setup?", out.GetName());
+	
+	X_CENTRE_THR = out.c_threshold;
+	X_NEIGHB_THR = out.n_threshold;
 
 	const auto& sigma = *input.ped_s;
 	for(int i=0; i<N_STRIPS; ++i) {
 		c_thr[i] = sigma[i] * X_CENTRE_THR; 
 		n_thr[i] = sigma[i] * X_NEIGHB_THR; 
-		//fprintf(stderr, "%.2f ", sigma[i]);
-	} //fprintf(stderr, "\n");
+	}
 
-	/* Bad/dead strips just label them with large thresholds.. */
+	/* Bad/dead strips just label them with NAN'ed thresholds. */
 	const std::vector<int>& bad_strips = *input.bad_strips;
 	for(auto i : bad_strips) {
 		c_thr[i] = BAD_STRIP_FAKE_THRESHOLD; 
@@ -77,9 +78,9 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, double x_seed, d
 
 	for(int i=0; i<N_STRIPS; ++i) {
 		if(n_thr[i] < 0.01)
-			ERROR("IDK bro: FOOT%d, strip = %d, n_thr = %.2f. Fix it.\n", input.FOOT_N, i, n_thr[i]);
+			ERROR("FOOT[%d -> %d], strip = %d, n_thr = %.2f too small.\n", out.FOOT_N, out.POS, i, n_thr[i]);
 		if(c_thr[i] < 0.01)
-			ERROR("IDK bro: FOOT%d, strip = %d, c_thr = %.2f. Fix it.\n", input.FOOT_N, i, c_thr[i]);
+			ERROR("FOOT[%d -> %d], strip = %d, c_thr = %.2f too small.\n", out.FOOT_N, out.POS, i, c_thr[i]);
 	}
 
 	/* Set the _e pointer. */
@@ -186,9 +187,9 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	}
 
 	/* Handle the wavyness in the cluster. If it is fragmented/merged, then it's wavy by default.
-	 * Meaning: first sequence of collected strips energy must be monotonically increasing,
-	 * while second sequence must have monotonically decreasing energy values, as to yield a proper
-	 * hit structure, if the cluster is to be marked `kGOOD`.  */
+	 * Meaning that a cluster marked `kGOOD` has: first sequence (left-to-right) of collected strips 
+	 * energy must be monotonically increasing, while second sequence must have monotonically 
+	 * decreasing energy values, as to yield a proper hit structure. */
 	
 	if(_ct != ClusterType::kFRAGMENTED and _ct != ClusterType::kMERGED) {
 		double prev_e = 0;

@@ -181,6 +181,7 @@ void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {
 		if(_i_tpc == 2) this->out.h2_xy_s2_before_target->Fill(x0, y0);
 		else if(_i_tpc == 3) this->out.h2_xy_s2_after_target->Fill(x0, y0);
 	}
+
 }
 
 /* This gets checked only per anode. */

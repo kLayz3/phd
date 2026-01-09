@@ -1,5 +1,7 @@
 #include "TFOOTCalCont.h"
 #include "TH1I.h"
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
 
 RNFOOTCluster::RNFOOTCluster(double x, double e, double m, ClusterType t) :
 	fCX(x), fCE(e), fCM(m), fCT(t) {}
@@ -48,9 +50,46 @@ void TFOOTCalCont::Init(TDictInfo info) {
 
 	FOOT_N = int_mappings.at("FOOT_ID");
 	POS = int_mappings.at("FOOT_POS");
+	
+	auto it = info.find("Setup");	
+	if(it == info.end()) {
+		WARN("TFOOTCalCont::Init(): `Setup` key not found for info (%s). " 
+			"Is fine, will default to (%.2f, %.2f) thresholds (in units of sigma).\n", mnd::type_name<TDictInfo>().c_str(),
+			TFOOTCalCont::CENTRE_THR_DEFAULT, TFOOTCalCont::NEIGHB_THR_DEFAULT);
+	}
+	else {
+		json j {};
+		const std::string& file_name = it->second;
+		auto f = mnd::get_maybe_ifstream(file_name);
+		if(!f.has_value())
+			ERROR("File \'%s\' not found or not openable.\n", file_name.c_str());
+
+		try {
+			j = json::parse(std::move( f.value() ));
+			auto j_it = j.find(Form("FOOT%d", FOOT_N));
+			if(j_it == j.end()) 
+				ERROR("FOOT[%d -> %d], setup file doesn't contain the key \"FOOT%d\".", FOOT_N, POS, FOOT_N);
+			
+			json& jf = j_it.value();
+			if(j_it = jf.find("c_threshold"); j_it != jf.end()) {
+				c_threshold = j_it.value().get<double>();
+			}
+			if(j_it = jf.find("n_threshold"); j_it != jf.end()) {
+				n_threshold = j_it.value().get<double>();
+			}
+			assert(c_threshold > n_threshold && Form("FOOT[%d -> %d] cthreshold(%.2f) < nthreshold(%.2f). Not allowed,",
+				FOOT_N, POS, c_threshold, n_threshold));
+
+		} catch(std::exception const& e) {
+			ERROR("Setup parse failed. Reason: %s\n", e.what());
+		}
+	}
 
 	this->SetName(Form("FOOT%d", POS));
 }
+
+using A2 = std::array<double, 2>;
+template<> void Add(A2& lhs, const A2& rhs) {}
 
 void TFOOTCalCont::Setup() {
 	if(strlen(GetName()) == 0) ERROR("Setup called before Init?");
@@ -63,6 +102,8 @@ void TFOOTCalCont::Setup() {
 	h1_dE_m2    = RegisterObject<TH1I>("h1_dE_m2", Form("(%2d:%d) energy with multiplicity 2", FOOT_N, POS), 2500, 0, 500);
 	h1_dE_m3    = RegisterObject<TH1I>("h1_dE_m3", Form("(%2d:%d) energy with multiplicity 3", FOOT_N, POS), 2500, 0, 500);
 	h1_sn_ratio = RegisterObject<TH1I>("h1_sn_ratio", Form("(%2d:%d) ratio neighbouring vs. seed value (mult <= 3)", FOOT_N, POS), 500, 0, 5);
+	
+	threshold = RegisterObject<A2>("threshold", mnd::noop_fn<A2>(), {c_threshold, n_threshold});
 }
 
 ClassImp(RNFOOTCluster);

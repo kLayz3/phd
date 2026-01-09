@@ -28,14 +28,14 @@ extern const char* calibrate_help;
 #define FOOT_ID_7 21
 
 constexpr i32 static_detectors[] = {
-	FOOT_ID_0, 
-	FOOT_ID_1,
-	FOOT_ID_2,
-	FOOT_ID_3,
-	FOOT_ID_4,
-	FOOT_ID_5,
-	FOOT_ID_6,
-	FOOT_ID_7
+	FOOT_ID_0, // Gets mapped to FOOT0
+	FOOT_ID_1, // Gets mapped to FOOT1
+	FOOT_ID_2, // Gets mapped to FOOT2
+	FOOT_ID_3, // Gets mapped to FOOT3
+	FOOT_ID_4, // Gets mapped to FOOT4
+	FOOT_ID_5, // Gets mapped to FOOT5
+	FOOT_ID_6, // Gets mapped to FOOT6
+	FOOT_ID_7  // Gets mapped to FOOT7
 };
 constexpr i32 N_FOOT = mnd::len(static_detectors);
 
@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
 
 	srand(time(NULL));	
 
-	std::string pStr, fileName, outFile;
+	std::string pStr, fileName, outFile, setupFile, footSetupFile;
 	u64 maxEvents = -1;
 
 	CMDLineParser::Mandatory::SetDefMessage(calibrate_help);
@@ -62,6 +62,14 @@ int main(int argc, char* argv[]) {
 	if(ParseCmdLine("max-events", pStr, argc, argv)) {
 		try { maxEvents = stoi(pStr); }
 		catch(std::exception& e) { WARN("Unparsable " EMPH(max-events) " argument to u64"); std::cout << e.what() << std::endl; }
+	}
+	if(!ParseCmdLine("setup", setupFile, argc, argv)) {
+		setupFile = PROG_PATH "/params/frs_setup.json";
+		WARN("FRS setup file not specified. Defaulting to: " EMPH(%s\n), setupFile.c_str());
+	}
+	if(!ParseCmdLine("foot-setup", footSetupFile, argc, argv)) {
+		footSetupFile = PROG_PATH "/params/foot_setup.json";
+		WARN("FOOT setup file not specified. Defaulting to: " EMPH(%s\n), footSetupFile.c_str());
 	}
 
 	VerifyNoArgumentsLeft(argc, argv);
@@ -78,28 +86,29 @@ int main(int argc, char* argv[]) {
 	mfrs.Setup();
 
 	TFRSCalCont cfrs{};
-	cfrs.Init( {{"Setup", PROG_PATH "/params/frs_setup.json"}} );
+	cfrs.Init( {{"Setup", setupFile }} );
 	cfrs.Setup();
 
 	TFOOTCalCont cfoot[N_FOOT]; // output container.
 	for(int i=0; i<N_FOOT; ++i) {
 		cfoot[i].Init({
 			{ "FOOT_ID"s, std::to_string(::static_detectors[i]) }, 
-			{ "FOOT_POS"s, std::to_string(i) }
+			{ "FOOT_POS"s, std::to_string(i) },
+			{ "Setup"s, footSetupFile }
 		});
 		cfoot[i].Setup();
 	}
 
 	/* Set up the process pool. */
 	auto pool = TAnalysisProcess<>(fileName, outFile, "h103")
-		.emplace_process<TFOOTCalProc>(cfoot[0], mfoot[0], 4, 1)
-		.emplace_process<TFOOTCalProc>(cfoot[1], mfoot[1], 4, 1)
-		.emplace_process<TFOOTCalProc>(cfoot[2], mfoot[2], 4, 1)
-		.emplace_process<TFOOTCalProc>(cfoot[3], mfoot[3], 4, 1)
-		.emplace_process<TFOOTCalProc>(cfoot[4], mfoot[4], 4, 1)
-		.emplace_process<TFOOTCalProc>(cfoot[5], mfoot[5], 4, 1)
-		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6], 4, 1)
-		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7], 4, 1)
+		.emplace_process<TFOOTCalProc>(cfoot[0], mfoot[0])
+		.emplace_process<TFOOTCalProc>(cfoot[1], mfoot[1])
+		.emplace_process<TFOOTCalProc>(cfoot[2], mfoot[2])
+		.emplace_process<TFOOTCalProc>(cfoot[3], mfoot[3])
+		.emplace_process<TFOOTCalProc>(cfoot[4], mfoot[4])
+		.emplace_process<TFOOTCalProc>(cfoot[5], mfoot[5])
+		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6])
+		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7])
 		.emplace_process<TFRSCalProc >(cfrs    , mfrs)
 		.MakePool<8>( 4096 );
 		/* Number of subthreads, chunk size. */
@@ -136,8 +145,10 @@ For either single or multiple values.\n\
 \n\
 -file input.root            ..Input file(s).\n\
 -output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_cal' suffix.\n\
--help                       ..Print this message to stdout. \n\
+-setup /PATH/TO/FRS.json    ..Specify FRS JSON setup file name.\n\
+-foot-setup /PATH/TO/JSON   ..Specify FOOT JSON setup file name.\n\
 -max-events N               ..Specify how many events to process in the ROOT file. Default all.\n\
+-help                       ..Print this message to stdout. \n\
 \n\
 This program will analyse the mapped ROOT file and perform the clustering of the FOOT data + calibrating FRS data.\n\
 Always remember: PHYSICS IS FUN <(^.^)>\n\n";

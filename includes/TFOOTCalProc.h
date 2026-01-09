@@ -14,7 +14,7 @@ struct TFOOTCalProc : TProcessor <
 	static constexpr int N_STRIPS    = TFOOTCalCont::N_STRIPS; /* 640 */
 	static constexpr int MAX_CL_SIZE = 40; /* Maximal allowed cluster size. */
 	static constexpr int MASSIVE_CLUSTER_CUTOFF = 20; /* After which multiplicity a cluster is called 'massive' */
-	static constexpr double BAD_STRIP_FAKE_THRESHOLD = 10'000;
+	static constexpr double BAD_STRIP_FAKE_THRESHOLD = NAN;
 
 	static_assert(MAX_CL_SIZE > MASSIVE_CLUSTER_CUTOFF);
 
@@ -32,18 +32,10 @@ struct TFOOTCalProc : TProcessor <
 		double e; /* ADC value. */
 	};
 
-	static constexpr double X_CENTRE_THR_STATIC = 4;
-	static constexpr double X_NEIGHB_THR_STATIC = 1;
-	
-	static_assert(X_CENTRE_THR_STATIC > X_NEIGHB_THR_STATIC, 
-		"Cannot cluster correctly if seed strip threshold cutoff is smaller than neighbouring strip's threshold (AMS paper).");
-
 	double X_CENTRE_THR;
 	double X_NEIGHB_THR;
 	
-	TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, 
-			double x_seed  = X_CENTRE_THR_STATIC, 
-			double x_neigh = X_NEIGHB_THR_STATIC);
+	TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in);
 	TFOOTCalProc() = default;
 
 	void ProcessEntry() noexcept;

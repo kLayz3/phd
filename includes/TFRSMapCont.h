@@ -40,7 +40,7 @@ struct RNSciMap {
  * -> This is diabolically bad, since we always take differences `tdc_l[??] - tdc_r[??]` and these references
  *  aren't on the same cache line. Worst yet - this heap allocated sequence could share close line with some FOOT
  *  data too, making congestion insane, and basically most values aren't (initially) cached in L1d.
- *  Having this layout and doing the simple loop above, slows down the whole program by a factor 101 !
+ *  Having this layout and doing the simple loop above, slows down the whole program by a factor 100 !
  *
  *  A great read to the whole L1d locality + cache congestion and how indeed malloc works under the hood:
  *  https://people.freebsd.org/~lstewart/articles/cpumemory.pdf
