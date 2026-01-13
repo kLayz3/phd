@@ -47,7 +47,7 @@ struct RNSciMap {
  */
 
 struct RNTPCMap {
-	static constexpr i32 MAX_SIZE = 6;
+	static constexpr i32 MAX_SIZE = 8;
 	static_assert(MAX_SIZE > 0 && MAX_SIZE < 64, "64 is what Go4 gives us. Don't make higher capacity!");
 
 	struct Measurement {

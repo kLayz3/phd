@@ -1,56 +1,56 @@
 {
 	"FOOT10": {
 		"position": 0,
-		"orientation": "x",
+		"orientation": "y",
 		"mirrored": 0,
 		"c_threshold": 3.2,
 		"n_threshold": 1.2
 	},
 	"FOOT17": {
 		"position": 0,
-		"orientation": "y",
+		"orientation": "-x",
 		"mirrored": 0,
 		"c_threshold": 3.2,
 		"n_threshold": 1.2
 	},
 	"FOOT19": {
 		"position": 1,
-		"orientation": "x",
+		"orientation": "y",
 		"mirrored": 0,
 		"c_threshold": 3.2,
 		"n_threshold": 1.2
 	},
 	"FOOT20": {
 		"position": 1,
-		"orientation": "y",
+		"orientation": "-x",
 		"mirrored": 0,
 		"c_threshold": 3.2,
 		"n_threshold": 1.2
 	},
 	"FOOT22": {
 		"position": 2,
-		"orientation": "x",
+		"orientation": "y",
 		"mirrored": 0,
 		"c_threshold": 3.2,
 		"n_threshold": 1.2
 	},
 	"FOOT25": {
 		"position": 2,
-		"orientation": "y",
+		"orientation": "-x",
 		"mirrored": 0,
 		"c_threshold": 3.2,
 		"n_threshold": 1.2
 	},
 	"FOOT23": {
 		"position": 3,
-		"orientation": "x",
+		"orientation": "y",
 		"mirrored": 0,
 		"c_threshold": 3.2,
 		"n_threshold": 1.2
 	},
 	"FOOT21": {
 		"position": 3,
-		"orientation": "y",
+		"orientation": "-x",
 		"mirrored": 0,
 		"c_threshold": 3.2,
 		"n_threshold": 1.2

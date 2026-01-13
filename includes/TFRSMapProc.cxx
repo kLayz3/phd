@@ -212,7 +212,7 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 		out.h1_tpc_ma1[s]->Fill( _nhits_a[1] );
 		out.h1_tpc_ma2[s]->Fill( _nhits_a[2] );
 	
-		/* Only fill if N_max > 1. */
+		/* Only fill histos if N_max > 1. */
 		if(N_max == 0) continue;
 
 		for(int a = 0; a<4; ++a) { /* Loop over anode indices. */

@@ -42,14 +42,18 @@ struct RNTPCCal {
 	 * with a no-op. */
 	
 	struct Measurement {
-		double x = NAN;
-		double y = NAN;
+		static constexpr i32 TDC_INVALID = RNTPCMap::Measurement::TDC_INVALID;
+		double x  = NAN;
+		double y  = NAN;
+		i64 ref   = TDC_INVALID;   
+		// 8-byte `ref`, because anyway the 4-byte i32 would net dummy 4-byte padding
+
 		Measurement() = default;
-		Measurement(double _x, double _y) : 
-			x(_x), y(_y) {}
+		Measurement(double _x, double _y, i64 _ref) : 
+			x(_x), y(_y), ref(_ref) {}
 		virtual ~Measurement() = default;
 	}; /* ^^^ Per anode measurement. [0] and [1]; same as [2] and [3]
-	    have duplicate measurement for x. */
+	    should have duplicate measurement for x. */
 	
 	using Measurements = std::vector <
 		std::array<Measurement, 4>

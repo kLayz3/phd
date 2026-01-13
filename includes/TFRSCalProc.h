@@ -50,6 +50,7 @@ private:
 	constexpr static std::size_t CANDIDATE_LIST_CAPACITY = 8;
 	using TPCHitCandidateList = std::vector<TPCHitCandidate>;
 	
+	/* One list per anode. */
 	std::array<TPCHitCandidateList, 4> initial_candidate_list {};
 	std::array<TPCHitCandidateList, 4> candidate_list {};
 
@@ -59,8 +60,9 @@ private:
 	void ProcessS2Angle() noexcept;
 	void ProcessS4Angle() noexcept;
 
-	bool IsUniqueTPCMeasurement(const TPCHitCandidateList&, const TPCHitCandidate& ) noexcept;
+	TPCHitCandidate* IsUniqueTPCMeasurement(TPCHitCandidateList&, const TPCHitCandidate& ) noexcept;
 
+	static std::array<std::array<double,4>, N_VALID_TPC> csum_mid;
 	/* === SCI analysis helper fnc's. === */
 	void ProcessSci(int ) noexcept;
 };

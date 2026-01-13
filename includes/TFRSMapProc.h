@@ -53,10 +53,10 @@ private:
 	void SetupPointers();
 
 	/* Some TPC vars' local temporary storage. */
-	Int_t _nhits_l[2] {};
-	Int_t _nhits_r[2] {};
-	Int_t _nhits_a[4] {};
-	Int_t _nhits_s {};
+	Int_t _nhits_l[2] {}; // Number of hits in the delay-left  vector 
+	Int_t _nhits_r[2] {}; // Number of hits in the delay-right vector
+	Int_t _nhits_a[4] {}; // Number of hits in the     anode   vector
+	Int_t _nhits_s {};    // Number of hits in the ref. sci    vector
 
 	std::array<Int_t, RNTPCMap::MAX_SIZE> _temp {};
 };

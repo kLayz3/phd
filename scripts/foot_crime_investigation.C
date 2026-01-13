@@ -37,12 +37,12 @@ void foot_crime_investigation(std::string fileName = "", uint32_t pos = 0) {
 	TH2I *h2_foot_x[8];
 	TH2I *h2_foot_y[8];
 	for(int i=0; i<8; ++i) {
-		h2_foot_x[i] = new TH2I(Form("FOOT%d_x_corr", i), Form("FOOT%d_x_corr", i), 640,0,640, 200, -40, 40);
-		h2_foot_y[i] = new TH2I(Form("FOOT%d_y_corr", i), Form("FOOT%d_y_corr", i), 640,0,640, 200, -40, 40);
+		h2_foot_x[i] = new TH2I(Form("FOOT%d_x_corr", i), Form("FOOT%d_x_corr", i), 320,0,640, 200, -40, 40);
+		h2_foot_y[i] = new TH2I(Form("FOOT%d_y_corr", i), Form("FOOT%d_y_corr", i), 320,0,640, 200, -40, 40);
 	}
-	TH2I* h2_tpc = new TH2I("h2_tpc", "TPC y vs. x", 200, -40, 40, 200, -40, 40);
+	TH2I* h2_tpc = new TH2I("h2_tpc", "TPC y vs. x", 200, -40, 40, 120, -40, 40);
 
-	double k = ( z[ static_cast<int>(pos) ] - zT ) / (zTPC - zT);
+	const double k = ( z[ static_cast<int>(pos) ] - zT ) / (zTPC - zT);
 
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
@@ -55,9 +55,13 @@ void foot_crime_investigation(std::string fileName = "", uint32_t pos = 0) {
 		auto p_tpc = MeanXY(m);
 		h2_tpc->Fill( p_tpc[0], p_tpc[1] );
 
+#if 1
 		double x_extrapolated = k * p_tpc[0]; 
 		double y_extrapolated = k * p_tpc[1]; 
-		
+#else
+		double x_extrapolated = p_tpc[0]; 
+		double y_extrapolated = p_tpc[1]; 
+#endif
 		for(int i=0; i<8; ++i) {
 			std::vector<double> cl_pos = foot[i]->X();
 			for(const auto p : cl_pos) {
