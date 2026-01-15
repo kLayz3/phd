@@ -36,6 +36,13 @@ void TFRSMapCont::Setup() {
 				Form("TPC%d_YDiff%d", i,a), Form("TPC%d anode(%d) - ref (mult == 1; in both)", i, a), 20000, 0, 100000
 			); 
 		}
+
+		for(int a=0; a<2; ++a) {
+			h1_tpc_adiff[i][a] = RegisterObject<TH1I>(
+				Form("TPC%d_ADiff%d", i,a), Form("TPC%d anode(%d) - anode(%d) (mult == 1; in both)", i, 2*a, 2*a+1), 
+					20000, -10000, 10000
+			); 
+		}
 	}
 };
 

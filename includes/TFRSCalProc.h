@@ -17,52 +17,51 @@ struct TFRSCalProc : TProcessor <
 	constexpr static auto N_VALID_SCI = RNFRSCal::N_VALID_SCI;
 
 	void ProcessEntry() noexcept;
-
+	
 private:
 	/* Encapsulating viable data from single TPC, single anode channel */
 	struct TPCHitCandidate {
-		int a_tdc;
-		int dl_tdc;
-		int dr_tdc;
-		int ref_tdc;
+		i32 a_tdc;
+		i32 dl_tdc;
+		i32 dr_tdc;
+		i32 ref_tdc;
 		
 		TPCHitCandidate() = default;
-		TPCHitCandidate(int a_tdc, int dl_tdc, int dr_tdc, int ref_tdc) noexcept :
-			a_tdc(a_tdc), dl_tdc(dl_tdc), dr_tdc(dr_tdc), ref_tdc(ref_tdc) {}
+		TPCHitCandidate(i32 _a_tdc, i32 _dl_tdc, i32 _dr_tdc, i32 _ref_tdc) noexcept :
+			a_tdc(_a_tdc), dl_tdc(_dl_tdc), dr_tdc(_dr_tdc), ref_tdc(_ref_tdc) {}
+	};
 
-		inline int CSum() noexcept { return dl_tdc + dr_tdc - (a_tdc << 1); }
-		inline bool operator<(const TPCHitCandidate& rhs) const noexcept {
+	struct TPCHitCandidateExtended {
+		std::array<i32,2> a_tdc;
+		i32 dl_tdc;
+		i32 dr_tdc;
+		i32 ref_tdc;
+		TPCHitCandidate hit; 
+		TPCHitCandidateExtended() = default;
+		TPCHitCandidateExtended(std::array<i32,2> _a_tdc, i32 _dl_tdc, i32 _dr_tdc, i32 _ref_tdc) noexcept :
+			a_tdc(std::move(_a_tdc)), dl_tdc(_dl_tdc), dr_tdc(_dr_tdc), ref_tdc(_ref_tdc) {}
+
+		inline bool operator<(const TPCHitCandidateExtended& rhs) const noexcept {
 			return ref_tdc < rhs.ref_tdc;
 		}
 	};
-	struct TPCHitCandidateExtended {
-		int index; 
-		TPCHitCandidate hit; 
-		TPCHitCandidateExtended() = default;
-		TPCHitCandidateExtended(int _i, const TPCHitCandidate& _hit) : 
-			index(_i), hit(_hit) {};
-		
-		inline bool operator<(const TPCHitCandidateExtended& rhs) const noexcept {
-			return hit < rhs.hit;
-		}
-	};
 
-	constexpr static std::size_t CANDIDATE_LIST_CAPACITY = 8;
-	using TPCHitCandidateList = std::vector<TPCHitCandidate>;
+	constexpr static std::size_t CANDIDATE_LIST_CAPACITY = RNTPCMap::MAX_SIZE * RNTPCMap::MAX_SIZE * RNTPCMap::MAX_SIZE;
+	using TPCHitCandidateList         = std::vector<TPCHitCandidate>;
+	using TPCHitCandidateExtendedList = std::vector<TPCHitCandidateExtended>;
 	
-	/* One list per anode. */
-	std::array<TPCHitCandidateList, 4> initial_candidate_list {};
-	std::array<TPCHitCandidateList, 4> candidate_list {};
+	/* One list per anode in a delay-line. */
+	std::array<TPCHitCandidateList, 2>         candidate_list {};
+	/* One list per delay-line in a TPC. */
+	std::array<TPCHitCandidateExtendedList, 2> full_candidate_list {};
 
-	std::vector<TPCHitCandidateExtended> full_candidate_list {};
-	
-	void ProcessTPC(int ) noexcept;
+	void PreProcessTPC(int ) noexcept;
+	void ProcessDelayLine(int, int ) noexcept;
+	void PostProcessTPC(int ) noexcept;
+
 	void ProcessS2Angle() noexcept;
 	void ProcessS4Angle() noexcept;
 
-	TPCHitCandidate* IsUniqueTPCMeasurement(TPCHitCandidateList&, const TPCHitCandidate& ) noexcept;
-
-	static std::array<std::array<double,4>, N_VALID_TPC> csum_mid;
 	/* === SCI analysis helper fnc's. === */
 	void ProcessSci(int ) noexcept;
 };

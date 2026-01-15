@@ -82,8 +82,10 @@ CMDLineParser::ParseCmdLine(const char* line, T& dest, int argc, char** argv, Ma
 			memset(argv[i], '_', strlen(argv[i]));
 			retval = 1;
 			
-			/* Eat up all the argv's until we reach another '^-' regex. */
+			/* Eat up all the argv's until we reach another '^-' or a '___' regex. */
 			while((++i) < argc && argv[i][0] != '-') {
+				if(strlen(argv[i]) >= 3 and !strncmp(argv[i], "___", 3)) 
+					break;
 				parsed.emplace_back(argv[i]);
 				memset(argv[i], '_', strlen(argv[i]));
 			}

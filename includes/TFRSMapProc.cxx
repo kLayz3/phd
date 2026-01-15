@@ -27,21 +27,22 @@ void TFRSMapProc::SetupPointers() {
 	MAP_SCI(2, 31);
 	MAP_SCI(3, 41);
 
-	for(int i=0; i < (int)this->tpc.size(); ++i) {
-		TFRSMapProc::TPC& tpc = this->tpc[i];
-		tpc._tpc_aa = &sort->tpc_a[i][0];
-		for(int j=0; j<2; ++j) {
-			tpc._tpc_lt[j]  = &sort->tpc_lt[i][j][0];
-			tpc._tpc_rt[j]  = &sort->tpc_rt[i][j][0];
-			tpc._tpc_ltn[j] = &sort->tpc_nhit_lt[i][j];
-			tpc._tpc_rtn[j] = &sort->tpc_nhit_rt[i][j];
+	for(int s=0; s < (int)this->tpc.size(); ++s) {
+		TFRSMapProc::TPC& tpc = this->tpc[s];
+		tpc._tpc_aa = &sort->tpc_a[s][0];
+		for(int i : {0,1}) { // Delay line index.
+			tpc._tpc_ltn[i] = &sort->tpc_nhit_lt[s][i];
+			tpc._tpc_rtn[i] = &sort->tpc_nhit_rt[s][i];
+			tpc._tpc_lt [i] = &sort->tpc_lt[s][i][0];
+			tpc._tpc_rt [i] = &sort->tpc_rt[s][i][0];
+			
+			for(int a : {0,1}) { // Anode index, underlying the delay line `i`.
+				tpc._tpc_atn[i][a] = &sort->tpc_nhit_dt[s][2*i + a];
+				tpc._tpc_at [i][a] = &sort->tpc_dt[s][2*i + a][0];
+			}
 		}
-		for(int j=0; j<4; ++j) { 
-			tpc._tpc_at[j]  = &sort->tpc_dt[i][j][0];
-			tpc._tpc_atn[j] = &sort->tpc_nhit_dt[i][j];
-		}
-		tpc._sci_timerefn = &sort->tpc_nhit_timeref[i];
-		tpc._sci_timeref = &sort->tpc_timeref[i][0];
+		tpc._sci_timerefn = &sort->tpc_nhit_timeref[s];
+		tpc._sci_timeref = &sort->tpc_timeref[s][0];
 	}
 
 	this->music[0]._music_raw = &sort->music_e1[0];
@@ -113,12 +114,35 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 	for(int s=0; s < (int)tpc.size(); ++s) {
 		const auto& tpc_go4 = this->tpc[s];
 		auto& tpc_raw = out.inner().tpc[s];
-		auto& tdc = tpc_raw.tdc; 
+		auto& tdc_ref = tpc_raw.tdc_ref; // vec<i32>
+		auto& tdc_dl  = tpc_raw.tdc;     // array<vec<Measurement>> 
 
 		/* Find how many elements we have to allocate. 
 		 * This assignment is potentially slow. */
+		
+		int _n_elems;
 
-		for(int i=0; i<2; ++i) {
+		_nhits_s = *tpc_go4._sci_timerefn;
+		if(_nhits_s < 0) {
+			WARN("Go4 reads: %d < 0 hits in TPC[%d], sci ref.\n", _nhits_s, s);
+			return;
+		}
+		
+		/* Sci reference. */
+		_n_elems = std::min(_nhits_s, RNTPCMap::MAX_SIZE);
+		tdc_ref.resize(_n_elems);
+		for(int n=0; n < _n_elems; ++n) 
+			_temp[n] = tpc_go4._sci_timeref[n];
+
+		std::sort(_temp.begin(), _temp.begin() + _n_elems);
+
+		for(int n=0; n < _n_elems; ++n) 
+			tdc_ref.at(n) = _temp[n];
+	
+		/* Loop over delay-lines, sort out the data. */
+		for(int i : {0,1}) {
+			std::vector<RNTPCMap::Measurement>& tdc = tdc_dl[i]; 
+
 			_nhits_l[i] = *tpc_go4._tpc_ltn[i];
 			_nhits_r[i] = *tpc_go4._tpc_rtn[i];
 			if(_nhits_l[i] < 0 || _nhits_r[i] < 0) {
@@ -126,53 +150,38 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 					_nhits_l[i], _nhits_r[i], s, i);
 				return;
 			}
-		}
-		for(int i=0; i<4; ++i) {
-			_nhits_a[i] = *tpc_go4._tpc_atn[i];
-			if(_nhits_a[i] < 0) {
-				WARN("Go4 reads: %d < 0 hits in TPC[%d], anode[%d].\n", _nhits_a[i], s, i);
-				return;
+			for(int a : {0,1}) {
+				_nhits_a[i][a] = *tpc_go4._tpc_atn[i][a];
+				if(_nhits_a[i][a] < 0) {
+					WARN("Go4 reads: %d < 0 hits in TPC[%d], anode[%d].\n", _nhits_a[i][a], s, 2*i+a);
+					return;
+				}
 			}
-		}
-		_nhits_s = *tpc_go4._sci_timerefn;
-		if(_nhits_s < 0) {
-			WARN("Go4 reads: %d < 0 hits in TPC[%d], sci ref.\n", _nhits_s, s);
-			return;
-		}
-		if(s == 5 || s == 6) {
-			if(_nhits_s > 0)
-				WARN("Found a sci-ref hit in TPC%d - nhit = %d\n", s, _nhits_s);
-		}
-		
-		/* We don't really care about more than RNTPCMap::MAX_SIZE elements. 
-		 * Usually, that multiplicity indicates an inconsistent multi-hit event. */
-		Int_t N_max = std::min (
-			mnd::max (
-				*std::max_element(std::begin(_nhits_l), std::end(_nhits_l)),
-				*std::max_element(std::begin(_nhits_r), std::end(_nhits_r)),
-				*std::max_element(std::begin(_nhits_a), std::end(_nhits_a)),
-				_nhits_s
-			), 
-			RNTPCMap::MAX_SIZE
-		);
-		tdc.resize(N_max);
-		std::fill_n(tdc.begin(), N_max, RNTPCMap::Measurement{});
-		
-		int _n_elems;
-		
-		/* Delay line left. */
-		for(int i=0; i<2; ++i) {
+
+			/* We don't really care about more than RNTPCMap::MAX_SIZE elements. 
+			 * Usually, that multiplicity indicates an inconsistent multi-hit event. */
+			Int_t N_max = std::min (
+				mnd::max (
+					_nhits_l[i], _nhits_r[i],
+					_nhits_a[i][0], _nhits_a[i][1]
+				), 
+				RNTPCMap::MAX_SIZE
+			);
+			tdc.resize(N_max);
+			std::fill_n(tdc.begin(), N_max, RNTPCMap::Measurement{});
+			
+			/* Delay line left. */
 			_n_elems = std::min(_nhits_l[i], N_max);
 			for(int n=0; n < _n_elems; ++n) 
 				_temp[n] = tpc_go4._tpc_lt[i][n];
 
 			std::sort(_temp.begin(), _temp.begin() + _n_elems);
 
-			for(int n=0; n < _n_elems; ++n) 
-				tdc.at(n).tdc_l[i] = _temp[n];
-		}
-		/* Delay line right. */
-		for(int i=0; i<2; ++i) {
+			for(int n=0; n < _n_elems; ++n)
+				tdc[n].tdc_l = _temp[n];
+			/* =================== */
+
+			/* Delay line right. */
 			_n_elems = std::min(_nhits_r[i], N_max);
 			for(int n=0; n < _n_elems; ++n) 
 				_temp[n] = tpc_go4._tpc_rt[i][n];
@@ -180,61 +189,57 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 			std::sort(_temp.begin(), _temp.begin() + _n_elems);
 
 			for(int n=0; n < _n_elems; ++n) 
-				tdc.at(n).tdc_r[i] = _temp[n];
-		}
-		/* Anodes (TDC + ADC) */
-		for(int i=0; i<4; ++i) {
-			_n_elems = std::min(_nhits_a[i], N_max);
-			for(int n=0; n < _n_elems; ++n) 
-				_temp[n] = tpc_go4._tpc_at[i][n];
+				tdc[n].tdc_r = _temp[n];
+			/* =================== */
 
-			std::sort(_temp.begin(), _temp.begin() + _n_elems);
+			/* Anodes (TDC) */
+			for(int a : {0,1}) {
+				_n_elems = std::min(_nhits_a[i][a], N_max);
+				for(int n=0; n < _n_elems; ++n)
+					_temp[n] = tpc_go4._tpc_at[i][a][n];
 
-			for(int n=0; n < _n_elems; ++n) 
-				tdc.at(n).tdc_a[i] = _temp[n];
+				std::sort(_temp.begin(), _temp.begin() + _n_elems);
 
-			tpc_raw.adc[i] = tpc_go4._tpc_aa[i]; 
-		}
+				for(int n=0; n < _n_elems; ++n)
+					tdc[n].tdc_a[a] = _temp[n];
+			}
+			/* =================== */
+
+			if(i == 0) {
+				out.h1_tpc_ml[s] ->Fill( _nhits_l[0] );
+				out.h1_tpc_mr[s] ->Fill( _nhits_r[1] );
+				out.h1_tpc_ma1[s]->Fill( _nhits_a[0][0] );
+				out.h1_tpc_ma2[s]->Fill( _nhits_a[0][1] );
+			}
 		
-		/* Sci reference. */
-		_n_elems = std::min(_nhits_s, N_max);
-		for(int n=0; n < _n_elems; ++n) 
-			_temp[n] = tpc_go4._sci_timeref[n];
-
-		std::sort(_temp.begin(), _temp.begin() + _n_elems);
-
-		for(int n=0; n < _n_elems; ++n) 
-			tdc.at(n).tdc_ref = _temp[n];
-
-		/* ----------------------------------- */
-		out.h1_tpc_ml[s] ->Fill( _nhits_l[0] );
-		out.h1_tpc_mr[s] ->Fill( _nhits_r[1] );
-		out.h1_tpc_ma1[s]->Fill( _nhits_a[1] );
-		out.h1_tpc_ma2[s]->Fill( _nhits_a[2] );
-	
-		/* Only fill histos if N_max > 1. */
-		if(N_max == 0) continue;
-
-		for(int a = 0; a<4; ++a) { /* Loop over anode indices. */
-			if(_nhits_a[a] != 1) continue;
-
-			if(int ndelay = a >> 1;
-				_nhits_r[ndelay] == 1 &&
-				_nhits_l[ndelay] == 1)
-			{
-				out.h1_tpc_csum[s][a] -> Fill(
-					tdc[0].tdc_l[ndelay] + tdc[0].tdc_r[ndelay] - 
-					  2 * tdc[0].tdc_a[a]
+			if(_nhits_a[i][0] == 1 and _nhits_a[i][1] == 1) {
+				out.h1_tpc_adiff[s][i] -> Fill(
+					tdc.at(0).tdc_a[0] - tdc.at(0).tdc_a[1]
 				);
 			}
-			if(_nhits_s == 1)
-			{
-				out.h1_tpc_ydiff[s][a] -> Fill(
-					tdc[0].tdc_a[a] -
-					tdc[0].tdc_ref
-				);
+
+			if(_nhits_l[i] != 1 || _nhits_r[i] != 1) continue;
+
+			for(int a : {0,1} ) {
+				if(_nhits_a[i][a] == 1) {
+					out.h1_tpc_csum[s][2*i + a] -> Fill(
+						tdc[0].tdc_l + tdc.at(0).tdc_r - 
+						2 * tdc[0].tdc_a[a]
+					);
+
+					if(_nhits_s == 1)
+						out.h1_tpc_ydiff[s][2*i + a] -> Fill(
+							tdc[0].tdc_a[a] -
+							tdc_ref[0]
+						);
+				}
 			}
-		}
+		} // end of loop over delay-lines {0,1}
+		
+		/* Anodes (ADC) */
+		for(int i=0; i<4; ++i)
+			tpc_raw.adc[i] = tpc_go4._tpc_aa[i]; 
+
 	} /* End loop over TPC's (s) */
 
 	/* MUSIC's */

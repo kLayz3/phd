@@ -47,29 +47,30 @@ struct RNSciMap {
  */
 
 struct RNTPCMap {
-	static constexpr i32 MAX_SIZE = 8;
+	static constexpr i32 MAX_SIZE = 6;
 	static_assert(MAX_SIZE > 0 && MAX_SIZE < 64, "64 is what Go4 gives us. Don't make higher capacity!");
 
 	struct Measurement {
 		static constexpr int TDC_INVALID = -1;
-		std::array<i32, 2> tdc_l { TDC_INVALID, TDC_INVALID }; /* 8  bytes. */
-		std::array<i32, 2> tdc_r { TDC_INVALID, TDC_INVALID }; /* 8  bytes. */
-		std::array<i32, 4> tdc_a { TDC_INVALID, TDC_INVALID, 
-			           TDC_INVALID, TDC_INVALID }; /* 16 bytes. */
-		i32 tdc_ref   = TDC_INVALID;               /* 4  bytes. */
-		/* + 4-byte alignment field. */
+		i32 tdc_l = TDC_INVALID;     /* 4 bytes. */
+		i32 tdc_r = TDC_INVALID;     /* 4 bytes. */
+		std::array<i32, 2> tdc_a { TDC_INVALID, TDC_INVALID }; /* 8 bytes */ 
 
 		Measurement() = default;
 		virtual ~Measurement() = default;
 		ClassDef(Measurement, 1);
-	}; static_assert(sizeof(Measurement) == 48, "Huh?");
+	}; static_assert(sizeof(Measurement) == 24, "Huh?");
 
-	std::vector<Measurement> tdc{};
-	u16 adc[4]{};
+	std::array <
+		std::vector<Measurement>, 2
+	> tdc{};
+	std::vector<i32> tdc_ref {};
+	u16 adc[4] {};
 
-	RNTPCMap() { tdc.reserve(MAX_SIZE); }
+	RNTPCMap() { for(auto& dl : tdc) dl.reserve(MAX_SIZE); tdc_ref.reserve(MAX_SIZE); }
 	inline void Clean() noexcept {
-		tdc.clear();
+		for(auto& tdc_dl : tdc) tdc_dl.clear();
+		tdc_ref.clear();
 		memset(adc, 0, sizeof(adc));
 	}
 
@@ -125,6 +126,7 @@ public:
 	TH1I* h1_tpc_ma2[7];
 	TH1I* h1_tpc_csum[7][4];
 	TH1I* h1_tpc_ydiff[7][4];
+	TH1I* h1_tpc_adiff[7][2];
 
 	void Setup() override;
 

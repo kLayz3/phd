@@ -121,8 +121,8 @@ int main(i32 argc, char* argv[]) {
 		.emplace_process<TFOOTMapProc>( foot[6], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
 		.emplace_process<TFOOTMapProc>( foot[7], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
 		.emplace_process<TFRSMapProc >( frs,     sort, TFRSMapProc::DoAnalysis::NO)
-		.MakePool<4>( n_batch );
-		//.MakePool<1>( 512 );
+		//.MakePool<4>( n_batch );
+		.MakePool<1>( 512 );
 
 	/* To register the initial FOOT global pedestals. */
 	pool.SendOneBatch( n_batch );
@@ -154,7 +154,7 @@ int main(i32 argc, char* argv[]) {
 		option::Lead{"@"},
 		option::Remainder{" "},
 		option::End{"]"},
-		option::PostfixText{"Event-by-event pedestal"},
+		option::PostfixText{"Event-by-event mapping (FRS) + pedestals (FOOT)"},
 		option::ForegroundColor{Color::blue},
 		option::ShowPercentage{true},
 		option::ShowElapsedTime{true},

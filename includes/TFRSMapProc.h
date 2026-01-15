@@ -34,8 +34,8 @@ private:
 		static constexpr int MAX_SIZE = RNTPCMap::MAX_SIZE;
 		
 		Int_t *_tpc_aa{};
-		Int_t *_tpc_lt[2], *_tpc_rt[2], *_tpc_at[4];
-		Int_t *_tpc_ltn[2], *_tpc_rtn[2], *_tpc_atn[4];
+		Int_t *_tpc_ltn[2], *_tpc_rtn[2], *_tpc_atn[2][2];
+		Int_t *_tpc_lt[2], *_tpc_rt[2], *_tpc_at[2][2];
 		Int_t *_sci_timerefn, *_sci_timeref;
 	};
 
@@ -53,10 +53,10 @@ private:
 	void SetupPointers();
 
 	/* Some TPC vars' local temporary storage. */
-	Int_t _nhits_l[2] {}; // Number of hits in the delay-left  vector 
-	Int_t _nhits_r[2] {}; // Number of hits in the delay-right vector
-	Int_t _nhits_a[4] {}; // Number of hits in the     anode   vector
-	Int_t _nhits_s {};    // Number of hits in the ref. sci    vector
+	Int_t _nhits_l[2]    {}; // Number of hits in the delay-left  vector 
+	Int_t _nhits_r[2]    {}; // Number of hits in the delay-right vector
+	Int_t _nhits_a[2][2] {}; // Number of hits in the     anode   vector
+	Int_t _nhits_s       {}; // Number of hits in the ref. sci    vector
 
 	std::array<Int_t, RNTPCMap::MAX_SIZE> _temp {};
 };

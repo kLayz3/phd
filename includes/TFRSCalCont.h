@@ -45,22 +45,24 @@ struct RNTPCCal {
 		static constexpr i32 TDC_INVALID = RNTPCMap::Measurement::TDC_INVALID;
 		double x  = NAN;
 		double y  = NAN;
-		i64 ref   = TDC_INVALID;   
-		// 8-byte `ref`, because anyway the 4-byte i32 would net dummy 4-byte padding
+		i32 ref   = TDC_INVALID;
+		i32 mask  = 0; 
+		/*^^^ 0b 01 => anode(0) fired; 0b 10 => anode(1) fired; 0b 11 => both anodes fired. */
 
 		Measurement() = default;
-		Measurement(double _x, double _y, i64 _ref) : 
-			x(_x), y(_y), ref(_ref) {}
+		Measurement(double _x, double _y, i32 _ref, i32 _mask) : 
+			x(_x), y(_y), ref(_ref), mask(_mask) {}
 		virtual ~Measurement() = default;
-	}; /* ^^^ Per anode measurement. [0] and [1]; same as [2] and [3]
-	    should have duplicate measurement for x. */
+	}; /* ^^^ Per delay-line measurement. If both the anodes measured
+		* y then the y measurement is the averaged one. */
 	
-	using Measurements = std::vector <
-		std::array<Measurement, 4>
+	/* TPC is represented as two independent xy-measurements coming from 2 delay lines. */
+	using Measurements = std::array <
+		std::vector<Measurement>, 2
 	>;
 	
 	Measurements hits;
-	inline void Clean() noexcept { hits.clear(); }
+	inline void Clean() noexcept { for(auto& d : hits) d.clear(); }
 	virtual ~RNTPCCal() = default;
 	ClassDef(RNTPCCal, 1);
 };

@@ -9,228 +9,268 @@ static double uniform() noexcept {
 	return static_cast<double>(rand()) / static_cast<double>(RAND_MAX + 1ULL); 
 }
 
-std::array <
-	std::array<double, 4> , 
-	TFRSCalProc::N_VALID_TPC
-> TFRSCalProc::csum_mid {};
-
 TFRSCalProc::TFRSCalProc(TFRSCalCont& out, const TFRSMapCont& in) : TFRSCalProc::Base(out, in) {
-	for(auto& anode_list : candidate_list)
-		anode_list.reserve(CANDIDATE_LIST_CAPACITY);
-	for(auto& anode_list : initial_candidate_list)
-		anode_list.reserve(CANDIDATE_LIST_CAPACITY);
-	
-	full_candidate_list.reserve(CANDIDATE_LIST_CAPACITY * mnd::len(candidate_list));
-
-	/* In handling the duplicates we sometimes require central value of the csum limits. 
-	 * Cache it here. */
-
-	for(int i=0; i < N_VALID_TPC; ++i) {
-		
-		const auto& [_1, _2, _3, _4, csum_lim, _5, _6] = TFRSCalCont::_tpc_param[i];
-		
-		for(int a = 0; a<4; ++a)
-			csum_mid[i][a] = (csum_lim[a][0] + csum_lim[a][1]) / 2;
-	}
+	for(auto& list : candidate_list)
+		list.reserve(CANDIDATE_LIST_CAPACITY);
+	for(auto& list : full_candidate_list)	
+		list.reserve(CANDIDATE_LIST_CAPACITY * mnd::len(candidate_list));
 }
 
 void TFRSCalProc::ProcessEntry() noexcept {
 	for(int i=0; i < N_VALID_SCI; ++i)
 		this->ProcessSci(i);
-	for(int i=0; i < N_VALID_TPC; ++i)
-		this->ProcessTPC(i);
+	for(int i=0; i < N_VALID_TPC; ++i) {
+		PreProcessTPC(i);
+		for(int d : {0,1})
+			ProcessDelayLine(i, d);		
+		PostProcessTPC(i);
+	}
 
-	this->ProcessS2Angle();
-	this->ProcessS4Angle();
+	//this->ProcessS2Angle();
+	//this->ProcessS4Angle();
 }
 
-void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {	
+void TFRSCalProc::PreProcessTPC(int _i_tpc) noexcept {
+	RNTPCCal& out = (this->out).inner().tpc[_i_tpc];
+	out.Clean();
+}
+
+/* `i` is the delay-line index: 0 or 1. */
+void TFRSCalProc::ProcessDelayLine(int _i_tpc, int i) noexcept {
 	constexpr auto INVALID = RNTPCMap::Measurement::TDC_INVALID;
 
-	for(auto& c : candidate_list) c.clear();
-	for(auto& c : initial_candidate_list) c.clear();
-	full_candidate_list.clear();
-	
-	const TFRSMapCont& input = std::get<0>( this->in );
-	const RNTPCMap& in = input.inner().tpc[_i_tpc];
-	auto const& hits = in.tdc; 
+	for(int a : {0,1} ) {
+		candidate_list[a].clear();
+		full_candidate_list[a].clear();
+	}
 
-	RNTPCCal& out = this->out.inner().tpc[_i_tpc];
+	const auto& csum_lim    = TFRSCalCont::_tpc_param[_i_tpc].csum_lim;
+	const auto& sci_ref_lim = TFRSCalCont::_tpc_param[_i_tpc].sci_ref_lim;
 
-	[[maybe_unused]]
-	const auto& [bx, ax, by, ay, csum_lim, sci_ref_lim, _] = TFRSCalCont::_tpc_param[_i_tpc]; // read from .rodata 
-	[[maybe_unused]]
-	const auto& csum_mid = TFRSCalProc::csum_mid[_i_tpc];
-	
-	/* For a general multihit combination, try to see which falls into Control Sum limits.
-	 * Ideally a hit will light up a delay line (LR), corresponding 1 or both anodes, and the referent scintillator. */
-	
-	/* Go over all recorded hits from map. Different channels can have different multihit value.
-	 * They're padded with `INVALID` value to indicate it's missing from a channel.
-	 * It's asserted that in the list of hits, for any channel, datum values will always come before
-	 * invalid fill. */
-	 
-	/* In general, the following algorithms are asymptotically bad - n*m*k complexity, 
-	 * but these multihits are very small on the order of ~2-4. 
-	 * Proper binary search, instead of brute force, would be faster starting from sizes 10x10x10 or so. 
-	 * Because each of the 9 sequences of RNTPCMap::Measurement 
-	 * {tdc_l[0]}, {tdc_l[1]}, {tdc_r[0], ...}, are sorted until (optional) INVALID range. */
+	const RNTPCMap& in = std::get<0>( this->in ).inner().tpc[_i_tpc];
 
-	/* First selection - go over all `sci_ref` values and only select anode(i) which can have their Y-reconstructed. */
-	for(const auto& h0 : hits) {
-		if(h0.tdc_ref == INVALID) break;
-		
-		for(const auto& h1 : hits) {
-			/* Try to see if any of the anode values, if existent, fit in the y-cut. */
-			for(int a=0; a<4; ++a) {
-				if(h1.tdc_a[a] != INVALID) {
-					auto diff = h1.tdc_a[a] - h0.tdc_ref;
-					if(diff > sci_ref_lim[a][0] and diff < sci_ref_lim[a][1]) {
-						initial_candidate_list[a].emplace_back(
-							h1.tdc_a[a], /* Anode TDC value. */
-							INVALID,     /* Delay-left  TDC (to-be-found). */
-							INVALID,     /* Delay-right TDC (to-be-found). */ 
-							h0.tdc_ref   /* Scintillator reference. */
+	/* Input hits for this delay line. */
+	const std::vector<RNTPCMap::Measurement>& hits = in.tdc[i];
+	
+	i32 csum = 0, csum_tmp;
+	i32 ai = 0; 
+	i32 tdc_a;
+	
+	/* Try to build up all the hits that satisfy the csum limits. */ 
+	for(auto hit_l = hits.begin(); hit_l != hits.end() and hit_l->tdc_l != INVALID; ++hit_l) {
+		const i32 dl = hit_l->tdc_l;
+
+		for(auto hit_r = hits.begin(); hit_r != hits.end() and hit_r->tdc_r != INVALID; ++hit_r) {
+			const i32 dr = hit_r->tdc_r;
+
+			csum_tmp = dl + dr;
+
+			for(int a : {0,1} ) {
+				ai = 2*i + a; // csum limit array goes 0..4 not [2][2]
+				
+				for(auto hit_a = hits.begin(); hit_a != hits.end() and hit_a->tdc_a[a] != INVALID; ++hit_a) {
+					tdc_a = hit_a->tdc_a[a];
+
+					csum = csum_tmp - 2*tdc_a;	
+					
+					if(csum > csum_lim[ ai ][0] and csum < csum_lim[ ai ][1]) {
+						candidate_list[a].emplace_back (
+							tdc_a, dl, dr, INVALID	
 						);
 					}
 				}
-			} // loop over anodes
-		} // loop over all hits; only anode parts interesting 
-	} // loop over all hits; only SCI part interesting
-	
-	/* Second selection - go over all four anodes (a), and their corresponding
-	 * partial candidate hit list: (a, _, _, tdc_ref), 
-	 * and select pairs (l,d) of corresponding delay-line measurements, 
-	 * that satisfy their corresponding control sum check. */
-
-	int csum1, csum2, ref, _cval;
-	for(int a=0; a<4; ++a) {
-		ref = a >> 1; // Referent delay line 0,1 => 0 ; 2,3 => 1
-		const auto& [lim_x_lo, lim_x_hi] = csum_lim[a]; // bind the csum limits.
-		
-		TPCHitCandidateList& init_list    = initial_candidate_list[a];
-		TPCHitCandidateList& updated_list = candidate_list[a];
-
-		for(auto& candidate : init_list) {
-			_cval = (candidate.a_tdc << 1); // 2*anode_tdc . Cannot overflow.
-			
-			for(const auto& h1 : hits) { // Delay-line left potential pairing partners
-				if(h1.tdc_l[ref] == INVALID) break;
-
-				csum1 = h1.tdc_l[ref] - _cval; // partial csum: l - 2*a
-
-				for(const auto& h2 : hits) { // Delay-line right potential pairing partners
-					if(h2.tdc_r[ref] == INVALID) break;
-
-					csum2 = h2.tdc_r[ref] + csum1; // full csum: l+r - 2*a
-					if(csum2 > lim_x_hi) break; /* Following entries in this inner loop will have even higher `tdc_r` */
-
-					else if(csum2 > lim_x_lo) {  
-						/* Found a valid updated candidate */
-						candidate.dl_tdc = h1.tdc_l[ref];	
-						candidate.dr_tdc = h2.tdc_r[ref];
-						
-						if(auto* duplicate = IsUniqueTPCMeasurement(updated_list, candidate);
-							duplicate == nullptr) {
-							updated_list.push_back(candidate);
-						} else {
-							/* Found a duplicate. Take the one which is closer to the csum central value. */
-							double d_current  = std::abs( csum2 - csum_mid[a] );
-							double d_previous = std::abs( duplicate->CSum() - csum_mid[a] );
-							if(d_current < d_previous)
-								std::swap( *duplicate, candidate );
-						}
-					}
-				} // loop over potential delay-right candidates
-			} // loop over delay-left candidates
-		} // loop over partial candidates, who survived the y-cut.
-	} // loop over anode indices 0,1,2,3
-
-	/* For each anode (a = 0,1,2,3) the corresponding hit list is complete.
-	 * We can now turn it into actual position measurement: (x,y).
-	 * But we would like to sort the collected hits in time. 
-	 * Sorting is done based on referent (Sci) TDC value - which is defacto ordered in actual time. 
-	 * Check bool operator<(...) function implementation in the header. */
-	/* We extend the `TPCHitCandidate` type to also attach the anode index to the hit. */
-
-	/* [1] Stuff the measurements of each of the anodes
-	 * tagged with its unique anode index, into this list. */
-	for(int a=0; a<4; ++a) {
-		const auto& list = candidate_list[a];	
-		for(const auto& hit : list)
-			full_candidate_list.emplace_back(a, hit);
-	}
-	/* [2] Sort the list w.r.t. sci reference TDC. */
-	std::sort(full_candidate_list.begin(), full_candidate_list.end());
-	
-	/* [3] Calculate how many output elements in RNTPCCal we need to allocate. */
-	size_t _n_measurements = 0;
-	int curr_ref_tdc = RNTPCCal::Measurement::TDC_INVALID; 
-	for(const auto& hit_extended : full_candidate_list) {
-		if(hit_extended.hit.ref_tdc != curr_ref_tdc) {
-			++_n_measurements;
-			curr_ref_tdc = hit_extended.hit.ref_tdc;
-		}
-	}
-
-	/* [4] Resize output container. */
-	out.hits.assign(_n_measurements, {});
-
-	/* [5] Copy over the hits into the output container. Do the linear calibration. */
-	curr_ref_tdc = RNTPCCal::Measurement::TDC_INVALID;
-	int n = -1; 
-	for(const auto& ehit : full_candidate_list) {
-		const i32 a   = ehit.index; /* Anode index: 0,1,2,3. */	
-		const i32 ref = a >> 1;     /* Corresponding delay line index: 0,1. */
-		const TPCHitCandidate& valid_hit = ehit.hit;
-		
-		if(valid_hit.ref_tdc != curr_ref_tdc) {
-			++n;
-			curr_ref_tdc = valid_hit.ref_tdc;
-		}
-		out.hits.at(n).at(a) = {
-			/* x-pos: */ ax[ref] * ( valid_hit.dl_tdc - valid_hit.dr_tdc)  + bx[ref],
-			/* y-pos: */ ay[ a ] * ( valid_hit.a_tdc  - valid_hit.ref_tdc) + by[ a ],
-			/* ref  : */ valid_hit.ref_tdc
-		};
-	}
-	
-	/* Make a preliminary plot of (x,y), only if _n_measurements is 1. */
-	if((_i_tpc == 2 or _i_tpc == 3) and _n_measurements == 1) {
-		const auto& hit = out.hits[0];
-		double x0=0, y0=0;
-		int n=0;
-		for(const auto& anode : hit) 
-			if(! std::isnan(anode.x)) {
-				x0 += anode.x; y0 += anode.y;
-				++n;
 			}
-		x0 /= n;
-		y0 /= n;
-		if(_i_tpc == 2) this->out.h2_xy_s2_before_target->Fill(x0, y0);
-		else if(_i_tpc == 3) this->out.h2_xy_s2_after_target->Fill(x0, y0);
+		}
 	}
 
-}
+	/* For this specific delay-line we collected all the hits that fit in a csum
+	 * cut. Next do the y- selection which is much less selective than the csum one. 
+	 * The testcase I kept failing was:
+	 * DL(0): { [L: 40220, R: 40118, A: [33032, 33003]],
+				[L: 45297, R: 46147, A: [38568, 38575]] }
+	   DL(1): { [L: 40436, R: 40056, A: [33050, 33064]]
+				[L: 45486, R: 46081, A: [38613, 38506]] }
+		   S: { 21553, 28248 }
+	 *
+	 * In this case, since the csum selection is the strictest, it should correspond to a real
+	 * particle. Since both 'S' values satisfy the y-check.
+	 * Therefore, try to couple the anode TDC value to the lowest referent one, that fits in the cut.
+	 * Having the map-level arrays sorted per-column comes in handy here!
+	 */
+	
+	/* [1] Go over existing candidate hits, but sort them over the  `tdc_a` attribute.
+	 * [2] There could be duplicate measurements here. Take the one with lower `tdc_l + tdc_r` score.  */
+	for(auto& list : candidate_list) {
+		if(list.size() < 2) continue;
 
-/* This gets checked only per anode. */
-TFRSCalProc::TPCHitCandidate* 
-TFRSCalProc::IsUniqueTPCMeasurement(TPCHitCandidateList& list, const TPCHitCandidate& candidate) noexcept {
-	/* Candidate must be completely unique to qualify a good measurement.
-	 * Do a small linear search to see if it can be added. */
-	for(auto& e : list) 
-		if(e.a_tdc   == candidate.a_tdc  ||
-		   e.dl_tdc  == candidate.dl_tdc ||
-		   e.dr_tdc  == candidate.dr_tdc ||
-		   e.ref_tdc == candidate.ref_tdc
-		) {
-			/* In this case, just return the address of this previous valid measurement
-			 * that constitutes a duplicate. */
-			return reinterpret_cast<TFRSCalProc::TPCHitCandidate*>( &e );
+		std::sort(list.begin(), list.end(),  // [1]
+				[](const auto& lhs, const auto& rhs) { return lhs.a_tdc < rhs.a_tdc; });
+		
+		/* loop exit condition iterator is valid since vector at any point inside the loop must be sized >= 2. */
+		for(auto it = list.begin(); it != list.end() - 1; ) { // [2]
+			if( it->a_tdc == (it+1)->a_tdc ) {
+				WARN("Found a duplicate in just one anode: TPC%d delay-line: %d\n", _i_tpc, i);
+				auto next = it+1;
+				if(it->dr_tdc + it->dl_tdc > next->dr_tdc + next->dl_tdc)
+					it = list.erase(it); // Will point to `next`, but we don't assign directly due to cxxABI
+				else
+					list.erase(next), ++it; // Don't reassign, because `it` is still valid, it's before `next`.
+			}
+			else {
+				++it;
+			}
+			/* list.end() iterator gets re-requested. */
 		}
-	return nullptr;
+	}
+
+	/* Try to see if any of the ref-sci values, if existent, fit in the y-cut. 
+	 * The first one that does, we associate it with the hit and kick it out of the selection for
+	 * consequent hits search. */
+	
+	auto it_end = in.tdc_ref.cend();
+	
+	for(int a : {0,1} ) { // This will just get unrolled twice, I can bet. :b
+		auto& list = candidate_list[a];
+		auto ref_it  = in.tdc_ref.cbegin(); // Start from begining, for a fresh anode.
+		ai = 2*i + a;
+		
+		for(auto& hit : list) {
+			for( ; ref_it != it_end; ++ref_it) {
+				i32 diff = hit.a_tdc - *ref_it;
+				if(diff > sci_ref_lim[ai][0] and diff < sci_ref_lim[ai][1]) {
+					hit.ref_tdc = *ref_it++;
+					break;
+				}
+			}
+		}
+	}
+	
+	/* On this delay line the corresponding hit list is complete.
+	 * We can now turn it into actual position measurement: (x,y).
+	 * Each of the two anode lists: candidate_list[0/1] are now also sorted according to
+	 * ref tdc time.
+	 * Combine their measurements. Alert if the same `ref_tdc` was found, but different dl/dr values.
+	 * These must be consistent, otherwise we associate ghost particles. 
+	 * If we find an anode candidate *without* matching `ref_tdc`, it gets thrown away, but maybe 
+	 * similar candidate from the other anode managed to create a full (x,y) hit. */
+	
+	i32 current_ref_tdc = INVALID;
+	auto it0 = candidate_list[0].cbegin();
+	auto it1 = candidate_list[1].cbegin();
+	
+	/* Walk over anode(0); keep the corresponding iterator pointed to most relevant in anode(1) list. */
+	for(; it0 < candidate_list[0].cend() and it0->ref_tdc != INVALID; ++it0) {
+		current_ref_tdc = it0->ref_tdc;
+		bool matched = false;
+
+		/* In anode(1) list keep going until we encounter a hit with either
+		 * [1] hit.ref_tdc == current_ref_tdc
+		 *     => Combine the xy-measurements
+		 * [2] hit.ref_tdc  > current_ref_tdc
+		 *     => Save the iterator, maybe it matches on the next `it0`. */
+		while( it1 < candidate_list[1].cend() and it1->ref_tdc != INVALID ) {
+			if(it1->ref_tdc > current_ref_tdc) {
+				/* Wait until anode(0) reference catches up. */
+				break; 
+			}
+
+			else if(it1->ref_tdc < current_ref_tdc) {
+				/* `it1` value must be unpaired, save it directly into the complete list. */
+				full_candidate_list[i].emplace_back (
+					std::array<i32,2>{ INVALID, it1->a_tdc },
+					it1->dl_tdc,
+					it1->dr_tdc,
+					it1->ref_tdc
+				);
+			}
+
+			else {
+				/* The ref_tdc values are the same for both anodes. Delay line values must also match. */
+				if(it1->dl_tdc != it0->dl_tdc or it1->dr_tdc != it0->dr_tdc) {
+					/* This measurement is just broken then somehow. Kick it out. */
+					WARN("TPC%d, delay-line: %d. Found two VALID hits without matching delay-line measurement?\n"
+						"        A     L     R     S\n"
+						"0: (%4d %4d %4d %4d)\n1: (%4d %4d %4d %4d)\n",
+						_i_tpc, i, 
+						it0->a_tdc, it0->dl_tdc, it0->dr_tdc, it0->ref_tdc,
+						it1->a_tdc, it1->dl_tdc, it1->dr_tdc, it1->ref_tdc);
+					++it1;
+				}
+				else {	
+					matched = true;	
+				}
+			}
+		}
+
+		if(matched) {
+			full_candidate_list[i].emplace_back (
+				std::array<i32,2>{ it0->a_tdc, it1->a_tdc },
+				it0->dl_tdc,
+				it0->dr_tdc,
+				current_ref_tdc
+			);
+		} else {
+			full_candidate_list[i].emplace_back (
+				std::array<i32,2>{ it0->a_tdc, INVALID },
+				it0->dl_tdc,
+				it0->dr_tdc,
+				current_ref_tdc
+			);
+		}
+	}
+
+	/* Walk over possible remnants in anode(1); anode(0) has been iterated through. */
+	for(; it1 < candidate_list[1].cend() and it1->ref_tdc != INVALID; ++it1)
+		full_candidate_list[i].emplace_back (
+			std::array<i32,2>{ INVALID, it1->a_tdc },
+			it1->dl_tdc,
+			it1->dr_tdc,
+			it1->ref_tdc
+		);
+
+
 }
 
+void TFRSCalProc::PostProcessTPC(int _i_tpc) noexcept {
+	constexpr auto INVALID = RNTPCMap::Measurement::TDC_INVALID;
+	RNTPCCal& out = (this->out).inner().tpc[_i_tpc];
+
+	const auto& [bx, ax, by, ay, _, __, ___] = TFRSCalCont::_tpc_param[_i_tpc]; // read from .rodata
+	for(int d : {0,1} ) {
+		auto& l = full_candidate_list[d];
+		std::sort(l.begin(), l.end());
+
+		std::vector<RNTPCCal::Measurement>& out_list = out.hits[d];
+		out_list.reserve(l.size());
+		
+		double x,y;
+		int a0 = 2*d;
+		for(const auto& hit : l) {
+			int mask = 0;
+
+			/* x-pos: */ 
+			x = ax[d] * ( hit.dl_tdc - hit.dr_tdc)  + bx[d];
+			/* y-pos: */ 
+			y = [&]() noexcept -> double {
+				double tmp = 0;
+				if(hit.a_tdc[0] != INVALID) {
+					tmp += ay[a0] * ( hit.a_tdc[0] - hit.ref_tdc) + by[a0];
+					mask |= 1;
+				}
+				if(hit.a_tdc[1] != INVALID) {
+					tmp += ay[a0+1] * ( hit.a_tdc[1] - hit.ref_tdc) + by[a0+1];
+					mask |= 2;
+				}
+				if(mask == 3) tmp /= 2;
+				return tmp;
+			}();
+
+			out_list.emplace_back(x,y, hit.ref_tdc, mask);
+		}
+	}	
+}
+
+#if 0
 /* Preliminary angle analysis at S2. */
 void TFRSCalProc::ProcessS2Angle() noexcept {
 	constexpr int n = 3;
@@ -288,6 +328,7 @@ void TFRSCalProc::ProcessS4Angle() noexcept {
 	
 }
 
+#endif
 void TFRSCalProc::ProcessSci(int _i_sci) noexcept {
 	constexpr auto INVALID = RNSciMap::Measurement::TDC_INVALID;
 	
