@@ -51,7 +51,7 @@ struct RNTPCMap {
 	static_assert(MAX_SIZE > 0 && MAX_SIZE < 64, "64 is what Go4 gives us. Don't make higher capacity!");
 
 	struct Measurement {
-		static constexpr int TDC_INVALID = -1;
+		static constexpr i32 TDC_INVALID = -1;
 		i32 tdc_l = TDC_INVALID;     /* 4 bytes. */
 		i32 tdc_r = TDC_INVALID;     /* 4 bytes. */
 		std::array<i32, 2> tdc_a { TDC_INVALID, TDC_INVALID }; /* 8 bytes */ 
@@ -115,18 +115,26 @@ class TFRSMapCont : public TContainer<RNFRSMap> {
 	static_assert(sizeof(Int_t) == sizeof(i32), 
 		"`i32` and `Int_t` unequal size? Change the std::memcpy to something human in the ProcessEntry!\n");
 public: 
+	constexpr static i32 N_VALID_SCI = RNFRSMap::N_VALID_SCI;
+	constexpr static i32 N_VALID_TPC = RNFRSMap::N_VALID_TPC;
 
-	TH1I* h1_sci_ml[4];
-	TH1I* h1_sci_mr[4];
-	TH1I* h1_sci_diff_lr[4];
+	TH1I* h1_sci_ml[N_VALID_SCI];
+	TH1I* h1_sci_mr[N_VALID_SCI];
+	TH1I* h1_sci_diff_lr[N_VALID_SCI];
 
-	TH1I* h1_tpc_ml[7];
-	TH1I* h1_tpc_mr[7];
-	TH1I* h1_tpc_ma1[7];
-	TH1I* h1_tpc_ma2[7];
-	TH1I* h1_tpc_csum[7][4];
-	TH1I* h1_tpc_ydiff[7][4];
-	TH1I* h1_tpc_adiff[7][2];
+	TH1I* h1_tpc_araw[N_VALID_TPC][4];
+	TH1I* h1_tpc_dl_lraw[N_VALID_TPC][2];
+	TH1I* h1_tpc_dl_rraw[N_VALID_TPC][2];
+
+	TH1I* h1_tpc_ml[N_VALID_TPC];
+	TH1I* h1_tpc_mr[N_VALID_TPC];
+	TH1I* h1_tpc_ma1[N_VALID_TPC];
+	TH1I* h1_tpc_ma2[N_VALID_TPC];
+	TH1I* h1_tpc_csum[N_VALID_TPC][4];
+	TH1I* h1_tpc_ydiff[N_VALID_TPC][4];
+	TH1I* h1_tpc_adiff[N_VALID_TPC][2]; /* Same TPC, anode (1)-(0) on same delay-line. */
+	TH1I* h1_tpc_ldiff[N_VALID_TPC];    /* Same TPC, delay-left (1)-(0). */ 
+	TH1I* h1_tpc_rdiff[N_VALID_TPC];    /* Same TPC, delay-left (1)-(0). */
 
 	void Setup() override;
 

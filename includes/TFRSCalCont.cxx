@@ -39,6 +39,9 @@ void TFRSCalCont::Init(TDictInfo info) {
 			"y_offset",
 			"y_factor",
 			"csum_lim",
+			"anode_diff_lim",
+			"dl_left_diff_lim",
+			"dl_right_diff_lim",
 			"sci_ref_lim",
 			"z0"
 		};
@@ -49,7 +52,7 @@ void TFRSCalCont::Init(TDictInfo info) {
 #define UNROLL_TPC_JSON_PARAM(X) \
 		try { \
 			/* Hacky part: right side is explicit conversion from nlohmann::json object
-			 * to std::array<?,?>. Type traits explore the exact array type. */ \
+			 * to std::array<?,?>. Type traits explore the exact nested type. */ \
 			_tpc_param.at(i).get<X>() = params[keys[X]] \
 				.get< \
 					std::remove_reference_t< \
@@ -68,6 +71,9 @@ void TFRSCalCont::Init(TDictInfo info) {
 		UNROLL_TPC_JSON_PARAM(4)
 		UNROLL_TPC_JSON_PARAM(5)
 		UNROLL_TPC_JSON_PARAM(6)
+		UNROLL_TPC_JSON_PARAM(7)
+		UNROLL_TPC_JSON_PARAM(8)
+		UNROLL_TPC_JSON_PARAM(9)
 	}
 
 	for(const auto& [_sci_i, params] : setup.at("SCI").items()) {
@@ -117,16 +123,18 @@ void Add(T1&, const T1&) {}
 void Add(T2&, const T2&) {}
 
 void TFRSCalCont::Setup() {
-	h1_tpc_s2_before_target_nhit = RegisterObject<TH1I>("h1_tpc_s2_before_target_nhit", "Multiplicity of good hits (before target)", 10,0,10);
-	h2_ab_s2_before_target = RegisterObject<TH2I>("h2_ab_s2_before_target", "Angle before target (mrad x mrad)", 200, -50, 50, 200, -50, 50);
-	h2_xy_s2_before_target = RegisterObject<TH2I>("h2_xy_s2_before_target", "XY before target (mm x mm)", 200, -50, 50, 200, -50, 50);
+	for(int i=0; i<RNFRSCal::N_VALID_TPC; ++i) {
+		for(int d : {0,1} ) {
+			h2_tpc_xy[i][d] = RegisterObject<TH2I>(Form("h2_tpc%d_xy%d", i,d), Form("TPC%d(%d) profile (mm x mm)", i, d), 200, -50, 50, 200, -50, 50);
+			h2_tpc_xy[i][d]->GetXaxis()->SetTitle("X [mm]");
+			h2_tpc_xy[i][d]->GetYaxis()->SetTitle("Y [mm]");
+			h1_tpc_mask[i][d] = RegisterObject<TH1I>(Form("h1_tpc%d_mask%d", i,d), Form("TPC%d(%d) anode mask.", i,d), 4,0,4);
 
-	h1_tpc_s2_after_target_nhit = RegisterObject<TH1I>("h1_tpc_s2_after_target_nhit", "Multiplicity of good hits (after target)", 10,0,10);
-	h2_xy_s2_after_target = RegisterObject<TH2I>("h2_xy_s2_after_target", "XY after target (mm x mm)", 200, -50, 50, 200, -50, 50);
-	h2_ab_s2_after_target = RegisterObject<TH2I>("h2_ab_s2_after_target", "Angle after target (mrad x mrad)", 200, -50, 50, 200, -50, 50);
+			for(int a: {0,1}) 
+				h1_tpc_y[i][2*d+a] = RegisterObject<TH1I>(Form("h1_tpc%d_y%d", i, 2*d+a), Form("TPC%d(%d) anode y-profile (mm)", i, 2*d+a), 800, -40, 40);
+		}
+	}
 
-	h2_xy_s4 = RegisterObject<TH2I>("h2_xy_s4", "XY S4 (mm x mm)", 200, -50, 50, 200, -50, 50);
-	h2_ab_s4 = RegisterObject<TH2I>("h2_ab_s4", "Angle S4 (mrad x mrad)", 200, -50, 50, 200, -50, 50);
 	h1_x_sc21_before_target = RegisterObject<TH1I>("h1_x_sc21_before_target", "Position (from Scintillator) before target (mm)", 400,-100,100);
 	h1_x_sc22_after_target = RegisterObject<TH1I>("h1_x_sc22_after_target", "Position (from Scintillator) after target (mm)", 400,-100,100);
 
@@ -144,19 +152,8 @@ void TFRSCalCont::Setup() {
 
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 
-	h2_ab_s4->GetXaxis()->SetTitle("Ax [mrad]");
-	h2_ab_s4->GetYaxis()->SetTitle("Ay [mrad]");
-
-	h2_ab_s2_before_target->GetXaxis()->SetTitle("Ax [mrad]");
-	h2_ab_s2_before_target->GetYaxis()->SetTitle("Ay [mrad]");
-
 	h1_x_sc21_before_target->GetXaxis()->SetTitle("X [mm]");
 	h1_x_sc22_after_target->GetXaxis()->SetTitle("X [mm]");
-	h1_tpc_s2_before_target_nhit->GetXaxis()->SetTitle("Multiplicity");
-
-	h2_ab_s2_after_target->GetXaxis()->SetTitle("X [mm]");
-	h2_ab_s2_after_target->GetYaxis()->SetTitle("Y [mm]");
-	h1_tpc_s2_after_target_nhit->GetXaxis()->SetTitle("Multiplicity");
 }
 
 ClassImp(RNSciCal);

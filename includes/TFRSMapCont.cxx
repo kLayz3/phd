@@ -3,7 +3,7 @@
 TFRSMapCont::TFRSMapCont() : TContainer("FRS") {}
 
 void TFRSMapCont::Setup() {
-	for(int i=0; i<4; ++i) {
+	for(int i=0; i<N_VALID_SCI; ++i) {
 		h1_sci_ml[i] = RegisterObject<TH1I>(
 			Form("SCI%d_ML", i), Form("Multipl. SCI%d left", i), 10, 0, 10
 		);
@@ -15,7 +15,20 @@ void TFRSMapCont::Setup() {
 		);
 	}
 
-	for(int i=0; i<7; ++i) {
+	for(int i=0; i<N_VALID_TPC; ++i) {
+		for(int d=0; d<2; ++d) {
+			h1_tpc_dl_lraw[i][d] = RegisterObject<TH1I>(
+				Form("TPC%d_DL%d", i,d), Form("TPC%d delayline(%d) left raw", i, d), 20000, 0, 60000
+			);
+			h1_tpc_dl_rraw[i][d] = RegisterObject<TH1I>(
+				Form("TPC%d_DR%d", i,d), Form("TPC%d delayline(%d) right raw", i, d), 20000, 0, 60000
+			);
+		}
+		for(int a=0; a<4; ++a) {
+			h1_tpc_araw[i][a] = RegisterObject<TH1I>(
+				Form("TPC%d_A%d", i, a), Form("TPC%d anode(%d) raw", i, a), 20000, 0, 60000
+			);
+		}
 		h1_tpc_ml[i] = RegisterObject<TH1I>(
 			Form("TPC%d_ML", i), Form("Multipl. TPC%d left dl(0)", i), 10, 0, 10
 		);
@@ -43,6 +56,12 @@ void TFRSMapCont::Setup() {
 					20000, -10000, 10000
 			); 
 		}
+		h1_tpc_ldiff[i] = RegisterObject<TH1I>(
+			Form("TPC%d_LDiff", i), Form("TPC%d DL0 left - DL1 left (mult == 1; in both)", i), 20000, -10000, 10000
+		); 
+		h1_tpc_rdiff[i] = RegisterObject<TH1I>(
+			Form("TPC%d_RDiff", i), Form("TPC%d DL0 right - DL1 right (mult == 1; in both)", i), 20000, -10000, 10000
+		); 
 	}
 };
 

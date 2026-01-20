@@ -4,6 +4,9 @@
 #include "TFRSCalCont.h"
 #include "monad/monad.hxx"
 
+//#define TFRSCALPROC_VERBOSE_
+#define TFRSCALPROC_SINGLEHIT
+
 struct TFRSCalProc : TProcessor <
 	TFRSCalCont
 	(TFRSMapCont)
@@ -13,23 +16,42 @@ struct TFRSCalProc : TProcessor <
 	TFRSCalProc(TFRSCalCont& , const TFRSMapCont& );
 	TFRSCalProc() = default;
 
+#ifdef TFRSCALPROC_VERBOSE_
+	inline static u64 called_ = 0;
+	inline static u64 errors_ = 0;
+	~TFRSCalProc() { WARN("N_ERRORS: " EMPH1(%lu\n), errors_); }
+#endif
+
 	constexpr static auto N_VALID_TPC = RNFRSCal::N_VALID_TPC;
 	constexpr static auto N_VALID_SCI = RNFRSCal::N_VALID_SCI;
 
 	void ProcessEntry() noexcept;
-	
+
 private:
 	/* Encapsulating viable data from single TPC, single anode channel */
 	struct TPCHitCandidate {
 		i32 a_tdc;
 		i32 dl_tdc;
 		i32 dr_tdc;
-		i32 ref_tdc;
-		
+		enum class Status { kFINE, kIN_CONFLICT, kDROPPED } status = Status::kFINE;
+
 		TPCHitCandidate() = default;
 		TPCHitCandidate(i32 _a_tdc, i32 _dl_tdc, i32 _dr_tdc, i32 _ref_tdc) noexcept :
-			a_tdc(_a_tdc), dl_tdc(_dl_tdc), dr_tdc(_dr_tdc), ref_tdc(_ref_tdc) {}
+			a_tdc(_a_tdc), dl_tdc(_dl_tdc), dr_tdc(_dr_tdc) {}
+		
+		inline i32 CSum() { return dl_tdc + dr_tdc - 2*a_tdc; }
 	};
+	using TPCHitCandidateList = std::vector<TPCHitCandidate>;
+	constexpr static std::size_t CANDIDATE_LIST_CAPACITY = RNTPCMap::MAX_SIZE * RNTPCMap::MAX_SIZE * RNTPCMap::MAX_SIZE;
+	
+	using TPCConflict = std::pair<TPCHitCandidate*, TPCHitCandidate*>;
+	using TPCConflicts = std::vector<std::pair<TPCHitCandidate*, TPCHitCandidate*>>;
+
+	bool TryResolveViaAnodeDiff(TPCConflict&, std::array<double, 2>& limits);
+
+	enum class MeasurementType { kLEFT, kRIGHT, kANODE };
+	template<MeasurementType m> 
+	bool TryResolveViaDiff(TPCConflict&, const std::array<double, 2>& limits, const TPCHitCandidateList& other, bool );
 
 	struct TPCHitCandidateExtended {
 		std::array<i32,2> a_tdc;
@@ -38,26 +60,39 @@ private:
 		i32 ref_tdc;
 		TPCHitCandidate hit; 
 		TPCHitCandidateExtended() = default;
-		TPCHitCandidateExtended(std::array<i32,2> _a_tdc, i32 _dl_tdc, i32 _dr_tdc, i32 _ref_tdc) noexcept :
-			a_tdc(std::move(_a_tdc)), dl_tdc(_dl_tdc), dr_tdc(_dr_tdc), ref_tdc(_ref_tdc) {}
+		TPCHitCandidateExtended(i32 _a_tdc0, i32 _a_tdc1, i32 _dl_tdc, i32 _dr_tdc, i32 _ref_tdc) noexcept :
+			a_tdc{_a_tdc0, _a_tdc1}, dl_tdc(_dl_tdc), dr_tdc(_dr_tdc), ref_tdc(_ref_tdc) {}
 
 		inline bool operator<(const TPCHitCandidateExtended& rhs) const noexcept {
 			return ref_tdc < rhs.ref_tdc;
 		}
 	};
-
-	constexpr static std::size_t CANDIDATE_LIST_CAPACITY = RNTPCMap::MAX_SIZE * RNTPCMap::MAX_SIZE * RNTPCMap::MAX_SIZE;
-	using TPCHitCandidateList         = std::vector<TPCHitCandidate>;
 	using TPCHitCandidateExtendedList = std::vector<TPCHitCandidateExtended>;
 	
-	/* One list per anode in a delay-line. */
-	std::array<TPCHitCandidateList, 2>         candidate_list {};
+	/* One list per anode, per delay-line. */
+	std::array<
+		std::array<TPCHitCandidateList, 2>, 2
+	> candidate_list {};
+
+	/* One list per anode, per delay-line. */
+	std::array<
+		std::array<TPCConflicts, 2>, 2
+	> conflicts {};
+
 	/* One list per delay-line in a TPC. */
 	std::array<TPCHitCandidateExtendedList, 2> full_candidate_list {};
 
+	void ProcessTPC(int ) noexcept;
 	void PreProcessTPC(int ) noexcept;
-	void ProcessDelayLine(int, int ) noexcept;
+	void ProcessCSum(int, int ) noexcept;
+	void ResolveTPCDelayLineConflicts(int, int ) noexcept;
+	void FilterRemainingConflicts() noexcept;
+	void ProcessTPC_YCut(int ) noexcept;
 	void PostProcessTPC(int ) noexcept;
+
+#ifdef TFRSCALPROC_SINGLEHIT
+	void ProcessSingleHit(int, int ) noexcept;
+#endif
 
 	void ProcessS2Angle() noexcept;
 	void ProcessS4Angle() noexcept;

@@ -29,10 +29,10 @@ void tpc_alignment(std::string prefix = "", std::vector<std::string> fileNames =
 
 	TH1I *h1_x[2], *h1_y[4];
 	for(int i=0; i<2; ++i)
-		h1_x[i] = new TH1I(Form("h1_TPC%d_x%d", i_tpc, i), Form("h1_TPC%d_x%d", i_tpc, i), 600, -100, 100);
+		h1_x[i] = new TH1I(Form("h1_TPC%d_x%d", i_tpc, i), Form("h1_TPC%d_x%d", i_tpc, i), 550, -100, 100);
 
 	for(int i=0; i<4; ++i)
-		h1_y[i] = new TH1I(Form("h1_TPC%d_y%d", i_tpc, i), Form("h1_TPC%d_y%d", i_tpc, i), 400, -60, 60);
+		h1_y[i] = new TH1I(Form("h1_TPC%d_y%d", i_tpc, i), Form("h1_TPC%d_y%d", i_tpc, i), 380, -60, 60);
 
 	std::vector<double> xs[2], ys[4];
 	
@@ -47,16 +47,21 @@ void tpc_alignment(std::string prefix = "", std::vector<std::string> fileNames =
 		for(auto entryId : *ntuple) {
 			ntuple->LoadEntry(entryId);
 			auto& tpc = frs->tpc.at(i_tpc);
-			if(tpc.hits.size() != 1) continue;
 			
-			std::array<Measurement, 4>& m = tpc.hits[0];
-			if(std::isnan(m[0].x) or std::isnan(m[2].x))
-				continue;
-			
-			h1_x[0]->Fill(m[0].x);
-			h1_x[1]->Fill(m[2].x);
-			for(int i=0; i<4; ++i)
-				h1_y[i]->Fill(m[i].y);
+			const std::array<std::vector<Measurement>, 2>& tpc_hits = tpc.hits;
+			for(int d : {0,1}) {
+				const std::vector<Measurement>& m = tpc_hits[d];
+				if(m.size() != 1)
+					continue;
+				
+				if(!std::isnan(m[0].x))
+					h1_x[d]->Fill(m[0].x);
+
+				for(int a : {0,1}) {
+					if(m[0].mask >> a)
+						h1_y[2*d + a]->Fill(m[0].y);
+				}
+			}
 		}
 
 		/* Fit Gauss around those values. */

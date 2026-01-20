@@ -219,13 +219,15 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 			}
 
 			if(_nhits_l[i] != 1 || _nhits_r[i] != 1) continue;
-
+			
 			for(int a : {0,1} ) {
 				if(_nhits_a[i][a] == 1) {
 					out.h1_tpc_csum[s][2*i + a] -> Fill(
 						tdc[0].tdc_l + tdc.at(0).tdc_r - 
 						2 * tdc[0].tdc_a[a]
 					);
+
+					out.h1_tpc_araw[s][2*i+a]->Fill(tdc.at(0).tdc_a[a]);
 
 					if(_nhits_s == 1)
 						out.h1_tpc_ydiff[s][2*i + a] -> Fill(
@@ -235,6 +237,21 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 				}
 			}
 		} // end of loop over delay-lines {0,1}
+		
+		if(_nhits_l[0] == 1 && _nhits_l[1] == 1) {
+			out.h1_tpc_ldiff[s]->Fill (
+				tdc_dl[0].at(0).tdc_l - tdc_dl[1].at(0).tdc_l
+			);
+			for(int d: {0,1} )
+				out.h1_tpc_dl_lraw[s][d]->Fill(tdc_dl[d].at(0).tdc_l);
+		}
+		if(_nhits_r[0] == 1 && _nhits_r[1] == 1) {
+			out.h1_tpc_rdiff[s]->Fill (
+				tdc_dl[0].at(0).tdc_r - tdc_dl[1].at(0).tdc_r
+			);
+			for(int d: {0,1} )
+				out.h1_tpc_dl_rraw[s][d]->Fill(tdc_dl[d].at(0).tdc_r);
+		}
 		
 		/* Anodes (ADC) */
 		for(int i=0; i<4; ++i)

@@ -17,6 +17,10 @@
 
 static_assert(TFOOTMapProc::N_STRIPS == TFOOTMapProc::N_ASIC * TFOOTMapProc::N_STRIPS_PER_ASIC, "Failed build: nstrip != nasic*nstrip_per_asic!\n");
 
+static inline void Trim(std::string& s) noexcept {
+	s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c){return std::isspace(c);}), s.end());	
+}
+
 using nlohmann::json;
 json TFOOTMapProc::_bad_strips{};
 
@@ -335,7 +339,7 @@ void TFOOTMapProc::parse_json_string(std::vector<int>& out, std::string s) {
 		R"(^(\d+)n(\+\d+)?$)"
 	);
 
-	mnd::Trim(s);
+	Trim(s);
 
 	/* Strings can be passed either as:
 	 * 1) raw numbers

@@ -44,24 +44,52 @@ struct RNTPCCal {
 	struct Measurement {
 		static constexpr i32 TDC_INVALID = RNTPCMap::Measurement::TDC_INVALID;
 		double x  = NAN;
-		double y  = NAN;
+		std::array<double, 2> y = {NAN, NAN};
 		i32 ref   = TDC_INVALID;
-		i32 mask  = 0; 
-		/*^^^ 0b 01 => anode(0) fired; 0b 10 => anode(1) fired; 0b 11 => both anodes fired. */
+		u8 trusted = 0; /* Basically, if in map step all the list sizes match, and we trust this measurement. */
 
 		Measurement() = default;
-		Measurement(double _x, double _y, i32 _ref, i32 _mask) : 
-			x(_x), y(_y), ref(_ref), mask(_mask) {}
+		Measurement(double _x, double _y0, double _y1 , i32 _ref, u8 _trusted) : 
+			x(_x), y{_y0, _y1}, ref(_ref), trusted(_trusted) {}
 		virtual ~Measurement() = default;
-	}; /* ^^^ Per delay-line measurement. If both the anodes measured
-		* y then the y measurement is the averaged one. */
-	
+
+		inline double X() const noexcept { return x; }
+		inline double Y() const noexcept {
+			int N=0; double y0 = 0.0;
+			if(!std::isnan(y[0])) { ++N; y0 += y[0]; } 
+			if(!std::isnan(y[1])) { ++N; y0 += y[1]; }
+			return y0 / N;
+		}
+		inline int AnodeMask() const noexcept {
+			int r = 0;
+			if(!std::isnan(y[0])) r |= 0x1;
+			if(!std::isnan(y[1])) r |= 0x2;
+			return r;
+		}
+	}; /* ^^^ Per delay-line measurement. */
+
 	/* TPC is represented as two independent xy-measurements coming from 2 delay lines. */
 	using Measurements = std::array <
 		std::vector<Measurement>, 2
 	>;
-	
 	Measurements hits;
+	
+	/* Returns X-position of the first registered hit. Quiet NaN if there are no hits. */
+	inline double X0() const noexcept {
+		int N=0; double x0 = 0.0;
+		if(hits[0].size() > 0) x0 += hits[0][0].X(), ++N;
+		if(hits[1].size() > 0) x0 += hits[1][0].X(), ++N;
+		return x0 / N;
+	}
+	/* Returns Y-position of the first registered hit. Quiet NaN if there are no hits. */
+	inline double Y0() const noexcept {
+		i32 w0 = 0, w1 = 0; 
+		double y0 = 0, y1 = 0;
+		if(hits[0].size() > 0) w0 = 1 + (hits[0][0].AnodeMask() == 0x3), y0 = hits[0][0].Y();
+		if(hits[1].size() > 0) w1 = 1 + (hits[1][0].AnodeMask() == 0x3), y1 = hits[1][0].Y();
+		return (w0*y0 + w1*y1) / (w0 + w1); 
+	}
+
 	inline void Clean() noexcept { for(auto& d : hits) d.clear(); }
 	virtual ~RNTPCCal() = default;
 	ClassDef(RNTPCCal, 1);
@@ -86,14 +114,20 @@ struct alignas(mnd::CL) RNFRSCal {
  * not in the processor,
  * to have it as an object in the ROOT file for later. */
 
+template<typename U, size_t N, size_t M>
+using arr2d = std::array<std::array<U, N>, M>;
+
 struct TPCParam {
-	constexpr static std::size_t N_PARAMS = 7;
+	constexpr static std::size_t N_PARAMS = 10;
 
 	std::array<double, 2> x_offset;
 	std::array<double, 2> x_factor;
 	std::array<double, 4> y_offset;
 	std::array<double, 4> y_factor;
 	std::array<std::array<double, 2>, 4> csum_lim;
+	std::array<std::array<double, 2>, 2> anode_diff_lim;
+	std::array<double, 2> dl_left_diff_lim;
+	std::array<double, 2> dl_right_diff_lim;
 	std::array<std::array<double, 2>, 4> sci_ref_lim; // for y-calculation.
 	
 	double z0; // nominal z position.
@@ -113,8 +147,11 @@ private:
 		else if constexpr(I == 2) return (std::forward<Self>(self).y_offset);
 		else if constexpr(I == 3) return (std::forward<Self>(self).y_factor);
 		else if constexpr(I == 4) return (std::forward<Self>(self).csum_lim);
-		else if constexpr(I == 5) return (std::forward<Self>(self).sci_ref_lim);
-		else if constexpr(I == 6) return (std::forward<Self>(self).z0);
+		else if constexpr(I == 5) return (std::forward<Self>(self).anode_diff_lim);
+		else if constexpr(I == 6) return (std::forward<Self>(self).dl_left_diff_lim);
+		else if constexpr(I == 7) return (std::forward<Self>(self).dl_right_diff_lim);
+		else if constexpr(I == 8) return (std::forward<Self>(self).sci_ref_lim);
+		else if constexpr(I == 9) return (std::forward<Self>(self).z0);
 		else static_assert(I < N_PARAMS, "Index out of bounds.");
 	} 
 };
@@ -151,8 +188,11 @@ namespace std {
 	template<> struct tuple_element<2, TPCParam> { using type = array<double, 4>; };
 	template<> struct tuple_element<3, TPCParam> { using type = array<double, 4>; };
 	template<> struct tuple_element<4, TPCParam> { using type = array<array<double, 2>, 4>; };
-	template<> struct tuple_element<5, TPCParam> { using type = array<array<double, 2>, 4>; };
-	template<> struct tuple_element<6, TPCParam> { using type = double; };
+	template<> struct tuple_element<5, TPCParam> { using type = array<array<double, 2>, 2>; };
+	template<> struct tuple_element<6, TPCParam> { using type = array<double, 2>; };
+	template<> struct tuple_element<7, TPCParam> { using type = array<double, 2>; };
+	template<> struct tuple_element<8, TPCParam> { using type = array<array<double, 2>, 4>; };
+	template<> struct tuple_element<9, TPCParam> { using type = double; };
 
 	template<> struct tuple_size<SCIParam> : integral_constant<size_t, SCIParam::N_PARAMS> {};
 	template<> struct tuple_element<0, SCIParam> { using type = double; };
@@ -176,16 +216,10 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
 		{"21", 0}, {"22", 1},                       {"31", 2}, {"41", 3}
 	};
 
-	TH1I* h1_tpc_s2_before_target_nhit;
-	TH2I* h2_xy_s2_before_target;
-	TH2I* h2_ab_s2_before_target;
+	TH2I* h2_tpc_xy[RNFRSCal::N_VALID_TPC][2];
+	TH1I* h1_tpc_y[RNFRSCal::N_VALID_TPC][4];
 
-	TH1I* h1_tpc_s2_after_target_nhit;
-	TH2I* h2_xy_s2_after_target;
-	TH2I* h2_ab_s2_after_target;
-	
-	TH2I* h2_xy_s4;
-	TH2I* h2_ab_s4;
+	TH1I* h1_tpc_mask[RNFRSCal::N_VALID_TPC][2];
 
 	TH1I* h1_x_sc21_before_target;
 	TH1I* h1_x_sc22_after_target;
