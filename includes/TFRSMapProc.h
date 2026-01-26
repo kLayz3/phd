@@ -45,7 +45,6 @@ private:
 
 	// --------------------------------------------------- //
 	
-	Int_t* _pattern;	
 	std::array<Sci, N_VALID_SCI> sci;
 	std::array<TPC, N_VALID_TPC> tpc;
 	std::array<MUSIC, 2> music;
@@ -59,4 +58,19 @@ private:
 	Int_t _nhits_s       {}; // Number of hits in the ref. sci    vector
 
 	std::array<Int_t, RNTPCMap::MAX_SIZE> _temp {};
+};
+
+struct TTrigMapProc : TProcessor <
+	TTrigMapCont
+	(TFRSGo4Cont)
+> {
+	using Base = TProcessor<TTrigMapCont(TFRSGo4Cont)>;
+
+	TFRSMapProc::DoAnalysis do_analysis;
+
+	TTrigMapProc() = default;
+	TTrigMapProc(TTrigMapCont& out, const TFRSGo4Cont& in, TFRSMapProc::DoAnalysis y_or_n) 
+		: Base(out, in), do_analysis(y_or_n) {}
+
+	void ProcessEntry() noexcept;
 };

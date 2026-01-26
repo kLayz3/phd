@@ -34,7 +34,7 @@ struct TFOOTCalProc : TProcessor <
 
 	double X_CENTRE_THR;
 	double X_NEIGHB_THR;
-	
+
 	TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in);
 	TFOOTCalProc() = default;
 

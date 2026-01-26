@@ -99,22 +99,19 @@ struct alignas(mnd::CL) RNFRSMap {
 	std::array<RNSciMap, N_VALID_SCI> sci;
 	std::array<RNTPCMap, N_VALID_TPC> tpc;
 	std::array<RNMUSICMap<8>, 2> music;
-	uint32_t tpat;
 
 	inline void Clean() noexcept {
 		for(auto& s : sci) s.Clean();
 		for(auto& t : tpc) t.Clean();
 		for(auto& m : music) m.Clean();
-		tpat = static_cast<u32>(-1);
 	}
 	virtual ~RNFRSMap() = default;
 	ClassDef(RNFRSMap, 1);
 };
 
-class TFRSMapCont : public TContainer<RNFRSMap> {
+struct TFRSMapCont : TContainer<RNFRSMap> {
 	static_assert(sizeof(Int_t) == sizeof(i32), 
 		"`i32` and `Int_t` unequal size? Change the std::memcpy to something human in the ProcessEntry!\n");
-public: 
 	constexpr static i32 N_VALID_SCI = RNFRSMap::N_VALID_SCI;
 	constexpr static i32 N_VALID_TPC = RNFRSMap::N_VALID_TPC;
 
@@ -139,4 +136,40 @@ public:
 	void Setup() override;
 
 	TFRSMapCont();
+};
+
+#include "Scaler.h"
+
+/* Trick is, we don't really care about full 64-bit White Rabbit, the 32-bit is fine up to ~20s or so. */
+
+struct alignas(mnd::CL) RNTrigMap {
+	constexpr static u32 INVALID_TPAT = -1;
+
+	u32 tpat; // Nullable, if tpat == INVALID_TPAT
+	Scaler<32> wr; // Nullable according to the tpat field.
+
+	inline mnd::Maybe<u32> Wr() const {
+		return ((tpat != INVALID_TPAT and wr.initialized_) ? mnd::Maybe<u32>{wr.curr_data} : mnd::None);
+	}
+	inline mnd::Maybe<u32> DeltaT() const {
+		return ((tpat != INVALID_TPAT and wr.initialized_) ? mnd::Maybe<u32>{wr.increment} : mnd::None);
+	}
+	inline void Clean() noexcept {
+		tpat = INVALID_TPAT;
+		/* `wr` field dont clean on purpose. 
+		 * It needs to hold the state of the previous entry. */
+	}
+
+	virtual ~RNTrigMap() = default;
+	ClassDef(RNTrigMap, 1);
+};
+
+struct TTrigMapCont : TContainer<RNTrigMap> {
+	TH1I* h1_full_tpat;
+	TH1I* h1_tpat;
+	TH1I* h1_wr_diff;
+
+	void Setup() override;
+
+	TTrigMapCont();
 };

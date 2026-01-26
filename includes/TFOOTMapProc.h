@@ -44,6 +44,8 @@ public:
 	struct NBatchPedestal {
 		u32 amount;
 	} n_batch_pedestal;
+	
+	double dt_veto = NAN; /* Optionally given. */
 
 	int N; // Corresponds to FOOT_N from the output container.
 	uint32_t nsampled = 0;
@@ -51,10 +53,7 @@ public:
 	TFOOTMapProc() = default;
 	TFOOTMapProc(TFOOTMapCont& out, const TFRSGo4Cont& in, 
 		NBatchPedestal n_batch = { N_BATCH_PEDESTAL },
-		CableSwapped is_cabling_swapped = CableSwapped::NO ) : Base(out, in), 
-		is_swapped(is_cabling_swapped),
-		n_batch_pedestal(n_batch), 
-		N(out.FOOT_N) {}
+		CableSwapped is_cabling_swapped = CableSwapped::NO, double dt_veto_ = NAN);
 
 	void ProcessInitialPedestal() noexcept;
 	
@@ -116,7 +115,8 @@ private:
 		bool TSBad; u32 TLO; u32 THI; u32 SY;
 		u32 Ndata; u32* E;
 	};
-	
+	Scaler<32> init_timing {};
+
 	static const FOOTView GetPtrs(const TFRSSortEvent* e, int N);
 
 	static void parse_json_string(std::vector<int>& out, std::string s);

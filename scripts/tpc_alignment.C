@@ -23,6 +23,7 @@ void tpc_alignment(std::string prefix = "", std::vector<std::string> fileNames =
 	if(i_tpc < 0 or i_tpc >= RNFRSCal::N_VALID_TPC)
 		throw std::runtime_error("Bad i_tpc arg");
 
+	printf("Doing alignment on: TPC%s\n", labels[i_tpc]);
 	ROOT::EnableImplicitMT();
 
 	using Measurement = RNTPCCal::Measurement;
@@ -39,11 +40,11 @@ void tpc_alignment(std::string prefix = "", std::vector<std::string> fileNames =
 	std::vector<TH1I*> ext_h_x[2];
 	std::vector<TH1I*> ext_h_y[4];
 
-	for(const auto& fileName: fileNames) { 
+	for(const auto& fileName: fileNames) {
 		auto model = RNTupleModel::Create();
 		auto frs = model->MakeField<RNFRSCal>("FRS"); // shared_ptr.
 		auto ntuple = RNTupleReader::Open(std::move(model), "h103", prefix+fileName+".root");
-
+		
 		for(auto entryId : *ntuple) {
 			ntuple->LoadEntry(entryId);
 			auto& tpc = frs->tpc.at(i_tpc);
@@ -58,8 +59,8 @@ void tpc_alignment(std::string prefix = "", std::vector<std::string> fileNames =
 					h1_x[d]->Fill(m[0].x);
 
 				for(int a : {0,1}) {
-					if(m[0].mask >> a)
-						h1_y[2*d + a]->Fill(m[0].y);
+					if(!std::isnan(m[0].y[a]))
+						h1_y[2*d + a]->Fill( m[0].y[a] );
 				}
 			}
 		}
@@ -96,6 +97,8 @@ void tpc_alignment(std::string prefix = "", std::vector<std::string> fileNames =
 			h->GetListOfFunctions()->Delete();
 			h->Reset("ICESM");
 		}
+
+		std::cout << "Finished a file: \'" << prefix+fileName+".root" << "\'\n";
 	}
 
 	printf("Corresponding values: \n");

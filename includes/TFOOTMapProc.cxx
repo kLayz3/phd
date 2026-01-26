@@ -4,6 +4,7 @@
 
 #include "TF1.h"
 #include "TGraph.h"
+#include "TParameter.h"
 
 #include <algorithm>
 #include <cassert>
@@ -74,6 +75,17 @@ const TFOOTMapProc::FOOTView TFOOTMapProc::GetPtrs(const TFRSSortEvent* e, int N
 			ERROR("Request for member %d, not in [1,29]\n", N);
 	}
 }
+
+TFOOTMapProc::TFOOTMapProc(TFOOTMapCont& out, const TFRSGo4Cont& in, 
+	NBatchPedestal n_batch, CableSwapped is_cabling_swapped, double dt_veto_) : Base(out, in), 
+	is_swapped(is_cabling_swapped),
+	n_batch_pedestal(n_batch),
+	dt_veto(1000 * dt_veto_),
+	N(out.FOOT_N) 
+	{
+		/* Write out the `dt_veto` into output TOnce object. */
+		out.dt_veto->SetVal(dt_veto_);
+	}
 
 void TFOOTMapProc::ProcessEntry() noexcept {
 	switch(process_type) {
@@ -146,9 +158,16 @@ void TFOOTMapProc::ProcessInitialPedestal() noexcept {
 
 	const TFRSSortEvent* sortev = std::get<0>( this->in ).raw();
 	
-	auto [_0, _1, _2, _3, footN, data] = GetPtrs(sortev, N);
+	auto [_0, Tlo, _1, _2, footN, data] = GetPtrs(sortev, N);
 	if(footN == 0) return; 
+
+	init_timing.assign(Tlo);
 	
+	/* A small barrier in case `dt_veto` field is given and consecutive timings fall below the dt veto. */
+	/* `dt_veto` is already in nanoseconds, just like the timing.increment. */
+	if(!std::isnan(dt_veto) and init_timing.initialized_ and init_timing.increment < dt_veto)
+		return;
+
 	int iraw;	
 	for(int i=0; i < N_STRIPS; ++i) {
 		iraw = (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
@@ -164,9 +183,16 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 
 	const TFRSSortEvent* sortev = &input.inner();
 
-	auto [_0, _1, _2, _3, footN, data] = GetPtrs(sortev, N);
+	auto [_0, Tlo, _1, _2, footN, data] = GetPtrs(sortev, N);
 	if(footN == 0) return;
-
+	
+	Scaler<32>& timing = out.inner().timing;
+	timing.assign(Tlo);
+	
+	/* A small barrier in case `dt_veto` field is given and consecutive timings fall below the dt veto. */
+	if(!std::isnan(dt_veto) and timing.initialized_ and timing.increment < dt_veto)
+		return;
+	
 	/* Subtract the global pedestal. */
 	/* Algorithm (per groups of 64-strips) is the following: j=0,1,2, ... 63
 	 * (1) Calculate the offsets of each: _FOOTE[j] - gped[j] and store in a 64-length array.
@@ -239,6 +265,8 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 			out.inner().FOOTE[i] = adc_final;
 		}
 	}
+
+	out.h1_entry_dt->Fill( out.inner().DeltaT().value_or(NAN) / 1000.0 /* in microseconds. */ );
 
 	/* If we sample enough events, recalculate the global pedestal quickly from the batch. */
 	if((++nsampled) == n_batch_pedestal.amount) {

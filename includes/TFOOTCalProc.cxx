@@ -1,7 +1,6 @@
 #include "TFOOTCalProc.h"
+#include "TFOOTCalCont.h"
 #include "TFOOTMapCont.h"
-
-#include "TGraph.h"
 
 #include <algorithm>
 #include <cmath>
@@ -50,16 +49,21 @@ auto TFOOTCalProc::GetClusterType() -> ClusterType {
 
 /* Input and output should be properly assigned a priori. */
 TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) : 
-	TFOOTCalProc::Base(out, in) 
+	TFOOTCalProc::Base(out, in)
 {
 	TFOOTMapCont& input = std::get<0>(this->in);
 	if(!input.ped_s || input.ped_s->size() != N_STRIPS)
 		ERROR("Input sigma array not initialized? State (null|entries): \'%s\' . Did you call TFOOTMapCont::Setup() ?\n",
 				input.ped_s ? "null" : Form("%zu", input.ped_s->size()));
 
-	if(out.FOOT_N < 0 || out.POS < 0) 
+	if(out.FOOT_N < 0 || out.par.N < 0) 
 		ERROR("Output object (TFOOTCalCont): \'%s\' uninitialized. Did you call ::Setup?", out.GetName());
-	
+
+	if(input.FOOT_N != out.FOOT_N)
+		ERROR(EMPH2(%s) ": mapping is wrong. Deduced output FOOT%d (from setup input), but processor's input is FOOT%d ?\n", 
+			_SELF_TYPE_CSTR, out.FOOT_N, input.FOOT_N);
+
+	/* Taken from setup file. Parsed in `TFOOTCalCont::Init()` */
 	X_CENTRE_THR = out.c_threshold;
 	X_NEIGHB_THR = out.n_threshold;
 
@@ -78,9 +82,9 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 
 	for(int i=0; i<N_STRIPS; ++i) {
 		if(n_thr[i] < 0.01)
-			ERROR("FOOT[%d -> %d], strip = %d, n_thr = %.2f too small.\n", out.FOOT_N, out.POS, i, n_thr[i]);
+			ERROR("FOOT[%d -> %d], strip = %d, n_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, n_thr[i]);
 		if(c_thr[i] < 0.01)
-			ERROR("FOOT[%d -> %d], strip = %d, c_thr = %.2f too small.\n", out.FOOT_N, out.POS, i, c_thr[i]);
+			ERROR("FOOT[%d -> %d], strip = %d, c_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, c_thr[i]);
 	}
 
 	/* Set the _e pointer. */

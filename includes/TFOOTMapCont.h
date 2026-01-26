@@ -1,6 +1,7 @@
 #pragma once
 
 #include "monad/monad.hxx"
+#include "Scaler.h"
 
 #include <array>
 #include <vector>
@@ -12,11 +13,27 @@
 class TH2I;
 class TH2D;
 class TGraph;
+template<typename T> class TParameter;
 
-struct RNFOOTMap {	
+struct RNFOOTMap {
+	Scaler<32> timing; // nullable according to `RNFOOTMap::HasData()` predicate 
 	double FOOTE[_FOOT_N_STRIPS]{};
+
 	inline void Clean() noexcept { std::fill_n(FOOTE, _FOOT_N_STRIPS, std::nan("")); }
+
+	inline bool HasData() const noexcept { return std::isfinite(FOOTE[0]); }
+	inline mnd::Maybe<u32> T() const noexcept {
+		return (HasData() and timing.initialized_) ? mnd::Maybe<u32>{timing.curr_data} : mnd::None;
+	}
 	
+	inline mnd::Maybe<u64> TotalT() const noexcept {
+		return HasData() ? mnd::Maybe<u64>{timing.cumulative} : mnd::None;
+	}
+
+	inline mnd::Maybe<u32> DeltaT() const noexcept {
+		return (HasData() and timing.initialized_) ? mnd::Maybe<u32>{timing.increment} : mnd::None;
+	}
+
 	RNFOOTMap() = default;
 	
 	virtual ~RNFOOTMap() = default;
@@ -47,6 +64,9 @@ struct TFOOTMapCont : TContainer<RNFOOTMap> {
 	TH2D* h2_ped_off_med;
 	TH2D* h2_ped_off_avg;
 	TH2D* h2_ped_off_diff;
+	TH1I* h1_entry_dt;
+
+	TParameter<double>* dt_veto;
 
 	void Setup() override;
 	void Init(TDictInfo ) override;

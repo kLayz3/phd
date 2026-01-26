@@ -200,6 +200,7 @@ void TFRSCalProc::ProcessCSum(int _i_tpc, int i) noexcept {
 
 }
 
+#ifndef TFRSCALPROC_SINGLEHIT
 void TFRSCalProc::ResolveTPCDelayLineConflicts(int _i_tpc, int i /* dl id: 0,1 */) noexcept { 
 	std::array<TPCConflicts, 2>& conflicts_in_dl = conflicts[i];
 
@@ -313,7 +314,7 @@ void TFRSCalProc::ProcessTPC_YCut(int _i_tpc) noexcept {
 			
 	}
 }
-
+#else
 void TFRSCalProc::ProcessSingleHit(int _i_tpc, int ref_tdc) noexcept {
 	constexpr i32 INVALID = RNTPCMap::Measurement::TDC_INVALID;
 
@@ -357,6 +358,7 @@ void TFRSCalProc::ProcessSingleHit(int _i_tpc, int ref_tdc) noexcept {
 		}
 	}
 }
+#endif
 
 void TFRSCalProc::PostProcessTPC(int _i_tpc) noexcept {
 	constexpr i32 INVALID = RNTPCMap::Measurement::TDC_INVALID;

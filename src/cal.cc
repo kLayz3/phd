@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
 
 	/* Set up the containers. */
 	TFOOTMapCont mfoot[N_FOOT]{}; // input map container.
-	for(int i=0; i<N_FOOT; ++i) {
+	for(int i=0; i < N_FOOT; ++i) {
 		mfoot[i].Init( {{"FOOT_ID"s, std::to_string(::static_detectors[i])}} );
 		mfoot[i].Setup();
 	}
@@ -92,8 +92,7 @@ int main(int argc, char* argv[]) {
 	TFOOTCalCont cfoot[N_FOOT]; // output container.
 	for(int i=0; i<N_FOOT; ++i) {
 		cfoot[i].Init({
-			{ "FOOT_ID"s, std::to_string(::static_detectors[i]) }, 
-			{ "FOOT_POS"s, std::to_string(i) },
+			{ "ID"s, std::to_string( mfoot[i].FOOT_N ) }, 
 			{ "Setup"s, footSetupFile }
 		});
 		cfoot[i].Setup();

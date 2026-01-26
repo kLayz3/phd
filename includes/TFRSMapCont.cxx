@@ -65,9 +65,19 @@ void TFRSMapCont::Setup() {
 	}
 };
 
+TTrigMapCont::TTrigMapCont() : TContainer("Trig") {}
+
+void TTrigMapCont::Setup() {
+	h1_full_tpat = RegisterObject<TH1I>("full_tpat", "Complete Trigger Pattern", 65536, 0, 65536);
+	h1_tpat = RegisterObject<TH1I>("tpat", "Trigger Pattern", 17, 0, 17);
+	h1_wr_diff = RegisterObject<TH1I>("wr_diff", "FRS Whiterabbit Increment [us]", 200, -5, 2000);
+}
+
 ClassImp(RNSciMap);
 ClassImp(RNSciMap::Measurement);
 ClassImp(RNTPCMap);
 ClassImp(RNTPCMap::Measurement);
 ClassImp(RNMUSICMap<8>);
 ClassImp(RNFRSMap);
+
+ClassImp(RNTrigMap);

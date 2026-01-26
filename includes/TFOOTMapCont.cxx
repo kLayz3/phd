@@ -3,6 +3,7 @@
 #include "TH2D.h"
 #include "TH2I.h"
 #include "TGraph.h"
+#include "TParameter.h"
 #include <algorithm>
 #include <cmath>
 
@@ -64,7 +65,8 @@ void TFOOTMapCont::Setup() {
 	h2_ped_off_med  = RegisterObject<TH2D>("h2_ped_off_med" , Form("Fine pedestal FOOT%d offset calculated via median", FOOT_N), 10,0,10, 1000,-100,100); 
 	h2_ped_off_avg  = RegisterObject<TH2D>("h2_ped_off_avg" , Form("Fine pedestal FOOT%d offset calculated via trimmed average", FOOT_N), 10,0,10, 1000,-100,100);
 	h2_ped_off_diff = RegisterObject<TH2D>("h2_ped_off_diff", Form("Fine pedestal FOOT%d offset diff (median - trimmed average)", FOOT_N), 10,0,10, 100,-10,10);
-
+	h1_entry_dt = RegisterObject<TH1I>("h1_entry_dt", Form("Conseq. entry timing diff FOOT%d [us]", FOOT_N), 100, 0, 2000);   
+	dt_veto = RegisterObject<TParameter<double>>("dt_veto", mnd::noop_fn<TParameter<double>>(), NAN); /* Optional, overridden in TFOOTMapProc constructor. */
 }
 
 ClassImp(RNFOOTMap);

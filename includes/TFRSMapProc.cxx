@@ -1,4 +1,5 @@
 #include "TFRSMapProc.h"
+#include "TFRSMapCont.h"
 #include <algorithm>
 
 #if defined(__GNUC__)
@@ -47,7 +48,6 @@ void TFRSMapProc::SetupPointers() {
 
 	this->music[0]._music_raw = &sort->music_e1[0];
 	this->music[1]._music_raw = &sort->music_e2[0];
-	this->_pattern = &sort->pattern;
 }
 
 
@@ -63,8 +63,6 @@ void TFRSMapProc::ProcessEntry() noexcept {
 void TFRSMapProc::_ProcessEntry() noexcept {
 	SetupPointers();
 	out.Clean();
-
-	out.inner().tpat = static_cast<u32>(*_pattern);
 
 	/* Scintillators. */
 	for(int s=0; s < (int)sci.size(); ++s) {
@@ -266,5 +264,38 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 	
 		for(int i=0; i < music_raw.size(); ++i)
 			music_raw.e[i] = static_cast<u16>(music_go4._music_raw[i]);
+	}
+}
+
+void TTrigMapProc::ProcessEntry() noexcept {
+	if(do_analysis == TFRSMapProc::DoAnalysis::NO) return;
+		
+	TFRSGo4Cont& input = std::get<0>( this->in );
+	TFRSSortEvent* sort = input.raw();
+	if(sort == nullptr) ERROR("TFRSGo4Cont, underlying pointer is null?");
+	
+	this->out.Clean();
+	RNTrigMap& out = this->out.inner(); 
+	
+	u64 wr = sort->frs_wr; 
+	if(wr == 0) return;	
+	
+	/* First assign tpat, because that's the nullable indicator. */
+	u16 tpat = sort->pattern & 0xffff;
+	out.tpat = tpat; 
+	this->out.h1_full_tpat->Fill(tpat);
+	
+	out.wr.assign( static_cast<u32>(wr) );
+	this->out.h1_wr_diff->Fill( out.DeltaT().value_or(NAN) / 1000. );
+
+	/* Butcher the (local) tpat now, look at all the bits. */
+	if(tpat == 0) {
+		this->out.h1_tpat->Fill(0);
+	} else {
+		for(int i=1; i<=16; ++i) {
+			if(tpat & 1)
+				this->out.h1_tpat->Fill(i);
+			tpat >>= 1;
+		}
 	}
 }

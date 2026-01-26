@@ -56,6 +56,7 @@ int main(i32 argc, char* argv[]) {
 
 	std::string pStr, outFile, inFile;
 	u64 maxEvents = -1;
+	double dt_veto = NAN;
 
 	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
 	
@@ -68,7 +69,13 @@ int main(i32 argc, char* argv[]) {
 	if(ParseCmdLine("max-events", pStr, argc, argv)) {
 		try { maxEvents = stoi(pStr); }
 		catch(std::exception const& e) { 
-			WARN("Unparsable " EMPH(max-events) " argument to u64. Err: %s\n", e.what()); 
+			WARN("Unparsable " EMPH(max-events) " argument to `u64`. Err: %s\n", e.what()); 
+		}
+	}
+	if(ParseCmdLine("foot-dt", pStr, argc, argv)) {
+		try { dt_veto = stod(pStr); }
+		catch(std::exception const& e) {
+			WARN("Unparsable " EMPH(foot-dt) " argument to `double`. Err: %s\n", e.what()); 
 		}
 	}
 
@@ -104,23 +111,26 @@ int main(i32 argc, char* argv[]) {
 	INIT_FOOT(FOOT_ID_6);
 	INIT_FOOT(FOOT_ID_7);
 
+	TFOOTMapProc::LoadBadStripsFile(PROG_PATH "/params/bad_strips.json");
+
 	TFRSMapCont frs{};
 	frs.Setup();
 
-	TFOOTMapProc::LoadBadStripsFile(PROG_PATH "/params/bad_strips.json");
-	
-	u32 n_batch = 25'000;
+	TTrigMapCont trig{};
+	trig.Setup();
 
+	u32 n_batch = 16'384;
 	auto pool = TAnalysisProcess<>(inFile, outFile, "h102")
-		.emplace_process<TFOOTMapProc>( foot[0], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::YES)
-		.emplace_process<TFOOTMapProc>( foot[1], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
-		.emplace_process<TFOOTMapProc>( foot[2], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
-		.emplace_process<TFOOTMapProc>( foot[3], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
-		.emplace_process<TFOOTMapProc>( foot[4], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
-		.emplace_process<TFOOTMapProc>( foot[5], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
-		.emplace_process<TFOOTMapProc>( foot[6], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
-		.emplace_process<TFOOTMapProc>( foot[7], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO)
+		.emplace_process<TFOOTMapProc>( foot[0], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::YES, dt_veto)
+		.emplace_process<TFOOTMapProc>( foot[1], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO , dt_veto)
+		.emplace_process<TFOOTMapProc>( foot[2], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO , dt_veto)
+		.emplace_process<TFOOTMapProc>( foot[3], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO , dt_veto)
+		.emplace_process<TFOOTMapProc>( foot[4], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO , dt_veto)
+		.emplace_process<TFOOTMapProc>( foot[5], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO , dt_veto)
+		.emplace_process<TFOOTMapProc>( foot[6], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO , dt_veto)
+		.emplace_process<TFOOTMapProc>( foot[7], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO , dt_veto)
 		.emplace_process<TFRSMapProc >( frs,     sort, TFRSMapProc::DoAnalysis::NO)
+		.emplace_process<TTrigMapProc>( trig,    sort, TFRSMapProc::DoAnalysis::NO)
 		.MakePool<4>( n_batch );
 		//.MakePool<1>( 512 );
 
@@ -129,7 +139,7 @@ int main(i32 argc, char* argv[]) {
 	WARN("Done with batching, going on to process (initial) guess for global pedestal in FOOT\n");
 
 	/* Loop over all workers, get their processes,
-	 * and set them correspondingly (FOOT). */
+	 * and set them correspondingly (FOOT). FRS+Trig process needs to be switched away from no-op state. */
 	for(auto& process : pool.GetPool()) {
 		auto subprocesses = process.GetProcesses(); 
 		/* ^^^^ std::array<TProcessorBase*, _> */
@@ -139,10 +149,12 @@ int main(i32 argc, char* argv[]) {
 			if(pfoot) {
 				pfoot->CalcGlobalPedestal();
 				pfoot->process_type = TFOOTMapProc::kMAIN;
-			} else {
-				TFRSMapProc* pfrs = dynamic_cast<TFRSMapProc*>(subproc);
-				if(pfrs) pfrs->do_analysis = TFRSMapProc::DoAnalysis::YES;
-			}
+			} 
+			TFRSMapProc* pfrs = dynamic_cast<TFRSMapProc*>(subproc);
+			if(pfrs) pfrs->do_analysis = TFRSMapProc::DoAnalysis::YES;
+			
+			TTrigMapProc* ptrg = dynamic_cast<TTrigMapProc*>(subproc);
+			if(ptrg) ptrg->do_analysis = TFRSMapProc::DoAnalysis::YES;
 		}
 	}
 	WARN("Done w/ guessing initial global ped per FOOT, per strip. Proceeding to main mapping step.\n");
@@ -190,6 +202,7 @@ For either single or multiple values.\n\
 -output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_map' suffix.\n\
 -help                       ..Print this message to stdout. \n\
 -max-events N               ..Specify how many events to process in the ROOT file. Default all.\n\
+-foot-dt T                  ..Specify in microseconds FOOT deadtime veto. Consecutive entries with stamp difference <T will be discarded.\n\
 \n\
 This program will go through the raw (sorted) ROOT file and do the full pedestal analysis of the FOOT data + perform mapping of the FRS data.\n\
 Always remember: PHYSICS IS FUN <(^.^)>\n\n";

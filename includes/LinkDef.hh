@@ -12,6 +12,9 @@
 #pragma link C++ class RNMUSICMap<8>+;
 #pragma link C++ class RNFRSMap+;
 
+#pragma link C++ class Scaler<32>+;
+#pragma link C++ class RNTrigMap+;
+
 #pragma link C++ class RNSciCal+;
 #pragma link C++ class RNSciCal::Measurement+;
 #pragma link C++ class RNTPCCal+;
@@ -23,4 +26,6 @@
 #pragma link C++ class RNFOOTMap++;
 #pragma link C++ class RNFOOTCluster+;
 #pragma link C++ class RNFOOTCal+;
+#pragma link C++ class FOOTParam+;
+
 #endif

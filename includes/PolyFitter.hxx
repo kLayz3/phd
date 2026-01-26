@@ -13,7 +13,7 @@
 
 template<std::size_t N, std::size_t R>
 struct StaticPolyFitter {
-	static_assert(R > 0, "Fit rank (polynomial) must be greater than 0");
+	static_assert(R >= 0, "Fit rank (polynomial) must be greater than 0");
 
 	using QR = Eigen::ColPivHouseholderQR<Eigen::Matrix<double, N, R+1>>;
 
@@ -35,7 +35,7 @@ struct StaticPolyFitter {
 		assert(x.size() == N && "Vector `x` must have exactly N elements.");
 		Eigen::Map<const Eigen::Matrix<double, N, 1>> xv(x.data());
 
-		Eigen::Matrix<double, N, R+1> A {};
+		Eigen::Matrix<double, N, R+2> A {};
 		A.col(0).setOnes();
 		for(size_t i = 1; i <= R; ++i)
 			A.col(i) = A.col(i-1).cwiseProduct(xv);
