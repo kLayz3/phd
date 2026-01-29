@@ -15,8 +15,8 @@
 		"position": 0,
 		"orientation": "y",
 		"mirrored": 0,
-		"c_threshold": 3.2,
-		"n_threshold": 1.2,
+		"c_threshold": 4.0,
+		"n_threshold": 1.5,
 		"delta_a": 0.0,
 		"delta_p": 0.0
 	},
@@ -25,8 +25,8 @@
 		"position": 0,
 		"orientation": "-x",
 		"mirrored": 0,
-		"c_threshold": 3.2,
-		"n_threshold": 1.2,
+		"c_threshold": 4.0,
+		"n_threshold": 1.5,
 		"delta_a": 0.0,
 		"delta_p": 0.0
 	},
@@ -35,8 +35,8 @@
 		"position": 1,
 		"orientation": "y",
 		"mirrored": 0,
-		"c_threshold": 3.2,
-		"n_threshold": 1.2,
+		"c_threshold": 4.0,
+		"n_threshold": 1.5,
 		"delta_a": 0.0,
 		"delta_p": 0.0
 	},
@@ -45,8 +45,8 @@
 		"position": 1,
 		"orientation": "-x",
 		"mirrored": 0,
-		"c_threshold": 3.2,
-		"n_threshold": 1.2,
+		"c_threshold": 4.0,
+		"n_threshold": 1.5,
 		"delta_a": 0.0,
 		"delta_p": 0.0
 	},
@@ -55,8 +55,8 @@
 		"position": 2,
 		"orientation": "y",
 		"mirrored": 0,
-		"c_threshold": 3.2,
-		"n_threshold": 1.2,
+		"c_threshold": 4.0,
+		"n_threshold": 1.5,
 		"delta_a": 0.0,
 		"delta_p": 0.0
 	},
@@ -65,8 +65,8 @@
 		"position": 2,
 		"orientation": "-x",
 		"mirrored": 0,
-		"c_threshold": 3.2,
-		"n_threshold": 1.2,
+		"c_threshold": 4.0,
+		"n_threshold": 1.5,
 		"delta_a": 0.0,
 		"delta_p": 0.0
 	},
@@ -75,8 +75,8 @@
 		"position": 3,
 		"orientation": "y",
 		"mirrored": 0,
-		"c_threshold": 3.2,
-		"n_threshold": 1.2,
+		"c_threshold": 4.0,
+		"n_threshold": 1.5,
 		"delta_a": 0.0,
 		"delta_p": 0.0
 	},
@@ -85,8 +85,8 @@
 		"position": 3,
 		"orientation": "-x",
 		"mirrored": 0,
-		"c_threshold": 3.2,
-		"n_threshold": 1.2,
+		"c_threshold": 4.0,
+		"n_threshold": 1.5,
 		"delta_a": 0.0,
 		"delta_p": 0.0
 	}

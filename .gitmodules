@@ -1,3 +1,6 @@
 [submodule "includes/monad"]
 	path = includes/monad
 	url = https://git.gsi.de/m.bajzek/monad/
+[submodule "includes/ceres-solver"]
+	path = includes/ceres-solver
+	url = https://github.com/ceres-solver/ceres-solver

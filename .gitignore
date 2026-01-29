@@ -1,5 +1,7 @@
 build*
 includes/build*
+includes/test*
+includes/makeme*
 lib*
 *.root
 *.lmd
@@ -15,3 +17,8 @@ mapdir
 caldir
 merged
 stash
+
+quick/*
+!quick/*.cc
+!quick/Makefile
+!quick/make_macro.bash

@@ -1,10 +1,11 @@
+BUILD_DIR=build
 SRC=$(wildcard *.cc)
-EXE=$(patsubst %.cc, %, $(SRC))
+EXE=$(patsubst %.cc, $(BUILD_DIR)/%, $(SRC))
 
-CFLAGS = $(shell root-config --cflags) \
+CXXFLAGS = $(shell root-config --cflags) \
 	-Wall -Wextra -I../includes/
 
-CFLAGS += -g3 -ggdb -O0 -fno-inline -fno-omit-frame-pointer
+include ../includes/monad/common.mk
 
 LIBS = $(shell root-config --ldflags --libs) \
 	   -lROOTNTuple \
@@ -14,5 +15,6 @@ LIBS = $(shell root-config --ldflags --libs) \
 
 all: $(EXE)
 
-$(EXE): % : %.cc
-	g++ -o $@ $^ $(CFLAGS) $(LIBS)
+$(EXE): $(BUILD_DIR)/% : %.cc
+	mkdir -p $(@D)
+	g++ -o $@ $^ $(CXXFLAGS) $(LIBS)

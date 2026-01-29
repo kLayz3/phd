@@ -31,7 +31,7 @@ void foot_spread(std::string fileName = "", std::string o="x") {
 
 	TH1I *h2_foot[4];
 	for(int i=0; i<4; ++i) {
-		h2_foot[i] = new TH1I(Form("FOOT%d", Is[i]), Form("FOOT%d measuring %s", Is[i], o.c_str()), 128,0,640);
+		h2_foot[i] = new TH1I(Form("FOOT%d", Is[i]), Form("FOOT%d measuring %s", Is[i], o.c_str()), 320,0,640);
 		h2_foot[i]->GetXaxis()->SetTitle(Form("%s in strip #", o.c_str()));
 	}
 

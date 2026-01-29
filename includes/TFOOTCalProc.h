@@ -14,7 +14,7 @@ struct TFOOTCalProc : TProcessor <
 	static constexpr int N_STRIPS    = TFOOTCalCont::N_STRIPS; /* 640 */
 	static constexpr int MAX_CL_SIZE = 40; /* Maximal allowed cluster size. */
 	static constexpr int MASSIVE_CLUSTER_CUTOFF = 20; /* After which multiplicity a cluster is called 'massive' */
-	static constexpr double BAD_STRIP_FAKE_THRESHOLD = NAN;
+	static constexpr double BAD_STRIP_THRESHOLD = INFINITY;
 
 	static_assert(MAX_CL_SIZE > MASSIVE_CLUSTER_CUTOFF);
 
@@ -55,7 +55,7 @@ private:
 
 	TClustHit _buf[MAX_CL_SIZE]{};
 
-	u32 _cl_cnt = 0; /* Points to last valid index in `_buf`.  */	
+	u32 _cl_cnt = 0; /* Points to one-ahead valid index in `_buf`. Is also size of `_buf`. */	
 	ClusterFullType _ct { ClusterType::kUNKNOWN, ClusterType::kUNKNOWN };
 	ClusterType GetClusterType();
 
@@ -71,7 +71,8 @@ private:
 		_buf[_cl_cnt].e = e[i];
 		++_cl_cnt;
 	}
-
+	
+	void PrintBuff();
 	/* Save the state of where the possible cluster fragmentation took place. */
 	TClustHit _frag{};
 };

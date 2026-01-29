@@ -58,7 +58,7 @@ void tpc_draw_track(std::string fileName = "", std::pair<int, int> sus = {-1,-1}
 		{0, 0}  // 24
 	};
 	
-	constexpr double WIDTH = 60.0;
+	constexpr double WIDTH = 70.0;
 	const Arr2<double, N, 2> zDL = [tpc_param](){
 		Arr2<double,N,2> z{};
 		for(int i=0; i<N; ++i) {
@@ -93,19 +93,26 @@ void tpc_draw_track(std::string fileName = "", std::pair<int, int> sus = {-1,-1}
 	h2_track_x->GetXaxis()->SetTitle("z [mm]"); h2_track_x->GetYaxis()->SetTitle("x [mm]");
 	h2_track_y->GetXaxis()->SetTitle("z [mm]"); h2_track_y->GetYaxis()->SetTitle("y [mm]");
 	
-	constexpr int N_BINS_X  = 100;
-	constexpr int PROJ_X_LO = -50;
-	constexpr int PROJ_X_HI =  50;
-	constexpr int N_BINS_Y  = 100;
-	constexpr int PROJ_Y_LO = -20;
-	constexpr int PROJ_Y_HI =  20;
+	constexpr int N_BINS_X = 150;
+	constexpr int X_LO     = -30;
+	constexpr int X_HI     =  30;
+	constexpr int N_BINS_XD = 150;
+	constexpr int XD_LO     = -10;
+	constexpr int XD_HI     =  10;
+
+	constexpr int N_BINS_Y = 200;
+	constexpr int Y_LO     = -50;
+	constexpr int Y_HI     =  50;
+	constexpr int N_BINS_YD = 200;
+	constexpr int YD_LO     = -10;
+	constexpr int YD_HI     =  10;
 
 	int N0, N1;
 	
 	TH2I* h2_tpc_xproj[4][3];
 	TH2I* h2_tpc_yproj[4][3];
 	TH2I* h2_tpc_sus_xproj[2][2];
-	TH2I* h2_tpc_sus_yproj[2][2];
+	TH2I* h2_tpc_sus_yproj[2/*<dl*/][2/*<a*/][2/*>dl*/][2/*>a*/][2/*>aRef*/];
 	
 	if(has_suspect(sus)) {
 		printf("\nInvestigating suspicious TPC%s, delay line: %d\n", labels[sus.first], sus.second);
@@ -130,17 +137,22 @@ void tpc_draw_track(std::string fileName = "", std::pair<int, int> sus = {-1,-1}
 			for(int d1: {0,1}) {
 				h2_tpc_sus_xproj[d0][d1] = new TH2I(Form("h2_tpc_sus_xproj%d-%d", d0, d1), 
 					Form("TPC%s(%d) && TPC%s(%d) X-projection diff on TPC%s(%d)", labels[N0],d0,labels[N1],d1,labels[sus.first],sus.second),
-						N_BINS_X, PROJ_X_LO, PROJ_X_HI, 60, -10, 10);
+						N_BINS_X, X_LO, X_HI, N_BINS_XD, XD_LO, XD_HI);
 				h2_tpc_sus_xproj[d0][d1]->GetXaxis()->SetTitle(Form("TPC%s(%d) X-measurement [mm]", labels[sus.first], sus.second)); 
 				h2_tpc_sus_xproj[d0][d1]->GetYaxis()->SetTitle(Form("TPC-X (%s:%d && %s:%d) extrap. - TPC%s(%d) X [mm]", 
 					labels[N0],d0, labels[N1],d1, labels[sus.first],sus.second)); 
-				
-				h2_tpc_sus_yproj[d0][d1] = new TH2I(Form("h2_tpc_sus_yproj%d-%d", d0, d1), 
-					Form("TPC%s(%d) && TPC%s(%d) Y-projection diff on TPC%s(%d)", labels[N0],d0,labels[N1],d1,labels[sus.first],sus.second),
-						N_BINS_Y, PROJ_Y_LO, PROJ_Y_HI, 60, -10, 10);
-				h2_tpc_sus_yproj[d0][d1]->GetXaxis()->SetTitle(Form("TPC%s(%d) Y-measurement [mm]", labels[sus.first], sus.second)); 
-				h2_tpc_sus_yproj[d0][d1]->GetYaxis()->SetTitle(Form("TPC-Y (%s:%d && %s:%d) extrap. - TPC%s(%d) Y [mm]", 
-					labels[N0],d0, labels[N1],d1, labels[sus.first],sus.second)); 
+			
+				for(int a0: {0,1}) {
+					for(int a1: {0,1}) {
+						for(int aR: {0,1}) {
+						h2_tpc_sus_yproj[d0][a0][d1][a1][aR] = new TH2I(Form("h2_tpc_sus_yproj%d:%d-%d:%d<=>%d", d0, a0, d1, a1, aR), 
+							Form("TPC%s(%d:%d) && TPC%s(%d:%d) Y-projection diff on TPC%s(%d:%d)", labels[N0], d0,a0, labels[N1],d1,a1, labels[sus.first],sus.second, aR),
+								N_BINS_Y, Y_LO, Y_HI, N_BINS_YD, YD_LO, YD_HI);
+						h2_tpc_sus_yproj[d0][a0][d1][a1][aR]->GetXaxis()->SetTitle(Form("TPC%s(%d:%d) Y-measurement [mm]", labels[sus.first], sus.second, aR)); 
+						h2_tpc_sus_yproj[d0][a0][d1][a1][aR]->GetYaxis()->SetTitle(Form("TPC-Y (%s:%d:%d && %s:%d:%d) extrap. - TPC%s(%d:%d) Y [mm]", labels[N0],d0,a0, labels[N1],d1,a1, labels[sus.first],sus.second, aR)); 
+						}
+					}
+				}
 			}
 		}
 	} 
@@ -155,9 +167,9 @@ void tpc_draw_track(std::string fileName = "", std::pair<int, int> sus = {-1,-1}
 
 
 				h2_tpc_yproj[itpc][i] = new TH2I(Form("h2_tpc_yproj%d-%d",  itpc, i), Form("TPC: %s Y-projection diff", name),
-						N_BINS_X, PROJ_X_LO, PROJ_X_HI, 60, -10, 10);
+					N_BINS_X, X_LO, X_HI, N_BINS_XD, XD_LO, XD_HI);
 				h2_tpc_xproj[itpc][i] = new TH2I(Form("h2_tpc_xproj%d-%d",  itpc, i), Form("TPC: %s X-projection diff", name),
-						N_BINS_Y, PROJ_Y_LO, PROJ_Y_HI, 60, -10, 10);
+					N_BINS_Y, Y_LO, Y_HI, N_BINS_YD, YD_LO, YD_HI);
 				h2_tpc_xproj[itpc][i]->GetXaxis()->SetTitle(Form("TPC%s X-measurement [mm]", labels[itpc])); 
 				h2_tpc_xproj[itpc][i]->GetYaxis()->SetTitle(Form("TPC X (%s&%s) - TPC%s X-measurement [mm]", labels[i0], labels[i1], labels[itpc])); 
 
@@ -221,37 +233,45 @@ void tpc_draw_track(std::string fileName = "", std::pair<int, int> sus = {-1,-1}
 		if(has_suspect(sus)) {
 			auto [NR, ndl] = sus;
 			
-			if(frs->tpc[NR].hits[ndl].size() == 0) continue;;
-			double xR = frs->tpc[NR].hits[ndl][0].X();
-			double yR = frs->tpc[NR].hits[ndl][0].Y();
-			//double zR = zDL[NR][ndl];
-			double zR = zTPC[NR];
-			if(std::isnan(xR) || std::isnan(yR)) continue;
-				
+			if(frs->tpc[NR].hits[ndl].size() == 0) continue;
+			auto& hitR = frs->tpc[NR].hits[ndl][0];
+			double xR = hitR.X();
+			double zR = zDL[NR][ndl];
+			
+			/* X,Y differences. */ 
 			for(int d0: {0,1}) {
 				if(frs->tpc[N0].hits[d0].size() == 0) continue;
-				double x0 = frs->tpc[N0].hits[d0][0].X();
-				double y0 = frs->tpc[N0].hits[d0][0].Y();
-				//double z0 = zDL[N0][d0];
-				double z0 = zTPC[N0];
+				auto& hit0 = frs->tpc[N0].hits[d0][0];
+				double x0 = hit0.X();
+				double z0 = zDL[N0][d0];
 				
 				for(int d1: {0,1}) {
 					if(frs->tpc[N1].hits[d1].size() == 0) continue;
-					double x1 = frs->tpc[N1].hits[d1][0].X();
-					double y1 = frs->tpc[N1].hits[d1][0].Y();
-					//double z1 = zDL[N1][d1];
-					double z1 = zTPC[N1];
+					auto& hit1 = frs->tpc[N1].hits[d1][0];
+					double x1 = hit1.X();
+					double z1 = zDL[N1][d1];
 
 					double kx = (x1 - x0) / (z1 - z0);
-					double ky = (y1 - y0) / (z1 - z0);
 					h2_tpc_sus_xproj[d0][d1] -> Fill (
 						xR,
 						(kx * (zR - z0) + x0) - xR
 					);
-					h2_tpc_sus_yproj[d0][d1] -> Fill (
-						yR,
-						(ky * (zR - z0) + y0) - yR
-					);
+					for(int a0: {0,1}) {
+						double y0 = hit0.y[a0]; // possible nan
+						
+						for(int a1: {0,1}) {
+							double y1 = hit1.y[a1]; // possible nan
+							
+							for(int aR: {0,1}) {
+								double yR = hitR.y[aR]; // possible nan.
+								double ky = (y1 - y0) / (z1 - z0);
+								h2_tpc_sus_yproj[d0][a0][d1][a1][aR] -> Fill (
+									yR,
+									(ky * (zR - z0) + y0) - yR
+								);
+							}
+						}
+					}
 				}
 			}
 		}
@@ -348,20 +368,28 @@ void tpc_draw_track(std::string fileName = "", std::pair<int, int> sus = {-1,-1}
 	
 	if(has_suspect(sus)) {
 		auto [NR, ndl] = sus;
-		TCanvas* c = new TCanvas(Form("cP%s", labels[NR]), Form("Corr: TPC%s-%d", labels[NR], ndl), 1900, 1400);
-		c->Divide(4,2); int cid = 1;
+		TCanvas* cX = new TCanvas(Form("cP%s-X", labels[NR]), Form("CorrX: TPC%s-%d", labels[NR], ndl), 1900, 1400);
+		cX->Divide(2,2); int cid = 1;
 		for(int d0: {0,1}) {
 			for(int d1: {0,1}) {
-				c->cd( cid++ );
+				cX->cd( cid++ );
 				gPad->SetGrid();
 				h2_tpc_sus_xproj[d0][d1]->Draw("COLZ");
 			}
-		} 
-		for(int d0: {0,1}) {
-			for(int d1: {0,1}) {
-				c->cd( cid++ );
-				gPad->SetGrid();
-				h2_tpc_sus_yproj[d0][d1]->Draw("COLZ");
+		}
+		for(int aR: {0,1}) {
+			TCanvas* cY = new TCanvas(Form("cP%s-Y(%d:%d)", labels[NR], ndl, aR), Form("CorrY: TPC%s-%d:%d", labels[NR], ndl, aR), 1900, 1400);
+			cY->Divide(4,4); cid = 1;
+			for(int d0: {0,1}) {
+				for(int a0: {0,1}) {
+					for(int d1: {0,1}) {
+						for(int a1: {0,1}) {
+							cY->cd( cid++ );
+							gPad->SetGrid();
+							h2_tpc_sus_yproj[d0][a0][d1][a1][aR]->Draw("COLZ");
+						}
+					}
+				}
 			}
 		}
 	}

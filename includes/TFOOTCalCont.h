@@ -9,6 +9,21 @@
 
 class TH1D;
 
+struct FOOTClusterFit {
+	double sigma  = NAN; /* Width of the fitted gauss. */
+	double delta  = NAN; /* Offset between mean and max strip. */
+	i32       i0  = -1;  /* Index of the max-strip hit. */
+	double E_cont = NAN; /* Total energy derived by continuous extrapolation. */
+	double E_disc = NAN; /* Total energy derived by discrete extrapolation. */
+	
+	double X() const noexcept { return static_cast<double>(i0) + delta; };
+	bool HasData() const noexcept { return !std::isnan(sigma); }
+
+	FOOTClusterFit() = default;
+	virtual ~FOOTClusterFit() = default;
+	ClassDef(FOOTClusterFit, 1);
+};
+
 struct RNFOOTCluster {
 	enum ClusterType {
 		kUNKNOWN    = 0, /* Unqualified. */
@@ -20,8 +35,10 @@ struct RNFOOTCluster {
 
 	double fCX = 0; /* Cluster mean strip position. */
 	double fCE = 0; /* Cluster summed energy. */
-	double fCM = 0; /* Cluster mean multiplicity. */
+	double fCM = 0; /* Cluster normalized multiplicity. */
+	u32    fCI = 0; /* Cluster absolute multiplicity. */
 	ClusterType fCT{}; /* Cluster type. */
+	FOOTClusterFit fit{};
 
 	template<std::size_t I>
 	decltype(auto) get() &        noexcept { return get_helper<I>(*this); }
@@ -35,7 +52,7 @@ struct RNFOOTCluster {
 	template<std::size_t I>
 	decltype(auto) get() const && noexcept { return get_helper<I>(std::move(*this)); }
 
-	RNFOOTCluster(double x, double e, double m, ClusterType t);
+	RNFOOTCluster(double, double, double, u32, ClusterType, FOOTClusterFit);
 	RNFOOTCluster() = default;
 	virtual ~RNFOOTCluster() = default;
 	ClassDef(RNFOOTCluster, 1);
@@ -86,8 +103,8 @@ struct alignas(mnd::CL) RNFOOTCal {
 	inline void AddCluster(RNFOOTCluster cl) noexcept {
 		fCl.push_back(std::move(cl));
 	}
-	inline void AddCluster(double x, double e, double m, ClusterType ty) noexcept {
-		fCl.emplace_back(x, e, m, ty);
+	inline void AddCluster(double x, double e, double m, u32 mi, ClusterType ty, FOOTClusterFit f) noexcept {
+		fCl.emplace_back(x, e, m, mi, ty, f);
 	}
 	virtual ~RNFOOTCal() = default;
 	ClassDef(RNFOOTCal, 1);
@@ -126,9 +143,6 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	int FOOT_N = -1; /* Comes from sort step. */
 	FOOTParam par;   /* Local object, will just get copied around. Is fine. */
 
-	double c_threshold = FOOTParam::CENTRE_THR_DEFAULT; // setup file param.
-	double n_threshold = FOOTParam::NEIGHB_THR_DEFAULT; // setup file param.
-
 	TH1I* h1_raw_mult; 
 	TH1I* h1_mult; 
 	TH1I* h1_dE; 
@@ -139,6 +153,7 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	TH1I* h1_dE_m2; 
 	TH1I* h1_dE_m3; 
 	TH1I* h1_sn_ratio; 
+	TH2I* h2_mult_e;
 
 	FOOTParam* setup;
 

@@ -1,10 +1,29 @@
 #include "TFOOTCalProc.h"
 #include "TFOOTCalCont.h"
 #include "TFOOTMapCont.h"
+#include "TH2I.h"
 
 #include <algorithm>
 #include <cmath>
 
+#include "helper_fwd.h"
+
+constexpr double TWO_PI = 6.283185307179586;
+constexpr double TWO_PI_SQRT = 2.5066282746310002;
+constexpr double TWO_PI_SQUARED = 19.739208802178716;
+
+double ffourier(u32 k, double sn, double delta) noexcept {
+	return exp(-TWO_PI_SQUARED * k*k * sn) * cos(TWO_PI*k*delta);
+}
+
+std::ostream& operator<<(std::ostream& os, const TFOOTCalProc::TClustHit& cl) {
+	return os << "{" << cl.x << ", " << cl.e << "}"; 
+}
+
+void TFOOTCalProc::PrintBuff() {
+	mnd_output_homogeneous_range_(std::cerr, _buf, _cl_cnt);	
+	fprintf(stderr, "\n");
+}
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int );
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int );
 
@@ -64,8 +83,8 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 			_SELF_TYPE_CSTR, out.FOOT_N, input.FOOT_N);
 
 	/* Taken from setup file. Parsed in `TFOOTCalCont::Init()` */
-	X_CENTRE_THR = out.c_threshold;
-	X_NEIGHB_THR = out.n_threshold;
+	X_CENTRE_THR = out.par.c_threshold;
+	X_NEIGHB_THR = out.par.n_threshold;
 
 	const auto& sigma = *input.ped_s;
 	for(int i=0; i<N_STRIPS; ++i) {
@@ -76,19 +95,16 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 	/* Bad/dead strips just label them with NAN'ed thresholds. */
 	const std::vector<int>& bad_strips = *input.bad_strips;
 	for(auto i : bad_strips) {
-		c_thr[i] = BAD_STRIP_FAKE_THRESHOLD; 
-		n_thr[i] = BAD_STRIP_FAKE_THRESHOLD; 
+		c_thr[i] = BAD_STRIP_THRESHOLD; 
+		n_thr[i] = BAD_STRIP_THRESHOLD; 
 	}
 
 	for(int i=0; i<N_STRIPS; ++i) {
-		if(n_thr[i] < 0.01)
+		if(n_thr[i] < 0.1)
 			ERROR("FOOT[%d -> %d], strip = %d, n_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, n_thr[i]);
-		if(c_thr[i] < 0.01)
+		if(c_thr[i] < 0.1)
 			ERROR("FOOT[%d -> %d], strip = %d, c_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, c_thr[i]);
 	}
-
-	/* Set the _e pointer. */
-	_e = &input.inner().FOOTE[0];
 
 #define _ALTER_TITLE(x) \
 	x->SetTitle(Form("%s : S=%.1f N=%1.f", x->GetTitle(), X_CENTRE_THR, X_NEIGHB_THR))
@@ -104,15 +120,16 @@ void TFOOTCalProc::ProcessEntry() noexcept {
 	out.Clean();
 	_e = &std::get<0>(in).inner().FOOTE[0]; /* Don't know if rebinding is really necessary... */
 
-	if( std::isnan(_e[0]) ) return; /* Missing data; in previous step marked it NAN by default. */
+	if( std::isnan(_e[0]) ) return; /* Missing data; previous step marked it NAN. */
 	
 	/* Copy	the data over, since there's a write to `e`. */
 	memcpy(e, _e, sizeof(e)); 
 	int i = 0;
 	/* Try to find a central 'seed' strip. */
 	for(; i < N_STRIPS; ++i) {
-		if(e[i] > c_thr[i])
+		if(e[i] > c_thr[i]) {
 			MakeACluster(i);
+		}
 	}
 }
 
@@ -172,15 +189,15 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		if(_buf[0].e > 3 * c_thr[i]) return;
 	}
 
+	/* Sort by their position in the FOOT. */
+	std::sort(_buf, _buf + _cl_cnt, [](const auto& l, const auto& r) { return l.x < r.x; });
+
 	/* Check if cluster is 'merged'. Meaning that in the cluster,
 	 * there exist two strips above C-threshold with 2 or more strips in-between 
 	 * which are below C-threshold. */
-	/* Sort by their position. */
-	std::sort(_buf, _buf + _cl_cnt, [](const auto& l, const auto& r) { return l.x < r.x; });
-
 	TClustHit* ref_hit = nullptr;
 	for(u32 i=0; i < _cl_cnt; ++i) {
-		auto [strip, adc_val] = _buf[i];
+		const auto& [strip, adc_val] = _buf[i];
 		if( adc_val > c_thr[strip] ) {
 			if(ref_hit && (strip - ref_hit->x > 2)) {
 				_ct_pos = ClusterType::kMERGED;
@@ -194,7 +211,6 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	 * Meaning that a cluster marked `kGOOD` has: first sequence (left-to-right) of collected strips 
 	 * energy must be monotonically increasing, while second sequence must have monotonically 
 	 * decreasing energy values, as to yield a proper hit structure. */
-	
 	if(_ct != ClusterType::kFRAGMENTED and _ct != ClusterType::kMERGED) {
 		double prev_e = 0;
 		enum { rising, falling } curve = rising;
@@ -217,18 +233,20 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	for(u32 hit = 0; hit < _cl_cnt; ++hit) {
 		cl_e  += _buf[hit].e;
 		cl_wx += _buf[hit].e * _buf[hit].x;
+		out.h2_mult_e->Fill(_buf[hit].e, _cl_cnt);
 	}
 	
 	cl_wx /= cl_e;
 
-	auto [cl_max_i, cl_max_e] = *std::max_element(_buf, _buf + _cl_cnt, 
+	/* Find the peak energy element in the cluster. */
+	auto it_max = std::max_element(_buf, _buf + _cl_cnt, 
 		[](const auto& l, const auto& r) { 
 			return l.e < r.e; 
 		});
+	auto [cl_max_x, cl_max_e] = *it_max; 
 	double cl_m = cl_e / cl_max_e;
 
 	ClusterType ct = this->GetClusterType();
-	out.inner().AddCluster(cl_wx, cl_e, cl_m, ct);
 	out.h1_raw_mult->Fill(_cl_cnt);
 	out.h1_mult->Fill(cl_m);
 	out.h1_dE->Fill(cl_e);
@@ -252,16 +270,29 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		default:
 			break;
 	}
-	/* Since the cluster hit array is sorted by the strip index, and only consecutive 
-	 * sequence of hits makes a cluster - means this below is valid: */
-	cl_max_i -= _buf[0].x;
-	/* assert(cl_max_i >= 0 && cl_max_i < _cl_cnt); */
-
-	if(cl_max_i > 0 && cl_max_i+1 < (int)_cl_cnt) {
-		double e_left  = _buf[cl_max_i - 1].e;
-		double e_right = _buf[cl_max_i + 1].e;
-		double sn = 1 / log( cl_max_e * cl_max_e / (e_left*e_right) );
+	
+	/* Check if it's a >3 strips cluster, then we can also do the cluster fit on the fly. */
+	FOOTClusterFit cl_fit {};
+	int imax = std::distance(&_buf[0], it_max); /* Index in the cluster. */
+	if(imax > 0 && imax+1 < (int)_cl_cnt) {
+		double e_left  = _buf[imax - 1].e;
+		double e_right = _buf[imax + 1].e;
+		double r_left  = log( cl_max_e / e_left );
+		double r_right = log( cl_max_e / e_right );
+		double sn = 1 / (r_left + r_right);
 		out.h1_sn_ratio->Fill(sn);
+		
+		double s = sqrt(sn);
+		double x = r_right / r_left;
+		double delta = 0.5 * (1-x)/(1+x);
+
+		cl_fit.E_cont = cl_max_e * exp(delta*delta / (2 * sn)) * s * TWO_PI_SQRT;
+		cl_fit.E_disc = cl_fit.E_cont * (1 + 2 * (ffourier(1,sn,delta) + ffourier(2,sn,delta) + ffourier(3,sn,delta)));
+		cl_fit.delta = delta;
+		cl_fit.sigma = s;
+		cl_fit.i0 = cl_max_x; 
+		//WARN("FOOT(%d->%d), found cluster at i0 = %d, x = %.2f\n", out.FOOT_N, out.par.N, cl_fit.i0, cl_fit.X());
+		//PrintBuff();
 	}
 
 	if(cl_max_e > 30 and _cl_cnt == 1 and 
@@ -270,6 +301,8 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	{
 		out.inner()._fHeClSize1.assign(e, e + N_STRIPS);
 	}
+	
+	out.inner().AddCluster(cl_wx, cl_e, cl_m, _cl_cnt, ct, cl_fit);
 }
 
 template<>

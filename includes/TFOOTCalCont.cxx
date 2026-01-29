@@ -1,11 +1,12 @@
 #include "TFOOTCalCont.h"
 #include "TH1I.h"
+#include "TH2I.h"
 #include "json_struct_def.hh"
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
-RNFOOTCluster::RNFOOTCluster(double x, double e, double m, ClusterType t) :
-	fCX(x), fCE(e), fCM(m), fCT(t) {}
+RNFOOTCluster::RNFOOTCluster(double x, double e, double m, u32 mi, ClusterType t, FOOTClusterFit fit) :
+	fCX(x), fCE(e), fCM(m), fCI(mi), fCT(t), fit{fit} {}
 
 /* ------------------------------------------------------- */
 
@@ -80,10 +81,15 @@ void TFOOTCalCont::Setup() {
 	h1_dE_m2    = RegisterObject<TH1I>("h1_dE_m2", Form("(%2d:%d) energy with multiplicity 2", FOOT_N, par.N), 2500, 0, 500);
 	h1_dE_m3    = RegisterObject<TH1I>("h1_dE_m3", Form("(%2d:%d) energy with multiplicity 3", FOOT_N, par.N), 2500, 0, 500);
 	h1_sn_ratio = RegisterObject<TH1I>("h1_sn_ratio", Form("(%2d:%d) ratio neighbouring vs. seed value (mult <= 3)", FOOT_N, par.N), 500, 0, 5);
-	
+	h2_mult_e = RegisterObject<TH2I>("h2_mult_e", Form("FOOT(%2d:%d) multiplicity and energy", FOOT_N, par.N),
+			2000,0,2000, 10, 1, 10);
+	h2_mult_e->GetXaxis()->SetTitle("Individual energy per strip hit");
+	h2_mult_e->GetYaxis()->SetTitle("Multiplicity");
+
 	setup = RegisterObject<FOOTParam>("setup", mnd::noop_fn<FOOTParam>(), this->par /* copy ctor */);
 }
 
+ClassImp(FOOTClusterFit);
 ClassImp(RNFOOTCluster);
 ClassImp(RNFOOTCal);
 

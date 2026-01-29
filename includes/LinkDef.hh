@@ -23,7 +23,8 @@
 #pragma link C++ class TPCParam+;
 #pragma link C++ class SCIParam+;
 
-#pragma link C++ class RNFOOTMap++;
+#pragma link C++ class RNFOOTMap+;
+#pragma link C++ class FOOTClusterFit+;
 #pragma link C++ class RNFOOTCluster+;
 #pragma link C++ class RNFOOTCal+;
 #pragma link C++ class FOOTParam+;
