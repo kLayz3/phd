@@ -9,15 +9,33 @@
 
 class TH1D;
 
+/* f(x; (a0,mu,sigma)) = a0 * exp( -0.5 * ((x-mu)/sigma)^2 ) */
 struct FOOTClusterFit {
-	double sigma  = NAN; /* Width of the fitted gauss. */
-	double delta  = NAN; /* Offset between mean and max strip. */
-	i32       i0  = -1;  /* Index of the max-strip hit. */
-	double E_cont = NAN; /* Total energy derived by continuous extrapolation. */
-	double E_disc = NAN; /* Total energy derived by discrete extrapolation. */
+	static constexpr double TWO_PI = 6.283185307179586;
+	static constexpr double TWO_PI_SQRT = 2.5066282746310002;
+	static constexpr double TWO_PI_SQUARED = 19.739208802178716;
+	static constexpr u32 LARGE_CLUSTER_CUTOFF = 7;
+
+	inline static double ffourier(u32 k, double sigma, double delta) {
+		return exp(-TWO_PI_SQUARED * k*k * sigma*sigma) * cos(TWO_PI*k*delta);
+	}
+
+	double a0     = NAN; /* Fitted Gauss amplitude. */
+	double mu     = NAN; /* Fitted Gauss mean. */
+	double sigma  = NAN; /* Fitted gauss width. */
+	double delta  = NAN; /* Offset between mean and max strip. Also a null indicator. */
 	
-	double X() const noexcept { return static_cast<double>(i0) + delta; };
-	bool HasData() const noexcept { return !std::isnan(sigma); }
+	inline double X() const noexcept { return mu; };
+	inline int   I0() const noexcept { return mnd::rround<int>( mu - delta ); }
+	inline double E() const noexcept { return a0 * sigma * TWO_PI_SQRT; }
+	
+	inline double E_discrete() const noexcept { 
+		return this->E() * (1 + 2 * (ffourier(1,sigma,delta) + ffourier(2,sigma,delta) + ffourier(3,sigma,delta))); 
+	} 
+
+
+	/* If true, all fit parameters are given. */
+	bool IsOk() const noexcept { return std::isfinite(delta); }
 
 	FOOTClusterFit() = default;
 	virtual ~FOOTClusterFit() = default;
@@ -35,10 +53,11 @@ struct RNFOOTCluster {
 
 	double fCX = 0; /* Cluster mean strip position. */
 	double fCE = 0; /* Cluster summed energy. */
-	double fCM = 0; /* Cluster normalized multiplicity. */
-	u32    fCI = 0; /* Cluster absolute multiplicity. */
+	u32    fCM = 0; /* Cluster multiplicity. */
 	ClusterType fCT{}; /* Cluster type. */
 	FOOTClusterFit fit{};
+
+	inline double Delta() const noexcept { return mnd::rround<int>(fCX) - fCX; }
 
 	template<std::size_t I>
 	decltype(auto) get() &        noexcept { return get_helper<I>(*this); }
@@ -52,7 +71,7 @@ struct RNFOOTCluster {
 	template<std::size_t I>
 	decltype(auto) get() const && noexcept { return get_helper<I>(std::move(*this)); }
 
-	RNFOOTCluster(double, double, double, u32, ClusterType, FOOTClusterFit);
+	RNFOOTCluster(double, double, u32, ClusterType, FOOTClusterFit);
 	RNFOOTCluster() = default;
 	virtual ~RNFOOTCluster() = default;
 	ClassDef(RNFOOTCluster, 1);
@@ -103,8 +122,8 @@ struct alignas(mnd::CL) RNFOOTCal {
 	inline void AddCluster(RNFOOTCluster cl) noexcept {
 		fCl.push_back(std::move(cl));
 	}
-	inline void AddCluster(double x, double e, double m, u32 mi, ClusterType ty, FOOTClusterFit f) noexcept {
-		fCl.emplace_back(x, e, m, mi, ty, f);
+	inline void AddCluster(double x, double e, u32 m, ClusterType ty, FOOTClusterFit f) noexcept {
+		fCl.emplace_back(x, e, m, ty, f);
 	}
 	virtual ~RNFOOTCal() = default;
 	ClassDef(RNFOOTCal, 1);
@@ -143,7 +162,6 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	int FOOT_N = -1; /* Comes from sort step. */
 	FOOTParam par;   /* Local object, will just get copied around. Is fine. */
 
-	TH1I* h1_raw_mult; 
 	TH1I* h1_mult; 
 	TH1I* h1_dE; 
 	TH1I* h1_X; 
@@ -152,7 +170,7 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	TH1I* h1_dE_m1; 
 	TH1I* h1_dE_m2; 
 	TH1I* h1_dE_m3; 
-	TH1I* h1_sn_ratio; 
+	TH1I* h1_cl_sigma;
 	TH2I* h2_mult_e;
 
 	FOOTParam* setup;

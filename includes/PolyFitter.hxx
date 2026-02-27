@@ -69,7 +69,18 @@ private:
 };
 
 
-template<size_t R>
+template<std::size_t R>
+inline void PolyFit_(const Eigen::VectorXd& x, const Eigen::VectorXd& y, std::size_t N, std::array<double, R+1>& result) {
+	Eigen::MatrixXd A(N, R+1);
+	A.col(0).setOnes();
+	for(size_t i = 1; i <= R; ++i)
+		A.col(i) = A.col(i-1).cwiseProduct(x);
+
+	Eigen::Matrix<double, R+1, 1> fit = A.colPivHouseholderQr().solve(y);
+	std::copy_n(fit.data(), R+1, result.data());
+}
+
+template<std::size_t R>
 void PolyFit(const std::vector<double>& x, const std::vector<double>& y, std::array<double, R+1>& result) {
 	static_assert(R >= 0, "Fit rank (polynomial) must be greater than 0");
 
@@ -81,19 +92,54 @@ void PolyFit(const std::vector<double>& x, const std::vector<double>& y, std::ar
 	Eigen::Map<const Eigen::VectorXd> xv(x.data(), N);
 	Eigen::Map<const Eigen::VectorXd> yv(y.data(), N);
 
-	Eigen::MatrixXd A(N, R+1);
-	A.col(0).setOnes();
-	for(size_t i = 1; i <= R; ++i)
-		A.col(i) = A.col(i-1).cwiseProduct(xv);
-
-	Eigen::Matrix<double, R+1, 1> fit = A.colPivHouseholderQr().solve(yv);
-
-	std::copy_n(fit.data(), R+1, result.data());
+	PolyFit_<R>(xv, yv, N, result);
 }
 
-template<size_t R>
+template<std::size_t R>
 std::array<double, R+1> PolyFit(const std::vector<double>& x, const std::vector<double>& y) {
 	std::array<double, R+1> res;
 	PolyFit<R>(x,y, res);
+	return res;
+}
+
+/* Weighted least squares. 
+ * If each point (xi,yi) also has a wi>0 value attached, then just by rescaling
+ * xi' = sqrt(wi)*xi
+ * yi' = sqrt(wi)*yi
+ * we come back to ordinary least-square method. */
+
+/* Weights vector `w` must have all elements >= 0. 
+ * This check **is not** reinforced at runtime. */
+template<std::size_t R>
+void PolyFit (
+	const std::vector<double>& x, 
+	const std::vector<double>& y,
+	const std::vector<double>& w,
+	std::array<double, R+1>& result
+) {
+	assert(((void)("Vectors `x` and `y` must be equally sized"), x.size() == y.size()));
+	assert(((void)("Vectors `x` and `w` must be equally sized"), x.size() == w.size()));
+
+	const std::size_t N = x.size();
+	assert(N >= R + 1 && "Need at least R+1 points");
+
+	Eigen::Map<const Eigen::VectorXd> xv(x.data(), N);
+	Eigen::Map<const Eigen::VectorXd> yv(y.data(), N);
+	Eigen::Map<const Eigen::VectorXd> wv(w.data(), N);
+
+	Eigen::VectorXd x_reduced = wv.array().sqrt() * xv.array();
+	Eigen::VectorXd y_reduced = wv.array().sqrt() * yv.array();
+	
+	PolyFit_<R>(x_reduced, y_reduced, N, result);
+}
+
+template<std::size_t R>
+std::array<double, R+1> PolyFit (
+	const std::vector<double>& x, 
+	const std::vector<double>& y,
+	const std::vector<double>& w
+) {
+	std::array<double, R+1> res;
+	PolyFit<R>(x,y,w,res);
 	return res;
 }

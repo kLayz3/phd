@@ -1,10 +1,10 @@
 #pragma once
 
 #include "TAxis.h"
-#include "TH2I.h"
+#include "TH2D.h"
 #include <array>
 
-inline void FillTrack(TH2I* hist, const std::array<double, 2>& a) {
+inline void FillTrack(TH2D* hist, const std::array<double, 2>& a) {
 	double xmin = hist->GetXaxis()->GetXmin();
 	double xmax = hist->GetXaxis()->GetXmax();	
 

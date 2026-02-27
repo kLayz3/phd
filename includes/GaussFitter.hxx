@@ -7,7 +7,7 @@
  * -Lceres-solver/build/lib -Wl,rpath,ceres-solver/build/lib -lceres 
  *    $(pkg-config --libs absl_log absl_log_internal_check_op absl_strings absl_base)
  *
- *  A lot of internal dependencies. \,(>.>),/
+ *  A lot of internal dependencies. \,(>_<),/
  */
 
 #include "Eigen/Dense"

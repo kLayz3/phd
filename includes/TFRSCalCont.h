@@ -30,6 +30,7 @@ struct RNSciCal {
 	double E = NAN;
 	std::vector<Measurement> hits;
 
+	inline bool IsOk() const noexcept  { return hits.size() > 0; }
 	inline void Clean() noexcept { E = 0; hits.clear(); }
 	virtual ~RNSciCal() = default;
 	ClassDef(RNSciCal, 1);
@@ -98,6 +99,13 @@ struct RNTPCCal {
 struct alignas(mnd::CL) RNFRSCal {
 	constexpr static i32 N_VALID_SCI = RNFRSMap::N_VALID_SCI;
 	constexpr static i32 N_VALID_TPC = RNFRSMap::N_VALID_TPC;
+	
+	inline static constexpr std::array<const char*, N_VALID_TPC> tpc_label = {
+		"21", "22", "23", "24", "41", "42", "31"
+	};	
+	inline static constexpr std::array<const char*, N_VALID_SCI> sci_label = {
+		"21", "22",             "31", "41"
+	};
 
 	std::array<RNSciCal, N_VALID_SCI> sci;
 	std::array<RNTPCCal, N_VALID_TPC> tpc;

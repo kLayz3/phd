@@ -7,13 +7,96 @@
 #include <cmath>
 
 #include "helper_fwd.h"
+#include "FastGauss.hxx"
 
-constexpr double TWO_PI = 6.283185307179586;
-constexpr double TWO_PI_SQRT = 2.5066282746310002;
-constexpr double TWO_PI_SQUARED = 19.739208802178716;
+// This will make all the fits be analytical from 3 points around the maximum
+// intensity strip.
+//#define FIT_ALL_WITH_3_POINTS
 
-double ffourier(u32 k, double sn, double delta) noexcept {
-	return exp(-TWO_PI_SQUARED * k*k * sn) * cos(TWO_PI*k*delta);
+/* Fit function taken for cluster sizes 4,5,6 where initial parameters are: {μ,σ} = {CoG, sqrt(Var(CoG)) }
+ * then it does a few step least-square optimization around that. */
+template<u32 N,
+	typename std::enable_if<(N < FOOTClusterFit::LARGE_CLUSTER_CUTOFF)>::type* = nullptr
+> 
+void FitFOOTCluster(TFOOTCalProc& self, FOOTClusterFit* dest) {
+	static_assert(N > 3, "Called with cluster size < 3");
+	Eigen::Matrix<double,N,1> xs, ys;
+	for(u32 i=0; i<N; ++i) {
+		xs[i] = static_cast<double>( self._buf[i].x );
+		ys[i] = self._buf[i].e;
+	}
+	auto params = FastGaussFit<N>(xs, ys);
+	dest->a0 = params.a0;
+	dest->mu = params.mu;
+	dest->sigma = params.sigma;
+	/* Delta assigned in parent call. */
+}
+
+/* Assumption is that the `_buf` buffer is sorted in the position already. 
+ * And is also guarded that the maximum element (in energy) is index'ed as [1]. 
+ * 3 points form a perfect Gauss (chi^2 undefined), and can be calculated analytically. */
+template<>
+void FitFOOTCluster<3>(TFOOTCalProc& self, FOOTClusterFit* dest) {
+#ifdef FIT_ALL_WITH_3_POINTS
+	auto it_max = std::max_element(self._buf, self._buf + self._cl_cnt, 
+		[](const auto& l, const auto& r) { 
+			return l.e < r.e; 
+	});
+	auto [x_0, e_0] = *it_max;
+	int i0 = std::distance(it_max, self._buf);
+	if(i0 == 0 || i0 == (int)(self._cl_cnt -1)) return;
+	double e_left  = (it_max - 1)->e;
+	double e_right = (it_max + 1)->e;
+#else
+	auto [x_0, e_0] = self._buf[1];
+	double e_left  = self._buf[0].e;
+	double e_right = self._buf[2].e;
+#endif
+
+	double r_left  = log( e_0 / e_left );
+	double r_right = log( e_0 / e_right );
+	double sigma_sq = 1 / (r_left + r_right);
+
+	dest->sigma = sqrt(sigma_sq);
+
+	double x = r_right / r_left;
+
+	dest->delta = 0.5 * (1-x)/(1+x);
+	dest->mu    = x_0 + dest->delta;
+	dest->a0    = e_0 * exp(0.5 * dest->delta * dest->delta / sigma_sq );
+}
+
+/* For large clusters, just report the fit parameters as {μ,σ} = {CoG, sqrt(Var(CoG)) } */
+template<u32 N,
+	typename std::enable_if<(N == FOOTClusterFit::LARGE_CLUSTER_CUTOFF)>::type* = nullptr
+> 
+void FitFOOTCluster(TFOOTCalProc& self, FOOTClusterFit* dest) {
+	/* Do brute force mu, sigma, a0 calculation. */
+	double sy = 0.;
+	double sxy = 0.;
+	double sx2y = 0.;
+	for(u32 i=0; i < self._cl_cnt; ++i) {
+		sy  += self._buf[i].e;
+		double _tmp =  self._buf[i].x * self._buf[i].e;
+		sxy += _tmp;
+		sx2y += self._buf[i].x * _tmp;
+	}
+	double mu = sxy/sy;
+	double sigma_squared = std::max(sx2y/sy  - mu*mu, 0.0);
+	double sigma = sqrt(sigma_squared);
+	
+	double phi_y = 0.;
+	double phi2 = 0.;
+	for(u32 i=0; i < self._cl_cnt; ++i) {
+		double dx = self._buf[i].x - mu;
+		double phi = exp(-0.5 * dx*dx / sigma_squared);
+		phi_y += phi * self._buf[i].e;
+		phi2 += phi*phi;
+	}
+	double a0 = phi_y / phi2;
+	dest->mu    = mu;
+	dest->sigma = sigma;
+	dest->a0    = a0;
 }
 
 std::ostream& operator<<(std::ostream& os, const TFOOTCalProc::TClustHit& cl) {
@@ -109,11 +192,10 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 #define _ALTER_TITLE(x) \
 	x->SetTitle(Form("%s : S=%.1f N=%1.f", x->GetTitle(), X_CENTRE_THR, X_NEIGHB_THR))
 	_ALTER_TITLE(out.h1_cl_type);
-	_ALTER_TITLE(out.h1_raw_mult);
 	_ALTER_TITLE(out.h1_mult);
 	_ALTER_TITLE(out.h1_X);
 	_ALTER_TITLE(out.h1_dE);
-	_ALTER_TITLE(out.h1_sn_ratio);
+	_ALTER_TITLE(out.h1_cl_sigma);
 }
 
 void TFOOTCalProc::ProcessEntry() noexcept {
@@ -243,16 +325,14 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		[](const auto& l, const auto& r) { 
 			return l.e < r.e; 
 		});
-	auto [cl_max_x, cl_max_e] = *it_max; 
-	double cl_m = cl_e / cl_max_e;
-
+	
 	ClusterType ct = this->GetClusterType();
-	out.h1_raw_mult->Fill(_cl_cnt);
-	out.h1_mult->Fill(cl_m);
+	out.h1_mult->Fill(_cl_cnt);
 	out.h1_dE->Fill(cl_e);
 	out.h1_X->Fill(cl_wx);
 	out.h1_cl_type->Fill(ct);
 
+	/* Debug cluster. */
 	if(_cl_cnt >= MASSIVE_CLUSTER_CUTOFF && out.inner()._fBadE.size() == 0) {
 		out.inner()._fBadE.assign(e, e + N_STRIPS); 
 	}
@@ -272,37 +352,53 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	}
 	
 	/* Check if it's a >3 strips cluster, then we can also do the cluster fit on the fly. */
-	FOOTClusterFit cl_fit {};
+	FOOTClusterFit cl_fit;	
 	int imax = std::distance(&_buf[0], it_max); /* Index in the cluster. */
 	if(imax > 0 && imax+1 < (int)_cl_cnt) {
-		double e_left  = _buf[imax - 1].e;
-		double e_right = _buf[imax + 1].e;
-		double r_left  = log( cl_max_e / e_left );
-		double r_right = log( cl_max_e / e_right );
-		double sn = 1 / (r_left + r_right);
-		out.h1_sn_ratio->Fill(sn);
-		
-		double s = sqrt(sn);
-		double x = r_right / r_left;
-		double delta = 0.5 * (1-x)/(1+x);
-
-		cl_fit.E_cont = cl_max_e * exp(delta*delta / (2 * sn)) * s * TWO_PI_SQRT;
-		cl_fit.E_disc = cl_fit.E_cont * (1 + 2 * (ffourier(1,sn,delta) + ffourier(2,sn,delta) + ffourier(3,sn,delta)));
-		cl_fit.delta = delta;
-		cl_fit.sigma = s;
-		cl_fit.i0 = cl_max_x; 
-		//WARN("FOOT(%d->%d), found cluster at i0 = %d, x = %.2f\n", out.FOOT_N, out.par.N, cl_fit.i0, cl_fit.X());
-		//PrintBuff();
+#ifdef FIT_ALL_WITH_3_POINTS
+		FitFOOTCluster<3>(*this, &cl_fit);
+#else
+		switch(_cl_cnt) {
+			case 3: {
+				FitFOOTCluster<3>(*this, &cl_fit);
+				break;
+			}
+			case 4: {
+				FitFOOTCluster<4>(*this, &cl_fit);
+				break;
+			}
+			case 5: {
+				FitFOOTCluster<5>(*this, &cl_fit);
+				break;
+			}
+			case 6: {
+				FitFOOTCluster<6>(*this, &cl_fit);
+				break;
+			}
+			default: {
+				/* Just approximate via the initial trial. Can't do much about it. */
+				FitFOOTCluster<FOOTClusterFit::LARGE_CLUSTER_CUTOFF>(*this, &cl_fit);
+				break;
+			}
+		}
+		if(_cl_cnt != 3)
+			cl_fit.delta = cl_fit.mu - it_max->x;
+		/* Some cases cluster can generate delta outside of range [-0.5, 0.5]. 
+		 * This is the ultimate null indicator field for the fit. */
+		if(std::abs(cl_fit.delta) > 0.5) cl_fit.delta = NAN;
+#endif
 	}
+	
+	if(cl_fit.IsOk()) out.h1_cl_sigma->Fill(cl_fit.sigma);
 
-	if(cl_max_e > 30 and _cl_cnt == 1 and 
+	if(it_max->e > 30 and _cl_cnt == 1 and 
 		out.inner()._fHeClSize1.size() == 0 and 
 		out.inner()._fBadE.size() == 0) 
 	{
 		out.inner()._fHeClSize1.assign(e, e + N_STRIPS);
 	}
 	
-	out.inner().AddCluster(cl_wx, cl_e, cl_m, _cl_cnt, ct, cl_fit);
+	out.inner().AddCluster(cl_wx, cl_e, _cl_cnt, ct, cl_fit);
 }
 
 template<>

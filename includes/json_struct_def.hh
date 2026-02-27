@@ -2,7 +2,7 @@
  * It only works really for single-depth JSON where each entry's value is either
  * a string, integer or double, or array of these.
  * If the value is another JSON table, then can just encode it as a raw string.
- * We enhance the structure with some sprinkles to define structured binding.
+ * We enhance the structure with some free functions to define structured binding.
  */
 
 #pragma once
@@ -97,3 +97,77 @@
 #define ADD_STD_TYPE_RESOLUTION_9(TYPE)  ADD_STD_TYPE_RESOLUTION_8(TYPE)  ADD_STD_TYPE_RESOLUTION_SINGLE_(TYPE, 9)
 #define ADD_STD_TYPE_RESOLUTION_10(TYPE) ADD_STD_TYPE_RESOLUTION_9(TYPE)  ADD_STD_TYPE_RESOLUTION_SINGLE_(TYPE, 10)
 
+
+/* How to use, example:
+Suppose your json looks like this:
+{
+	"anode_diff_lim": [[-780, 600], [-580,800]],
+	"x_factor": [11.1, 12.2],
+	"z0": 1782.5
+}
+
+Then define a structure with some label:
+
+struct MyStruct {
+    GET_HELP_AUX_IMPL;
+	using T1 = std::array<std::array<int, 2>, 2>;
+	using T2 = std::array<double, 2>;
+    
+	//   MACRO NAME                must match label in JSON    default value     index must be in order 
+	
+	ADD_SERIALIZABLE_FIELD(T1,     anode_diff_lim,                  {},                   0);
+    ADD_SERIALIZABLE_FIELD(T2,     x_factor,                        {},                   1);
+    ADD_SERIALIZABLE_FIELD(double, z0,                              0,                    2);
+};
+ADD_STD_TYPE_RESOLUTION_(MyStruct,   2)
+//                       typename    ^-- last index
+
+Note: if your type, in this case `std::array<double, 2>` contains a comma, then you can't directly
+write it into `ADD_SERIALIZABLE_FIELD(  )` block. Then just call it some simple label with `using` C++ alias.
+
+
+In code then you can access it like regular structure. 
+
+============================
+===== Complete Example =====
+============================
+
+#include <bits/stdc++.h>
+#include "json_struct_def.hh"
+
+struct MyStruct {
+    GET_HELP_AUX_IMPL;
+	using T1 = std::array<double, 2>;
+	using T2 = std::array<std::array<int, 2>, 2>;
+	using T3 = std::array<T2, 3>;
+    
+	ADD_SERIALIZABLE_FIELD(T1,          x_factor,        {}, 0);
+    ADD_SERIALIZABLE_FIELD(T2,          anode_diff_lim,  {}, 1);
+    ADD_SERIALIZABLE_FIELD(double,      z0,               0, 2);
+	ADD_SERIALIZABLE_FIELD(T3,          three_dim_array, {}, 3);
+	ADD_SERIALIZABLE_FIELD(std::string, some_string,     {}, 4);
+	ADD_SERIALIZABLE_FIELD(bool,        maybe_bool,      {}, 5);
+};
+ADD_STD_TYPE_RESOLUTION_(MyStruct, 5)
+
+int main() {
+    MyStruct par;
+    json j = json::parse(R"(
+    {
+        "x_factor": [11.1, 12.2],
+        "anode_diff_lim": [[-780, 600], [-580,800]],
+        "z0": 1782.5,
+        "three_dim_array": [[[11,12], [13,14]], [[15,16], [17,18]], [[19,20], [21,22]]],
+        "some_string": "hello there!",
+        "maybe_bool": true
+    }
+    )");
+    UNROLL_JSON_PARAM(par, j, 5);
+	
+	std::cout << par.anode_diff_lim[0][1] << " should be 600" << std::endl;
+	assert(par.anode_diff_lim[1][1] == 800);
+	std::cout << par << std::endl;
+
+    return 0;
+}
+*/

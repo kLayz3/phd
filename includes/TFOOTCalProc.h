@@ -3,6 +3,7 @@
 #include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"
 #include "monad/monad.hxx"
+#include <type_traits>
 
 struct TFOOTMapCont;
 
@@ -42,7 +43,6 @@ struct TFOOTCalProc : TProcessor <
 
 	template<LookAhead> bool _IsAddibleToCluster(const int );
 
-private:
 	void MakeACluster(int& );
 
 	Double_t* _e;
@@ -54,6 +54,7 @@ private:
 	 * for a specific collected cluster. */
 
 	TClustHit _buf[MAX_CL_SIZE]{};
+	using TClustHitIterator = std::remove_reference<decltype( std::begin(_buf) )>::type;
 
 	u32 _cl_cnt = 0; /* Points to one-ahead valid index in `_buf`. Is also size of `_buf`. */	
 	ClusterFullType _ct { ClusterType::kUNKNOWN, ClusterType::kUNKNOWN };
@@ -71,8 +72,9 @@ private:
 		_buf[_cl_cnt].e = e[i];
 		++_cl_cnt;
 	}
-	
+
 	void PrintBuff();
+	
 	/* Save the state of where the possible cluster fragmentation took place. */
 	TClustHit _frag{};
 };

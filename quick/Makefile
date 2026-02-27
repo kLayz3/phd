@@ -1,11 +1,10 @@
-BUILD_DIR=build
-SRC=$(wildcard *.cc)
-EXE=$(patsubst %.cc, $(BUILD_DIR)/%, $(SRC))
+include common.mk
 
-CXXFLAGS = $(shell root-config --cflags) \
-	-Wall -Wextra -I../includes/
+SRC := $(BASE)/main.cc
+OBJ := $(patsubst $(BASE)/%.cc, $(BASE)/$(BUILD)/%.o, $(SRC_N))
+EXE := $(BASE)/run
 
-include ../includes/monad/common.mk
+STEP := map cal hit
 
 LIBS = $(shell root-config --ldflags --libs) \
 	   -lROOTNTuple \
@@ -13,8 +12,32 @@ LIBS = $(shell root-config --ldflags --libs) \
 	   -Wl,-rpath,../ \
 	   -lStructures
 
+ALIB = $(patsubst %, $(BASE)/%/$(BUILD)/%.a, $(STEP))
+
+.PHONY: all
 all: $(EXE)
 
-$(EXE): $(BUILD_DIR)/% : %.cc
-	mkdir -p $(@D)
-	g++ -o $@ $^ $(CXXFLAGS) $(LIBS)
+$(EXE): $(OBJ) $(ALIB)
+	$(Q)echo "  LD $(notdir $@) "
+	$(Q)g++ -o $@ $^ $(CXXFLAGS) $(LIBS)
+
+$(OBJ): $(BASE)/$(BUILD)/%.o : $(BASE)/%.cc
+	$(Q)echo "  CXX $(notdir $@)  "
+	$(Q)g++ -c -o $@ $< $(CXXFLAGS)
+
+$(ALIB):
+	$(Q)echo "  MAKE $(notdir $@)  "
+	$(Q)$(MAKE) -C $(dir $@)..
+
+.PHONY: clean
+clean:
+	$(Q)rm -rf $(BASE)/$(BUILD) $(BASE)/$(EXE) 2>/dev/null
+
+.PHONY: clean-all $(addprefix clean-, $(STEP))
+
+clean-all: $(addprefix clean-,$(STEP))
+
+clean-%:
+	$(Q)echo "  MAKE CLEAN $*  "
+	$(Q)$(MAKE) -C $(BASE)/$* clean
+

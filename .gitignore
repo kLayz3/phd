@@ -17,6 +17,7 @@ mapdir
 caldir
 merged
 stash
+info.yaml
 
 quick/*
 !quick/*.cc

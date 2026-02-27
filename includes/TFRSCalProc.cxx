@@ -380,10 +380,12 @@ void TFRSCalProc::PostProcessTPC(int _i_tpc) noexcept {
 		for(const auto& hit : l) {
 			/* hit.a_tdc[0/1] is nullable, handle it explicitly here. */
 			double diff_tdc_0 = (hit.a_tdc[0] != INVALID) ? static_cast<double>( hit.a_tdc[0] - hit.ref_tdc ) : NAN; 
-			double diff_tdc_1 = (hit.a_tdc[1] != INVALID) ? static_cast<double>( hit.a_tdc[1] - hit.ref_tdc ) : NAN; 
+			double diff_tdc_1 = (hit.a_tdc[1] != INVALID) ? static_cast<double>( hit.a_tdc[1] - hit.ref_tdc	) : NAN; 
+			diff_tdc_0 += uniform() - 0.5;
+			diff_tdc_1 += uniform() - 0.5;
 
 			out_list.emplace_back (
-				/* x : */ ax[d] * ( hit.dl_tdc - hit.dr_tdc)  + bx[d],
+				/* x : */ ax[d] * ( hit.dl_tdc - hit.dr_tdc + uniform() - 0.5)  + bx[d],
 				/* y0: */ ay[a0+0] * diff_tdc_0 + by[a0+0],
 				/* y1: */ ay[a0+1] * diff_tdc_1 + by[a0+1],
 				/* s : */ hit.ref_tdc,
@@ -473,8 +475,7 @@ void TFRSCalProc::ProcessSci(int _i_sci) noexcept {
 	RNSciCal&      out = (this->out).inner().sci[_i_sci];
 	out.Clean();
 	
-	out.E = static_cast<double>(in.qdc[0] * in.qdc[1] + 0.0000001);
-	out.E = sqrt(out.E);
+	out.E = sqrt( static_cast<double>(in.qdc[0] * in.qdc[1] + 0.00000001) );
 	/* ^^^ Last addition is t make sqrt() stable for (0,0) combination. */
 
 	const auto& hits = in.tdc;
@@ -491,7 +492,7 @@ void TFRSCalProc::ProcessSci(int _i_sci) noexcept {
 		for(int j=i; (j<(int)hits.size()) && (hits[j].tdc_r != INVALID); ++j) {
 			auto diff_lr = hits[i].tdc_l - hits[j].tdc_r;
 			if(diff_lr > lim[0] and diff_lr < lim[1]) {
-				/* Draw twice to account for TDC uncertainty. */
+				/* Draw random twice to account for TDC uncertainty. */
 				d_l = uniform(); d_r = uniform();
 				auto avg_t = (hits[i].tdc_l + hits[j].tdc_r + d_l + d_r) / 2;
 				double x = ax * (diff_lr + d_l - d_r) + bx;
