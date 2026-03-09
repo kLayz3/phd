@@ -23,10 +23,19 @@
 #pragma link C++ class TPCParam+;
 #pragma link C++ class SCIParam+;
 
+#pragma link C++ class FRSIdParam+;
+#pragma link C++ class FRSTargetParam+;
+#pragma link C++ class RNFRSHit+;
+#pragma link C++ class RNFRSHit::Id+;
+
 #pragma link C++ class RNFOOTMap+;
 #pragma link C++ class FOOTClusterFit+;
 #pragma link C++ class RNFOOTCluster+;
 #pragma link C++ class RNFOOTCal+;
 #pragma link C++ class FOOTParam+;
+
+#pragma link C++ class FOOTHit+;
+#pragma link C++ class FOOTBoxParam+;
+#pragma link C++ class RNFOOTHit+;
 
 #endif

@@ -1,30 +1,29 @@
 {
+	/* Common FOOT box parameters. */
 	"box" : {
 		"z0": 3355,
 		"width_inner": 412,
 		"width_outer": 440,
-		"detector_positions": {
-			"0": 89,
-			"1": 179,
-			"2": 315,
-			"3": 415
-		}
+		"dx": 0.0,
+		"dy": 0.0,
+		"da": 0.0,
+		"db": 0.0
 	},
 	"FOOT10": {
-		"N": 0,
-		"position": 0,
+		"N": 0,             // It's unique index in the data
+		"z0": 89.0,         // `z` position
 		"orientation": "y",
-		"mirrored": 0,
-		"c_threshold": 4.0,
-		"n_threshold": 1.5,
-		"delta_a": 0.0,
-		"delta_p": 0.0
+		"mirrored": false,  // can be rotated and mirrored
+		"c_threshold": 4.0, // Central Threshold (sigma units)
+		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
+		"delta_a": 0.0,     // Offset in its measuring dimension
+		"delta_p": 0.0      // Offset in angle 
 	},
 	"FOOT17": {
 		"N": 1,
-		"position": 0,
+		"z0": 89.0,
 		"orientation": "-x",
-		"mirrored": 0,
+		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
 		"delta_a": 0.0,
@@ -32,9 +31,9 @@
 	},
 	"FOOT19": {
 		"N": 2,
-		"position": 1,
+		"z0": 179.0,
 		"orientation": "y",
-		"mirrored": 0,
+		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
 		"delta_a": 0.0,
@@ -42,9 +41,9 @@
 	},
 	"FOOT20": {
 		"N": 3,
-		"position": 1,
+		"z0": 179.0,
 		"orientation": "-x",
-		"mirrored": 0,
+		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
 		"delta_a": 0.0,
@@ -52,19 +51,19 @@
 	},
 	"FOOT22": {
 		"N": 4,
-		"position": 2,
+		"z0": 315.0,
 		"orientation": "y",
-		"mirrored": 0,
+		"mirrored": false,
 		"c_threshold": 4.0,
-		"n_threshold": 1.5,
+		"n_threshold": 2.5,
 		"delta_a": 0.0,
 		"delta_p": -1.7
 	},
 	"FOOT25": {
 		"N": 5,
-		"position": 2,
+		"z0": 315.0,
 		"orientation": "-x",
-		"mirrored": 0,
+		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
 		"delta_a": 0.0,
@@ -72,9 +71,9 @@
 	},
 	"FOOT23": {
 		"N": 6,
-		"position": 3,
+		"z0": 415.0,
 		"orientation": "y",
-		"mirrored": 0,
+		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
 		"delta_a": 0.0,
@@ -82,9 +81,9 @@
 	},
 	"FOOT21": {
 		"N": 7,
-		"position": 3,
+		"z0": 415.0,
 		"orientation": "-x",
-		"mirrored": 0,
+		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
 		"delta_a": 0.0,

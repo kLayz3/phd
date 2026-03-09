@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "helper_fwd.h"
+#include "json_struct_def.hh"
 #include "FastGauss.hxx"
 
 // This will make all the fits be analytical from 3 points around the maximum

@@ -15,7 +15,7 @@ std::ostream& operator<<(std::ostream& os, const RNTPCMap::Measurement& m) {
 	return os;
 }
 
-#include "helper_fwd.h"
+#include "json_struct_def.hh"
 
 std::ostream& operator<<(std::ostream& os, const RNTPCMap& m) {
 	os << KBH_RED << "Full TPC dump: " << std::endl;

@@ -6,6 +6,8 @@
 #include <array>
 #include <vector>
 
+#define N_FOOT_DETECTORS 8
+
 #define _FOOT_N_STRIPS         640
 #define _FOOT_N_ASIC            10
 #define _FOOT_N_STRIPS_PER_ASIC 64

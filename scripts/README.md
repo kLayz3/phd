@@ -24,17 +24,6 @@ Steps [1], [2], [3] can be chained together, but before draw a real object must 
 so one can capture the global `TCutG` pointer and call `TObject::Clone()` on it and stuff in `static thread_local std::unique_ptr<TCutG>`
 
 
-## Scripts
-
-
-### Map Step
-#### `sci_cal.C`
-Plot some `l-r` and also `sqrt(qdc_l*qdc_r)` value for scintillator(s)
-- File name
-- Sci Index 
-  - Can be left default; will draw for all sci's
-
-
 ### Cal Step
 
 #### `tpc_draw_track.C`

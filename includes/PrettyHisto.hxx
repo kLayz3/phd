@@ -1,19 +1,28 @@
 #pragma once
 
+#include <cstring>
 #include <sstream>
 #include "TH1D.h"
 #include "TH2D.h"
 #include "TColor.h"
-#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <type_traits>
 #include "TPad.h"
 #include "TLatex.h"
+#include "TGClient.h"
+#include "TCanvas.h"
 
 struct ORGB { uint32_t v; };
 
 namespace ph_detail {
+
+static inline const char* skip_whitespace(const char* str) {
+	while(*str and isspace(*str)) {
+		++str;
+	}
+	return str;
+}
 
 static inline std::string trim(std::string_view s) {
 	std::stringstream ss{};
@@ -129,7 +138,22 @@ struct TH1P {
 		if(semicolon)
 			throw std::invalid_argument("Label input to 'TH1P' must not contain ';' semicolon delimiter!");
 
-		std::string xlabel, title_extra;
+		std::string xlabel, hname_extra, title_extra;
+		
+		// Possible `(( ))` block
+		const char* bracket_open = strstr(label, "((");
+		if(bracket_open !=  nullptr) {
+			const char* bracket_close = strstr(bracket_open, "))");
+			if(bracket_close == nullptr)
+				throw std::invalid_argument("Label input to 'TH1P' contains bracket open \"((\" "
+					"delimiter but not the closing one \"))\" after the opening bracket.");
+			if(std::distance(bracket_open, bracket_close) <= 2)
+				throw std::invalid_argument("Label input to 'TH1P' has empty block inside \"((\" and \"))\" brackets?");
+			hname_extra = std::string(bracket_open+2, bracket_close);
+			label = bracket_close+2;
+			label = ph_detail::skip_whitespace(label);
+		}
+
 		// Possible `@` separator 
 		const char* at = strchr(label, '@');
 		if(at != nullptr) {
@@ -140,7 +164,8 @@ struct TH1P {
 		}
 		
 		std::string xs = ph_detail::strip_square_brackets( xlabel );
-		std::string hname = ph_detail::nonalnum_to_underscore(xs);
+		std::string hname = hname_extra + "_"
+			+ ph_detail::nonalnum_to_underscore(xs);
 		
 		h = inner_type(hname.c_str(), "", std::forward<Ts>(args)...); 
 		std::stringstream title;
@@ -149,6 +174,7 @@ struct TH1P {
 			title << " (" << title_extra << ')';
 		auto title_materialied = title.str();
 		h.SetTitle(Form("%s;%s;%s", title_materialied.c_str(), xlabel.c_str(), "Count") );
+		h.GetYaxis()->SetTitleOffset(1.0);
 
 		col.ApplyFill(&h);
 		h.SetLineColor(kBlack);
@@ -193,8 +219,24 @@ struct TH2P {
 		if(semicolon)
 			throw std::invalid_argument("Label input to 'TH2P' must not contain ';' semicolon delimiter!");
 
-		std::string ylabel = std::string(label, colon);
-		std::string xlabel, title_extra;
+		std::string xlabel, ylabel, hname_extra, title_extra;
+		
+		// Possible `(( ))` block
+		const char* bracket_open = strstr(label, "((");
+		if(bracket_open !=  nullptr) {
+			const char* bracket_close = strstr(bracket_open, "))");
+			if(bracket_close == nullptr)
+				throw std::invalid_argument("Label input to 'TH1P' contains bracket open \"((\" "
+					"delimiter but not the closing one \"))\" after the opening bracket.");
+			if(std::distance(bracket_open, bracket_close) <= 2)
+				throw std::invalid_argument("Label input to 'TH1P' has empty block inside \"((\" and \"))\" brackets?");
+			hname_extra = std::string(bracket_open+2, bracket_close);
+			label = bracket_close+2;
+			label = ph_detail::skip_whitespace(label);
+		}
+
+		ylabel = std::string(label, colon);
+
 		// Possible `@` separator 
 		const char* at = strchr(label, '@');
 		if(at != nullptr) {
@@ -206,7 +248,8 @@ struct TH2P {
 		std::string ys = ph_detail::strip_square_brackets( ylabel );
 		std::string xs = ph_detail::strip_square_brackets( xlabel );
 		
-		std::string hname = ph_detail::nonalnum_to_underscore(ys) + ".v." + ph_detail::nonalnum_to_underscore(xs);
+		std::string hname = hname_extra + "_" 
+			+ ph_detail::nonalnum_to_underscore(ys) + ".v." + ph_detail::nonalnum_to_underscore(xs);
 		
 		h = inner_type(hname.c_str(), "", std::forward<Ts>(args)...); 
 		std::stringstream title;
@@ -215,6 +258,7 @@ struct TH2P {
 			title << " (" << title_extra << ')';
 		auto title_materialied = title.str();
 		h.SetTitle(Form("%s;%s;%s", title_materialied.c_str(), xlabel.c_str(), ylabel.c_str()) );
+		h.GetYaxis()->SetTitleOffset(1.0);
 	}
 
 	/* Forward only Fill and Draw methods. Don't care about others. */
@@ -290,4 +334,40 @@ struct PLatex {
 	}
 
 	/* Phew, why are humans still using that god-awful `const char*` API..? */
+};
+
+inline void MaximizeCanvas(TCanvas* c) {
+	c->SetWindowSize (
+		gClient->GetDisplayWidth(),
+		gClient->GetDisplayHeight()
+	);
+}
+/* TODO */
+struct PCanvas {
+	using inner_type = TCanvas;
+	inner_type c;
+	
+	template<typename... Ts>
+	PCanvas(const char* label, Ts&&... args) {
+		const char* semicolon = strchr(label, ';');
+		if(!semicolon)
+			throw std::invalid_argument("Label input to 'PCanvas' must contain ';' semicolon delimiter");
+		
+		std::string obj_name = std::string(label, semicolon);
+		std::string title    = std::string(semicolon + 1);	
+	}
+
+	/* Implicit ref cvt */
+	operator inner_type&()             noexcept { return c; }
+    operator const inner_type&() const noexcept { return c; }
+
+	/* Implicit pointer cvt */
+	operator inner_type*()             noexcept { return &c; }
+    operator const inner_type*() const noexcept { return &c; }
+
+	inline inner_type* operator->() noexcept { return &c; }
+	inline inner_type& operator*()  noexcept { return c; }
+	inline const inner_type* operator->() const noexcept { return &c; }
+	inline const inner_type& operator*()  const noexcept { return c; }
+
 };

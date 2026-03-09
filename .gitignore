@@ -7,14 +7,16 @@ lib*
 *.lmd
 *.pcm
 .clangd
-cal
 map
+cal
+hit
 includes/dict
 rootfiles
 *.png
 params/justus_tpc.json
 mapdir
 caldir
+hitdir
 merged
 stash
 info.yaml

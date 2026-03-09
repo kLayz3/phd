@@ -111,5 +111,29 @@
 			"cdiff_lim": [-330, -180],
 			"z0": 2156
 		}
+	},
+
+	"FRS": {
+		"S2": {
+			"dist": 0.0,
+			"magnification": 1.0,
+			"brho": 6.7626,
+			"dispersion": 0.0,
+			"zfocus": 3135.0,
+			"target": {
+				"width": 3.0,
+				"thickness": 2000.0
+			}
+		},
+		"S3": {
+			"dist": 17340.3,
+			"magnification": 1.0,
+			"brho": 8.8181,
+			"dispersion": 0.0,
+			"zfocus": 1279
+		},
+		"ToF": {
+			"combo": [1,2]
+		}
 	}
 }

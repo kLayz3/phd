@@ -18,27 +18,6 @@ using namespace mnd;
 
 extern const char* calibrate_help;
 
-#define FOOT_ID_0 10
-#define FOOT_ID_1 17
-#define FOOT_ID_2 19
-#define FOOT_ID_3 20
-#define FOOT_ID_4 22
-#define FOOT_ID_5 25
-#define FOOT_ID_6 23
-#define FOOT_ID_7 21
-
-constexpr i32 static_detectors[] = {
-	FOOT_ID_0, // Gets mapped to FOOT0
-	FOOT_ID_1, // Gets mapped to FOOT1
-	FOOT_ID_2, // Gets mapped to FOOT2
-	FOOT_ID_3, // Gets mapped to FOOT3
-	FOOT_ID_4, // Gets mapped to FOOT4
-	FOOT_ID_5, // Gets mapped to FOOT5
-	FOOT_ID_6, // Gets mapped to FOOT6
-	FOOT_ID_7  // Gets mapped to FOOT7
-};
-constexpr i32 N_FOOT = mnd::len(static_detectors);
-
 int main(int argc, char* argv[]) {
 	using namespace indicators;
 	signal(SIGINT , sig_callback_handler);
@@ -51,7 +30,6 @@ int main(int argc, char* argv[]) {
 	std::string pStr, fileName, outFile, setupFile, footSetupFile;
 	u64 maxEvents = -1;
 
-	CMDLineParser::Mandatory::SetDefMessage(calibrate_help);
 	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
 	
 	ParseCmdLine("file", fileName, argc, argv, true);
@@ -109,8 +87,8 @@ int main(int argc, char* argv[]) {
 		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6])
 		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7])
 		.emplace_process<TFRSCalProc >(cfrs    , mfrs)
-		.MakePool<8>( 4092 );
-		//.MakePool<1>( 512 );
+		//.MakePool<8>( 4092 );
+		.MakePool<1>( 512 );
 		/* Number of subthreads, chunk size. */
 
 	ProgressBar bar {

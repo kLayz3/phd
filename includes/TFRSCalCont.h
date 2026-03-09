@@ -1,20 +1,10 @@
 #pragma once
 
 #include "monad/monad.hxx"
-#include "nlohmann/json.hpp"
+#include "json_struct_def.hh"
 #include "TFRSMapCont.h"
 
 class TH2I;
-
-#define GET_HELP_AUX_IMPL  \
-	template<std::size_t I> \
-    decltype(auto) get() &       noexcept { return get_helper<I>(*this); } \
-    template<std::size_t I>  \
-    decltype(auto) get() const & noexcept { return get_helper<I>(*this); } \
-    template<std::size_t I>  \
-    decltype(auto) get() &&      noexcept { return get_helper<I>(std::move(*this)); } \
-    template<std::size_t I> \
-    decltype(auto) get() const&& noexcept { return get_helper<I>(std::move(*this)); }
 
 struct RNSciCal {
 	struct Measurement {
@@ -118,99 +108,47 @@ struct alignas(mnd::CL) RNFRSCal {
 	ClassDef(RNFRSCal, 1);
 };
 
-/* As a sanity check, we put setup parameters in the container, 
- * not in the processor,
- * to have it as an object in the ROOT file for later. */
-
-template<typename U, size_t N, size_t M>
-using arr2d = std::array<std::array<U, N>, M>;
-
 struct TPCParam {
-	constexpr static std::size_t N_PARAMS = 10;
-
-	std::array<double, 2> x_offset;
-	std::array<double, 2> x_factor;
-	std::array<double, 4> y_offset;
-	std::array<double, 4> y_factor;
-	std::array<std::array<double, 2>, 4> csum_lim;
-	std::array<std::array<double, 2>, 2> anode_diff_lim;
-	std::array<double, 2> dl_left_diff_lim;
-	std::array<double, 2> dl_right_diff_lim;
-	std::array<std::array<double, 2>, 4> sci_ref_lim; // for y-calculation.
+	using arr2 = std::array<double,2>;
+	using arr4 = std::array<double,4>;
+	using arr22 = std::array<std::array<double,2>, 2>;
+	using arr24 = std::array<std::array<double,2>, 4>;
 	
-	double z0; // nominal z position.
-	
-	GET_HELP_AUX_IMPL
+	GET_HELP_AUX_IMPL;
 
+	ADD_SERIALIZABLE_FIELD(arr2,   x_offset,             {}, 0);
+	ADD_SERIALIZABLE_FIELD(arr2,   x_factor,             {}, 1);
+	ADD_SERIALIZABLE_FIELD(arr4,   y_offset,             {}, 2);
+	ADD_SERIALIZABLE_FIELD(arr4,   y_factor,             {}, 3);
+	ADD_SERIALIZABLE_FIELD(arr24,  csum_lim,             {}, 4);
+	ADD_SERIALIZABLE_FIELD(arr22,  anode_diff_lim,       {}, 5);
+	ADD_SERIALIZABLE_FIELD(arr2,   dl_left_diff_lim,     {}, 6);
+	ADD_SERIALIZABLE_FIELD(arr2,   dl_right_diff_lim,    {}, 7);
+	ADD_SERIALIZABLE_FIELD(arr24,  sci_ref_lim,          {}, 8);
+	ADD_SERIALIZABLE_FIELD(double, z0,                    0, 9); 
+	
 	virtual ~TPCParam() = default;
 	ClassDef(TPCParam, 1);
-
-private:
-	template<std::size_t I, typename Self>
-	static decltype(auto) get_helper(Self&& self) noexcept {
-		/* Brackets around return value because of decltype deduction rules. Check link:
-		 * https://stackoverflow.com/questions/27557369/why-does-decltypeauto-return-a-reference-here */
-		if      constexpr(I == 0) return (std::forward<Self>(self).x_offset);
-		else if constexpr(I == 1) return (std::forward<Self>(self).x_factor);
-		else if constexpr(I == 2) return (std::forward<Self>(self).y_offset);
-		else if constexpr(I == 3) return (std::forward<Self>(self).y_factor);
-		else if constexpr(I == 4) return (std::forward<Self>(self).csum_lim);
-		else if constexpr(I == 5) return (std::forward<Self>(self).anode_diff_lim);
-		else if constexpr(I == 6) return (std::forward<Self>(self).dl_left_diff_lim);
-		else if constexpr(I == 7) return (std::forward<Self>(self).dl_right_diff_lim);
-		else if constexpr(I == 8) return (std::forward<Self>(self).sci_ref_lim);
-		else if constexpr(I == 9) return (std::forward<Self>(self).z0);
-		else static_assert(I < N_PARAMS, "Index out of bounds.");
-	} 
 };
+ADD_STD_TYPE_RESOLUTION_(TPCParam, 9)
 
 struct SCIParam {
+	GET_HELP_AUX_IMPL
 	constexpr static std::size_t N_PARAMS = 4;
 	constexpr static double channel_to_ns = 0.025;
+	using arr2 = std::array<double,2>;
 
-	double x_offset;
-	double x_factor;
-	std::array<double, 2> cdiff_lim;
-	
-	double z0; // nominal z position, w.r.t. 'Abstaende S2 Strahlzeit 2024'.
-	GET_HELP_AUX_IMPL
+	ADD_SERIALIZABLE_FIELD(double, x_offset,  0,  0);
+	ADD_SERIALIZABLE_FIELD(double, x_factor,  0,  1);
+	ADD_SERIALIZABLE_FIELD(arr2,   cdiff_lim, {}, 2);
+	ADD_SERIALIZABLE_FIELD(double, z0,        0,  3); 
 
 	virtual ~SCIParam() = default;
 	ClassDef(SCIParam, 1);
-
-private:
-	template<std::size_t I, typename Self>
-	static decltype(auto) get_helper(Self&& self) noexcept {
-		if      constexpr(I == 0) return (std::forward<Self>(self).x_offset);
-		else if constexpr(I == 1) return (std::forward<Self>(self).x_factor);
-		else if constexpr(I == 2) return (std::forward<Self>(self).cdiff_lim);
-		else if constexpr(I == 3) return (std::forward<Self>(self).z0);
-		else static_assert(I < N_PARAMS, "Index out of bounds.");
-	}
 };
-
-namespace std {
-	template<> struct tuple_size<TPCParam> : integral_constant<size_t, TPCParam::N_PARAMS> {};
-	template<> struct tuple_element<0, TPCParam> { using type = array<double, 2>; };
-	template<> struct tuple_element<1, TPCParam> { using type = array<double, 2>; };
-	template<> struct tuple_element<2, TPCParam> { using type = array<double, 4>; };
-	template<> struct tuple_element<3, TPCParam> { using type = array<double, 4>; };
-	template<> struct tuple_element<4, TPCParam> { using type = array<array<double, 2>, 4>; };
-	template<> struct tuple_element<5, TPCParam> { using type = array<array<double, 2>, 2>; };
-	template<> struct tuple_element<6, TPCParam> { using type = array<double, 2>; };
-	template<> struct tuple_element<7, TPCParam> { using type = array<double, 2>; };
-	template<> struct tuple_element<8, TPCParam> { using type = array<array<double, 2>, 4>; };
-	template<> struct tuple_element<9, TPCParam> { using type = double; };
-
-	template<> struct tuple_size<SCIParam> : integral_constant<size_t, SCIParam::N_PARAMS> {};
-	template<> struct tuple_element<0, SCIParam> { using type = double; };
-	template<> struct tuple_element<1, SCIParam> { using type = double; };
-	template<> struct tuple_element<2, SCIParam> { using type = array<double, 2>; };
-	template<> struct tuple_element<3, SCIParam> { using type = double; };
-}
+ADD_STD_TYPE_RESOLUTION_(SCIParam, 3)
 
 struct TFRSCalCont : TContainer<RNFRSCal> {
-
 	inline static nlohmann::json setup {}; 
 	inline static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
 	inline static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};

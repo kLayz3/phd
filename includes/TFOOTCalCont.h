@@ -9,6 +9,28 @@
 
 class TH1D;
 
+#define FOOT_ID_0 10
+#define FOOT_ID_1 17
+#define FOOT_ID_2 19
+#define FOOT_ID_3 20
+#define FOOT_ID_4 22
+#define FOOT_ID_5 25
+#define FOOT_ID_6 23
+#define FOOT_ID_7 21
+
+inline constexpr i32 static_detectors[] = {
+	FOOT_ID_0, // Gets mapped to FOOT0
+	FOOT_ID_1, // Gets mapped to FOOT1
+	FOOT_ID_2, // Gets mapped to FOOT2
+	FOOT_ID_3, // Gets mapped to FOOT3
+	FOOT_ID_4, // Gets mapped to FOOT4
+	FOOT_ID_5, // Gets mapped to FOOT5
+	FOOT_ID_6, // Gets mapped to FOOT6
+	FOOT_ID_7  // Gets mapped to FOOT7
+};
+inline constexpr i32 N_FOOT = mnd::len(static_detectors);
+static_assert(N_FOOT == N_FOOT_DETECTORS);
+
 /* f(x; (a0,mu,sigma)) = a0 * exp( -0.5 * ((x-mu)/sigma)^2 ) */
 struct FOOTClusterFit {
 	static constexpr double TWO_PI = 6.283185307179586;
@@ -140,8 +162,8 @@ struct FOOTParam {
 
 	GET_HELP_AUX_IMPL;
 
-	ADD_SERIALIZABLE_FIELD(i32,         position,    -1,                 0);
-	ADD_SERIALIZABLE_FIELD(i32,         N,           -1,                 1);
+	ADD_SERIALIZABLE_FIELD(i32,         N,           -1,                 0);
+	ADD_SERIALIZABLE_FIELD(double,      z0,          NAN,                1);
 	ADD_SERIALIZABLE_FIELD(std::string, orientation, {},                 2);
 	ADD_SERIALIZABLE_FIELD(i32,         mirrored,    -1,                 3);
 	ADD_SERIALIZABLE_FIELD(double,      c_threshold, CENTRE_THR_DEFAULT, 4);
@@ -159,7 +181,7 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 
 	constexpr static int N_STRIPS = RNFOOTCal::N_STRIPS;
 	/* These values will not get serialized. */
-	int FOOT_N = -1; /* Comes from sort step. */
+	int FOOT_N = -1; /* Comes from sort step, isn't in order. */
 	FOOTParam par;   /* Local object, will just get copied around. Is fine. */
 
 	TH1I* h1_mult; 

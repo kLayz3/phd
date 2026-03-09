@@ -1,13 +1,17 @@
 /* Few preproc black magic macros to help parse a JSON into a proper C++ structure.
  * It only works really for single-depth JSON where each entry's value is either
- * a string, integer or double, or array of these.
- * If the value is another JSON table, then can just encode it as a raw string.
- * We enhance the structure with some free functions to define structured binding.
+ * a string, integer, double, or array of these (single underlying type). 
+ * === **Value cannot be an object** ===
+ * If the value must be another JSON table, then can just encode it as a raw string.
+ * We enhance the structure with some free functions to define structured binding + std::ostream API.
  */
 
 #pragma once
 
 #include <iostream>
+#include <vector>
+#include <array>
+#include "nlohmann/json.hpp"
 
 #define EMPTY_MACRO__(...) 
 
@@ -33,18 +37,20 @@
 	static void print_field(std::ostream& os, Self&& self) noexcept { os << ".\e[1;94m" << #NAME << "\e[0m = " << std::forward<Self>(self).NAME << ", "; };
 
 #define UNROLL_JSON_PARAM_SINGLE_(StructInstance, JSONInstance, INDEX) \
-	try { \
-		StructInstance.get<INDEX>() = JSONInstance[ decltype(StructInstance)::name_##INDEX ] \
-			.get< \
-				std::remove_reference_t< \
-					decltype(StructInstance)::type_##INDEX \
-				> \
-			>(); \
-	} catch(std::exception const& e) { \
-		ERROR("Failed setup assignment \'%s\': index: %d, key:%s: reason: %s\n",  \
-			#StructInstance, INDEX, decltype(StructInstance)::name_##INDEX, e.what()); \
+	{ \
+		using BareType = std::remove_reference_t<decltype(StructInstance)>; \
+		const char* key = BareType::name_##INDEX; \
+		try { \
+			StructInstance.get<INDEX>() = JSONInstance[ key ].get<BareType::type_##INDEX>(); \
+		} catch(std::exception const& e) { \
+			fprintf(stderr, \
+				"Failed JSON setup assignment \'%s\': index: %d, key:%s " \
+				"(Json instance: '%s', " \
+				"reason: %s\n",  \
+				#StructInstance, INDEX, key, #JSONInstance, e.what()); \
+		} \
+		EMPTY_MACRO__(INDEX) \
 	} \
-	EMPTY_MACRO__(INDEX) \
 
 #define UNROLL_JSON_PARAM(StructInstance, JSONInstance, N)  UNROLL_JSON_PARAM_N_(StructInstance, JSONInstance, N)
 #define UNROLL_JSON_PARAM_N_(StructInstance, JSONInstance, N) UNROLL_JSON_PARAM_##N(StructInstance, JSONInstance)
@@ -97,6 +103,32 @@
 #define ADD_STD_TYPE_RESOLUTION_9(TYPE)  ADD_STD_TYPE_RESOLUTION_8(TYPE)  ADD_STD_TYPE_RESOLUTION_SINGLE_(TYPE, 9)
 #define ADD_STD_TYPE_RESOLUTION_10(TYPE) ADD_STD_TYPE_RESOLUTION_9(TYPE)  ADD_STD_TYPE_RESOLUTION_SINGLE_(TYPE, 10)
 
+template<typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& );
+template<typename T, std::size_t N>
+std::ostream& operator<<(std::ostream& os, const std::array<T,N>& );
+/* ^^^ Fwd declared for symbol visiblity in the function below
+ * All underlying 'bare' `T` must have the overloaded operator defined at this point. */
+
+template<typename T>
+std::ostream& mnd_output_homogeneous_range_(std::ostream& os, const T* p, const std::size_t N) {
+	os << '[';
+	if(N > 0) os << p[0];
+	for(std::size_t i = 1; i < N; ++i) {
+		os << ", " << p[i];
+	}
+	os << ']';
+    return os;
+}
+
+template<typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
+	return mnd_output_homogeneous_range_(os, v.data(), v.size());
+}
+template<typename T, std::size_t N>
+std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v) {
+	return mnd_output_homogeneous_range_(os, v.data(), v.size());
+}
 
 /* How to use, example:
 Suppose your json looks like this:
@@ -151,6 +183,7 @@ struct MyStruct {
 ADD_STD_TYPE_RESOLUTION_(MyStruct, 5)
 
 int main() {
+	using json = nlohmann::json;
     MyStruct par;
     json j = json::parse(R"(
     {

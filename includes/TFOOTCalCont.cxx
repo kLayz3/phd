@@ -1,7 +1,7 @@
 #include "TFOOTCalCont.h"
 #include "TH1I.h"
 #include "TH2I.h"
-#include "json_struct_def.hh"
+#include "JSONParser.hxx"
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
@@ -35,7 +35,7 @@ std::vector<double> RNFOOTCal::X() const noexcept {
 
 /* ------------------------------------------------------- */
 
-/* Initialized with 2 keys: "FOOT_ID" and "Setup" */
+/* Initialized with 2 keys: "ID" and "Setup" */
 void TFOOTCalCont::Init(TDictInfo info) {
 	constexpr const char* id_key = "ID";
 	auto it = info.find(id_key);
@@ -51,12 +51,9 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	if(it == info.end())
 		ERROR("TFOOTCalCont::Init(): \"Setup\" key not found for info (%s).\n" 
 			, mnd::type_name<TDictInfo>().c_str());
-	json j {};
 	const std::string& file_name = it->second;
-	auto f = mnd::get_maybe_ifstream(file_name);
-	if(!f.has_value())
-		ERROR("File \'%s\' not found or not openable.\n", file_name.c_str());
-	j = json::parse(std::move( f.value() ));
+	json j = ParseJSON(file_name);
+	
 	auto j_it = j.find(Form("FOOT%d", FOOT_N));
 	if(j_it == j.end()) 
 		ERROR("Trying to set up FOOT[%d] cal, but setup file doesn't contain the key \"FOOT%d\".", FOOT_N, FOOT_N);
@@ -71,7 +68,7 @@ using A2 = std::array<double, 2>;
 template<> void Add(A2& lhs, const A2& rhs) {}
 
 void TFOOTCalCont::Setup() {
-	if(strlen(GetName()) == 0) ERROR("Setup called before Init?");
+	if(strlen(GetName()) == 0) ERROR("Setup called before Init? or name field set to '' ?");
 	h1_mult     = RegisterObject<TH1I>("h1_mult", Form("FOOT (%2d: %d) multiplicity", FOOT_N, par.N), 200,0,50);
 	h1_dE       = RegisterObject<TH1I>("h1_dE", Form("FOOT(%2d: %d) energy", FOOT_N, par.N), 5000,0,1000);
 	h1_X        = RegisterObject<TH1I>("h1_x", Form("FOOT(%2d: %d) clust position", FOOT_N, par.N), 5*N_STRIPS, 0, N_STRIPS);
