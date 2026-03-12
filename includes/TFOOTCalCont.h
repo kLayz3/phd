@@ -5,6 +5,7 @@
 
 #include "TFOOTMapCont.h"
 #include "util/json_struct_def.hh"
+#include "util/PolyFitter.hxx"
 #include "TParameter.h"
 
 class TH1D;
@@ -160,7 +161,16 @@ struct FOOTDeltaParam {
 	ADD_SERIALIZABLE_FIELD(double, s, 1.0, 0);	
 	ADD_SERIALIZABLE_FIELD(double, M, 1.0, 1);
 	ADD_SERIALIZABLE_FIELD(Vec,   a2,  {}, 2);
-	
+
+	inline double CorrectionBasic(const double delta) const noexcept {
+		double x = std::min( std::abs(delta), s );
+		return M - (M-1) / s * x;
+	}
+	inline double CorrectionFactor(const double delta) const noexcept {
+		double corr0 = this->CorrectionBasic(delta);
+		double corr1 = poly::Eval(delta, a2);
+		return corr0 * corr1; 
+	}
 	FOOTDeltaParam() = default;
 	virtual ~FOOTDeltaParam() = default;
 	ClassDef(FOOTDeltaParam, 1);

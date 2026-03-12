@@ -15,13 +15,13 @@
 
 #define GET_HELP_AUX_IMPL  \
 	template<std::size_t I> \
-    decltype(auto) get() &       noexcept { return get_helper<I>(*this); } \
-    template<std::size_t I>  \
-    decltype(auto) get() const & noexcept { return get_helper<I>(*this); } \
-    template<std::size_t I>  \
-    decltype(auto) get() &&      noexcept { return get_helper<I>(std::move(*this)); } \
-    template<std::size_t I> \
-    decltype(auto) get() const&& noexcept { return get_helper<I>(std::move(*this)); } \
+	decltype(auto) get() &       noexcept { return get_helper<I>(*this); } \
+	template<std::size_t I>  \
+	decltype(auto) get() const & noexcept { return get_helper<I>(*this); } \
+	template<std::size_t I>  \
+	decltype(auto) get() &&      noexcept { return get_helper<I>(std::move(*this)); } \
+	template<std::size_t I> \
+	decltype(auto) get() const&& noexcept { return get_helper<I>(std::move(*this)); } \
 
 #define ADD_SERIALIZABLE_FIELD(TYPE, NAME, DEFAULT, INDEX) \
 	TYPE NAME = DEFAULT; \
@@ -152,7 +152,7 @@ std::ostream& mnd_output_homogeneous_range_(std::ostream& os, const T* p, const 
 		os << ", " << p[i];
 	}
 	os << ']';
-    return os;
+	return os;
 }
 
 template<typename T>
@@ -181,9 +181,9 @@ struct MyStruct {
     
 	//   MACRO NAME                must match label in JSON    default value     index must be in order 
 	
-	ADD_SERIALIZABLE_FIELD(T1,     anode_diff_lim,                  {},                   0);
-    ADD_SERIALIZABLE_FIELD(T2,     x_factor,                        {},                   1);
-    ADD_SERIALIZABLE_FIELD(double, z0,                              0,                    2);
+	ADD_SERIALIZABLE_FIELD(T1,     anode_diff_lim,                  { },                  0);
+	ADD_SERIALIZABLE_FIELD(T2,     x_factor,                        { },                  1);
+	ADD_SERIALIZABLE_FIELD(double, z0,                               0,                   2);
 };
 ADD_JSON_TYPE_RESOLUTION(MyStruct,   2)
 //                       typename    ^-- last index
@@ -217,8 +217,8 @@ struct MyStruct {
 	using T3 = std::array<T2, 3>;
     
 	ADD_SERIALIZABLE_FIELD(T1,          x_factor,        {}, 0);
-    ADD_SERIALIZABLE_FIELD(T2,          anode_diff_lim,  {}, 1);
-    ADD_SERIALIZABLE_FIELD(double,      z0,               0, 2);
+	ADD_SERIALIZABLE_FIELD(T2,          anode_diff_lim,  {}, 1);
+	ADD_SERIALIZABLE_FIELD(double,      z0,               0, 2);
 	ADD_SERIALIZABLE_FIELD(T3,          three_dim_array, {}, 3);
 	ADD_SERIALIZABLE_FIELD(std::string, some_string,     {}, 4);
 	ADD_SERIALIZABLE_FIELD(Nested,      cut,             {}, 5);
@@ -229,22 +229,22 @@ int main() {
 	using json = nlohmann::json;
     
 	MyStruct par;
-    json j = json::parse(R"(
-    {
-        "x_factor": [11.1, 12.2],
-        "anode_diff_lim": [[-780, 600], [-580,800]],
-        "z0": 1782.5,
-        "three_dim_array": [[[11,12], [13,14]], [[15,16], [17,18]], [[19,20], [21,22]]],
-        "some_string": "hello there!",
-        "cut": {
+	json j = json::parse(R"(
+	{
+		"x_factor": [11.1, 12.2],
+		"anode_diff_lim": [[-780, 600], [-580,800]],
+		"z0": 1782.5,
+		"three_dim_array": [[[11,12], [13,14]], [[15,16], [17,18]], [[19,20], [21,22]]],
+		"some_string": "hello there!",
+		"cut": {
 			"index": 2,
-			"bounds": [42, 77],
+			"bounds": [42, 77];
 			"used": false
 		}
     }
     )");
-    UNROLL_JSON_PARAM(par, j, 5);
-	
+	UNROLL_JSON_PARAM(par, j, 5);
+
 	std::cout << par.anode_diff_lim[0][1] << " should be 600" << std::endl;
 	assert(par.anode_diff_lim[1][1] == 800);
 	assert(!par.cut.used);
