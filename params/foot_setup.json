@@ -14,10 +14,15 @@
 		"z0": 89.0,         // `z` position
 		"orientation": "y",
 		"mirrored": false,  // can be rotated and mirrored
-		"c_threshold": 4.0, // Central Threshold (sigma units)
+		"c_threshold": 4.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
-		"delta_a": 0.0,     // Offset in its measuring dimension
-		"delta_p": 0.0      // Offset in angle 
+		"delta_a": 0.0,     // Offset in its measuring dimension [strip units; 150 um]
+		"delta_p": 0.0,     // Offset in angle [mrad]
+		"de": {
+			"s": 0.29,
+			"M": 1.85,
+			"a2": [1, 0.00105689, -1.67603, 0.189775, 24.1006, -1.23571, -74.095]
+		}
 	},
 	"FOOT17": {
 		"N": 1,

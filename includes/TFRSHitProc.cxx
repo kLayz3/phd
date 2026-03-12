@@ -2,8 +2,8 @@
 #include "TFRSCalCont.h"
 #include "TFRSHitCont.h"
 #include "TFRSHitProc.h"
-#include "PolyFitter.hxx"
-#include "json_struct_def.hh"
+#include "util/PolyFitter.h"
+#include "util/json_struct_def.hh"
 #include <cmath>
 
 constexpr double TWO_PI = 6.283185307179586;

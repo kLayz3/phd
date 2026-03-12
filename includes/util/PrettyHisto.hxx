@@ -187,11 +187,11 @@ struct TH1P {
 
 	/* Implicit ref cvt */
 	operator inner_type&()             noexcept { return h; }
-    operator const inner_type&() const noexcept { return h; }
+	operator const inner_type&() const noexcept { return h; }
 
 	/* Implicit pointer cvt */
 	operator inner_type*()             noexcept { return &h; }
-    operator const inner_type*() const noexcept { return &h; }
+	operator const inner_type*() const noexcept { return &h; }
 
 	inline inner_type* operator->() noexcept { return &h; }
 	inline inner_type& operator*()  noexcept { return h; }
@@ -359,11 +359,11 @@ struct PCanvas {
 
 	/* Implicit ref cvt */
 	operator inner_type&()             noexcept { return c; }
-    operator const inner_type&() const noexcept { return c; }
+	operator const inner_type&() const noexcept { return c; }
 
 	/* Implicit pointer cvt */
 	operator inner_type*()             noexcept { return &c; }
-    operator const inner_type*() const noexcept { return &c; }
+	operator const inner_type*() const noexcept { return &c; }
 
 	inline inner_type* operator->() noexcept { return &c; }
 	inline inner_type& operator*()  noexcept { return c; }

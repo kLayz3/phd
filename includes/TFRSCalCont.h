@@ -1,7 +1,7 @@
 #pragma once
 
 #include "monad/monad.hxx"
-#include "json_struct_def.hh"
+#include "util/json_struct_def.hh"
 #include "TFRSMapCont.h"
 
 class TH2I;
@@ -130,7 +130,7 @@ struct TPCParam {
 	virtual ~TPCParam() = default;
 	ClassDef(TPCParam, 1);
 };
-ADD_STD_TYPE_RESOLUTION_(TPCParam, 9)
+ADD_JSON_TYPE_RESOLUTION(TPCParam, 9)
 
 struct SCIParam {
 	GET_HELP_AUX_IMPL
@@ -146,7 +146,7 @@ struct SCIParam {
 	virtual ~SCIParam() = default;
 	ClassDef(SCIParam, 1);
 };
-ADD_STD_TYPE_RESOLUTION_(SCIParam, 3)
+ADD_JSON_TYPE_RESOLUTION(SCIParam, 3)
 
 struct TFRSCalCont : TContainer<RNFRSCal> {
 	inline static nlohmann::json setup {}; 

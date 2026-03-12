@@ -1,7 +1,7 @@
 #pragma once
 
 #include "monad/monad.hxx"
-#include "json_struct_def.hh"
+#include "util/json_struct_def.hh"
 #include <utility>
 
 #include "Rtypes.h"
@@ -21,7 +21,7 @@ struct FRSIdParam {
 	virtual ~FRSIdParam() = default;
 	ClassDef(FRSIdParam, 1);
 };
-ADD_STD_TYPE_RESOLUTION_(FRSIdParam, 4)
+ADD_JSON_TYPE_RESOLUTION(FRSIdParam, 4)
 
 struct FRSTargetParam {
 	GET_HELP_AUX_IMPL;
@@ -33,7 +33,7 @@ struct FRSTargetParam {
 	virtual ~FRSTargetParam() = default;
 	ClassDef(FRSTargetParam, 1);
 };
-ADD_STD_TYPE_RESOLUTION_(FRSTargetParam, 1)
+ADD_JSON_TYPE_RESOLUTION(FRSTargetParam, 1)
 
 struct RNFRSHit {
 	/* At this level, FRS ID in a single focal point is determined uniquely by:

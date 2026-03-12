@@ -6,8 +6,8 @@
 #include <algorithm>
 #include <cmath>
 
-#include "json_struct_def.hh"
-#include "FastGauss.hxx"
+#include "util/json_struct_def.hh"
+#include "util/FastGauss.hxx"
 
 // This will make all the fits be analytical from 3 points around the maximum
 // intensity strip.

@@ -53,7 +53,6 @@ void TFOOTHitProc::ProcessSingle(const TFOOTCalCont& cfoot) noexcept {
 	
 	int pn = n / 2;
 	HitsBuffer& pair = this->buf[pn];
-
 	bool is_x = (orientation == "x") || (orientation == "-x");
 	std::vector<HitCandidate>& v = (is_x) ? pair.xs : pair.ys;
 	if(is_x) { pair.nx = n; pair.zx = z; }
@@ -86,6 +85,7 @@ void TFOOTHitProc::ConstructHits(HitsBuffer& pair, int n) noexcept {
 
 	std::sort(xs.begin(), xs.end(), lambda);
 	std::sort(ys.begin(), ys.end(), lambda);
+	
 
 	while(xs.size() > 0 and ys.size() > 0) {
 		const auto& hit_x = xs.back();

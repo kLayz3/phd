@@ -1,5 +1,8 @@
 build*
 includes/build*
+includes/util/build*
+includes/util/.*
+
 includes/test*
 includes/makeme*
 lib*
@@ -20,6 +23,7 @@ hitdir
 merged
 stash
 info.yaml
+*.exe
 
 quick/*
 !quick/*.cc

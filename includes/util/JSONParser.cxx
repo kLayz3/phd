@@ -1,6 +1,5 @@
-#pragma once
+#include "JSONParser.h"
 
-#include "json_struct_def.hh"
 #include <cstdlib>
 #include <stdexcept>
 #include <unistd.h>
@@ -25,13 +24,9 @@ do { \
 } while(0);
 #endif
 
-/** 
- * Parse a file first thru the GCC preprocessor, and then
- * try to parse the output as json. Returns a variant of the
- * valid JSON or a corresponding error code. Is not thread safe!
- */
-inline
-nlohmann::json ParseJSON(const std::string& fileName) {
+using json = nlohmann::json;
+
+json ParseJSON(const std::string& fileName) {
 #ifndef _POSIX_VERSION
 #	error "Cannot compile in this function for non- UNIX operating systems!"
 #else
@@ -66,7 +61,8 @@ nlohmann::json ParseJSON(const std::string& fileName) {
 			fileName.c_str(), text.c_str());
 
 	/* Can throw on bad parse. */
-	return nlohmann::json::parse( text );
+	return json::parse( text );
 
 #endif
+
 }

@@ -2,8 +2,7 @@
 #include "TH2I.h"
 #include <stdexcept>
 
-#include "JSONParser.hxx"
-#include "json_struct_def.hh"
+#include "util/JSONParser.h"
 
 using nlohmann::json;
 

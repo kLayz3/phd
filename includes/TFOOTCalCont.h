@@ -4,7 +4,7 @@
 #include <cstddef>
 
 #include "TFOOTMapCont.h"
-#include "json_struct_def.hh"
+#include "util/json_struct_def.hh"
 #include "TParameter.h"
 
 class TH1D;
@@ -54,7 +54,6 @@ struct FOOTClusterFit {
 	inline double E_discrete() const noexcept { 
 		return this->E() * (1 + 2 * (ffourier(1,sigma,delta) + ffourier(2,sigma,delta) + ffourier(3,sigma,delta))); 
 	} 
-
 
 	/* If true, all fit parameters are given. */
 	bool IsOk() const noexcept { return std::isfinite(delta); }
@@ -155,6 +154,18 @@ struct alignas(mnd::CL) RNFOOTCal {
  * We don't serialize nlohman::json as a raw dump directly into ROOT, as parsing it
  * then can be annoying. Just solve all the parsing right here, and then have a unique type
  * that can be queried directly. */
+struct FOOTDeltaParam {
+	using Vec = std::vector<double>;
+	GET_HELP_AUX_IMPL;
+	ADD_SERIALIZABLE_FIELD(double, s, 1.0, 0);	
+	ADD_SERIALIZABLE_FIELD(double, M, 1.0, 1);
+	ADD_SERIALIZABLE_FIELD(Vec,   a2,  {}, 2);
+	
+	FOOTDeltaParam() = default;
+	virtual ~FOOTDeltaParam() = default;
+	ClassDef(FOOTDeltaParam, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FOOTDeltaParam, 2);
 
 struct FOOTParam {
 	constexpr static double CENTRE_THR_DEFAULT = 3.3;
@@ -162,19 +173,20 @@ struct FOOTParam {
 
 	GET_HELP_AUX_IMPL;
 
-	ADD_SERIALIZABLE_FIELD(i32,         N,           -1,                 0);
-	ADD_SERIALIZABLE_FIELD(double,      z0,          NAN,                1);
-	ADD_SERIALIZABLE_FIELD(std::string, orientation, {},                 2);
-	ADD_SERIALIZABLE_FIELD(i32,         mirrored,    -1,                 3);
-	ADD_SERIALIZABLE_FIELD(double,      c_threshold, CENTRE_THR_DEFAULT, 4);
-	ADD_SERIALIZABLE_FIELD(double,      n_threshold, NEIGHB_THR_DEFAULT, 5);
-	ADD_SERIALIZABLE_FIELD(double,      delta_a,     0.0,                6);
-	ADD_SERIALIZABLE_FIELD(double,      delta_p,     0.0,                7);
+	ADD_SERIALIZABLE_FIELD(i32,              N,           -1,                 0);
+	ADD_SERIALIZABLE_FIELD(double,           z0,          NAN,                1);
+	ADD_SERIALIZABLE_FIELD(std::string,      orientation, {},                 2);
+	ADD_SERIALIZABLE_FIELD(i32,              mirrored,    -1,                 3);
+	ADD_SERIALIZABLE_FIELD(double,           c_threshold, CENTRE_THR_DEFAULT, 4);
+	ADD_SERIALIZABLE_FIELD(double,           n_threshold, NEIGHB_THR_DEFAULT, 5);
+	ADD_SERIALIZABLE_FIELD(double,           delta_a,     0.0,                6);
+	ADD_SERIALIZABLE_FIELD(double,           delta_p,     0.0,                7);
+	ADD_SERIALIZABLE_FIELD(FOOTDeltaParam,   de,          {},                 8);
 
 	virtual ~FOOTParam() = default;
 	ClassDef(FOOTParam, 1);
 };
-ADD_STD_TYPE_RESOLUTION_(FOOTParam, 7)
+ADD_JSON_TYPE_RESOLUTION(FOOTParam, 8)
 
 struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	friend struct TFOOTCalProc;

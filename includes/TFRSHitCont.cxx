@@ -1,5 +1,5 @@
 #include "TFRSHitCont.h"
-#include "JSONParser.hxx"
+#include "util/JSONParser.h"
 
 using nlohmann::json;
 

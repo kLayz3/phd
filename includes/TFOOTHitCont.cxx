@@ -1,7 +1,7 @@
 #include "TFOOTHitCont.h"
 #include "TH2I.h"
 #include "TH1I.h"
-#include "JSONParser.hxx"
+#include "util/JSONParser.h"
 
 using json = nlohmann::json;
 

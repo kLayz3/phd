@@ -1,3 +1,5 @@
+include includes/q.mk
+
 CXX:=g++
 SRC_DIR = src
 INC_DIR = includes
@@ -24,7 +26,7 @@ LIBS := $(shell root-config --libs) \
 SRC:=$(wildcard $(SRC_DIR)/*.cc)
 
 OBJ:=$(patsubst $(SRC_DIR)/%.cc,  $(BUILD_DIR)/%.o, $(SRC))
-EXE:=$(patsubst $(SRC_DIR)/%.cc, %, $(SRC))
+EXE:=$(patsubst $(SRC_DIR)/%.cc, %.exe, $(SRC))
 
 STRUCT_LIB = $(INC_DIR)/$(BUILD_DIR)/libStructures.so
 
@@ -34,19 +36,21 @@ MKDIR = mkdir -p $(@D)
 
 all: $(EXE) $(AUX)
 
-$(EXE): % : $(BUILD_DIR)/%.o $(STRUCT_LIB)
-	ln -sf $(STRUCT_LIB)
-	$(CXX) -o $@ $^ $(LDFLAGS) $(LIBS)
+$(EXE): %.exe : $(BUILD_DIR)/%.o $(STRUCT_LIB)
+	$(Q)$(call log,LINK,$(notdir $@))
+	$(Q)$(CXX) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cc
 	@$(MKDIR)
-	$(CXX) -c -o $@ $(CXXFLAGS) $<
+	$(Q)$(call log,CXX,$(notdir $@))
+	$(Q)$(CXX) -c -o $@ $(CXXFLAGS) $<
 
 $(STRUCT_LIB):
 	$(MAKE) -C $(INC_DIR)
 
 $(AUX) : $(SCRIPT_DIR)/*.bash
-	./$<
+	$(call log,BASH,$(notdir $@))
+	$(Q)./$<
 
 .PHONY: clean
 clean:

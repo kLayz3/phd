@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Eigen/Dense"
+#include "../Eigen/Dense"
 #include <algorithm>
 #include <array>
 #include <vector>
@@ -35,7 +35,7 @@ struct StaticPolyFitter {
 		assert(x.size() == N && "Vector `x` must have exactly N elements.");
 		Eigen::Map<const Eigen::Matrix<double, N, 1>> xv(x.data());
 
-		Eigen::Matrix<double, N, R+2> A {};
+		Eigen::Matrix<double, N, R+1> A {};
 		A.col(0).setOnes();
 		for(size_t i = 1; i <= R; ++i)
 			A.col(i) = A.col(i-1).cwiseProduct(xv);
@@ -70,7 +70,11 @@ private:
 
 
 template<std::size_t R>
-inline void PolyFit_(const Eigen::VectorXd& x, const Eigen::VectorXd& y, std::size_t N, std::array<double, R+1>& result) {
+inline void PolyFit_(
+	const Eigen::Ref<const Eigen::VectorXd>& x, 
+	const Eigen::Ref<const Eigen::VectorXd>& y, 
+	std::size_t N, std::array<double, R+1>& result
+) {
 	Eigen::MatrixXd A(N, R+1);
 	A.col(0).setOnes();
 	for(size_t i = 1; i <= R; ++i)
@@ -142,4 +146,35 @@ std::array<double, R+1> PolyFit (
 	std::array<double, R+1> res;
 	PolyFit<R>(x,y,w,res);
 	return res;
+}
+
+/* Horner's algorithm: https://en.wikipedia.org/wiki/Horner%27s_method 
+ * Written recursive to unroll everything. */
+namespace poly {
+	template<std::size_t I, std::size_t R>
+	double EvalImpl__(double x, const std::array<double,R>& a) noexcept {
+		if constexpr(I == R - 1)
+			return a[I];
+		else
+			return a[I] + x * EvalImpl__<I + 1>(x, a);
+	}
+	inline double EvalImpl__(double x, const double* a, const int N) noexcept {
+		if(N == 1) 
+			return a[0];
+		else
+			return a[0] + x * EvalImpl__(x, a+1, N-1);
+	}
+
+	template<std::size_t R>
+	double Eval(const double x, const std::array<double, R>& a) noexcept {
+		if constexpr(R == 0) 
+			return 0.0;
+		else
+			return EvalImpl__<0>(x, a);
+	}
+
+	inline double Eval(const double x, const std::vector<double>& a) noexcept {
+		if(a.size() == 0) return 0;
+		return EvalImpl__(x, a.data(), static_cast<int>(a.size()) );
+	}
 }

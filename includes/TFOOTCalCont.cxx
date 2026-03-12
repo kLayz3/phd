@@ -1,7 +1,7 @@
 #include "TFOOTCalCont.h"
 #include "TH1I.h"
 #include "TH2I.h"
-#include "JSONParser.hxx"
+#include "util/JSONParser.h"
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
@@ -59,7 +59,7 @@ void TFOOTCalCont::Init(TDictInfo info) {
 		ERROR("Trying to set up FOOT[%d] cal, but setup file doesn't contain the key \"FOOT%d\".", FOOT_N, FOOT_N);
 	
 	json& jf = j_it.value();
-	UNROLL_JSON_PARAM(par, jf, 7);
+	UNROLL_JSON_PARAM(par, jf, 8);
 
 	this->SetName(Form("FOOT%d", par.N));
 }
@@ -89,4 +89,5 @@ ClassImp(FOOTClusterFit);
 ClassImp(RNFOOTCluster);
 ClassImp(RNFOOTCal);
 
+ClassImp(FOOTDeltaParam);
 ClassImp(FOOTParam);

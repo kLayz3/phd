@@ -1,3 +1,5 @@
+include q.mk
+
 SRC_DIR = $(shell pwd -P)
 BUILD_DIR = $(SRC_DIR)/build_$(shell gcc -dumpmachine)_$(shell gcc -dumpversion)
 DICT_DIR = $(SRC_DIR)/dict
@@ -12,6 +14,20 @@ include monad/common.mk
 
 LDFLAGS := $(shell root-config --ldflags)
 LIBS := $(shell root-config --libs) -lROOTNTuple
+
+# Normally on lustre.hpc the libfftw3 is fucked so I found
+# one normally on a /usr/lib that works and ported it over to $HOME/.local/lib
+# This is a very handwavy hack.
+HOSTNAME = $(shell hostname)
+ifneq ($(findstring lustre,$(HOSTNAME)),)
+	LIBS += -Wl,--no-as-needed \
+		-L$(HOME)/.local/lib \
+		-Wl,-rpath,$(HOME)/.local/lib \
+		-lfftw3 \
+		-Wl,--as-needed
+else
+	LIBS += -lfftw3
+endif
 
 SRC := $(wildcard $(SRC_DIR)/*.cxx)
 HEADERS := $(wildcard $(SRC_DIR)/*.h)
@@ -30,30 +46,46 @@ RDFLAGS = -I./ -I../ -v3 \
 		  -I$(GO4_SRC_DIR) \
 		  -Wall -MMD -MP -rml $(GEN_LIB) -rmf $(GEN_MAP)
 
+UTIL_DIR = $(SRC_DIR)/util
+UTIL_LIB = $(UTIL_DIR)/libUtil.a
+
 .PHONY: all symlink clean
 all: $(GEN_LIB) $(DICT) symlink
 
-$(GEN_LIB) : $(OBJ) $(DICT_OBJ)
-	$(CXX) $(LDFLAGS) -shared -o $@ $^ $(LIBS)	
+# I fucked up the linking order at some point
+# , so from the static I gotta load all the symbols. 🤦 */ 
+$(GEN_LIB) : $(UTIL_LIB) $(OBJ) $(DICT_OBJ) 
+	$(Q)$(call log,LINK,$(notdir $@))
+	$(Q)$(CXX) $(LDFLAGS) -shared -o $@ \
+		-Wl,--whole-archive $< \
+		-Wl,--no-whole-archive $(filter-out $<,$^) \
+		$(LIBS)	
 
 $(OBJ) : $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cxx $(SRC_DIR)/%.h $(DICT_OBJ)
+	$(Q)$(call log,CXX,$(notdir $@))
 	@mkdir -p $(@D)
-	$(CXX) -c -o $@ $< $(CXXFLAGS)
+	$(Q)$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 $(DICT_OBJ) : $(DICT)
+	$(Q)$(call log,CXX,$(notdir $@))
 	@mkdir -p $(@D)
-	$(CXX) -c -o $@ $^ $(CXXFLAGS)
+	$(Q)$(CXX) -c -o $@ $^ $(CXXFLAGS)
 
 $(DICT) : $(HEADERS) LinkDef.hh 
+	$(Q)$(call log,RCLING,$(notdir $@))
 	@mkdir -p $(DICT_DIR) $(BUILD_DIR)
-	rootcling -f $@ $(RDFLAGS) -p $^
+	$(Q)rootcling -f $@ $(RDFLAGS) -p $^
+
+$(UTIL_LIB):
+	$(MAKE) -C $(UTIL_DIR)
 
 symlink : $(DICT) $(GEN_LIB)
-	ln -sf $(DICT_PCM) $(BUILD_DIR)
-	ln -sf $(GEN_LIB)  ../
-	ln -sf $(GEN_MAP)  ../
-	ln -sf $(DICT_PCM) ../
+	$(Q)ln -sf $(DICT_PCM) $(BUILD_DIR)
+	$(Q)ln -sf $(GEN_LIB)  ../
+	$(Q)ln -sf $(GEN_MAP)  ../
+	$(Q)ln -sf $(DICT_PCM) ../
 
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(DICT_DIR)
+	$(MAKE) -C $(UTIL_DIR) clean

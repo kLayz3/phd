@@ -1,7 +1,7 @@
 #pragma once
 
 #include "monad/monad.hxx"
-#include "json_struct_def.hh"
+#include "util/json_struct_def.hh"
 #include "TFOOTCalCont.h"
 
 class TH2I;
@@ -30,7 +30,7 @@ struct FOOTBoxParam {
 	virtual ~FOOTBoxParam() = default;
 	ClassDef(FOOTBoxParam, 1);
 };
-ADD_STD_TYPE_RESOLUTION_(FOOTBoxParam, 6)
+ADD_JSON_TYPE_RESOLUTION(FOOTBoxParam, 6)
 
 struct RNFOOTHit {
 	std::vector<FOOTHit> hits;
