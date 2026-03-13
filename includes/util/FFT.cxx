@@ -49,9 +49,9 @@ double FFTW::Evaluate(double x, double xmin, double xmax, int Q) {
 
 FFTW DoFFTX(TH2D* h2) {
 	auto pfx = std::unique_ptr<TProfile>( h2->ProfileX("pfx") );
-	if(!pfx) {
+	if(!pfx)
 		throw std::runtime_error("DoFFTX(): ProfileX() failed");
-	}
+
 	pfx->SetDirectory(nullptr);
 
 	const int N = pfx->GetNbinsX();
@@ -67,7 +67,7 @@ FFTW DoFFTX(TH2D* h2) {
 	FFTW out{N}; 
 
 	fftw_plan plan = fftw_plan_dft_r2c_1d(N, in, out.data, FFTW_ESTIMATE);
-    if(!plan) {
+	if(!plan) {
 		fftw_free(in);
 		throw std::runtime_error("DoFFTX(): fftw_plan_dft_r2c_1d() failed");
 	}

@@ -2,7 +2,7 @@
  * It recursively works for all JSON objects where each entry's value is either
  * 1) a primitive: a string, integer, double, or array of these (single underlying type). 
  * 2) another object decorated with same macros (to_json/from_json will recurse)
- * Long live recursion 🫡 */
+ * Long live recursion 🫡 --k14y23 */
 
 #pragma once
 
@@ -211,7 +211,7 @@ struct Nested {
 ADD_JSON_TYPE_RESOLUTION(Nested, 2)
 
 struct MyStruct {
-    GET_HELP_AUX_IMPL;
+	GET_HELP_AUX_IMPL;
 	using T1 = std::array<double, 2>;
 	using T2 = std::array<std::array<int, 2>, 2>;
 	using T3 = std::array<T2, 3>;
@@ -242,7 +242,7 @@ int main() {
 			"used": false
 		}
     }
-    )");
+	)");
 	UNROLL_JSON_PARAM(par, j, 5);
 
 	std::cout << par.anode_diff_lim[0][1] << " should be 600" << std::endl;
@@ -251,6 +251,6 @@ int main() {
 	
 	std::cout << par << std::endl;
 
-    return 0;
+	return 0;
 }
 */

@@ -40,25 +40,25 @@ json ParseJSON(const std::string& fileName) {
 		"\"" + fileName + "\" " 
 		"-o - 2>&1";
 
-    FILE* pipe = popen(cmd.c_str(), "r");
-    if(!pipe) ERROR("popen failed for file: '\%s\'\n", fileName.c_str());
-	
-	std::string text;
-    char buf[MAX_BUF_SIZE];
+	FILE* pipe = popen(cmd.c_str(), "r");
+	if(!pipe) ERROR("popen failed for file: '\%s\'\n", fileName.c_str());
 
-    while(fgets(buf, sizeof(buf), pipe)) {
-        text += buf;
+	std::string text;
+	char buf[MAX_BUF_SIZE];
+
+	while(fgets(buf, sizeof(buf), pipe)) {
+		text += buf;
 	}
-	
+
 	int status = pclose(pipe);
 	if(WIFSIGNALED(status))
 		ERROR("Preprocessor killed by signal %d while parsing '%s'\n",
-			WTERMSIG(status), fileName.c_str());
+				WTERMSIG(status), fileName.c_str());
 	if(!WIFEXITED(status))
 		ERROR("Preproccessor failed:\n " KNRM "%s\n", text.c_str());
 	if(WEXITSTATUS(status) != 0)
 		ERROR("Preprocessor failed for '%s': " KNRM "\n%s",
-			fileName.c_str(), text.c_str());
+				fileName.c_str(), text.c_str());
 
 	/* Can throw on bad parse. */
 	return json::parse( text );
