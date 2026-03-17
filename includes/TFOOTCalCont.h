@@ -10,6 +10,8 @@
 
 class TH1D;
 
+/* Doesn't have to be geometrically in order,
+ * this ordering gets handled in the setup file with `.N` attribute. */
 #define FOOT_ID_0 10
 #define FOOT_ID_1 17
 #define FOOT_ID_2 19
@@ -20,14 +22,14 @@ class TH1D;
 #define FOOT_ID_7 21
 
 inline constexpr i32 static_detectors[] = {
-	FOOT_ID_0, // Gets mapped to FOOT0
-	FOOT_ID_1, // Gets mapped to FOOT1
-	FOOT_ID_2, // Gets mapped to FOOT2
-	FOOT_ID_3, // Gets mapped to FOOT3
-	FOOT_ID_4, // Gets mapped to FOOT4
-	FOOT_ID_5, // Gets mapped to FOOT5
-	FOOT_ID_6, // Gets mapped to FOOT6
-	FOOT_ID_7  // Gets mapped to FOOT7
+	FOOT_ID_0, 
+	FOOT_ID_1, 
+	FOOT_ID_2, 
+	FOOT_ID_3, 
+	FOOT_ID_4, 
+	FOOT_ID_5, 
+	FOOT_ID_6, 
+	FOOT_ID_7  
 };
 inline constexpr i32 N_FOOT = mnd::len(static_detectors);
 static_assert(N_FOOT == N_FOOT_DETECTORS);
@@ -65,7 +67,7 @@ struct FOOTClusterFit {
 };
 
 struct RNFOOTCluster {
-	enum ClusterType {
+	enum ClusterType : u32 {
 		kUNKNOWN    = 0, /* Unqualified. */
 		kGOOD       = 1, /* Good cluster. Monotonically rising ADC values to peak ADC strip, then monotonically decreasing. */
 		kFRAGMENTED = 2, /* One strip in noise; is missing between two sequences of the cluster. */
@@ -77,6 +79,7 @@ struct RNFOOTCluster {
 	double fCE = 0; /* Cluster summed energy. */
 	u32    fCM = 0; /* Cluster multiplicity. */
 	ClusterType fCT{}; /* Cluster type. */
+	double fCP = 0; /* Cluster max energy in a single strip. */
 	FOOTClusterFit fit{};
 
 	inline double Delta() const noexcept { return mnd::rround<int>(fCX) - fCX; }
@@ -93,7 +96,7 @@ struct RNFOOTCluster {
 	template<std::size_t I>
 	decltype(auto) get() const && noexcept { return get_helper<I>(std::move(*this)); }
 
-	RNFOOTCluster(double, double, u32, ClusterType, FOOTClusterFit);
+	RNFOOTCluster(double, double, u32, ClusterType, double, FOOTClusterFit);
 	RNFOOTCluster() = default;
 	virtual ~RNFOOTCluster() = default;
 	ClassDef(RNFOOTCluster, 1);
@@ -105,17 +108,19 @@ private:
 		else if constexpr(I == 1) return (std::forward<Self>(self).fCE);
 		else if constexpr(I == 2) return (std::forward<Self>(self).fCM);
 		else if constexpr(I == 3) return (std::forward<Self>(self).fCT);
-		else static_assert(I < 4, "Index out of bounds for RNFOOTCluster::get");
+		else if constexpr(I == 4) return (std::forward<Self>(self).fCP);
+		else static_assert(I < 5, "Index out of bounds for RNFOOTCluster::get");
 	} 
 };
 
 /* Make it structured-binding decomposable. */
 namespace std {
-	template<> struct tuple_size<::RNFOOTCluster> : integral_constant<size_t, 4> {};
+	template<> struct tuple_size<::RNFOOTCluster> : integral_constant<size_t, 5> {};
 	template<> struct tuple_element<0, ::RNFOOTCluster> { using type = double; };
 	template<> struct tuple_element<1, ::RNFOOTCluster> { using type = double; };
-    template<> struct tuple_element<2, ::RNFOOTCluster> { using type = double; };
+    template<> struct tuple_element<2, ::RNFOOTCluster> { using type = u32; };
     template<> struct tuple_element<3, ::RNFOOTCluster> { using type = RNFOOTCluster::ClusterType; };
+    template<> struct tuple_element<4, ::RNFOOTCluster> { using type = double; };
 }
 
 struct alignas(mnd::CL) RNFOOTCal {
@@ -144,8 +149,8 @@ struct alignas(mnd::CL) RNFOOTCal {
 	inline void AddCluster(RNFOOTCluster cl) noexcept {
 		fCl.push_back(std::move(cl));
 	}
-	inline void AddCluster(double x, double e, u32 m, ClusterType ty, FOOTClusterFit f) noexcept {
-		fCl.emplace_back(x, e, m, ty, f);
+	inline void AddCluster(double x, double e, u32 m, ClusterType ty, double p, FOOTClusterFit f) noexcept {
+		fCl.emplace_back(x, e, m, ty, p, f);
 	}
 	virtual ~RNFOOTCal() = default;
 	ClassDef(RNFOOTCal, 1);
@@ -193,6 +198,7 @@ struct FOOTParam {
 	ADD_SERIALIZABLE_FIELD(double,           delta_p,     0.0,                7);
 	ADD_SERIALIZABLE_FIELD(FOOTDeltaParam,   de,          {},                 8);
 
+	int de10_index_ = -1;
 	virtual ~FOOTParam() = default;
 	ClassDef(FOOTParam, 1);
 };

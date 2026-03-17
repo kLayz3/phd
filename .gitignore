@@ -24,6 +24,8 @@ merged
 stash
 info.yaml
 *.exe
+exec/*.cmd
+log.txt
 
 quick/*
 !quick/*.cc

@@ -7,22 +7,6 @@
 #include "Rtypes.h"
 #include "TH2D.h"
 
-struct FRSIdParam {
-	GET_HELP_AUX_IMPL;
-	 
-	ADD_SERIALIZABLE_FIELD(double, dist,          0.0,  0); /* Distance relative to iron yoke at S2 (last quad b4 air). */
-	ADD_SERIALIZABLE_FIELD(double, magnification, 1.0,  1); 
-	ADD_SERIALIZABLE_FIELD(double, brho,          10.0, 2); /* Brho at the entrance to that focal point. */
-	ADD_SERIALIZABLE_FIELD(double, dispersion,    0.0,  3);
-	ADD_SERIALIZABLE_FIELD(double, zfocus,        1000, 4);
-	//ADD_SERIALIZABLE_FIELD(u32,    Z0,            6,    4);
-
-	FRSIdParam() = default;
-	virtual ~FRSIdParam() = default;
-	ClassDef(FRSIdParam, 1);
-};
-ADD_JSON_TYPE_RESOLUTION(FRSIdParam, 4)
-
 struct FRSTargetParam {
 	GET_HELP_AUX_IMPL;
 
@@ -34,6 +18,22 @@ struct FRSTargetParam {
 	ClassDef(FRSTargetParam, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(FRSTargetParam, 1)
+
+struct FRSIdParam {
+	GET_HELP_AUX_IMPL;
+	 
+	ADD_SERIALIZABLE_FIELD(double,         dist,          0.0,  0); /* Distance relative to iron yoke at S2 (last quad b4 air). */
+	ADD_SERIALIZABLE_FIELD(double,         magnification, 1.0,  1); 
+	ADD_SERIALIZABLE_FIELD(double,         brho,          10.0, 2); /* Brho at the entrance to that focal point. */
+	ADD_SERIALIZABLE_FIELD(double,         dispersion,    0.0,  3);
+	ADD_SERIALIZABLE_FIELD(double,         zfocus,        1000, 4);
+	ADD_SERIALIZABLE_FIELD(FRSTargetParam, target,        {},   5);
+
+	FRSIdParam() = default;
+	virtual ~FRSIdParam() = default;
+	ClassDef(FRSIdParam, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FRSIdParam, 5)
 
 struct RNFRSHit {
 	/* At this level, FRS ID in a single focal point is determined uniquely by:

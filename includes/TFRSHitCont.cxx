@@ -20,7 +20,7 @@ void TFRSHitCont::Init(TDictInfo info) {
 
 	j_it  = jfrs.find("S2");
 	if(j_it == jfrs.end()) ERROR("\'S2\' key not found in \'FRS\' section of JSON file: %s\n", file_name.c_str());
-	UNROLL_JSON_PARAM(_s2p, j_it.value(), 4);
+	UNROLL_JSON_PARAM(_s2p, j_it.value(), 5);
 	
 	/* Unpack the S2 target param values. */
 	auto& js2 = j_it.value();
@@ -30,7 +30,7 @@ void TFRSHitCont::Init(TDictInfo info) {
 	
 	j_it  = jfrs.find("S3");
 	if(j_it == jfrs.end()) ERROR("\'S3\' key not found in \'FRS\' section of JSON file: %s\n", file_name.c_str());
-	UNROLL_JSON_PARAM(_s3p, j_it.value(), 4);
+	UNROLL_JSON_PARAM(_s3p, j_it.value(), 5);
 }
 
 void Add(FRSIdParam&, const FRSIdParam&) {}

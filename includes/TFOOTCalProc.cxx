@@ -398,7 +398,7 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		out.inner()._fHeClSize1.assign(e, e + N_STRIPS);
 	}
 	
-	out.inner().AddCluster(cl_wx, cl_e, _cl_cnt, ct, cl_fit);
+	out.inner().AddCluster(cl_wx, cl_e, _cl_cnt, ct, it_max->e, cl_fit);
 }
 
 template<>

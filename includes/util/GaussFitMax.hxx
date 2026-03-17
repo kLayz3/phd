@@ -27,9 +27,9 @@ std::array<double, 3> GaussFitMax(TH1D* h) {
 	}
 	
 	return { 
-		f.GetParameter(0),
-		f.GetParameter(1),
-		f.GetParameter(2)
+		f.GetParameter(0), /* Amplitude */
+		f.GetParameter(1), /* Mean */
+		f.GetParameter(2)  /* Sigma */
 	};
 }
 }

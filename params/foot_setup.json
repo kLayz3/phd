@@ -12,7 +12,7 @@
 	"FOOT10": {
 		"N": 0,             // It's unique index in the data
 		"z0": 89.0,         // `z` position
-		"orientation": "y",
+		"orientation": "y", // Orientation, defined by TPCs' y-axis
 		"mirrored": false,  // can be rotated and mirrored
 		"c_threshold": 4.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)

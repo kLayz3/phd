@@ -5,8 +5,8 @@
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
-RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, FOOTClusterFit fit) :
-	fCX(x), fCE(e), fCM(m), fCT(t), fit{fit} {}
+RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, double p, FOOTClusterFit fit) :
+	fCX(x), fCE(e), fCM(m), fCT(t), fCP(p), fit{fit} {}
 
 /* ------------------------------------------------------- */
 
@@ -61,6 +61,12 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	json& jf = j_it.value();
 	UNROLL_JSON_PARAM(par, jf, 8);
 
+	par.de10_index_ = FOOT_N;
+	if(par.N == -1) 
+		ERROR("Parsed the setup file fine, but the \"N\" table entry for FOOT%d not found. "
+			"It is mandatory to label the FOOT's!", FOOT_N);
+	/* Note, if two FOOT's in the setup have identical `.N` field, it will throw a
+	 * wildest RNTuple error 'cause of columns of identical name... */
 	this->SetName(Form("FOOT%d", par.N));
 }
 
