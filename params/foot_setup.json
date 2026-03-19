@@ -1,23 +1,40 @@
 {
-	/* Common FOOT box parameters. */
+	// Common FOOT box parameters. 
+	// Taken from Chamber_ASM_dwg_v3_1
 	"box" : {
-		"z0": 3355,
+		"z0": 3355, // Nominal placement of the center of the box.
 		"width_inner": 412,
 		"width_outer": 440,
-		"dx": 0.0,
-		"dy": 0.0,
-		"da": 0.0,
-		"db": 0.0
+		// FOOT detector `z` positions, relative to the outer wall, where the Be target sits nominally. Check foot_pos_from_chamber_drawing.py script
+		"det_pos": [19.0, 19.0, 119.0, 119.0, 255.0, 255.0, 345.0, 345.0],
+		"dx": 0.0, // Small offset in x- direction 
+		"dy": 0.0, // Small offset in x- direction
+		"da": 0.0, // Small offset in x- angle relative to the TPCs' defined axis.
+		"db": 0.0  // Small offset in y- angle relative to the TPCs' defined axis.
 	},
 	"FOOT10": {
-		"N": 0,             // It's unique index in the data
-		"z0": 89.0,         // `z` position
+		"N": 0,             // Detector's unique index in the data, also in the `box.det_pos` array
+		"dz": 0.0,          // Small offset in nominally stated position in "box" entry, along the z-axis. Positive `dz` means farther away from Be target
 		"orientation": "y", // Orientation, defined by TPCs' y-axis
 		"mirrored": false,  // can be rotated and mirrored
 		"c_threshold": 4.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
 		"delta_a": 0.0,     // Offset in its measuring dimension [strip units; 150 um]
-		"delta_p": 0.0,     // Offset in angle [mrad]
+		"delta_p": 0.0,     // Offset in angle [mrad]	
+		"gain": [         // Entry related to the gain matching across the detector
+		// Per asic: Nth degree spline describing the behaviour per ASIC. Check the writeup section `Gain Correction`
+			/* ASIC[0] */ [1555.34], // not enough statistics; taken as default.
+			/* ASIC[1] */ [1555.34], // not enough statistics; taken as default.
+			/* ASIC[2] */ [1464],
+			/* ASIC[3] */ [1545],
+			/* ASIC[4] */ [269384, -3709.91, 19.2564, -0.0443829, 3.8323e-05],
+			/* ASIC[5] */ [297585, -3412.49, 14.7267, -0.0281979, 2.02112e-05],
+			/* ASIC[6] */ [1557],
+			/* ASIC[7] */ [1555.34], // not enough statistics; taken as default.
+			/* ASIC[8] */ [1555.34], // not enough statistics; taken as default.
+			/* ASIC[9] */ [1555.34]  // not enough statistics; taken as default.
+		], // ^^ Correction is calcualted as RAW position (double) [-0.5, 639.5], and then depending on ⌊x/64⌋ take that polynomial.
+		   // If left empty, then the only parameter is `mean`. Otherwise `mean` doesn't come into the play, if the full polynomial is given.
 		"de": {             // Delta correction parameters
 			"M": 1.9082,   // Roughly Amplitude factor difference
 			"s": 0.2932,   // Position of side peak (mean)
@@ -27,7 +44,6 @@
 	},
 	"FOOT17": {
 		"N": 1,
-		"z0": 89.0,
 		"orientation": "-x",
 		"mirrored": false,
 		"c_threshold": 4.0,
@@ -42,7 +58,6 @@
 	},
 	"FOOT19": {
 		"N": 2,
-		"z0": 179.0,
 		"orientation": "y",
 		"mirrored": false,
 		"c_threshold": 4.0,
@@ -57,7 +72,6 @@
 	},
 	"FOOT20": {
 		"N": 3,
-		"z0": 179.0,
 		"orientation": "-x",
 		"mirrored": false,
 		"c_threshold": 4.0,
@@ -72,8 +86,7 @@
 	},
 	"FOOT22": {
 		"N": 4,
-		"z0": 315.0,
-		"orientation": "y",
+		"orientation": "y", /* One rotated by about ~20 deg */
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 2.5,
@@ -87,8 +100,7 @@
 	},
 	"FOOT25": {
 		"N": 5,
-		"z0": 315.0,
-		"orientation": "-x",
+		"orientation": "-x", /* One rotated by about ~20 deg */
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
@@ -102,7 +114,6 @@
 	},
 	"FOOT23": {
 		"N": 6,
-		"z0": 415.0,
 		"orientation": "y",
 		"mirrored": false,
 		"c_threshold": 4.0,
@@ -117,13 +128,24 @@
 	},
 	"FOOT21": {
 		"N": 7,
-		"z0": 415.0,
 		"orientation": "-x",
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
 		"delta_a": 0.0,
 		"delta_p": 23.1,
+		"gain": [
+			[1495],
+			[1506],
+			[-160340, 4105.04, -38.8771, 0.162826, -0.000254517],
+			[-18570.3, 327.467, -1.97633, 0.00520428, -5.02017e-06],
+			[-700197, 9788.55, -51.0904, 0.118199, -0.000102266],
+			[-824091, 9272.91, -39.0081, 0.0728344, -5.09299e-05],
+			[0, -118.526, 0.910221, -0.00223934, 1.81667e-06],
+			[0, 62.533, -0.420091, 0.000991808, -7.80116e-07]
+			[1455],
+			[1557]
+		],
 		"de": {
 			"M": 2.1587,
 			"s": 0.2744,

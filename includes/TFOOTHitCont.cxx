@@ -16,10 +16,9 @@ auto it = info.find("Setup");
 	setup = ParseJSON(file_name);
 	setup["file_name"] = file_name;
 	
-	auto j_it = setup.find("box");
-	if(j_it == setup.end()) ERROR("\'box\' key not found in JSON file: %s\n", file_name.c_str());
+	if(!setup.contains("box")) ERROR("\'box\' key not found in JSON file: %s\n", file_name.c_str());
 		
-	UNROLL_JSON_PARAM(_box, j_it.value(), 6);
+	UNROLL_JSON_PARAM(_box, setup["box"], 7);
 }
 
 void Add(FOOTBoxParam&, const FOOTBoxParam&) {}
@@ -59,6 +58,4 @@ void TFOOTHitCont::Setup() {
 }
 
 ClassImp(FOOTHit);
-ClassImp(FOOTBoxParam);
 ClassImp(RNFOOTHit);
-

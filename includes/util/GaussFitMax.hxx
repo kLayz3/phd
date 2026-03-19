@@ -3,33 +3,57 @@
 #include "TFitResultPtr.h"
 #include "TH1D.h"
 #include "TF1.h"
+#include "Verbosity.hxx"
 
+static constexpr double GAUSS_FIT_SIDE_RATIO_DEFAULT = 1.5;
 /**
  * @brief For a projection, TH1D, quickly fit a gauss around it's peak value, and +-2 sigma 
  * @note Thread-unsafe.
  */
-namespace mnd {
-inline
-std::array<double, 3> GaussFitMax(TH1D* h) {
-	double m = h->GetXaxis()->GetBinCenter( h->GetMaximumBin() );
-	double s = h->GetStdDev();
+inline std::pair <
+	std::array<double, 3>,
+	std::array<double, 3>
+> GaussFitMax (
+	TH1D* h, 
+	double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
+	Verbosity v = Verbosity::SILENT
+) {
+	static uint64_t incrementer_ = 0;
+
+	const double m = h->GetXaxis()->GetBinCenter( h->GetMaximumBin() );
+	const double s = h->GetStdDev();
 	
-	double fitMin = m - 2*s;
-	double fitMax = m + 2*s;
-	TF1 f("f","gaus", fitMin, fitMax);
-	TFitResultPtr res = h->Fit(&f, "Q0S");
+	const double fitMin = m - side_ratio*s;
+	const double fitMax = m + side_ratio*s;
+	if(v > 1)
+		printf("[GaussFitMax] (%s) Performing gaus fit around %.2f: [%.2f, %2.f]\n",
+			h->GetTitle(), m, fitMin, fitMax);
+	TF1 f(Form("f_%lu_%.1f_%.1f", incrementer_++, fitMin, fitMax),"gaus", fitMin, fitMax);
+	TFitResultPtr res = h->Fit(&f, "Q0SR");
 
 	if(!res.Get() || (int)res != 0) { // Fit failed.
-		fprintf(stderr, "No fit performed...\n");
-		fprintf(stderr, "Hist name: '%s', m=%.2f, s=%.2f\n",
-			h->GetName(), m, s);
-		return {NAN, NAN, NAN};
+		if(v > Verbosity::SILENT) {
+			fprintf(stderr, "No fit performed...\n");
+			fprintf(stderr, "Hist name: '%s', m=%.2f, s=%.2f\n",
+				h->GetName(), m, s);
+		}
+		return {{NAN, NAN, NAN}, {NAN, NAN, NAN}};
 	}
-	
+	if(v > 1) std::cout << "[GaussFitMax] (" << h->GetTitle() << ") Result: {" 
+		<< f.GetParameter(0) << " +- " << f.GetParError(0) << ", "
+		<< f.GetParameter(1) << " +- " << f.GetParError(1) << ", "
+		<< f.GetParameter(2) << " +- " << f.GetParError(2) << "}" << std::endl;
+
 	return { 
-		f.GetParameter(0), /* Amplitude */
-		f.GetParameter(1), /* Mean */
-		f.GetParameter(2)  /* Sigma */
+		std::array<double, 3> { 
+			f.GetParameter(0), /* Amplitude */
+			f.GetParameter(1), /* Mean */
+			f.GetParameter(2)  /* Sigma */
+		}, 
+		std::array<double, 3> { 
+			f.GetParError(0), /* Amplitude */
+			f.GetParError(1), /* Mean */
+			f.GetParError(2)  /* Sigma */
+		}
 	};
-}
 }

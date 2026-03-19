@@ -44,8 +44,9 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 
 void TFOOTHitProc::ProcessSingle(const TFOOTCalCont& cfoot) noexcept {
 	FOOTParam* p = cfoot.setup;
+	FOOTBoxParam* b = out.box;
 	const i32 n = p->N;
-	const double z = p->z0;
+	const double z = b->GetFOOTZ(n, p); /* Second argument is for `.dz` field that p could expose. */
 	const std::string& orientation = p->orientation;
 	
 	if(n >= N_FOOT_DETECTORS)

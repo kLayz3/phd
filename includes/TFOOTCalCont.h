@@ -10,6 +10,80 @@
 
 class TH1D;
 
+/* Small struct to hold delta-correction associated params. */
+struct FOOTDeltaParam {
+	using Vec = std::vector<double>;
+	GET_HELP_AUX_IMPL;
+	ADD_SERIALIZABLE_FIELD(double, s, 1.0, 0);	
+	ADD_SERIALIZABLE_FIELD(double, M, 1.0, 1);
+	ADD_SERIALIZABLE_FIELD(Vec,   a2,  {}, 2);
+
+	inline double CorrectionBasic(const double delta) const noexcept {
+		double x = std::min( std::abs(delta), s );
+		return M - (M-1) / s * x;
+	}
+	inline double CorrectionFactor(const double delta) const noexcept {
+		double corr0 = this->CorrectionBasic(delta);
+		double corr1 = poly::Eval(delta, a2);
+		return corr0 * corr1; 
+	}
+	FOOTDeltaParam() = default;
+	virtual ~FOOTDeltaParam() = default;
+	ClassDef(FOOTDeltaParam, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FOOTDeltaParam, 2);
+
+/* Parameters specific to a single FOOT detector. */
+struct FOOTParam {
+	constexpr static double CENTRE_THR_DEFAULT = 3.3;
+	constexpr static double NEIGHB_THR_DEFAULT = 1.3;
+
+	GET_HELP_AUX_IMPL;
+
+	ADD_SERIALIZABLE_FIELD(i32,              N,           -1,                 0);
+	ADD_SERIALIZABLE_FIELD(double,           dz,          0.0,                1);
+	ADD_SERIALIZABLE_FIELD(std::string,      orientation, {},                 2);
+	ADD_SERIALIZABLE_FIELD(i32,              mirrored,    -1,                 3);
+	ADD_SERIALIZABLE_FIELD(double,           c_threshold, CENTRE_THR_DEFAULT, 4);
+	ADD_SERIALIZABLE_FIELD(double,           n_threshold, NEIGHB_THR_DEFAULT, 5);
+	ADD_SERIALIZABLE_FIELD(double,           delta_a,     0.0,                6);
+	ADD_SERIALIZABLE_FIELD(double,           delta_p,     0.0,                7);
+	ADD_SERIALIZABLE_FIELD(FOOTDeltaParam,   de,          {},                 8);
+
+	int de10_index_ = -1;
+	virtual ~FOOTParam() = default;
+	ClassDef(FOOTParam, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FOOTParam, 8)
+
+/* Parameters describing the whole FOOT box. Whatever the box may be :) */
+struct FOOTBoxParam {
+	GET_HELP_AUX_IMPL
+	using Arr1 = std::array<double, N_FOOT_DETECTORS>;
+
+	ADD_SERIALIZABLE_FIELD(double, z0,          NAN, 0)
+	ADD_SERIALIZABLE_FIELD(double, width_inner, NAN, 1)
+	ADD_SERIALIZABLE_FIELD(Arr1,   det_pos,     {},  2)
+	ADD_SERIALIZABLE_FIELD(double, width_outer, NAN, 3)
+	ADD_SERIALIZABLE_FIELD(double, dx,          NAN, 4)
+	ADD_SERIALIZABLE_FIELD(double, dy,          NAN, 5)
+	ADD_SERIALIZABLE_FIELD(double, da,          NAN, 6)
+	ADD_SERIALIZABLE_FIELD(double, db,          NAN, 7)
+
+	inline double GetTargetZ() const noexcept { return z0 - (width_outer / 2); }
+
+	/* Calculate the absolute z- position of n-th FOOT detector in the box. */
+	inline double GetFOOTZ(const int n, const FOOTParam* p = nullptr) const noexcept {
+		double zf = GetTargetZ() + det_pos.at(n);
+		if(p) zf += p->dz;
+		return zf;
+	}
+
+	virtual ~FOOTBoxParam() = default;
+	ClassDef(FOOTBoxParam, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FOOTBoxParam, 7)
+
 /* Doesn't have to be geometrically in order,
  * this ordering gets handled in the setup file with `.N` attribute. */
 #define FOOT_ID_0 10
@@ -156,61 +230,12 @@ struct alignas(mnd::CL) RNFOOTCal {
 	ClassDef(RNFOOTCal, 1);
 };
 
-/* Keep this struct a mirror of the setup file JSON.
- * We don't serialize nlohman::json as a raw dump directly into ROOT, as parsing it
- * then can be annoying. Just solve all the parsing right here, and then have a unique type
- * that can be queried directly. */
-struct FOOTDeltaParam {
-	using Vec = std::vector<double>;
-	GET_HELP_AUX_IMPL;
-	ADD_SERIALIZABLE_FIELD(double, s, 1.0, 0);	
-	ADD_SERIALIZABLE_FIELD(double, M, 1.0, 1);
-	ADD_SERIALIZABLE_FIELD(Vec,   a2,  {}, 2);
-
-	inline double CorrectionBasic(const double delta) const noexcept {
-		double x = std::min( std::abs(delta), s );
-		return M - (M-1) / s * x;
-	}
-	inline double CorrectionFactor(const double delta) const noexcept {
-		double corr0 = this->CorrectionBasic(delta);
-		double corr1 = poly::Eval(delta, a2);
-		return corr0 * corr1; 
-	}
-	FOOTDeltaParam() = default;
-	virtual ~FOOTDeltaParam() = default;
-	ClassDef(FOOTDeltaParam, 1);
-};
-ADD_JSON_TYPE_RESOLUTION(FOOTDeltaParam, 2);
-
-struct FOOTParam {
-	constexpr static double CENTRE_THR_DEFAULT = 3.3;
-	constexpr static double NEIGHB_THR_DEFAULT = 1.3;
-
-	GET_HELP_AUX_IMPL;
-
-	ADD_SERIALIZABLE_FIELD(i32,              N,           -1,                 0);
-	ADD_SERIALIZABLE_FIELD(double,           z0,          NAN,                1);
-	ADD_SERIALIZABLE_FIELD(std::string,      orientation, {},                 2);
-	ADD_SERIALIZABLE_FIELD(i32,              mirrored,    -1,                 3);
-	ADD_SERIALIZABLE_FIELD(double,           c_threshold, CENTRE_THR_DEFAULT, 4);
-	ADD_SERIALIZABLE_FIELD(double,           n_threshold, NEIGHB_THR_DEFAULT, 5);
-	ADD_SERIALIZABLE_FIELD(double,           delta_a,     0.0,                6);
-	ADD_SERIALIZABLE_FIELD(double,           delta_p,     0.0,                7);
-	ADD_SERIALIZABLE_FIELD(FOOTDeltaParam,   de,          {},                 8);
-
-	int de10_index_ = -1;
-	virtual ~FOOTParam() = default;
-	ClassDef(FOOTParam, 1);
-};
-ADD_JSON_TYPE_RESOLUTION(FOOTParam, 8)
-
 struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	friend struct TFOOTCalProc;
 
 	constexpr static int N_STRIPS = RNFOOTCal::N_STRIPS;
-	/* These values will not get serialized. */
+	
 	int FOOT_N = -1; /* Comes from sort step, isn't in order. */
-	FOOTParam par;   /* Local object, will just get copied around. Is fine. */
 
 	TH1I* h1_mult; 
 	TH1I* h1_dE; 
@@ -224,9 +249,22 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	TH2I* h2_mult_e;
 
 	FOOTParam* setup;
+	FOOTBoxParam* box; // Optional; not every FOOT will register the box object 
+					   // based on `should_register_box_` predicate.
 
 	TFOOTCalCont() = default;
 
 	void Init(TDictInfo info) override;
 	void Setup() override;
+	inline void SetRegisterBox(bool b) { should_register_box_ = b; }
+
+private:
+	FOOTParam par;   /* Local object, will just get copied around. Is fine. */
+	FOOTBoxParam bpar; /* Again, local object for a small temporary buffer. */
+	bool should_register_box_ = false;
+	
+	/* ^^^ I don't make them internally linked in the .cxx since different containers 
+	 * could point to different parameter files/objects,.. then I'd need some map and query it..
+	 * It's a bit too complex for less than 500 byte of memory saved. */
+
 };

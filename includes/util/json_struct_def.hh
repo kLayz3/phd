@@ -140,6 +140,9 @@
 #define ADD_JSON_TYPE_RESOLUTION_11(TYPE) ADD_JSON_TYPE_RESOLUTION_10(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 11)
 #define ADD_JSON_TYPE_RESOLUTION_12(TYPE) ADD_JSON_TYPE_RESOLUTION_11(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 12)
 
+
+#define MND_HAS_RANGE_OSTREAM_
+
 template<typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& );
 template<typename T, std::size_t N>

@@ -3,6 +3,7 @@
 #include "TH2I.h"
 #include "util/JSONParser.h"
 #include "nlohmann/json.hpp"
+#include "util/json_struct_def.hh"
 using json = nlohmann::json;
 
 RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, double p, FOOTClusterFit fit) :
@@ -68,6 +69,14 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	/* Note, if two FOOT's in the setup have identical `.N` field, it will throw a
 	 * wildest RNTuple error 'cause of columns of identical name... */
 	this->SetName(Form("FOOT%d", par.N));
+
+	if(should_register_box_) {
+		if(!j.contains("box"))
+			ERROR("Container meant to also register the FOOT box, but inside %s file, \"box\" key not found?",
+				file_name.c_str());
+		
+		UNROLL_JSON_PARAM(bpar, j["box"], 7);
+	}
 }
 
 using A2 = std::array<double, 2>;
@@ -89,6 +98,10 @@ void TFOOTCalCont::Setup() {
 	h2_mult_e->GetYaxis()->SetTitle("Multiplicity");
 
 	setup = RegisterObject<FOOTParam>("setup", mnd::noop_fn<FOOTParam>(), this->par /* copy ctor */);
+	
+	/* In the cal step, box object not used. It's just written down for helper scripts to  process stuff. */
+	if(should_register_box_)
+		box = RegisterObject<FOOTBoxParam>("box", mnd::noop_fn<FOOTBoxParam>(), this->bpar);
 }
 
 ClassImp(FOOTClusterFit);
@@ -97,3 +110,4 @@ ClassImp(RNFOOTCal);
 
 ClassImp(FOOTDeltaParam);
 ClassImp(FOOTParam);
+ClassImp(FOOTBoxParam);

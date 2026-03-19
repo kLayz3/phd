@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TFOOTMapCont.h"
 #include "monad/monad.hxx"
 #include "util/json_struct_def.hh"
 #include "TFOOTCalCont.h"
@@ -17,20 +18,6 @@ struct FOOTHit {
 	ClassDef(FOOTHit, 1);
 };
 
-struct FOOTBoxParam {
-	GET_HELP_AUX_IMPL
-	using T1 = 	std::array<double, 4>;
-	ADD_SERIALIZABLE_FIELD(double, z0,          NAN, 0);
-	ADD_SERIALIZABLE_FIELD(double, width_inner, NAN, 1);
-	ADD_SERIALIZABLE_FIELD(double, width_outer, NAN, 2);
-	ADD_SERIALIZABLE_FIELD(double, dx,          NAN, 3);
-	ADD_SERIALIZABLE_FIELD(double, dy,          NAN, 4);
-	ADD_SERIALIZABLE_FIELD(double, da,          NAN, 5);
-	ADD_SERIALIZABLE_FIELD(double, db,          NAN, 6);
-	virtual ~FOOTBoxParam() = default;
-	ClassDef(FOOTBoxParam, 1);
-};
-ADD_JSON_TYPE_RESOLUTION(FOOTBoxParam, 6)
 
 struct RNFOOTHit {
 	std::vector<FOOTHit> hits;

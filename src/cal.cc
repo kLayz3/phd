@@ -68,6 +68,8 @@ int main(int argc, char* argv[]) {
 	cfrs.Setup();
 
 	TFOOTCalCont cfoot[N_FOOT]; // output container.
+	cfoot[0].SetRegisterBox(true);
+
 	for(int i=0; i<N_FOOT; ++i) {
 		cfoot[i].Init({
 			{ "ID"s, std::to_string( mfoot[i].FOOT_N ) }, 
