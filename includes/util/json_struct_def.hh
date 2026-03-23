@@ -49,9 +49,10 @@
 		} catch(std::exception const& e) { \
 			fprintf(stderr, \
 				"Failed JSON setup assignment \'%s\': index: %d, key:%s " \
-				"(Json instance: '%s', " \
+				"(Json instance: '%s'), " \
 				"reason: %s\n",  \
 				#StructInstance, INDEX, key, #JSONInstance, e.what()); \
+			throw; \
 		} \
 		EMPTY_MACRO__(INDEX) \
 	} while(0); \

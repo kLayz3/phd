@@ -12,10 +12,6 @@
 #include <climits>
 
 static const char* module_name_ = "FitSpline";
-static int gCol_ = kRed + 1; /* For Gaussian profile. */
-static int pCol_ = kMagenta; /* For standard TProfile. */
-
-enum class fit_info { PROFILE_MAX, GAUSS_MAX };
 
 /* By default, profile will sample the projected bin's mean.
  * But sometimes distributions can be skewed and we just wish to make
@@ -30,11 +26,11 @@ std::pair <
 	std::array<double, R+1>,
 	TGraphErrors*
 > FitSpline (
-		TH2D* h2, 
-		double x_lo = -DBL_MAX,
-		double x_hi =  DBL_MAX,
-		double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
-		Verbosity v = Verbosity::SILENT
+	TH2D* h2, 
+	double x_lo = -DBL_MAX,
+	double x_hi =  DBL_MAX,
+	double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
+	Verbosity v = Verbosity::SILENT
 ) {
 	std::unique_ptr<TH1D> pfx;
 	TAxis* xax = h2->GetXaxis();
@@ -57,7 +53,7 @@ std::pair <
 		int nbins = ibin_last - ibin_first + 1;
 		
 		if(v > 1) { 
-			printf("%s: from \'%s\'; taking bin indices: [%d,%d], "
+			printf("[FitSpline] %s: from \'%s\'; taking bin indices: [%d,%d], "
 				"with lo = %.1f, hi = %.1f, N=%d\n", 
 				module_name_, h2->GetTitle(), ibin_first, ibin_last, xfirst, xlast, nbins);
 		}
@@ -89,11 +85,6 @@ std::pair <
 	TGraphErrors* gerr = new TGraphErrors( pfx.get() ); 
 	gerr->SetMarkerStyle(20);
 	gerr->SetMarkerSize(1.2);
-	if constexpr(sliceType == fit_info::PROFILE_MAX) {
-		gerr->SetLineColor(pCol_);
-	} else { 
-		gerr->SetLineColor(gCol_);
-	}
 	xax->SetRange();
 	if(v > 0) {
 		std::cout << "Fitting" << std::endl
@@ -109,7 +100,7 @@ template <
 	std::size_t R,
 	fit_info sliceType = fit_info::PROFILE_MAX
 > [[ nodiscard ]] 
-std::tuple<
+std::tuple <
 	std::array<double, R+1>,
 	TGraphErrors*,
 	TGraph*

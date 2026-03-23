@@ -11,6 +11,9 @@
 #include <cmath>
 #include <complex>
 
+#include "GaussFitMax.hxx"
+#include "Verbosity.hxx"
+
 extern "C" {
 	#include <fftw3.h>
 }
@@ -18,6 +21,7 @@ extern "C" {
 /* Make it RAII friendly. 
  * @note Thread un-safe. */
 struct FFTW {
+	static constexpr int Q_DEFAULT = 10;
 	static constexpr double pi = 3.141592653589793238462643383279502884;
 	struct Coeff { double a, b; };
 
@@ -76,11 +80,17 @@ struct FFTW {
 		return *this;
 	}
 	
-	void ComputeCoeffs();
+	void ComputeCoeffs(Verbosity = Verbosity::SILENT, int = Q_DEFAULT);
+	void Dump(int = Q_DEFAULT) const;
 
 	// Evaluate in the sample-aligned basis:
 	// x_j = xmin + (j + 1/2) * (P/n_full)
 	double Evaluate(double x, double xmin, double xmax, int Q = INT_MAX);
+	
+	/* A static function to evaluate based on `std::vector<std::array<double, 2>>` packed- 
+	 * foreign coefficients, and `N` supplied. */
+	using Foreign = std::vector<std::array<double, 2>>;
+	static double Evaluate(const Foreign& c, const int N, double x, double xmin, double xmax, int Q = INT_MAX);
 
 	inline double DC() const noexcept {
 		return coeff[0].a;	
@@ -88,5 +98,21 @@ struct FFTW {
 };
 
 class TH2D;
-FFTW DoFFTX(TH2D* h2);
+class TGraph;
+class TGraphErrors;
 
+template<fit_info> 
+std::tuple <
+	FFTW,
+	TGraphErrors*,
+	TGraph*
+> DoFFTW (
+	TH2D*, 
+	double = -DBL_MAX, 
+	double = DBL_MAX, 
+	double = GAUSS_FIT_SIDE_RATIO_DEFAULT,
+	int = 6, 
+	Verbosity = Verbosity::SILENT
+);
+
+std::ostream& operator<<(std::ostream& , FFTW::Coeff);

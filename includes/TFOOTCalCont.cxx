@@ -4,7 +4,12 @@
 #include "util/JSONParser.h"
 #include "nlohmann/json.hpp"
 #include "util/json_struct_def.hh"
+#include "util/FFT.h"
 using json = nlohmann::json;
+
+double FOOTDeltaFFT::Evaluate(const double x) const {
+	return FFTW::Evaluate(this->c, this->n, x, -0.5, 0.5); 	
+}
 
 RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, double p, FOOTClusterFit fit) :
 	fCX(x), fCE(e), fCM(m), fCT(t), fCP(p), fit{fit} {}
@@ -60,7 +65,7 @@ void TFOOTCalCont::Init(TDictInfo info) {
 		ERROR("Trying to set up FOOT[%d] cal, but setup file doesn't contain the key \"FOOT%d\".", FOOT_N, FOOT_N);
 	
 	json& jf = j_it.value();
-	UNROLL_JSON_PARAM(par, jf, 8);
+	UNROLL_JSON_PARAM(par, jf, 9);
 
 	par.de10_index_ = FOOT_N;
 	if(par.N == -1) 
@@ -108,6 +113,8 @@ ClassImp(FOOTClusterFit);
 ClassImp(RNFOOTCluster);
 ClassImp(RNFOOTCal);
 
+ClassImp(FOOTGainParam);
+ClassImp(FOOTDeltaFFT);
 ClassImp(FOOTDeltaParam);
 ClassImp(FOOTParam);
 ClassImp(FOOTBoxParam);

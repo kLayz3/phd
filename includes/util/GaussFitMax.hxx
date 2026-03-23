@@ -37,7 +37,10 @@ inline std::pair <
 			fprintf(stderr, "Hist name: '%s', m=%.2f, s=%.2f\n",
 				h->GetName(), m, s);
 		}
-		return {{NAN, NAN, NAN}, {NAN, NAN, NAN}};
+		/* In this case, don't quietly return the NAN's, try to give the best estimate if it
+		 * were just a random distribution (uniform) */
+		// return {{NAN, NAN, NAN}, {NAN, NAN, NAN}};
+		return {{ NAN, m, s }, { NAN, s, s/3 }};
 	}
 	if(v > 1) std::cout << "[GaussFitMax] (" << h->GetTitle() << ") Result: {" 
 		<< f.GetParameter(0) << " +- " << f.GetParError(0) << ", "
@@ -57,3 +60,8 @@ inline std::pair <
 		}
 	};
 }
+
+enum class fit_info { PROFILE_MAX, GAUSS_MAX };
+
+[[ maybe_unused ]] static int gCol_ = kRed + 1; /* For Gaussian profile. */
+[[ maybe_unused ]] static int pCol_ = kMagenta; /* For standard TProfile. */
