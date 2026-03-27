@@ -248,14 +248,14 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 
 			adc_final = data[iraw] - current_gped[i];
 			
-			if(strip > 0) {
+			if(strip > 0) { /* The initial first strip in ASIC is uncoupled, just let it be. */
 				adc_final -=
 #ifdef CALC_OFFSET_FROM_MEDIAN
 				ped_off_med
 #else
 				ped_off_avg
 #endif
-				; /* The initial first strip in ASIC is uncoupled, just let it be. */
+				; 
 			} 
 			else { /* Just for the initial strip that's uncoupled, wash away binning all the values into a single bin. */
 				adc_final += rand() / (double)RAND_MAX ;
@@ -264,6 +264,13 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 			out.h2_corr->Fill(i, adc_final);
 			out.inner().FOOTE[i] = adc_final;
 		}
+		out.inner().common_offset[asic] = 
+#ifdef CALC_OFFSET_FROM_MEDIAN
+			ped_off_med
+#else
+			ped_off_avg
+#endif
+		;
 	}
 
 	out.h1_entry_dt->Fill( out.inner().DeltaT().value_or(NAN) / 1000.0 /* in microseconds. */ );

@@ -22,7 +22,7 @@ void verify_foot_delta_gain (
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> eta_axis = {80, 0.52}
 ) {
-	if(np > 3) throw std::runtime_error("np parameter (2nd) > 3.");
+	if(np > 3) throw std::runtime_error("np parameter (2nd argument) is > 3.");
 	ROOT::EnableImplicitMT();
 
 	const double CA = FOOTGainParam::CARBON_ADC;
@@ -44,41 +44,48 @@ void verify_foot_delta_gain (
 
 	TH2P* raw_energy_vs_delta[2];
 	TH2P* raw_energy_vs_x[2];
+	TH1P* raw_e[2];
 	TH2P* gain_energy_vs_delta[2];
 	TH2P* gain_energy_vs_x[2];
+	TH1P* gain_e[2];
 	TH2P* final_energy_vs_delta[2];
 	TH2P* final_energy_vs_x[2];
 	TH1P* final_e[2];
 
+	constexpr double SCALING_RAW = 2.3;
 	for(int i: {0,1}) {
 		const auto& lim = (i==0) ? cut0 : cut1;
 		int foot_i = 2*np + i;
 		
-		raw_energy_vs_delta[i] = new TH2P(Form("((h2_raw_%d))Cluster E raw [ADC]:Delta@FOOT%d", i, foot_i),
-			eta_axis[0], -1.0*eta_axis[1], eta_axis[1],
-			lim[0], 0, 4096	
+		raw_energy_vs_delta[i] = new TH2P(Form("((h2_raw_%d))Cluster E [ADC units]:Delta@FOOT%d Raw", i, foot_i),
+			eta_axis[0], -1.0*eta_axis[1], eta_axis[1], lim[0], lim[1]/SCALING_RAW, lim[2]/SCALING_RAW	
 		);
-		raw_energy_vs_x[i] = new TH2P(Form("((h2_raw_x%d))Cluster E raw [ADC]:x [strip #]@FOOT%d", i, foot_i),
-			320, 0, 640,
-			lim[0], 0, 4096	
+		raw_energy_vs_x[i] = new TH2P(Form("((h2_raw_x%d))Cluster E [ADC units]:x [strip #]@FOOT%d Raw", i, foot_i),
+			320, 0, 640, lim[0], lim[1]/SCALING_RAW, lim[2]/SCALING_RAW
 		);
-		gain_energy_vs_delta[i] = new TH2P(Form("((h2_gain_%d))Cluster sum [ADC gain]:Delta@FOOT%d gain matched", i, foot_i),
-			eta_axis[0], -1.0*eta_axis[1], eta_axis[1],
-			lim[0], lim[1], lim[2]	
+		raw_e[i] = new TH1P(Form("((h1_raw_e%d))dE [ADC units]@FOOT%d Raw", 
+			i, foot_i), kYellow - 3, lim[0], lim[1]/SCALING_RAW, lim[2]/SCALING_RAW
 		);
-		gain_energy_vs_x[i] = new TH2P(Form("((h2_gain_x%d))Cluster E raw [ADC]:x [strip #]@FOOT%d", i, foot_i),
-			320, 0, 640,
-			lim[0], lim[1], lim[1]
+		/* ================================================================== */
+		gain_energy_vs_delta[i] = new TH2P(Form("((h2_gain_%d))Cluster E [ADC gain-adjusted]:Delta@FOOT%d gain-matched", i, foot_i),
+			eta_axis[0], -1.0*eta_axis[1], eta_axis[1], lim[0], lim[1], lim[2]	
 		);
-		final_energy_vs_delta[i] = new TH2P(Form("((h2_final_d%d))Cluster E [ADC corr]:Delta@FOOT%d corrected", i, foot_i),
-			eta_axis[0], -1.0*eta_axis[1], eta_axis[1],
-			lim[0], lim[1], lim[2]	
+		gain_energy_vs_x[i] = new TH2P(Form("((h2_gain_x%d))Cluster E [ADC gain-adjusted]:x [strip #]@FOOT%d gain-matched", i, foot_i),
+			320, 0, 640, lim[0], lim[1], lim[2]
 		);
-		final_energy_vs_x[i] = new TH2P(Form("((h2_final_x%d))Cluster E [ADC corr]:x [strip #]@FOOT%d corrected", i, foot_i),
-			320, 0, 640,
-			lim[0], lim[1], lim[2]	
+		gain_e[i] = new TH1P(Form("((h1_gain_e%d))dE [ADC gain-adjusted]@FOOT%d gain-matched", i, foot_i), 
+			kYellow - 5, lim[0], lim[1], lim[2]
 		);
-		final_e[i] = new TH1P(Form("((h1_final_e%d))dE [ADC units|6+ at %.1f]@FOOT%d", i, CA, foot_i), kYellow - 7, lim[0], lim[1], lim[2]);
+		/* ================================================================== */
+		final_energy_vs_delta[i] = new TH2P(Form("((h2_final_d%d))Cluster E [ADC gain-delta adjusted]:Delta@FOOT%d gain-delta adjusted", i, foot_i),
+			eta_axis[0], -1.0*eta_axis[1], eta_axis[1], lim[0], lim[1], lim[2]	
+		);
+		final_energy_vs_x[i] = new TH2P(Form("((h2_final_x%d))Cluster E [ADC gain-delta adjusted]:x [strip #]@FOOT%d gain-delta adjusted", i, foot_i),
+			320, 0, 640, lim[0], lim[1], lim[2]	
+		);
+		final_e[i] = new TH1P(Form("((h1_final_e%d))dE [ADC gain-delta adjusted]@FOOT%d gain-delta adjusted", i, foot_i), 
+			kYellow - 7, lim[0], lim[1], lim[2]
+		);
 	}
 	TH2P* h2_both = new TH2P(Form("((h2_0)) FOOT%d dE [ADC corrected]:FOOT%d dE [ADC corrected]", 2*np+1, 2*np), 
 		cut0[0], cut0[1], cut0[2],
@@ -127,11 +134,13 @@ void verify_foot_delta_gain (
 	x[i]  = cl##i.fCX; \
 	raw_energy_vs_delta[i] -> Fill(delta[i], ei[i]); \
 	raw_energy_vs_x[i] -> Fill(x[i], ei[i]); \
+	raw_e[i]->Fill(ei[i]); \
 	\
 	gfactor[i] = p[i]->gain.CorrectionFactor( x[i] ); \
 	eg[i] = ei[i] / gfactor[i]; \
 	gain_energy_vs_delta[i] -> Fill(delta[i], eg[i]); \
 	gain_energy_vs_x[i] -> Fill(x[i], eg[i]); \
+	gain_e[i]->Fill(eg[i]); \
 	\
 	dfactor[i] = p[i]->de.CorrectionFactor( delta[i] ); \
 	ef[i] = eg[i] / dfactor[i]; \
@@ -149,21 +158,27 @@ void verify_foot_delta_gain (
 		}
 	}
 
-	TCanvas* ci = new TCanvas("ci", "Single (initial)", 2000, 1400);
-	TCanvas* cg = new TCanvas("cg", "Single (gain-matched)", 2000, 1400);
-	TCanvas* cf = new TCanvas("cf", "Single (final)", 2000, 1400);
-	ci->Divide(2,2); cg->Divide(2,2); cf->Divide(3,2);
+	TCanvas* ci = new TCanvas("ci", "Single (initial)", 2100, 1400);
+	TCanvas* cg = new TCanvas("cg", "Single (gain-matched)", 2100, 1400);
+	TCanvas* cf = new TCanvas("cf", "Single (final)", 2100, 1400);
+	ci->Divide(3,2); cg->Divide(3,2); cf->Divide(3,2);
 	
 	for(int i: {0,1}) {
-		ci->cd(2*i + 1); gPad->SetLogz();
+		TGraph *gr_gain = p[i]->gain.GetGraph();
+		ci->cd(3*i + 1); gPad->SetLogz();
 		raw_energy_vs_delta[i]->Draw("COLZ");
-		ci->cd(2*i + 2); gPad->SetLogz();
+		ci->cd(3*i + 2); gPad->SetLogz();
 		raw_energy_vs_x[i]->Draw("COLZ");
-
-		cg->cd(2*i + 1); gPad->SetLogz();
+		gr_gain->Draw("L SAME");
+		ci->cd(3*i + 3); 
+		raw_e[i]->Draw();
+		
+		cg->cd(3*i + 1); gPad->SetLogz();
 		gain_energy_vs_delta[i]->Draw("COLZ");
-		cg->cd(2*i + 2); gPad->SetLogz();
+		cg->cd(3*i + 2); gPad->SetLogz();
 		gain_energy_vs_x[i]->Draw("COLZ");
+		cg->cd(3*i + 3); 
+		gain_e[i]->Draw();
 
 		cf->cd(3*i + 1); gPad->SetLogz();
 		final_energy_vs_delta[i]->Draw("COLZ");

@@ -7,7 +7,7 @@
 
 static const char* module_name_ = "FFTX";
 
-std::ostream& operator<<(std::ostream& os, FFTW::Coeff coeff) {
+std::ostream& operator<<(std::ostream& os, const FFTW::Coeff& coeff) {
 	os << '[' << coeff.a << ", " << coeff.b << ']';
 	return os;
 }

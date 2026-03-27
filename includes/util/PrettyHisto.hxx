@@ -184,6 +184,13 @@ struct TH1P {
 	/* Forward only Fill and Draw methods. Don't care about others. */
 	FWD_DRAW(h);
 	FWD_FCN(Fill, h);
+	
+	inline bool IsInside(const double x) const {
+		return (
+			x >= h.GetXaxis()->GetXmin() &&
+			x <  h.GetXaxis()->GetXmax()
+		);
+	}
 
 	/* Implicit ref cvt */
 	operator inner_type&()             noexcept { return h; }
@@ -264,6 +271,15 @@ struct TH2P {
 	/* Forward only Fill and Draw methods. Don't care about others. */
 	FWD_DRAW(h);
 	FWD_FCN(Fill, h);
+
+	inline bool IsInside(const double x, const double y) const {
+		return (
+			x >= h.GetXaxis()->GetXmin() &&
+			x <  h.GetXaxis()->GetXmax() &&
+			y >= h.GetYaxis()->GetXmin() &&
+			y <  h.GetYaxis()->GetXmax()
+		);
+	}
 
 	/* Implicit ref cvt */
 	operator inner_type&()             noexcept { return h; }

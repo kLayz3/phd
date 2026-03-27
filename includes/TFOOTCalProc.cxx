@@ -200,7 +200,7 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 
 void TFOOTCalProc::ProcessEntry() noexcept {
 	out.Clean();
-	_e = &std::get<0>(in).inner().FOOTE[0]; /* Don't know if rebinding is really necessary... */
+	_e = std::get<0>(in).inner().FOOTE.data(); /* Don't know if rebinding is really necessary... */
 
 	if( std::isnan(_e[0]) ) return; /* Missing data; previous step marked it NAN. */
 	

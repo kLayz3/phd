@@ -28,3 +28,5 @@ quick/*
 !quick/*.cc
 !quick/Makefile
 !quick/make_macro.bash
+
+exec/important_commands.txt

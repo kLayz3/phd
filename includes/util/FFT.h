@@ -115,4 +115,4 @@ std::tuple <
 	Verbosity = Verbosity::SILENT
 );
 
-std::ostream& operator<<(std::ostream& , FFTW::Coeff);
+std::ostream& operator<<(std::ostream& , const FFTW::Coeff& );

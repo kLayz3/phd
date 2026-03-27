@@ -18,10 +18,18 @@ class TGraph;
 template<typename T> class TParameter;
 
 struct RNFOOTMap {
-	Scaler<32> timing; // nullable according to `RNFOOTMap::HasData()` predicate 
-	double FOOTE[_FOOT_N_STRIPS]{};
+	static constexpr int N_STRIPS          = _FOOT_N_STRIPS;          /* 640 */
+	static constexpr int N_ASIC            = _FOOT_N_ASIC;            /* 10  */
+	static constexpr int N_STRIPS_PER_ASIC = _FOOT_N_STRIPS_PER_ASIC; /* 64  */
 
-	inline void Clean() noexcept { std::fill_n(FOOTE, _FOOT_N_STRIPS, std::nan("")); }
+	Scaler<32> timing; // nullable according to `RNFOOTMap::HasData()` predicate 
+	std::array<double, N_STRIPS> FOOTE;
+	std::array<double, N_ASIC> common_offset;
+
+	inline void Clean() noexcept { 
+		FOOTE.fill( std::nan("") ); 
+		common_offset.fill( std::nan("") ); 
+	}
 
 	inline bool HasData() const noexcept { return std::isfinite(FOOTE[0]); }
 	inline mnd::Maybe<u32> T() const noexcept {
@@ -37,15 +45,14 @@ struct RNFOOTMap {
 	}
 
 	RNFOOTMap() = default;
-	
 	virtual ~RNFOOTMap() = default;
 	ClassDef(RNFOOTMap, 1);
 };
 
 struct TFOOTMapCont : TContainer<RNFOOTMap> {
-	static constexpr int N_STRIPS          = _FOOT_N_STRIPS;          /* 640 */
-	static constexpr int N_ASIC            = _FOOT_N_ASIC;            /* 10  */
-	static constexpr int N_STRIPS_PER_ASIC = _FOOT_N_STRIPS_PER_ASIC; /* 64  */
+	static constexpr int N_STRIPS          = RNFOOTMap::N_STRIPS;          /* 640 */
+	static constexpr int N_ASIC            = RNFOOTMap::N_ASIC;            /* 10  */
+	static constexpr int N_STRIPS_PER_ASIC = RNFOOTMap::N_STRIPS_PER_ASIC; /* 64  */
 	static constexpr int N_GPED_CHANGE_TOLERANCE  = 5; /* Relative to intial gped, consecutive calculations can go +- 5 ADC units. */
 	static constexpr int N_GPED_BINS_IN_TOLERANCE = 20; /* How many bins does the tolerance window, +- 5 span. */ 
 
