@@ -6,51 +6,103 @@
 #include "TFOOTMapCont.h"
 #include "util/json_struct_def.hh"
 #include "util/PolyFitter.hxx"
+#include "util/Tracking.hxx"
+
 #include "TGraph.h"
 
 class TH1D;
 
+struct FOOTAsicGainParam {
+	using Vec = std::vector<double>;
+	GET_HELP_AUX_IMPL;
+
+	ADD_SERIALIZABLE_FIELD(Vec, central, {}, 0);
+	ADD_SERIALIZABLE_FIELD(Vec, lateral, {}, 1);
+
+	inline double ValueCentral(const double x) const noexcept { return poly::Eval(x, central); }
+	inline double ValueLateral(const double x) const noexcept { return poly::Eval(x, lateral); }
+
+	FOOTAsicGainParam() = default;
+	virtual ~FOOTAsicGainParam() = default;
+	ClassDef(FOOTAsicGainParam, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FOOTAsicGainParam, 1);
+
 struct FOOTGainParam {
 	static constexpr double CARBON_ADC = 3600;
-
-	using Vec   = std::vector<double>;
-	using Arr2d = std::array<Vec, TFOOTMapCont::N_ASIC>;
+	using AsicArray = std::array<FOOTAsicGainParam, TFOOTMapCont::N_ASIC>;
 	GET_HELP_AUX_IMPL;
-	ADD_SERIALIZABLE_FIELD(Arr2d, fit, {}, 0);
 
-	inline double Value(const double x) const noexcept {
+	ADD_SERIALIZABLE_FIELD(double,    lat_avg, 0.0, 0);
+	ADD_SERIALIZABLE_FIELD(double,    mid_avg, 0.0, 1);
+	ADD_SERIALIZABLE_FIELD(AsicArray, fit,     {},  2);
+	
+	inline std::array<double, 2> GetCentralLateralMeanE(const double x) const noexcept {
 		int i = static_cast<int>( x / TFOOTMapCont::N_STRIPS_PER_ASIC );
 		if(i >= (int)fit.size())
-			ERROR("FOOT fit matching: Found cluster at %.2f, index=%d > %d\n",
+			ERROR("GetCentralLateralMeanE: Requested cluster at %.2f, index=%d > %d\n",
 				x, i, (int)fit.size());
-		const Vec& p = fit[i]; 
-
-		return poly::Eval(x, p);
+		
+		const auto& p = fit[i]; 
+		return { p.ValueCentral(x), p.ValueLateral(x) };
 	}
+
+	/**
+	 * Get two values, corresponding to the: 
+	 * 1) needed gain at the completely central
+	 *   9C hit, which will be gain-matched into `CARBON_ADC`.
+	 * 2) needed gain at the lateral (non-bonded strip) 9C hit, which will
+	 * be gain matched into `CARBON_ADC * S/M `. 
+	 */
+	inline std::array <
+		std::array<double, 2>,
+		2 
+	> GetCentralLateralGainValue(const double x) const noexcept {
+		auto [central_e, lateral_e ] = this->GetCentralLateralMeanE(x);	
+		return {{
+			/* pos            gain           */
+			{central_e, CARBON_ADC / central_e}, 
+			{lateral_e, (lat_avg/mid_avg) * CARBON_ADC / lateral_e} 
+		}};
+	}
+
 	/* Factor to divide the measured ADC value to fit the equal C line. */
-	inline double CorrectionFactor(const double x) const noexcept {
-		return ( this->Value(x) / CARBON_ADC );
+	inline double CorrectionFactor(const double x, const double e) const noexcept {
+		auto values = this->GetCentralLateralGainValue(x);
+
+		auto lin_fit = GetLine(values);
+		double gain_invalid_after = -lin_fit[0] / (2 * lin_fit[1]);
+		gain_invalid_after = (gain_invalid_after > 0) ? gain_invalid_after : DBL_MAX;
+		
+		if(x > gain_invalid_after) 
+			return e * values[0][1];
+		else 
+			return poly::Eval(e, lin_fit);
 	}
 
 	/* Small helper function to plot what we're actually gain matching upon. */
-	[[ nodiscard ]] inline TGraph* GetGraph() const {
+	[[ nodiscard ]] inline std::pair<TGraph*, TGraph*> GetGraph() const {
 		const int N =  (int)TFOOTMapCont::N_STRIPS;
-		TGraph* g = new TGraph(N);	
+		TGraph* g_cen = new TGraph(N);	
+		TGraph* g_lat = new TGraph(N);	
 		for(int i=0; i<N; ++i) {
 			double x0 = i + 0.5;
-			double y0 = this->Value(x0);
-			g->SetPoint(i, x0, y0);
+			auto [y_cen, y_lat] = this->GetCentralLateralMeanE(x0);
+			g_cen->SetPoint(i, x0, y_cen);
+			g_lat->SetPoint(i, x0, y_lat);
 		}
-		g->SetLineColor(kRed);
-		g->SetLineWidth(3);
-		return g;
+		g_cen->SetLineColor(kRed);
+		g_cen->SetLineWidth(3);
+		g_lat->SetLineColor(kMagenta + 1);
+		g_lat->SetLineWidth(3);
+		return {g_cen, g_lat};
 	}
 
 	FOOTGainParam() = default;
 	virtual ~FOOTGainParam() = default;
 	ClassDef(FOOTGainParam, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(FOOTGainParam, 0);
+ADD_JSON_TYPE_RESOLUTION(FOOTGainParam, 2);
 
 struct FOOTDeltaFFT {
 	using Coeff = std::array<double, 2>;

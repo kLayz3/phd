@@ -233,6 +233,7 @@ void foot_gain_match (
 		fit_params_##pre[0] = gauss_mean; \
 	}
 	/* Try to fit a spline(s) for middle few ASICs. */
+	
 	if(do_fit == DoFit::yes) { 
 		auto h2_gain = new TH2P(Form("Gain factor:Raw FOOTE [ADC]@FOOT%d for different strips", ifoot),
 			2000, 0, foot_binning[2], 1000, 0.0, 5.0);
@@ -242,9 +243,14 @@ void foot_gain_match (
 		TGraph* cutoff = new TGraph(); 
 		TGraph* hi_pts = new TGraph(); TGraph* hi_pts1 = new TGraph();
 		TGraph* lo_pts = new TGraph(); TGraph* lo_pts1 = new TGraph();
+
+		FOOTGainParam pp {};
+		pp.mid_avg = M;
+		pp.lat_avg = S;
+
 		const auto& v = fit_these_asics;
 		std::vector<double> fit_params_mid, fit_params_lr;
-		for(int a=0; a<10; ++a) {
+		for(int a=0; a < TFOOTMapCont::N_ASIC; ++a) {
 			double x_lo  = (a) * 64 + 0.00001;
 			double x_hi = (a+1) * 64 - 0.00001;
 			if( contains(v, a) ) {
@@ -255,8 +261,10 @@ void foot_gain_match (
 				EXPAND_PROJ(mid)
 				EXPAND_PROJ(lr)
 			}
-			std::cout << "[MID]: FOOT" <<  foot_param->de10_index_ << ": parameters (ASIC: " << a << "): " << fit_params_mid << std::endl;
-			std::cout << "[LR ]: FOOT" <<  foot_param->de10_index_ << ": parameters (ASIC: " << a << "): " << fit_params_lr << std::endl;
+			pp.fit[a].central = fit_params_mid;
+			pp.fit[a].lateral = fit_params_lr;
+			//std::cout << "[MID]: FOOT" <<  foot_param->de10_index_ << ": parameters (ASIC: " << a << "): " << fit_params_mid << std::endl;
+			//std::cout << "[LR ]: FOOT" <<  foot_param->de10_index_ << ": parameters (ASIC: " << a << "): " << fit_params_lr << std::endl;
 
 			static constexpr int N_PTS_G = 64;
 			double dx = (x_hi - x_lo) / (N_PTS_G - 1);
@@ -322,6 +330,8 @@ void foot_gain_match (
 		leg1->AddEntry(hi_pts1, "Central strip hit region gain", "p");
 		leg1->AddEntry(lo_pts1, "Side strip hit region gain", "p");
 		leg1->Draw();
+
+		std::cout << pp.dump() << std::endl;
 	}
 
 	std::vector<TLine*> vlines;
