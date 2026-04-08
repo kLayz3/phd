@@ -16,9 +16,6 @@ inline std::array<double, 2> GetLine(const std::array<std::array<double, 2>, 2> 
 }
 
 inline void FillTrack(TH2D* hist, const std::array<double, 2>& a) {
-	double xmin = hist->GetXaxis()->GetXmin();
-	double xmax = hist->GetXaxis()->GetXmax();	
-
 	int NBins = hist->GetNbinsX();
 	TAxis* xaxis = hist->GetXaxis();
 
@@ -29,4 +26,3 @@ inline void FillTrack(TH2D* hist, const std::array<double, 2>& a) {
 		hist->Fill(x,y);
 	}
 }
-

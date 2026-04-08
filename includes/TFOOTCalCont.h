@@ -55,8 +55,7 @@ struct FOOTGainParam {
 	 * be gain matched into `CARBON_ADC * S/M `. 
 	 */
 	inline std::array <
-		std::array<double, 2>,
-		2 
+		std::array<double, 2>, 2 
 	> GetCentralLateralGainValue(const double x) const noexcept {
 		auto [central_e, lateral_e ] = this->GetCentralLateralMeanE(x);	
 		return {{
@@ -70,12 +69,16 @@ struct FOOTGainParam {
 	inline double CorrectionFactor(const double x, const double e) const noexcept {
 		auto values = this->GetCentralLateralGainValue(x);
 
-		auto lin_fit = GetLine(values);
+		std::array<double, 2> lin_fit = GetLine(values);
+		
+		/* Point where d/de( g(e) * e) == 0; meaning that the gain matching will reorder two ADC values.
+		 * At this point, the linear curve becomes invalid. */
 		double gain_invalid_after = -lin_fit[0] / (2 * lin_fit[1]);
 		gain_invalid_after = (gain_invalid_after > 0) ? gain_invalid_after : DBL_MAX;
-		
+		double gain_value_at_invalid_point = lin_fit[0] / 2;
+
 		if(x > gain_invalid_after) 
-			return e * values[0][1];
+			return e * gain_value_at_invalid_point;
 		else 
 			return poly::Eval(e, lin_fit);
 	}

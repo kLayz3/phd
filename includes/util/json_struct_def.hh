@@ -101,11 +101,13 @@
 	/* De/serialization API. */ \
 	template<std::size_t I> \
 	void add_json_entry_aux_##TYPE(nlohmann::json& j, const TYPE& obj) { \
-		j.at(TYPE::get_name<I>()) = TYPE::get_helper<I>(obj); \
+		j[TYPE::get_name<I>()] = TYPE::get_helper<I>(obj); \
 	} \
 	template<std::size_t I> \
 	void get_json_entry_aux_##TYPE(const nlohmann::json& j, TYPE& obj) { \
-		j.at(TYPE::get_name<I>()).get_to( TYPE::get_helper<I>(obj) ); \
+		if(j.contains(TYPE::get_name<I>())) { \
+			j.at(TYPE::get_name<I>()).get_to( TYPE::get_helper<I>(obj) ); \
+		} \
 	} \
 	template<std::size_t... Is> \
 	void add_json_entry_##TYPE(nlohmann::json& j, const TYPE& obj, std::index_sequence<Is...>) { \
@@ -148,7 +150,7 @@ template<typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& );
 template<typename T, std::size_t N>
 std::ostream& operator<<(std::ostream& os, const std::array<T,N>& );
-/* ^^^ Fwd declared for symbol visiblity in the function below
+/* ^^^ Fwd declared for symbol visibility in the function below
  * All underlying 'bare' `T` must have the overloaded operator defined at this point. */
 
 template<typename T>

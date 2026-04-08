@@ -18,11 +18,36 @@
 using namespace ROOT;
 using namespace ROOT::Experimental;
 
+struct DoFit {
+	struct No {};
+	struct Verify {};
+	struct Yes {
+		std::vector<int> values;
+	};
+
+	/* constexpr */ static inline No no{};
+	/* constexpr */ static inline Verify verify{};
+	/* constexpr */ static inline Yes yes{};
+
+	DoFit(No) : data_(No{}) {}
+	DoFit(Verify) : data_(Verify{}) {}
+	DoFit(Yes y) : data_(std::move(y)) {}
+
+	friend bool operator==(const DoFit& lhs, const DoFit& rhs) {
+		return ( lhs.data_.index() == rhs.data_.index() &&
+			lhs.data_.index() != std::variant_npos
+		);
+	}
+	const Yes* as_yes() const { return std::get_if<Yes>(&data_); }
+	
+private:
+	std::variant<No, Verify, Yes> data_;
+};
+
 constexpr int D_BINS = 1000;
 constexpr int N_STRIPS = 64;
-constexpr double LR_SCALING = 2.4;
+constexpr double LR_SCALING = 2.5;
 
-enum class DoFit {no, yes, verify};
 enum class HitPos { mid, lr, none };
 
 void foot_gain_match (
@@ -83,7 +108,7 @@ void foot_gain_match (
 		bins_per_asic*10, 0,640, foot_binning[0], foot_binning[1]/LR_SCALING, foot_binning[2]/LR_SCALING);
 
 	const double C_ADC = FOOTGainParam::CARBON_ADC;
-	std::array<double, 3> v_binning = {foot_binning[0], C_ADC/1500 * foot_binning[1], C_ADC/1500 * foot_binning[2]};
+	std::array<double, 3> v_binning = {foot_binning[0], C_ADC/(3*LR_SCALING), C_ADC*1.5};
 
 	auto* h1_foot_e_corr = new TH1P("((h1_corr))Gain matched FOOT E [Corr ADC units]@Central strip value", ORGB{0x52FD30}, v_binning[0], v_binning[1], v_binning[2]); 
 	auto* hit_energy_corr = new TH2P(Form("((h2_foot%d_corr))Max Signal [ADC]:Strip number [0..640]@FOOT%d Corrected, per ASIC", ifoot, ifoot), 
@@ -116,7 +141,7 @@ void foot_gain_match (
 			h1_delta->Fill(delta);
 			
 			int i = static_cast<int>( cl.fCX );
-			double e = cl.fCP;
+			double e = cl.fCP; /* Take *central* strip value, not the entire cluster! */
 		
 			auto hp = get_hit_position(delta);
 			switch(hp) {
@@ -132,9 +157,9 @@ void foot_gain_match (
 				}
 				default: break;
 			}
-			if(do_fit == DoFit::verify && hp != HitPos::none) {
+			if(do_fit == DoFit::verify /* && hp != HitPos::none */) {
 				double cog = cl.fCX;
-				e /= foot_param->gain.CorrectionFactor(cog);
+				e *= foot_param->gain.CorrectionFactor(cog, e);
 				hit_energy_corr->Fill(cog, e);
 				h1_foot_e_corr->Fill(e);
 			}
@@ -175,7 +200,7 @@ void foot_gain_match (
 	};
 
 	constexpr static size_t POLY_DEG = 4;
-	constexpr static int N_NEEDED_ENTRIES = 300;
+	constexpr static int N_NEEDED_ENTRIES = 250;
 
 	/* I'm coding like absolute monkey. Legit tilted fuckin hell... */
 #define EXPAND_FIT(pre) \
@@ -248,8 +273,10 @@ void foot_gain_match (
 		pp.mid_avg = M;
 		pp.lat_avg = S;
 
-		const auto& v = fit_these_asics;
+		//const auto& v = fit_these_asics;
+		const auto& v = do_fit.as_yes()->values;
 		std::vector<double> fit_params_mid, fit_params_lr;
+
 		for(int a=0; a < TFOOTMapCont::N_ASIC; ++a) {
 			double x_lo  = (a) * 64 + 0.00001;
 			double x_hi = (a+1) * 64 - 0.00001;
@@ -331,7 +358,7 @@ void foot_gain_match (
 		leg1->AddEntry(lo_pts1, "Side strip hit region gain", "p");
 		leg1->Draw();
 
-		std::cout << pp.dump() << std::endl;
+		std::cout << "\"gain\": " << nlohmann::json(pp).dump(4) << std::endl;
 	}
 
 	std::vector<TLine*> vlines;

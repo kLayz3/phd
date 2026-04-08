@@ -40,7 +40,7 @@ FOOTDeltaParam* GetDeltaParams(TH2D*);
 constexpr double D_LO = 0.4999;
 constexpr int D_BINS = 60;
 
-void foot_eta_corr (
+void foot_delta_corr (
 	std::string fileName = "", 
 	int ifoot = 0,
 	std::array<double,2> foot_cut = {4,4000}, 
@@ -70,6 +70,9 @@ void foot_eta_corr (
 
 	TH1P* h1_delta = new TH1P(Form("((h1_foot%d))Delta@FOOT%d", ifoot, ifoot), kGreen+1, D_BINS, -D_LO, D_LO);
 	TH2P* h2_m_vs_delta = new TH2P(Form("((h2_footm%d))Partial cluster size:delta@FOOT%d", ifoot, ifoot), D_BINS, -D_LO, D_LO, 10, 0.5, 10.5);
+	TH2P* sum_energy_vs_x = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Delta@FOOT%d raw", ifoot, ifoot), 
+		160,0,640,
+		D_BINS, foot_cut[0], foot_cut[1]);
 	TH2P* sum_energy_vs_delta = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Delta@FOOT%d raw", ifoot, ifoot), 
 		D_BINS,-D_LO, D_LO,
 		D_BINS, foot_cut[0], foot_cut[1]);
@@ -78,8 +81,6 @@ void foot_eta_corr (
 		D_BINS, foot_cut[0]/CA - 1, foot_cut[1]/CA - 1);
 	
 	TH1P* h1_m0 = new TH1P(Form("((h_0)) FOOT%d dE [ADC units]@All cluster sizes", ifoot), kYellow - 7, D_BINS, foot_cut[0], foot_cut[1]);
-	TH1P* h1_m1 = new TH1P(Form("((h_1)) FOOT%d dE [ADC units]@Only cluster size 1", ifoot), kYellow + 1, D_BINS, foot_cut[0], foot_cut[1]);
-	TH1P* h1_m2 = new TH1P(Form("((h_2)) FOOT%d dE [ADC units]@Only cluster sizes >2", ifoot), kYellow - 3, D_BINS, foot_cut[0], foot_cut[1]);
 
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
@@ -120,18 +121,14 @@ void foot_eta_corr (
 			double x = cl.fCX;
 			
 			/* Take the gain matching param. */
-			e /= p->gain.CorrectionFactor(x);
+			e *= p->gain.CorrectionFactor(x, e);
 
 			if(!mnd::IsInside(e, foot_cut)) continue;
 			
 			sum_energy_vs_delta -> Fill(delta, e);
+			sum_energy_vs_x -> Fill(x, e);
 			h2_m_vs_delta -> Fill(delta, cl.fCM);
 			h1_delta -> Fill(delta);
-			if(cl.fCM == 1) {
-				h1_m1->Fill(e);
-			} else if(cl.fCM > 2) {
-				h1_m2->Fill(e);
-			}
 			h1_m0->Fill(e);
 		}
 	}
@@ -160,7 +157,7 @@ void foot_eta_corr (
 			double x = cl.fCX;
 
 			/* Normalize again with the gain matching param. */
-			e /= p->gain.CorrectionFactor(x);
+			e *= p->gain.CorrectionFactor(x, e);
 
 			/* Normalize with the triangular delta-correction */
 			e /= d->CorrectionBasic(delta);
@@ -210,9 +207,9 @@ void foot_eta_corr (
 	g->Draw("L SAME");
 	gr->Draw("P SAME");
 	c->cd(5);
-	h1_m1->Draw();
+	sum_energy_vs_x->Draw("COLZ");
 	c->cd(6);
-	h1_m2->Draw();
+	h1_m0->Draw();
 
 	TCanvas* cs = new TCanvas("cs", "SCI21,22,31", 2000, 1200);
 	cs->Divide(3,2);
