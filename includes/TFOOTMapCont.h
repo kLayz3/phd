@@ -17,6 +17,30 @@ class TH2D;
 class TGraph;
 template<typename T> class TParameter;
 
+/* Doesn't have to be geometrically in order,
+ * this ordering gets handled in the setup file with `.N` attribute. */
+#define FOOT_ID_0 10
+#define FOOT_ID_1 17
+#define FOOT_ID_2 19
+#define FOOT_ID_3 20
+#define FOOT_ID_4 22
+#define FOOT_ID_5 25
+#define FOOT_ID_6 23
+#define FOOT_ID_7 21
+
+inline constexpr i32 static_detectors[] = {
+	FOOT_ID_0, 
+	FOOT_ID_1, 
+	FOOT_ID_2, 
+	FOOT_ID_3, 
+	FOOT_ID_4, 
+	FOOT_ID_5, 
+	FOOT_ID_6, 
+	FOOT_ID_7  
+};
+inline constexpr i32 N_FOOT = mnd::len(static_detectors);
+static_assert(N_FOOT == N_FOOT_DETECTORS);
+
 struct RNFOOTMap {
 	static constexpr int N_STRIPS          = _FOOT_N_STRIPS;          /* 640 */
 	static constexpr int N_ASIC            = _FOOT_N_ASIC;            /* 10  */

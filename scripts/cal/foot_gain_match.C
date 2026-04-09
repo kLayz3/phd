@@ -70,12 +70,24 @@ void foot_gain_match (
 	const std::array<double, 2> delta_cut_right  = { delta_cut[0]-delta_cut[2], delta_cut[0]+delta_cut[1] };
 
 	FOOTParam *foot_param; 
+	TParameter<bool> *is_already_gain_matched;
 	{
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
 		foot_param = f->Get<FOOTParam>(Form("FOOT%d_setup", ifoot));
 		if(!foot_param)
 			throw std::runtime_error(Form("FOOT param is nullptr. Fix it (line: %d).", __LINE__));
+		is_already_gain_matched = f->Get<TParameter<bool>>(Form("FOOT%d_gain_matched", ifoot));
+		if(!is_already_gain_matched)
+			ERROR("FOOT%d gain matching tag not fetchable? Line: %d\n", ifoot, __LINE__); 
 	}
+	if(do_fit == DoFit::yes and is_already_gain_matched->GetVal()) 
+		ERROR("Trying to fit the gain matched curve, but FOOT%d tagged as already gain matched!\n"
+			"Either use this to verify, or re-do the file without gain-matching flag upfront.", ifoot);
+	
+	if(do_fit == DoFit::verify and !is_already_gain_matched->GetVal()) 
+		ERROR("Trying to verify the gain matched data, but FOOT%d tagged as NOT already gain matched!\n"
+			"Either use this to gain-match, or re-do the file WITH gain-matching flag upfront.", ifoot);
+
 	ROOT::EnableImplicitMT();
 	
 	auto get_hit_position = [&delta_cut_mid, &delta_cut_right, &delta_cut_left](double d) { 
@@ -110,9 +122,12 @@ void foot_gain_match (
 	const double C_ADC = FOOTGainParam::CARBON_ADC;
 	std::array<double, 3> v_binning = {foot_binning[0], C_ADC/(3*LR_SCALING), C_ADC*1.5};
 
-	auto* h1_foot_e_corr = new TH1P("((h1_corr))Gain matched FOOT E [Corr ADC units]@Central strip value", ORGB{0x52FD30}, v_binning[0], v_binning[1], v_binning[2]); 
-	auto* hit_energy_corr = new TH2P(Form("((h2_foot%d_corr))Max Signal [ADC]:Strip number [0..640]@FOOT%d Corrected, per ASIC", ifoot, ifoot), 
+	auto* hit_energy_corr = new TH2P(Form("((h2_foot%d_corr))Max strip ADC Corrected [A.U.]:Strip number [0..640]@FOOT%d Corrected, per ASIC", ifoot, ifoot), 
 		bins_per_asic*10, 0,640, v_binning[0], v_binning[1], v_binning[2]);
+	auto* h1_hit_energy_corr = new TH1P(Form("((h1_foot%d_corr))Max strip ADC Corrected [A.U.]@FOOT%d Corrected, per ASIC", ifoot, ifoot), ORGB{0x52FD30}, v_binning[0], v_binning[1], v_binning[2]); 
+	auto* clust_energy_corr = new TH2P(Form("((h2_foot%d_corr))Cluster Sum Corrected [ADC]:Strip number [0..640]@FOOT%d Corrected, per ASIC", ifoot, ifoot), 
+		bins_per_asic*10, 0,640, v_binning[0], v_binning[1], v_binning[2]);
+	auto* h1_clust_energy_corr = new TH1P(Form("((h1_foot%d_corr))Cluster Sum Corrected [A.U.]@FOOT%d Corrected, per ASIC", ifoot, ifoot), ORGB{0x52FD30}, v_binning[0], v_binning[1], v_binning[2]); 
 
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
@@ -159,9 +174,12 @@ void foot_gain_match (
 			}
 			if(do_fit == DoFit::verify /* && hp != HitPos::none */) {
 				double cog = cl.fCX;
-				e *= foot_param->gain.CorrectionFactor(cog, e);
+				double e_cl = cl.fCE;
 				hit_energy_corr->Fill(cog, e);
-				h1_foot_e_corr->Fill(e);
+				h1_hit_energy_corr->Fill(e);
+
+				clust_energy_corr->Fill(cog, e_cl);
+				h1_clust_energy_corr->Fill(e_cl);
 			}
 		}
 	}
@@ -425,16 +443,27 @@ void foot_gain_match (
 	cd->cd(4); h1_foot_e_lr->Draw();
 
 	if(do_fit == DoFit::verify) {
-		cd->cd(4); h1_foot_e_corr->Draw();
-		TCanvas *cc = new TCanvas(Form("cCORR%d", ifoot), Form("[Corr] FOOT%d", ifoot), 2000, 1400);
+		TCanvas *cc = new TCanvas(Form("cCORR%d", ifoot), Form("Corrected FOOT%d", ifoot), 2000, 1400);
+		cc->Divide(2,2);
+#define DRAW_AND_DO_LINES \
+		h2->Draw("COLZ"); \
+		for(auto* l0 : vlines) { \
+			TLine* l = dynamic_cast<TLine*>(l0->Clone()); \
+			l->SetY1(h2->GetYaxis()->GetXmin()); \
+			l->SetY2(h2->GetYaxis()->GetXmax()); \
+			l->Draw("SAME"); \
+		} 
 		TH2D* h2 = &hit_energy_corr->h;
-		h2->Draw("COLZ");
-		
-		for(auto* l0 : vlines) {
-			TLine* l = dynamic_cast<TLine*>(l0->Clone());
-			l->SetY1(h2->GetYaxis()->GetXmin());
-			l->SetY2(h2->GetYaxis()->GetXmax());
-			l->Draw("SAME");
-		}
+		cc->cd(1);
+		DRAW_AND_DO_LINES
+
+		h2 = &clust_energy_corr->h;
+		cc->cd(2);
+		DRAW_AND_DO_LINES
+
+		cc->cd(3);
+		h1_hit_energy_corr->Draw();
+		cc->cd(4);
+		h1_clust_energy_corr->Draw();
 	}
 }

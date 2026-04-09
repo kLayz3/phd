@@ -151,7 +151,7 @@ struct FOOTDeltaParam {
 		double x = std::min( std::abs(delta), s );
 		return 1 - (1-f) / s * x;
 	}
-	/* Total factor. Corrected energy is then: e/CorrectionFactor() */
+	/* Total factor. Corrected cluster energy is then: e' = e / CorrectionFactor(δ) */
 	inline double CorrectionFactor(const double delta) const noexcept {
 		
 		double corr1 = this->CorrectionBasic(delta); // Interval [f, 1]
@@ -231,30 +231,6 @@ struct FOOTBoxParam {
 	ClassDef(FOOTBoxParam, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(FOOTBoxParam, 7)
-
-/* Doesn't have to be geometrically in order,
- * this ordering gets handled in the setup file with `.N` attribute. */
-#define FOOT_ID_0 10
-#define FOOT_ID_1 17
-#define FOOT_ID_2 19
-#define FOOT_ID_3 20
-#define FOOT_ID_4 22
-#define FOOT_ID_5 25
-#define FOOT_ID_6 23
-#define FOOT_ID_7 21
-
-inline constexpr i32 static_detectors[] = {
-	FOOT_ID_0, 
-	FOOT_ID_1, 
-	FOOT_ID_2, 
-	FOOT_ID_3, 
-	FOOT_ID_4, 
-	FOOT_ID_5, 
-	FOOT_ID_6, 
-	FOOT_ID_7  
-};
-inline constexpr i32 N_FOOT = mnd::len(static_detectors);
-static_assert(N_FOOT == N_FOOT_DETECTORS);
 
 /* f(x; (a0,mu,sigma)) = a0 * exp( -0.5 * ((x-mu)/sigma)^2 ) */
 struct FOOTClusterFit {
@@ -399,6 +375,7 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	FOOTParam* setup;
 	FOOTBoxParam* box; // Optional; not every FOOT will register the box object 
 					   // based on `should_register_box_` predicate.
+	TParameter<bool>* gain_matched;
 
 	TFOOTCalCont() = default;
 

@@ -1,6 +1,7 @@
 #include "TFOOTCalCont.h"
 #include "TH1I.h"
 #include "TH2I.h"
+#include "TParameter.h"
 #include "util/JSONParser.h"
 #include "nlohmann/json.hpp"
 #include "util/json_struct_def.hh"
@@ -104,9 +105,12 @@ void TFOOTCalCont::Setup() {
 
 	setup = RegisterObject<FOOTParam>("setup", mnd::noop_fn<FOOTParam>(), this->par /* copy ctor */);
 	
-	/* In the cal step, box object not used. It's just written down for helper scripts to  process stuff. */
+	/* In the cal step, box object not used. It's just written down for helper scripts to process stuff. */
 	if(should_register_box_)
 		box = RegisterObject<FOOTBoxParam>("box", mnd::noop_fn<FOOTBoxParam>(), this->bpar);
+	
+	gain_matched = RegisterObject<TParameter<bool>>("gain_matched", mnd::noop_fn<TParameter<bool>>());
+	gain_matched->SetVal(false);
 }
 
 ClassImp(FOOTClusterFit);

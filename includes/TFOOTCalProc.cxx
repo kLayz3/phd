@@ -2,6 +2,7 @@
 #include "TFOOTCalCont.h"
 #include "TFOOTMapCont.h"
 #include "TH2I.h"
+#include "TParameter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -150,7 +151,7 @@ auto TFOOTCalProc::GetClusterType() -> ClusterType {
 }
 
 /* Input and output should be properly assigned a priori. */
-TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) : 
+TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, DoGainMatch gm) : 
 	TFOOTCalProc::Base(out, in)
 {
 	TFOOTMapCont& input = std::get<0>(this->in);
@@ -188,6 +189,19 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 		if(c_thr[i] < 0.1)
 			ERROR("FOOT[%d -> %d], strip = %d, c_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, c_thr[i]);
 	}
+	
+	this->gm_ = gm;
+	if(gm_ == DoGainMatch::kYES) {
+		/* In this case, the thresholds must adjust, since everything will initially get
+		 * bounced by a factor (up to 2-3). */
+		const FOOTGainParam& gain = out.par.gain;
+		for(int i=0; i<N_STRIPS; ++i) {
+			double g0 = gain.CorrectionFactor(i + 0.5, 0.0); /* Gain factor at ~0 ADC units */
+			c_thr[i] *= g0;
+			n_thr[i] *= g0;
+		}
+		out.gain_matched->SetVal(true);
+	}
 
 #define _ALTER_TITLE(x) \
 	x->SetTitle(Form("%s : S=%.1f N=%1.f", x->GetTitle(), X_CENTRE_THR, X_NEIGHB_THR))
@@ -206,6 +220,15 @@ void TFOOTCalProc::ProcessEntry() noexcept {
 	
 	/* Copy	the data over, since there's a write to `e`. */
 	memcpy(e, _e, sizeof(e)); 
+
+	/* In case we do on-the-fly gain matching, adjust each ADC value accordingly. */
+	if(gm_ == DoGainMatch::kYES) {
+		const FOOTGainParam& gain = out.par.gain;
+		for(int i=0; i<N_STRIPS; ++i) {
+			e[i] *= gain.CorrectionFactor(i + 0.5, e[i]);
+		}
+	}
+			
 	int i = 0;
 	/* Try to find a central 'seed' strip. */
 	for(; i < N_STRIPS; ++i) {
@@ -231,10 +254,10 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	_AddHit(i);
 	
 	/* The moment `e[i] > n_thr[i]` fails, a lookahead to i+1, or a lookbehind to i-1 occurs.
-	 * If the lookahead/behind finds a hit, e[i] is averaged out between e[i-1] and e[i+1].
-	 * If it fails, means both e[i] and:
-	 *     > e[i+1], in case of right traversing, 
-	 *     > e[i-1], in case of left traversing,
+	 * If the lookahead/behind finds a hit, e[i] is averaged out (geometric mean * small constant) 
+	 * between e[i-1] and e[i+1]. If it fails, means that both values `e[i]` and:
+	 *   e[i+1], in case of right traversing, 
+	 *   e[i-1], in case of left traversing,
 	 * fail the N-threshold cutoff and it constitutes a 
 	 * cluster end, for this respective side's traverse.  */
 
@@ -401,6 +424,17 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	out.inner().AddCluster(cl_wx, cl_e, _cl_cnt, ct, it_max->e, cl_fit);
 }
 
+/* When noisy strip is found in a middle of the cluster, extrapolate it's value based
+ * on Gaussian extrapolation. Means we sampled point (x-1) and point (x+1). So from Gaussian 
+ * distribution it follows: g(x) = sqrt( g(x-1) * g(x+1) ) * exp( 1/(2*σ²) ); 
+ * For FOOT, for H/He the parameter is roughly: σ² = 0.295. 
+ * Note, for higher Z, σ² is much smaller, so the Gauss decays much faster.*/
+constexpr double SN_RATIO_FACTOR = 1.15; // exp( 1/(2*σ²) )
+constexpr double SN_RATIO_FACTOR_TO_MINUS_2 = 1 / (SN_RATIO_FACTOR * SN_RATIO_FACTOR);
+
+/* Doesn't show improvement, even is a bit more scuffed than before... Rather keep it out. */
+//#define CL_E_TEST
+
 template<>
 bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int i /* 1, ... , 639 */) {
 	/* Lookahead by one strip.
@@ -416,12 +450,28 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int i /* 1, ...
 	if(next < N_STRIPS and e[next] > n_thr[next]) {
 		_frag = {i, e[i]};
 		_ct_pos = ClusterType::kFRAGMENTED;
-		
+
+#ifdef CL_E_TEST
+		e[i] = sqrt( e[prev] * e[next] ) * SN_RATIO_FACTOR;
+#else
 		e[i] = ( e[prev] + e[next] ) / 2;
+#endif
 
 		// Calling function will restore this hit, here just 'reassign' the energy.	
 		return true; 
 	}
+#ifdef CL_E_TEST
+	// Possible that the current strip `i` is marked bad or 'noisy'.
+	// In this case just try to take the value as the average'd out
+	// between two previous ones. Assuming that the very-previous was already inside 
+	else if(int pprev = prev-1; 
+		pprev > 0 and e[pprev] > n_thr[pprev] and !std::isfinite(n_thr[i]) ) { 
+		e[i] = e[prev] * e[prev] / e[pprev] *  SN_RATIO_FACTOR_TO_MINUS_2;
+		
+		/* Check threshold versus the `n_thr` of previously added strip. */
+		if( e[i] > n_thr[prev] ) return true;
+	}
+#endif
 	return false;
 }
 
@@ -441,10 +491,26 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int i /* 0, ...
 		_frag = {i, e[i]};
 		_ct_neg = ClusterType::kFRAGMENTED;
 		
+#ifdef CL_E_TEST
+		e[i] = sqrt( e[prev] * e[next] ) * SN_RATIO_FACTOR;
+#else
 		e[i] = ( e[prev] + e[next] ) / 2;
+#endif
 		
 		// Calling function will restore this hit, here just 'reassign' the energy.
 		return true; 
 	}
+	// Possible that the current strip `i` is marked 'noisy'.
+	// In this case just try to take the value as the average'd out
+	// between two previous ones if they're part of the cluster.
+#ifdef CL_E_TEST
+	else if(int nnext = next+1; 
+		nnext < N_STRIPS and e[nnext] > n_thr[nnext] and !std::isfinite(n_thr[i]) ) { 
+		e[i] = e[next] * e[next] / e[nnext] *  SN_RATIO_FACTOR_TO_MINUS_2;
+
+		/* Check threshold versus the `n_thr` of previously added strip. */
+		if( e[i] > n_thr[next] ) return true;
+	}
+#endif
 	return false;
 }

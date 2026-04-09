@@ -36,7 +36,8 @@ struct TFOOTCalProc : TProcessor <
 	double X_CENTRE_THR;
 	double X_NEIGHB_THR;
 
-	TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in);
+	enum class DoGainMatch { kNO, kYES } gm_ = DoGainMatch::kNO;
+	TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, DoGainMatch = DoGainMatch::kNO);
 	TFOOTCalProc() = default;
 
 	void ProcessEntry() noexcept;

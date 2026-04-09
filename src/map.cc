@@ -24,27 +24,6 @@ extern const char* map_help;
 	#define FRS_GO4
 #endif
 
-#define FOOT_ID_0 10
-#define FOOT_ID_1 19
-#define FOOT_ID_2 17
-#define FOOT_ID_3 20
-#define FOOT_ID_4 22
-#define FOOT_ID_5 25
-#define FOOT_ID_6 23
-#define FOOT_ID_7 21
-
-constexpr i32 static_detectors[] = {
-	FOOT_ID_0, 
-	FOOT_ID_1,
-	FOOT_ID_2,
-	FOOT_ID_3,
-	FOOT_ID_4,
-	FOOT_ID_5,
-	FOOT_ID_6,
-	FOOT_ID_7
-};
-constexpr i32 N_FOOT = mnd::len(static_detectors);
-
 int main(i32 argc, char* argv[]) {
 	using namespace indicators;
 	signal(SIGINT , sig_callback_handler);
@@ -93,7 +72,7 @@ int main(i32 argc, char* argv[]) {
 	TFOOTMapCont foot[N_FOOT];
 #define INIT_FOOT_(ID) \
 	{ \
-		int i = mnd::FindIndex(static_detectors, ID); \
+		int i = mnd::FindIndex(::static_detectors, ID); \
 		if(i < 0) ERROR("Index cannot be found: ID=%d, i=%d", ID, i); \
 		TFOOTMapCont& f = foot[i]; \
 		info["FOOT_ID"] = #ID; \

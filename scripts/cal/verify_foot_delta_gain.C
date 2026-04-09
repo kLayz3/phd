@@ -28,11 +28,21 @@ void verify_foot_delta_gain (
 	const double CA = FOOTGainParam::CARBON_ADC;
 	std::array<FOOTParam*, 2> p;
 	{
+		std::array<TParameter<bool>*, 2> is_gain_matched;
+		
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
 		p[0] = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*np));
 		p[1] = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*np + 1));
 		if(!p[0] or !p[1])
 			throw std::runtime_error(Form("FOOT param is nullptr. Fix it (line: %d).", __LINE__));
+		is_gain_matched[0] = f->Get<TParameter<bool>>(Form("FOOT%d_gain_matched", 2*np));
+		is_gain_matched[1] = f->Get<TParameter<bool>>(Form("FOOT%d_gain_matched", 2*np));
+		if(!is_gain_matched[0] or !is_gain_matched[1])
+			ERROR("FOOT%d/%d pair gain matching tag not fetchable?\n", 2*np, 2*np+1); 
+
+		if(!is_gain_matched[0]->GetVal() or !is_gain_matched[1]->GetVal()) 
+			ERROR("Trying to do the delta-correction, but FOOT%d/%d pair tagged as NOT already gain matched!\n"
+					"Please reodo the file WITH gain-matching flag supplied.", 2*np, 2*np+1);
 	}
 
 	std::array<std::shared_ptr<RNFOOTCal>, 2> foot {};
@@ -42,9 +52,6 @@ void verify_foot_delta_gain (
 	auto frs = model->MakeField<RNFRSCal>("FRS");
 	auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
 
-	TH2P* raw_energy_vs_delta[2];
-	TH2P* raw_energy_vs_x[2];
-	TH1P* raw_e[2];
 	TH2P* gain_energy_vs_delta[2];
 	TH2P* gain_energy_vs_x[2];
 	TH1P* gain_e[2];
@@ -52,20 +59,10 @@ void verify_foot_delta_gain (
 	TH2P* final_energy_vs_x[2];
 	TH1P* final_e[2];
 
-	constexpr double SCALING_RAW = 2.3;
 	for(int i: {0,1}) {
 		const auto& lim = (i==0) ? cut0 : cut1;
 		int foot_i = 2*np + i;
 		
-		raw_energy_vs_delta[i] = new TH2P(Form("((h2_raw_%d))Cluster E [ADC units]:Delta@FOOT%d Raw", i, foot_i),
-			eta_axis[0], -1.0*eta_axis[1], eta_axis[1], lim[0], lim[1]/SCALING_RAW, lim[2]/SCALING_RAW	
-		);
-		raw_energy_vs_x[i] = new TH2P(Form("((h2_raw_x%d))Cluster E [ADC units]:x [strip #]@FOOT%d Raw", i, foot_i),
-			320, 0, 640, lim[0], lim[1]/SCALING_RAW, lim[2]/SCALING_RAW
-		);
-		raw_e[i] = new TH1P(Form("((h1_raw_e%d))dE [ADC units]@FOOT%d Raw", 
-			i, foot_i), kYellow - 3, lim[0], lim[1]/SCALING_RAW, lim[2]/SCALING_RAW
-		);
 		/* ================================================================== */
 		gain_energy_vs_delta[i] = new TH2P(Form("((h2_gain_%d))Cluster E [ADC gain-adjusted]:Delta@FOOT%d gain-matched", i, foot_i),
 			eta_axis[0], -1.0*eta_axis[1], eta_axis[1], lim[0], lim[1], lim[2]	
@@ -102,8 +99,7 @@ void verify_foot_delta_gain (
 	double delta[2]; // delta
 	double gfactor[2]; // gain factor
 	double dfactor[2]; // delta factor
-	double ei[2]; // ADC initial (raw)
-	double eg[2]; // ADC intermediate (gain-corrected)
+	double ei[2]; // ADC intermediate (gain-corrected)
 	double ef[2]; // ADC final (gain-corrected + delta-corrected)
 
 	for(auto entryId : *ntuple) {
@@ -132,18 +128,13 @@ void verify_foot_delta_gain (
 	delta[i]  = cl##i.Delta(); \
 	ei[i] = cl##i.fCE; \
 	x[i]  = cl##i.fCX; \
-	raw_energy_vs_delta[i] -> Fill(delta[i], ei[i]); \
-	raw_energy_vs_x[i] -> Fill(x[i], ei[i]); \
-	raw_e[i]->Fill(ei[i]); \
 	\
-	gfactor[i] = p[i]->gain.CorrectionFactor( x[i] ); \
-	eg[i] = ei[i] / gfactor[i]; \
-	gain_energy_vs_delta[i] -> Fill(delta[i], eg[i]); \
-	gain_energy_vs_x[i] -> Fill(x[i], eg[i]); \
-	gain_e[i]->Fill(eg[i]); \
+	gain_energy_vs_delta[i] -> Fill(delta[i], ei[i]); \
+	gain_energy_vs_x[i] -> Fill(x[i], ei[i]); \
+	gain_e[i]->Fill(ei[i]); \
 	\
 	dfactor[i] = p[i]->de.CorrectionFactor( delta[i] ); \
-	ef[i] = eg[i] / dfactor[i]; \
+	ef[i] = ei[i] / dfactor[i]; \
 	final_energy_vs_delta[i] -> Fill(delta[i], ef[i]); \
 	final_energy_vs_x[i] -> Fill(x[i], ef[i]); \
 	final_e[i]->Fill( ef[i] ); \
@@ -157,26 +148,37 @@ void verify_foot_delta_gain (
 			}
 		}
 	}
-
-	TCanvas* ci = new TCanvas("ci", "Single (initial)", 2100, 1400);
+	
+	std::vector<TLine*> vlines;
+	for(int i = 1; i < 10; ++i) {
+		TLine* line = new TLine(i * 64, 0, 
+				                i * 64, 1000);
+		line->SetLineColor(kRed);
+		line->SetLineStyle(2);
+		line->SetLineWidth(3);
+		vlines.push_back( line );
+	}
+#define DRAW_VLINES(name) \
+	{ \
+		TH2D* h2_ = &name->h; \
+		for(auto* l0 : vlines) { \
+			TLine* l = dynamic_cast<TLine*>(l0->Clone()); \
+			l->SetY1(h2_->GetYaxis()->GetXmin()); \
+			l->SetY2(h2_->GetYaxis()->GetXmax()); \
+			l->Draw("SAME"); \
+		} \
+	}
 	TCanvas* cg = new TCanvas("cg", "Single (gain-matched)", 2100, 1400);
 	TCanvas* cf = new TCanvas("cf", "Single (final)", 2100, 1400);
-	ci->Divide(3,2); cg->Divide(3,2); cf->Divide(3,2);
+	cg->Divide(3,2); cf->Divide(3,2);
 	
 	for(int i: {0,1}) {
-		TGraph *gr_gain = p[i]->gain.GetGraph();
-		ci->cd(3*i + 1); gPad->SetLogz();
-		raw_energy_vs_delta[i]->Draw("COLZ");
-		ci->cd(3*i + 2); gPad->SetLogz();
-		raw_energy_vs_x[i]->Draw("COLZ");
-		gr_gain->Draw("L SAME");
-		ci->cd(3*i + 3); 
-		raw_e[i]->Draw();
-		
 		cg->cd(3*i + 1); gPad->SetLogz();
 		gain_energy_vs_delta[i]->Draw("COLZ");
 		cg->cd(3*i + 2); gPad->SetLogz();
 		gain_energy_vs_x[i]->Draw("COLZ");
+		//DRAW_VLINES(gain_energy_vs_x[i]);
+
 		cg->cd(3*i + 3); 
 		gain_e[i]->Draw();
 
@@ -184,6 +186,8 @@ void verify_foot_delta_gain (
 		final_energy_vs_delta[i]->Draw("COLZ");
 		cf->cd(3*i + 2); gPad->SetLogz();
 		final_energy_vs_x[i]->Draw("COLZ");
+		//DRAW_VLINES(final_energy_vs_x[i]);
+
 		cf->cd(3*i + 3); 
 		final_e[i]->Draw();
 	}

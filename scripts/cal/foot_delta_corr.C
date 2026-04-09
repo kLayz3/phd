@@ -38,7 +38,7 @@ class FOOTDeltaParam;
 FOOTDeltaParam* GetDeltaParams(TH2D*);
 
 constexpr double D_LO = 0.4999;
-constexpr int D_BINS = 60;
+constexpr int D_BINS = 80;
 
 void foot_delta_corr (
 	std::string fileName = "", 
@@ -53,12 +53,21 @@ void foot_delta_corr (
 #endif
 
 	FOOTParam* p;
+	TParameter<bool> *is_gain_matched;
 	{
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
 		p = f->Get<FOOTParam>(Form("FOOT%d_setup", ifoot));
 		if(!p)
 			throw std::runtime_error(Form("FOOT param is nullptr. Fix it (line: %d).", __LINE__));
+		is_gain_matched = f->Get<TParameter<bool>>(Form("FOOT%d_gain_matched", ifoot));
+		if(!is_gain_matched)
+			ERROR("FOOT%d gain matching tag not fetchable? Line: %d\n", ifoot, __LINE__); 
 	}
+
+	if(!is_gain_matched->GetVal()) 
+		ERROR("Trying to do the delta-correction, but FOOT%d tagged as NOT already gain matched!\n"
+			"Please reodo the file WITH gain-matching flag supplied.", ifoot);
+
 	const double CA = FOOTGainParam::CARBON_ADC;
 
 	ROOT::EnableImplicitMT();
@@ -70,7 +79,7 @@ void foot_delta_corr (
 
 	TH1P* h1_delta = new TH1P(Form("((h1_foot%d))Delta@FOOT%d", ifoot, ifoot), kGreen+1, D_BINS, -D_LO, D_LO);
 	TH2P* h2_m_vs_delta = new TH2P(Form("((h2_footm%d))Partial cluster size:delta@FOOT%d", ifoot, ifoot), D_BINS, -D_LO, D_LO, 10, 0.5, 10.5);
-	TH2P* sum_energy_vs_x = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Delta@FOOT%d raw", ifoot, ifoot), 
+	TH2P* sum_energy_vs_x = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Strip num@FOOT%d raw", ifoot, ifoot), 
 		160,0,640,
 		D_BINS, foot_cut[0], foot_cut[1]);
 	TH2P* sum_energy_vs_delta = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Delta@FOOT%d raw", ifoot, ifoot), 
@@ -78,7 +87,7 @@ void foot_delta_corr (
 		D_BINS, foot_cut[0], foot_cut[1]);
 	TH2P* corr_energy_vs_delta = new TH2P(Form("((h2_footcorr%d))E1/%.1f - 1:Delta@FOOT%d", ifoot, CA, ifoot), 
 		D_BINS,-D_LO, D_LO,
-		D_BINS, foot_cut[0]/CA - 1, foot_cut[1]/CA - 1);
+		D_BINS, foot_cut[0]/CA - 0.9, foot_cut[1]/CA - 0.9);
 	
 	TH1P* h1_m0 = new TH1P(Form("((h_0)) FOOT%d dE [ADC units]@All cluster sizes", ifoot), kYellow - 7, D_BINS, foot_cut[0], foot_cut[1]);
 
@@ -120,9 +129,6 @@ void foot_delta_corr (
 			double e = cl.fCE;
 			double x = cl.fCX;
 			
-			/* Take the gain matching param. */
-			e *= p->gain.CorrectionFactor(x, e);
-
 			if(!mnd::IsInside(e, foot_cut)) continue;
 			
 			sum_energy_vs_delta -> Fill(delta, e);
@@ -155,9 +161,6 @@ void foot_delta_corr (
 			double delta = cl.Delta(); 
 			double e = cl.fCE;
 			double x = cl.fCX;
-
-			/* Normalize again with the gain matching param. */
-			e *= p->gain.CorrectionFactor(x, e);
 
 			/* Normalize with the triangular delta-correction */
 			e /= d->CorrectionBasic(delta);
