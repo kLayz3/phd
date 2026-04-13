@@ -30,3 +30,4 @@ quick/*
 !quick/make_macro.bash
 
 exec/important_commands.txt
+autosave

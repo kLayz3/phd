@@ -4,9 +4,11 @@
 #include "ROOT/RCanvas.hxx"
 #include "ROOT/RNTupleDS.hxx"
 #include "ROOT/RDataFrame.hxx"
-#include "../../includes/util/PolyFitter.hxx"
-#include "../../includes/util/Tracking.hxx"
+
 #include "../../includes/util/PrettyHisto.hxx"
+#include "../../includes/util/FitSpline.hxx"
+#include "../../includes/util/Tracking.hxx"
+#include "../../includes/util/MacroHelpers.hxx"
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
@@ -21,24 +23,57 @@ constexpr bool _take[N] = {
 	0  // 24
 };
 
-enum class DoDelta {no, yes};
 enum class DoDiff {no, yes};
 enum class DoOrientation {no, yes};
+enum class DoSave {no, yes};
+
+struct DoDelta {
+	struct No {};
+	struct Yes { 
+		int position = -1;
+		char orientation;
+		double xlo, xhi;
+
+		Yes() = default;
+		constexpr Yes(int v) : position(v), orientation('\0'), xlo(0), xhi(0) {}; 
+		constexpr Yes(int v, const char* o, double lo, double hi) : 
+			position(v), orientation(o[0]), xlo(lo), xhi(hi) {}; 
+	};
+
+	/* constexpr */ static inline No no {};
+	/* constexpr */ static inline Yes yes{-1};
+
+	DoDelta(No) : data_(No{}) {}
+	DoDelta(Yes y) : data_(y) {}
+	friend bool operator==(const DoDelta& lhs, const DoDelta& rhs) {
+		return ( lhs.data_.index() == rhs.data_.index() &&
+			lhs.data_.index() != std::variant_npos
+		);
+	}
+	const Yes* as_yes() const { return std::get_if<Yes>(&data_); }
+
+private:
+	std::variant<No, Yes> data_;
+};
 
 /* Here we place FOOT ifoot onto various positions z, oriented either x- or y- 
  * and see which one fits the picture as correlation. */
 void foot_spread (
 	std::string fileName = "",
 	uint32_t ifoot = 0, 
+	std::array<double,3> binning_x = {200,-30,30},
+	std::array<double,3> binning_y = {200,-30,30},
 	std::array<double,2> foot_cut = {10,3000},
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
 	DoDelta do_delta = DoDelta::no,
 	DoDiff do_diff = DoDiff::no,
-	DoOrientation do_orientation = DoOrientation::no
+	DoOrientation do_orientation = DoOrientation::no,
+	DoSave do_save = DoSave::no
 ) {
-	if(ifoot > 7) throw std::runtime_error("Second argument `ifoot` can be only {0,..,7}.");
+	if(ifoot > 7)
+		throw std::invalid_argument("Second argument `ifoot` can be only {0,..,7}.");
 	
 	using Measurement = RNTPCCal::Measurement;
 	
@@ -60,8 +95,9 @@ void foot_spread (
 			throw std::runtime_error(Form("FOOT box param is nullptr. Fix it (line: %d).", __LINE__));
 	}
 
-	bool wrong_way = ((foot_param->orientation == "-x") or (foot_param->orientation == "-y"));
-	
+	const bool wrong_way = ((foot_param->orientation == "-x") or (foot_param->orientation == "-y"));
+	const double offset = foot_param->delta_a;
+
 	const std::array<double, N> zTPC = {
 		tpc_param->at(0).z0,
 		tpc_param->at(1).z0,
@@ -75,6 +111,10 @@ void foot_spread (
 		box->GetFOOTZ(6)
 	};
 
+	TH2P* h2_track_x = new TH2P("Track density (X) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60);
+	TH2P* h2_track_y = new TH2P("Track density (Y) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60);
+	TH2P* h2_ab = new TH2P("Y-angle [mrad]:X-angle [mrad]", 100, -20, 20, 100, -20, 20);
+
 	/* 4 possible placements along x, and y. */
 	TH2P *foot_x[4];
 	TH2P *foot_y[4];
@@ -83,21 +123,24 @@ void foot_spread (
 		if(do_diff == DoDiff::no) {
 			foot_x[i] = new TH2P(Form("((h2_x))FOOT Position Uncalibrated [mm]:TPC projection X at Z=%.1f,pos=%d@FOOT%d", 
 				zFOOT[i], i, ifoot),
-				300,-30, 30, 200, -30, 30);
+				binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]);
 			foot_y[i] = new TH2P(Form("((h2_y))FOOT Position Uncalibrated [mm]:TPC projection Y at Z=%.1f,pos=%d@FOOT%d", 
 				zFOOT[i], i, ifoot),
-				300,-30, 30, 200, -30, 30); 
+				binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]); 
 		} else {
 			foot_x[i] = new TH2P(Form("((h2_x))FOOT Position - TPC proj X [mm]:TPC projection X at Z=%.1f,pos=%d@FOOT%d", 
 				zFOOT[i], i, ifoot),
-				300,-30, 30, 400, -10, 10);
+				binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]);
 			foot_y[i] = new TH2P(Form("((h2_y))FOOT Position - TPC proj Y [mm]:TPC projection Y at Z=%.1f,pos=%d@FOOT%d", 
 				zFOOT[i], i, ifoot),
-				300,-30, 30, 400, -10, 10); 
+				binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]); 
 		}
 	}
-	auto* foot_e = new TH2P(Form("Cluster E [ADC Units]:Delta [-0.5,0.5]@FOOT%d", ifoot), 
+	auto* foot_e_vs_d = new TH2P(Form("Cluster E [ADC Units G.M]:Delta [-0.5,0.5]@FOOT%d", ifoot), 
 		80, -0.5, 0.5, 100, foot_cut[0], foot_cut[1]);
+	auto* foot_e_vs_x = new TH2P(Form("Cluster E [ADC Units G.M.]:FOOT x@FOOT%d", ifoot), 
+		binning_x[0], binning_x[1], binning_x[2], 100, foot_cut[0], foot_cut[1]);
+	auto* foot_pos = new TH1P(Form("((h1))FOOT measurement@FOOT%d", ifoot), ORGB{0xFF7C0A}, binning_x[0], binning_x[1], binning_x[2]);
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
 	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", ORGB{0x009B2F}, 500, 300, 4000);
@@ -160,6 +203,10 @@ void foot_spread (
 		auto fx = PolyFit<1>(z, x);	
 		auto fy = PolyFit<1>(z, y);	
 
+		FillTrack(*h2_track_x, fx);
+		FillTrack(*h2_track_y, fy);
+		h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
+
 		for(const auto& hit : foot->fCl) {
 			double e = hit.fCE;
 			double d = hit.Delta();
@@ -172,6 +219,9 @@ void foot_spread (
 			if(do_orientation == DoOrientation::yes and wrong_way)
 				hit_position = -hit_position;
 
+			hit_position -= offset;
+
+			foot_pos->Fill(hit_position);
 			for(int i=0; i<4; ++i) {
 				x_extrapolated = fx[0] + fx[1]*zFOOT[i]; 
 				y_extrapolated = fy[0] + fy[1]*zFOOT[i]; 
@@ -184,11 +234,29 @@ void foot_spread (
 					foot_y[i]->Fill(y_extrapolated, hit_position);
 				}
 			}
-			foot_e->Fill(d,e);
+			foot_e_vs_d->Fill(d, e);
+			foot_e_vs_x->Fill(hit_position, e);
 		}
 	}
 
-	TCanvas* c = new TCanvas("c", Form("FOOT%d Position", ifoot),2000,1000);
+	TCanvas* cTr = new TCanvas("TPC-tracks", "TPC-tracks", 2000, 1200);
+	cTr->Divide(2,2);
+	cTr->cd(1); h2_track_x->Draw("COLZ");
+	cTr->cd(3); h2_track_y->Draw("COLZ");
+	cTr->cd(2); h2_ab->Draw("COLZ");
+	cTr->cd(4);
+	PLatex(0.08,
+		Form("Tracks derived from TPC: %s", ( []()->std::string {
+			std::string s;
+			for(int i=0; i<N; ++i) 
+				if(_take[i]) { s+=::tpc_moniker[i]; s+=", "; };
+			return s.substr(0, s.size()-2);
+		}().c_str()))
+	);
+
+	TCanvas* c = new TCanvas(
+		Form("FOOTXY%s", (do_diff == DoDiff::yes  ? "_diff" : "")), 
+		Form("FOOT%d Position", ifoot),2000,1000);
 	c->Divide(4,2);
 	for(int i=0; i<4; ++i) {
 		c->cd(i+1);
@@ -196,8 +264,26 @@ void foot_spread (
 		c->cd(i+5);
 		foot_y[i]->Draw("COLZ");
 	}
-	TCanvas* cs = new TCanvas("cs", "SCI21,22,31", 1800, 800);
 
+	if(do_delta == DoDelta::yes and do_delta.as_yes()->position != -1 and do_diff == DoDiff::yes) {
+		int pos = do_delta.as_yes()->position;
+		char o = do_delta.as_yes()->orientation;
+		if(pos > 3) ERROR("Position %d requested, >3. Not allowed\n", pos);
+		if(o != 'x' and o != 'y') ERROR("Orientation \'%c\' requested, isn't x or y.\n", o); 
+		
+		TH2D* hist; 
+		if(o == 'x') { hist = &foot_x[pos]->h; c->cd(pos+1); }
+		if(o == 'y') { hist = &foot_y[pos]->h; c->cd(pos+5); } 
+		double xlo = do_delta.as_yes()->xlo;
+		double xhi = do_delta.as_yes()->xhi;
+		auto [alph, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX>(hist, xlo, xhi); 
+		g->Draw("L SAME");
+		gerr->Draw("P SAME");
+		WARN("DoDelta(..) result: (%.4f, %.4f) meaning:\n"
+			"Offset: %.4f, slope: %.5f\n", alph[0], alph[1], -alph[0]/(1+alph[1]), 1.0/(1+alph[1]));
+	}
+
+	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 1800, 800);
 	cs->Divide(3,2);
 	cs->cd(1); h1_sci21->Draw();
 	cs->cd(2); h1_sci22->Draw();
@@ -207,9 +293,9 @@ void foot_spread (
 	cs->cd(6); h1_sci31_cut->Draw();
 
 	TCanvas* efoot = new TCanvas("cf", "FOOTE", 1400, 800);
-	efoot->Divide(1,2);
+	efoot->Divide(2,2);
 	efoot->cd(1);
-	foot_e->Draw("COLZ"); gPad->SetLogz();
+	foot_e_vs_d->Draw("COLZ"); gPad->SetLogz();
 	efoot->cd(2);
 	PLatex(0.07,
 		[](){ std::string s = "Extrapolation done from: ";
@@ -222,9 +308,17 @@ void foot_spread (
 		Form("Preliminary orientation: \'%s\'", foot_param->orientation.c_str()),
 		"... Check if this matches!"
 	);
+	efoot->cd(3);
+	foot_e_vs_x->Draw("COLZ"); gPad->SetLogz();
 	printf("Positions at FOOT taken from extrapolating TPC: ");
 	for(int i=0; i<N; ++i) {
 		if(_take[i]) printf("%s ", tpc_moniker[i]);
 	}
 	printf("track!\n\n");
+
+	efoot->cd(4);
+	foot_pos->Draw();
+
+	if(do_save == DoSave::yes)
+		save_all(canvas::Extension::png, { Form("FOOT%d", ifoot) });
 }

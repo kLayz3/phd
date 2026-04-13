@@ -82,19 +82,18 @@ int main(int argc, char* argv[]) {
 		});
 		cfoot[i].Setup();
 	}
-	auto   fgm = TFOOTCalProc::DoGainMatch::kNO;
-	if(gm) fgm = TFOOTCalProc::DoGainMatch::kYES;
+	auto fgm_ = (gm) ? TFOOTCalProc::DoGainMatch::kYES : TFOOTCalProc::DoGainMatch::kNO;
 
 	/* Set up the process pool. */
 	auto pool = TAnalysisProcess<>(fileName, outFile, "h103")
-		.emplace_process<TFOOTCalProc>(cfoot[0], mfoot[0], fgm)
-		.emplace_process<TFOOTCalProc>(cfoot[1], mfoot[1], fgm)
-		.emplace_process<TFOOTCalProc>(cfoot[2], mfoot[2], fgm)
-		.emplace_process<TFOOTCalProc>(cfoot[3], mfoot[3], fgm)
-		.emplace_process<TFOOTCalProc>(cfoot[4], mfoot[4], fgm)
-		.emplace_process<TFOOTCalProc>(cfoot[5], mfoot[5], fgm)
-		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6], fgm)
-		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7], fgm)
+		.emplace_process<TFOOTCalProc>(cfoot[0], mfoot[0], fgm_)
+		.emplace_process<TFOOTCalProc>(cfoot[1], mfoot[1], fgm_)
+		.emplace_process<TFOOTCalProc>(cfoot[2], mfoot[2], fgm_)
+		.emplace_process<TFOOTCalProc>(cfoot[3], mfoot[3], fgm_)
+		.emplace_process<TFOOTCalProc>(cfoot[4], mfoot[4], fgm_)
+		.emplace_process<TFOOTCalProc>(cfoot[5], mfoot[5], fgm_)
+		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6], fgm_)
+		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7], fgm_)
 		.emplace_process<TFRSCalProc >(cfrs    , mfrs)
 		.MakePool<8>( 4092 );
 		//.MakePool<1>( 512 );

@@ -14,10 +14,12 @@
 #include "../../includes/util/PrettyHisto.hxx"
 #include "../../includes/util/FitSpline.hxx"
 #include "../../includes/util/Tracking.hxx"
+#include "../../includes/util/MacroHelpers.hxx"
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
 
+enum class DoSave { yes, no };
 struct DoFit {
 	struct No {};
 	struct Verify {};
@@ -59,7 +61,8 @@ void foot_gain_match (
 	std::array<double,4> delta_cut = {0.27, 0.05, 0.03, 0.03},
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX} 
+	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
+	DoSave do_save = DoSave::no
 ) {
 	if(N_STRIPS % bins_per_asic != 0)
 		throw std::runtime_error(Form("Passed: %d , not evenly divisible by %d.\n",
@@ -355,7 +358,7 @@ void foot_gain_match (
 		lo_pts1->SetMarkerSize(1.15);
 		lo_pts1->SetMarkerColor(kOrange +4);
 		
-		TCanvas *cgain = new TCanvas("cgain", "Gain Factor", 2200, 1400);
+		TCanvas *cgain = new TCanvas("gain", "Gain Factor", 2200, 1400);
 		cgain->Divide(1,2);
 
 		cgain->cd(1); h2_gain->Draw("COLZ"); (*h2_gain)->SetStats(0); 
@@ -389,7 +392,7 @@ void foot_gain_match (
 		vlines.push_back( line );
 	}
 	
-	TCanvas *c = new TCanvas(Form("cRAW%d", ifoot), Form("FOOT%d central", ifoot), 2000, 1400);
+	TCanvas *c = new TCanvas("RawFOOT_central", Form("FOOT%d central", ifoot), 2000, 1400);
 	hit_energy_mid->Draw("COLZ");
 	for(auto* l0 : vlines) {
 		TLine* l = dynamic_cast<TLine*>(l0->Clone());
@@ -403,7 +406,7 @@ void foot_gain_match (
 	for(auto* gfit : gauss_fit_mid) gfit->Draw("L SAME");
 	for(auto* graw : gauss_raw_mid) graw->Draw("P SAME");
 
-	TCanvas *clr = new TCanvas(Form("cRAW_lr%d", ifoot), Form("FOOT%d peripheral", ifoot), 2000, 1400);
+	TCanvas *clr = new TCanvas("RawFOOT_lateral", Form("FOOT%d peripheral", ifoot), 2000, 1400);
 	hit_energy_lr->Draw("COLZ");
 	for(auto* l0 : vlines) {
 		TLine* l = dynamic_cast<TLine*>(l0->Clone());
@@ -416,7 +419,7 @@ void foot_gain_match (
 	for(auto* gfit : gauss_fit_lr) gfit->Draw("L SAME");
 	for(auto* graw : gauss_raw_lr) graw->Draw("P SAME");
 
-	TCanvas* cs = new TCanvas("cs", "SCI21,22,31", 2000, 1200);
+	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2000, 1200);
 	cs->Divide(3,2);
 	cs->cd(1); h1_sci21->Draw();
 	cs->cd(2); h1_sci22->Draw();
@@ -428,7 +431,7 @@ void foot_gain_match (
 	auto* hs_d = new THStack("hs_d","Delta cut");
 	hs_d->Add(*h1_delta_cut_mid);
 	hs_d->Add(*h1_delta_cut_lr);
-	TCanvas* cd = new TCanvas("cd", "Delta & 1D energy", 1400, 800);
+	TCanvas* cd = new TCanvas("delta_energy", "Delta & 1D energy", 1400, 800);
 	cd->Divide(2,2);
 	TLine* l_dl = new TLine(-delta_cut[0], (*h1_delta)->GetXaxis()->GetXmin(), 
 							-delta_cut[0], (*h1_delta)->GetXaxis()->GetXmin());
@@ -443,7 +446,7 @@ void foot_gain_match (
 	cd->cd(4); h1_foot_e_lr->Draw();
 
 	if(do_fit == DoFit::verify) {
-		TCanvas *cc = new TCanvas(Form("cCORR%d", ifoot), Form("Corrected FOOT%d", ifoot), 2000, 1400);
+		TCanvas *cc = new TCanvas("Corrected", Form("Corrected FOOT%d", ifoot), 2000, 1400);
 		cc->Divide(2,2);
 #define DRAW_AND_DO_LINES \
 		h2->Draw("COLZ"); \
@@ -466,4 +469,7 @@ void foot_gain_match (
 		cc->cd(4);
 		h1_clust_energy_corr->Draw();
 	}
+
+	if(do_save == DoSave::yes)
+		save_all(canvas::Extension::png, { Form("FOOT%d", ifoot) });
 }

@@ -5,8 +5,11 @@
 #include "ROOT/RNTupleDS.hxx"
 #include "ROOT/RDataFrame.hxx"
 #include "../../includes/util/PrettyHisto.hxx"
+#include "../../includes/util/MacroHelpers.hxx"
+
 using namespace ROOT;
 using namespace ROOT::Experimental;
+enum class DoSave { yes, no };
 
 constexpr static double NBINS  = 300;
 constexpr static double CUT_LO = 10;
@@ -20,7 +23,8 @@ void verify_foot_delta_gain (
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> eta_axis = {80, 0.52}
+	std::array<double,2> eta_axis = {80, 0.52},
+	DoSave do_save = DoSave::no
 ) {
 	if(np > 3) throw std::runtime_error("np parameter (2nd argument) is > 3.");
 	ROOT::EnableImplicitMT();
@@ -192,7 +196,7 @@ void verify_foot_delta_gain (
 		final_e[i]->Draw();
 	}
 
-	TCanvas* c2 = new TCanvas("c2", Form("FOOT Pair %d XY", np), 2000, 1400);
+	TCanvas* c2 = new TCanvas("PairXY", Form("FOOT Pair %d XY", np), 2000, 1400);
 	c2->Divide(2,1);
 	c2->cd(1); gPad->SetLogz();
 	h2_both->Draw("COLZ");
@@ -204,7 +208,7 @@ void verify_foot_delta_gain (
 		Form("Cut applied on SCI22: (%.1f, %.1f)", sci22_cut[0], sci22_cut[1])
 	);
 	
-	TCanvas* cs = new TCanvas("cs", "SCI21,22,31", 2000, 1200);
+	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2000, 1200);
 	cs->Divide(3,2);
 	cs->cd(1); h1_sci21->Draw();
 	cs->cd(2); h1_sci22->Draw();
@@ -212,4 +216,11 @@ void verify_foot_delta_gain (
 	cs->cd(4); h1_sci21_cut->Draw();
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
+	
+	if(do_save == DoSave::yes) {
+		std::string postfix = std::string( Form("sc31_%d_%d",
+			(sci31_cut[0] > 0) ? (int)sci31_cut[0] : 0, 
+			(sci31_cut[1] < 5000) ? (int)sci31_cut[1] : 5000) );
+		save_all(canvas::Extension::png, { Form("pair%d", np), postfix });
+	}
 }

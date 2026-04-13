@@ -193,8 +193,8 @@ struct FOOTParam {
 	ADD_SERIALIZABLE_FIELD(i32,              mirrored,    -1,                 3);
 	ADD_SERIALIZABLE_FIELD(double,           c_threshold, CENTRE_THR_DEFAULT, 4);
 	ADD_SERIALIZABLE_FIELD(double,           n_threshold, NEIGHB_THR_DEFAULT, 5);
-	ADD_SERIALIZABLE_FIELD(double,           delta_a,     0.0,                6);
-	ADD_SERIALIZABLE_FIELD(double,           delta_p,     0.0,                7);
+	ADD_SERIALIZABLE_FIELD(double,           delta_p,     0.0,                6);
+	ADD_SERIALIZABLE_FIELD(double,           delta_a,     0.0,                7);
 	ADD_SERIALIZABLE_FIELD(FOOTGainParam,    gain,        {},                 8);
 	ADD_SERIALIZABLE_FIELD(FOOTDeltaParam,   de,          {},                 9);
 
@@ -223,9 +223,17 @@ struct FOOTBoxParam {
 	/* Calculate the absolute z- position of n-th FOOT detector in the box. */
 	inline double GetFOOTZ(const int n, const FOOTParam* p = nullptr) const noexcept {
 		double zf = GetTargetZ() + det_pos.at(n);
-		if(p) zf += p->dz;
+		if(p) {
+			/* For sanity check. The `N` field supplied there must be factor 2- up to `n` 
+			 * since FOOTs by convention go in order. */
+			if(n != (p->N / 2))
+				WARN("Fetching FOOT z-position, but from box requested n=%d, "
+					"supplied FOOT param handle reads .N=%d (position=%d)\n", n, p->N, p->N/2);
+			zf += p->dz;
+		}
 		return zf;
 	}
+	inline double GetFOOTZ(const FOOTParam* p) const noexcept { return GetFOOTZ(p->N/2, p); }
 
 	virtual ~FOOTBoxParam() = default;
 	ClassDef(FOOTBoxParam, 1);

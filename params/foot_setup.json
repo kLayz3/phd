@@ -19,8 +19,8 @@
 		"mirrored": false,  // can be rotated and mirrored
 		"c_threshold": 4.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
-		"delta_a": 0.0,     // Offset in its measuring dimension [strip units; 150 um]
-		"delta_p": 0.0,     // Offset in angle [mrad]	
+		"delta_p": 1.7956,  // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
+		"delta_a": 0.0,     // Offset in angle [mrad], around the z-axis.
 		"gain": {
 			"fit": [ // Array of gain fits for 10 individual ASICS, for 9C beam.
 				{ // ASIC[0]
@@ -139,8 +139,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
+		"delta_p": -1.7555,
 		"delta_a": 0.0,
-		"delta_p": 0.0,
 		"gain": {
 			"fit": [
 				{
@@ -290,8 +290,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
+		"delta_p": 2.0660,
 		"delta_a": 0.0,
-		"delta_p": 1.5,
 		"gain": {
 			"fit": [
 				{
@@ -409,8 +409,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
+		"delta_p": -2.8510,
 		"delta_a": 0.0,
-		"delta_p": 7.2,
 		"gain": {
 			"fit": [
 				{
@@ -560,8 +560,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 2.5,
+		"delta_p": 1.6596,
 		"delta_a": 0.0,
-		"delta_p": -1.7,
 		"gain": {
 			"fit": [
 				{
@@ -679,8 +679,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
+		"delta_p": -3.8071,
 		"delta_a": 0.0,
-		"delta_p": 10.5,
 		"gain": { // Potentially asics 0,1 much lower...
 			"fit": [
 				{
@@ -823,8 +823,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
+		"delta_p": 2.3373,
 		"delta_a": 0.0,
-		"delta_p": 3.2,
 		"gain": {
 			"fit": [
 				{
@@ -942,8 +942,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
+		"delta_p": -4.7794,
 		"delta_a": 0.0,
-		"delta_p": 23.1,
 		"gain": {
 			"fit": [
 				{

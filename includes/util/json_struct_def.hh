@@ -250,7 +250,7 @@ int main() {
 			"bounds": [42, 77];
 			"used": false
 		}
-    }
+	}
 	)");
 	UNROLL_JSON_PARAM(par, j, 5);
 
@@ -258,6 +258,9 @@ int main() {
 	assert(par.anode_diff_lim[1][1] == 800);
 	assert(!par.cut.used);
 	
+	auto& [xf, adf, _, __, ___, ____] = par;
+	assert(adf[1][0] == -580);
+
 	std::cout << par << std::endl;
 
 	return 0;
