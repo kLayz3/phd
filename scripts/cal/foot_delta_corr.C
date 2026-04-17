@@ -7,6 +7,7 @@
 
 #include "../../includes/util/PrettyHisto.hxx"
 #include "../../includes/util/GaussFitMax.hxx"
+#include "../../includes/util/MacroHelpers.hxx"
 
 #if 0
 #	define USING_POLY

@@ -172,8 +172,8 @@ void verify_foot_delta_gain (
 			l->Draw("SAME"); \
 		} \
 	}
-	TCanvas* cg = new TCanvas("cg", "Single (gain-matched)", 2100, 1400);
-	TCanvas* cf = new TCanvas("cf", "Single (final)", 2100, 1400);
+	TCanvas* cg = new TCanvas("GainMatched", "Single (gain-matched)", 2100, 1400);
+	TCanvas* cf = new TCanvas("FinalSpectra", "Single (final)", 2100, 1400);
 	cg->Divide(3,2); cf->Divide(3,2);
 	
 	for(int i: {0,1}) {
@@ -218,9 +218,10 @@ void verify_foot_delta_gain (
 	cs->cd(6); h1_sci31_cut->Draw();
 	
 	if(do_save == DoSave::yes) {
-		std::string postfix = std::string( Form("sc31_%d_%d",
+		std::filesystem::path inf( fileName );
+		std::string postfix = std::string( Form("%d_%d_sc31cut",
 			(sci31_cut[0] > 0) ? (int)sci31_cut[0] : 0, 
 			(sci31_cut[1] < 5000) ? (int)sci31_cut[1] : 5000) );
-		save_all(canvas::Extension::png, { Form("pair%d", np), postfix });
+		save_all(canvas::Extension::png, { Form("pair%d", np), inf.stem().c_str(), postfix });
 	}
 }

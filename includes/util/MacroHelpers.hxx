@@ -8,6 +8,9 @@
 #include "TCanvas.h"
 #include "TInterpreter.h"
 
+using A2 = std::array<double, 2>;
+using A3 = std::array<double, 3>;
+
 namespace canvas {
 	enum struct Extension { png, jpeg, pdf, C, root };
 
@@ -41,25 +44,49 @@ namespace canvas {
 			return;
 		}
 
+		std::vector<TCanvas*> cs;
 		for(TObject* k_ : *gROOT->GetListOfCanvases()) {
-			TCanvas* c = dynamic_cast<TCanvas*>(k_);
-			if(!c) continue; 
+			if(TCanvas* c = dynamic_cast<TCanvas*>(k_))
+				cs.push_back(c);
+		}
+		if(cs.empty()) return;
+
+		for(auto* c : cs) {
 			auto name = std::string(c->GetName()); 
 			auto outfile = p / (name + "." + ext);
+			// Force rendering
+			c->Modified();
+			c->Update();
 			c->SaveAs( outfile.c_str() ); 
+		}
+		if(cs.size() == 1 or (extension != Extension::png and extension != Extension::jpeg)) return;
+
+		// In case of two or more canvases saved, also collect them into a .pdf
+		std::string outpdf = (p / "all.pdf").string();
+
+		cs.front()->Print(Form("%s(", outpdf.c_str()));
+		for(size_t i=1; i < cs.size() - 1; ++i) {
+			cs[i]->Print( outpdf.c_str() );
 		} 
-	} 
+		cs.back()->Print(Form("%s)", outpdf.c_str()));
+	}
 };
 
 struct MeanStddev {
 	double mean, stddev;
-	operator std::pair<double,double>() noexcept { return { mean, stddev }; }
+	inline operator std::pair<double,double>() noexcept { return { mean, stddev }; }
 
 	friend std::ostream& operator<<(std::ostream&, const MeanStddev& ) noexcept;
 
-	std::string string() const noexcept { 
+	inline std::string string() const noexcept { 
 		std::stringstream ss;
 		ss << *this;
+		return ss.str();
+	}
+
+	inline std::string lstring() const noexcept {
+		std::stringstream ss;
+		ss << mean << " #pm " << stddev;
 		return ss.str();
 	}
 };

@@ -4,10 +4,13 @@
 #include "ROOT/RCanvas.hxx"
 #include "ROOT/RNTupleDS.hxx"
 #include "ROOT/RDataFrame.hxx"
-#include "../../includes/util/PolyFitter.hxx"
-#include "../../includes/util/Tracking.hxx"
+
 #include "../../includes/util/PrettyHisto.hxx"
+#include "../../includes/util/FitSpline.hxx"
+#include "../../includes/util/Tracking.hxx"
+#include "../../includes/util/MacroHelpers.hxx"
 #include "../../includes/util/json_struct_def.hh"
+#include <sstream>
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
@@ -20,27 +23,42 @@ static const char* label[] = {
 };
 constexpr double zT = 3355 - 440/2;
 
-double lo_y(TH2D*, double );
-double hi_y(TH2D*, double );
+using namespace hist;
 
-std::array<double, 2> FitProfile(TH2D*, int);
-std::array<double, 2> FitProfile(TH2D*, double);
+struct DoFit {
+	struct No {};
+	struct Yes { double lo, hi; };
 
-struct OptionE {
-	static constexpr int Nothing = 0x0000;
-	static constexpr int FitDiff = 0x0001;
-	int mask_;
-	inline bool operator==(int rhs) {
-		switch(rhs) {
-			case 0:  return mask_ == rhs;
-			default: return static_cast<bool>( mask_ & rhs );
-		}
+	/* constexpr */ static inline No no{};
+	/* constexpr */ static inline Yes yes{};
+
+	DoFit(No) : data_(No{}) {}
+	DoFit(Yes y) : data_(std::move(y)) {}
+
+	friend bool operator==(const DoFit& lhs, const DoFit& rhs) {
+		return ( lhs.data_.index() == rhs.data_.index() &&
+			lhs.data_.index() != std::variant_npos
+		);
 	}
-	OptionE() = default;
-	OptionE(int x) : mask_(x) {}
+	const Yes* as_yes() const { return std::get_if<Yes>(&data_); }
+	
+private:
+	std::variant<No, Yes> data_;
 };
+enum class DoSave { no, yes };
 
-void tpc_draw_track(std::string fileName = "", OptionE e = OptionE::Nothing, int I = -1, uint64_t max_events = -1) {
+void tpc_draw_track (
+	std::string fileName = "", 
+	DoFit do_fit = DoFit::no,
+	A3 binning_x  = {100, -30, 30},
+	A3 binning_xd = {100, -10, 10},
+	A3 binning_y  = {100, -30, 30},
+	A3 binning_yd = {100, -10, 10},
+	A2 sci21_cut = {-DBL_MAX, DBL_MAX},
+	A2 sci22_cut = {-DBL_MAX, DBL_MAX},
+	A2 sci31_cut = {-DBL_MAX, DBL_MAX},
+	DoSave do_save = DoSave::no
+) {
 	ROOT::EnableImplicitMT();
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_params;
 	{
@@ -77,9 +95,16 @@ void tpc_draw_track(std::string fileName = "", OptionE e = OptionE::Nothing, int
 	};
 	printf("TPC positions: \n");
 	for(int i=0; i<N; ++i) printf("TPC%s: %.1f mm\n", label[i], zTPC[i]);
+	
+	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
+	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
+	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", ORGB{0x009B2F}, 500, 300, 4000);
+	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
+	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
+	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
 
-	TH2P* h2_xy = new TH2P(Form("Y [mm]:X [mm]@target z=%.1f", zT), 400, -50, 50, 400, -50, 50);
-	TH2P* h2_ab = new TH2P(Form("Y-angle [mrad]:X-angle [mrad]@target z=%.1f", zT), 400, -50, 50, 400, -50, 50);
+	TH2P* h2_xy = new TH2P(Form("Y [mm]:X [mm]@target z=%.1f", zT), 100, -40, 40, 100, -40, 40);
+	TH2P* h2_ab = new TH2P(Form("Y-angle [mrad]:X-angle [mrad]@target z=%.1f", zT), 100, -20, 20, 100, -20, 20);
 	TH2P* h2_track_x = new TH2P("Track density (X) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60); 
 	TH2P* h2_track_y = new TH2P("Track density (Y) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60); 
 
@@ -87,26 +112,16 @@ void tpc_draw_track(std::string fileName = "", OptionE e = OptionE::Nothing, int
 	TH2P* h2_tpc_xd[N][2];
 	TH2P* h2_tpc_yd[N][4];
 	for(int i=0; i<N; ++i) {
-		h2_tpc_xy[i] = new TH2P(Form("TPC%s Y [mm]:TPC%s X [mm]", label[i], label[i]), 400, -20, 20, 400, -20, 20); 
+		h2_tpc_xy[i] = new TH2P(Form("((h2_%d))Y measurement [mm]:X measurement [mm]@TPC%s", i, label[i]), 
+			binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]); 
 		for(int dl: {0,1}) 
-			h2_tpc_xd[i][dl] = new TH2P(Form("TPC%s X%d - Ref Y [mm]:Ref X [mm]@Delay line %d", label[i], dl, dl), 200,-50,50,200,-10,10);
+			h2_tpc_xd[i][dl] = new TH2P(Form("TPC%s X%d - Ref X [mm]:Ref X [mm]@TPC%s Delay line %d", label[i], dl, label[i], dl), 
+				binning_x[0], binning_x[1], binning_x[2], binning_xd[0], binning_xd[1], binning_xd[2]);
 		for(int a: {0,1,2,3})
-			h2_tpc_yd[i][a] = new TH2P(Form("TPC%s Y%d - Ref Y [mm]:Ref Y [mm]@Anode %d", label[i], a, a), 200,-100,100,200,-10,10);
+			h2_tpc_yd[i][a] = new TH2P(Form("TPC%s Y%d - Ref Y [mm]:Ref Y [mm]@TPC%s Anode %d", label[i], a, label[i], a), 
+				binning_y[0], binning_y[1], binning_y[2], binning_yd[0], binning_yd[1], binning_yd[2]);
 	}
-	constexpr int N_BINS_X = 3000;
-	constexpr int X_LO     = -30;
-	constexpr int X_HI     =  30;
-	constexpr int N_BINS_XD = 150;
-	constexpr int XD_LO     = -10;
-	constexpr int XD_HI     =  10;
-
-	constexpr int N_BINS_Y = 300;
-	constexpr int Y_LO     = -50;
-	constexpr int Y_HI     =  50;
-	constexpr int N_BINS_YD = 200;
-	constexpr int YD_LO     = -10;
-	constexpr int YD_HI     =  10;
-
+	
 	auto model = RNTupleModel::Create();
 	auto frs = model->MakeField<RNFRSCal>("FRS"); // shared_ptr.
 	auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
@@ -115,21 +130,37 @@ void tpc_draw_track(std::string fileName = "", OptionE e = OptionE::Nothing, int
 	std::vector<double> x; x.reserve(4*2);
 	std::vector<double> y; y.reserve(4*2);
 	std::vector<double> z; x.reserve(4*2);
-	
-	uint64_t maxEntries = std::min( max_events, static_cast<uint64_t>(ntuple->GetNEntries()) );
 
-	for(uint64_t entryId = 0; entryId < maxEntries; ++entryId) {
+	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
 		x.clear(); y.clear(); z.clear();
 		
+		/* Veto out the event based on SCI's first... */
+		const auto& sci21 = frs->sci[0];
+		const auto& sci22 = frs->sci[1];
+		const auto& sci31 = frs->sci[2];
+		if(sci21.hits.size() != 1) continue;
+		if(sci22.hits.size() != 1) continue;
+		if(sci31.hits.size() != 1) continue;
+
+		h1_sci21->Fill(sci21.E);
+		h1_sci22->Fill(sci22.E);
+		h1_sci31->Fill(sci31.E);
+
+		if(!mnd::IsInside(sci21.E, sci21_cut)) continue;
+		if(!mnd::IsInside(sci22.E, sci22_cut)) continue;
+		if(!mnd::IsInside(sci31.E, sci31_cut)) continue;
+
+		h1_sci21_cut->Fill(sci21.E);
+		h1_sci22_cut->Fill(sci22.E);
+		h1_sci31_cut->Fill(sci31.E);
+
 		for(int i = 0; i < N; ++i) {
 			const auto& tpc = frs->tpc[i];
-
 			const std::array<std::vector<Measurement>, 2>& tpc_hits = tpc.hits;
 
 			for(int d=0; d<2; ++d) {
 				const std::vector<Measurement>& hits = tpc_hits[d];
-				
 				if(hits.size() == 1 and !std::isnan(hits[0].x) and _take[i][d]
 					and !std::isnan(hits[0].y[0]) and !std::isnan(hits[0].y[1])) {
 					x.push_back( hits[0].X() );
@@ -161,8 +192,8 @@ void tpc_draw_track(std::string fileName = "", OptionE e = OptionE::Nothing, int
 				if(hits.size() != 1) continue;
 				
 				const Measurement& m = hits[0];
-				double x_ref = fx[1]*zDL[i][d] + fx[0];
-				double y_ref = fy[1]*zDL[i][d] + fy[0];
+				double x_ref = fx[1] * zDL[i][d] + fx[0];
+				double y_ref = fy[1] * zDL[i][d] + fy[0];
 				
 				h2_tpc_xd[i][d] -> Fill( x_ref, m.x - x_ref );
 				for(int a: {0,1}) {
@@ -172,54 +203,45 @@ void tpc_draw_track(std::string fileName = "", OptionE e = OptionE::Nothing, int
 		}
 	}
 
-	TCanvas* cT = new TCanvas("cT", "cT", 2000, 1200);
-	cT->Divide(1,2);
-	cT->cd(1);
-	h2_xy->Draw("COLZ");
-
-	cT->cd(2);
-	h2_ab->Draw("COLZ");
-
-	/* ========================= */
-	/* Also draw some nominal indicators where each TPC sits. */
-
-	TCanvas* cTr = new TCanvas("cTr", "cTr", 2000, 1200);
-	cTr->Divide(1,2);
+	TCanvas* cTr = new TCanvas("Tracks", "Tracks", 2000, 1200);
+	cTr->Divide(2,2);
 	cTr->cd(1);
 	h2_track_x->Draw("COLZ");
 
 	double r = 0.8;
+	TLine* line;
 	for(int i=0; i<4; ++i) {
-		TLine* line = new TLine( zTPC[i], lo_y(*h2_track_x, r), zTPC[i], hi_y(*h2_track_x, r) );
+		line = vline(h2_track_x, zTPC[i], r);
 		line->SetLineColor(kRed);
 		line->SetLineStyle(2);
 		line->SetLineWidth(3);
 		line->Draw("SAME");
 	}
-	TLine* line = new TLine( zT, lo_y(*h2_track_x, r), zT, hi_y(*h2_track_x, r) );
+	line = vline(h2_track_x, zT, r);
 	line->SetLineColor(kBlack);
 	line->SetLineStyle(3);
 	line->SetLineWidth(6);
 	line->Draw("SAME");
 
-	cTr->cd(2);
+	cTr->cd(3);
 	h2_track_y->Draw("COLZ");
 	for(int i=0; i<4; ++i) {
-		TLine* line = new TLine( zTPC[i], lo_y(*h2_track_y, r), zTPC[i], hi_y(*h2_track_y, r) );
+		line = vline(h2_track_y, zTPC[i], r);
 		line->SetLineColor(kRed);
 		line->SetLineStyle(2);
 		line->SetLineWidth(3);
 		line->Draw("SAME");
 	}
-	line = new TLine( zT, lo_y(*h2_track_y, r), zT, hi_y(*h2_track_y, r) );
+	line = vline(h2_track_y, zT, r);
 	line->SetLineColor(kBlack);
 	line->SetLineStyle(3);
 	line->SetLineWidth(6);
 	line->Draw("SAME");
-
+	cTr->cd(2); h2_xy->Draw("COLZ");
+	cTr->cd(4); h2_ab->Draw("COLZ");
+	
 	/* ========================= */
-	std::stringstream ref_txt{};
-	auto eval_latex_label = [&_take](int i) -> std::string {
+	[[ maybe_unused ]] auto eval_latex_label = [&_take](int i) -> std::string {
 		std::stringstream ref_txt {};
 		if(_take[i][0] or _take[i][1]) {
 			ref_txt << Form("TPC%s", label[i]);
@@ -233,120 +255,104 @@ void tpc_draw_track(std::string fileName = "", OptionE e = OptionE::Nothing, int
 		return ref_txt.str();
 	};
 
-	for(int i=0; i<N; ++i) {
-		if(I >= 0 and i != I) continue;
+	[[ maybe_unused ]] std::string eval_code = [&_take]() -> std::string {
+		std::stringstream ss;
+		ss << "TPC_";
+		for(int i=0; i<N; ++i) {
+			int v = 0;
+			v = static_cast<int>(_take[i][0]) |
+				(static_cast<int>(_take[i][1]) << 1);
+			if(v > 0) ss << label[i] << "(" << std::bitset<2>(v) << ")"; 
+		}
+		return ss.str();
+	}();
 
+	TCanvas* cdiff[N];
+	for(int i=0; i<N; ++i) {
 		TCanvas* c = new TCanvas(Form("TPC%s", label[i]), Form("TPC%s", label[i]), 1800, 1300); 
-		c->Divide(4,2);
+		c->Divide(3,2);
 		for(int d: {0,1}) {
-			c->cd(d+1); 
+			c->cd(3*d + 1); 
 			h2_tpc_xd[i][d]->Draw("COLZ");
 		}
-		c->cd(3);
-		h2_tpc_xy[i]->Draw("COLZ");
+#define GET_ANODE_PAD(a) \
+		{ \
+			int d = a/2; \
+			int ai = a%2; \
+			c->cd( d*3 + 2 + ai ); \
+		} 
 		for(int a: {0,1,2,3}) {
-			c->cd(5+a);
+			GET_ANODE_PAD(a);
 			h2_tpc_yd[i][a]->Draw("COLZ");
 		}
-		c->cd(4);
-		PLatex( 0.08, 
-			Form("TPC%s", label[i]),
-			"Reference made by: ",
-			eval_latex_label(0),
-			eval_latex_label(1),
-			eval_latex_label(2),
-			eval_latex_label(3)
-		);
+		//c->cd(4);
+		//PLatex( 0.08, 
+		//	Form("TPC%s", label[i]),
+		//	"Reference made by: ",
+		//	eval_latex_label(0),
+		//	eval_latex_label(1),
+		//	eval_latex_label(2),
+		//	eval_latex_label(3)
+		//);
+		cdiff[i] = c;
 	}
+	TCanvas* cs = new TCanvas("SCIe", "SCI21,22,31", 1800, 800);
+	cs->Divide(3,2);
+	cs->cd(1); h1_sci21->Draw();
+	cs->cd(2); h1_sci22->Draw();
+	cs->cd(3); h1_sci31->Draw();
+	cs->cd(4); h1_sci21_cut->Draw();
+	cs->cd(5); h1_sci22_cut->Draw();
+	cs->cd(6); h1_sci31_cut->Draw();
 
-	if(e == OptionE::FitDiff) {
+	if(do_fit == DoFit::yes) {
 		/* Idea is to take central bin positions (xi),
 		 * their TH1D* projection has a peak around value (yi) with counts (wi)
 		 * and then do a weighted linear fit. */
-		double dist_side = 15.0; 
+		const auto [lo, hi] = *do_fit.as_yes();
+		
 		for(int i=0; i<N; ++i) {
-			if(I >= 0 and i != I) continue;
-
 			const TPCParam& p = tpc_params->at(i);
+			TCanvas* c = cdiff[i];
+
 			WARN("\n" EMPH1(TPC%s) " " EBOLD(fitting parameters) "\n", label[i]);
 			for(int d: {0,1}) {
 				const double b0 = p.x_offset[d];
 				const double a0 = p.x_factor[d];
 
-				auto [k,l] = FitProfile(*h2_tpc_xd[i][d], dist_side);
+				auto [rg, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX> (
+					*h2_tpc_xd[i][d], lo, hi, 40, 1.1
+				);
+				auto [l,k] = rg;
 				WARN("DL%d found \'more optimized\' parameter\n", d);
 				WARN("\rOffset/slope: %.9f, %.9f\n", l, k);
 				printf("\rBefore: (%.6f , %.6f)\n",             b0,                 a0);
 				printf("\rNew   : " EBOLD((%.6f , %.6f)) "\n",  b0/(k+1) - l/(k+1), a0/(k+1));
+				c->cd(3*d + 1); 
+				gerr->Draw("P SAME");
+				g->Draw("L SAME");
 			}
-			dist_side = 20.0;
 			for(int a: {0,1,2,3}) {
 				const double b0 = p.y_offset[a];
 				const double a0 = p.y_factor[a];
 
-				auto [k,l] = FitProfile(*h2_tpc_yd[i][a], dist_side);
+				auto [rg, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX> (
+					*h2_tpc_yd[i][a], lo, hi, 40, 1.1
+				);
+				auto [l,k] = rg;
 				WARN("A %d found \'more optimized\' parameter\n", a);
 				WARN("\rOffset/slope: %.5f, %.5f\n", l, k);
 				printf("\rBefore: (%.6f , %.6f)\n",             b0,                 a0);
 				printf("\rNew   : " EBOLD((%.6f , %.6f)) "\n",  b0/(k+1) - l/(k+1), a0/(k+1));
+				
+				GET_ANODE_PAD(a); 
+				gerr->Draw("P SAME");
+				g->Draw("L SAME");
 			}
 		}
 	}
-}
-
-double lo_y(TH2D* h2, double r=0) { 
-	if(r > 1 || r <= 0)
-		throw std::runtime_error("second arg must be <0, 1]");
-	return  (1-r)/2 * h2->GetYaxis()->GetXmax() + (1+r)/2 * h2->GetYaxis()->GetXmin(); 
-}
-double hi_y(TH2D* h2, double r=0) { 
-	if(r > 1 || r <= 0)
-		throw std::runtime_error("second arg must be <0, 1]");
-	return  (1+r)/2 * h2->GetYaxis()->GetXmax() + (1-r)/2 * h2->GetYaxis()->GetXmin(); 
-}
-
-std::array<double, 2> FitProfile (
-	TH2D* h2, int N_BINS_SIDE
-) {
-	std::vector<double> xv, yv, wv;
-	xv.reserve(2*N_BINS_SIDE + 1);
-	yv.reserve(2*N_BINS_SIDE + 1);
-	wv.reserve(2*N_BINS_SIDE + 1);
-	TAxis* ax = h2->GetXaxis();
-
-	int b0 = ax->FindBin(0.0);
-	const int bMin = std::max(             1, b0 - N_BINS_SIDE);
-	const int bMax = std::min(ax->GetNbins(), b0 + N_BINS_SIDE);
-	for(int bx=bMin; bx <= bMax; ++bx) {
-		double x = ax->GetBinCenter(bx);
-		auto py = std::unique_ptr<TH1D>( h2->ProjectionY("_py_bx", bx, bx) ); 
-		py->SetDirectory(nullptr);
-		int by =  py->GetMaximumBin();
-		double w = py->GetBinContent(by); 
-		double y = py->GetBinCenter(by);
-		xv.push_back(x); 
-		yv.push_back(y); 
-		wv.push_back(w);
+	if(do_save == DoSave::yes) {
+		std::filesystem::path inf( fileName );
+		save_all(canvas::Extension::png, { eval_code, inf.stem().c_str() });
 	}
-
-	WARN("Doing fit with: ");
-	std::cerr << std::endl
-		<< "x: " << KBH_BLU << xv << KNRM << std::endl
-		<< "y: " << KBH_RED << yv << KNRM << std::endl
-		//<< std::endl << "w: " << KBH_MAG << wv << KNRM << std::endl
-		;
-	//return PolyFit<1>(xv, yv, wv);
-	return PolyFit<1>(xv, yv);
-}
-
-/* No checks, fuck it. */
-std::array<double, 2> FitProfile (
-	TH2D* h2, double distance
-) {
-	TAxis* ax = h2->GetXaxis();
-	int ibin_side = ax->FindBin(distance + 0.0000001);
-	int b0 = ax->FindBin(0.0);
-	
-	int bins_to_the_side = std::max(ibin_side - b0, 1);
-	return FitProfile(h2, bins_to_the_side);
 }

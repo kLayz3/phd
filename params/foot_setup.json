@@ -5,7 +5,7 @@
 		"z0": 3355, // Nominal placement of the center of the box.
 		"width_inner": 412,
 		"width_outer": 440,
-		// FOOT detector `z` positions, relative to the outer wall, where the Be target sits nominally. Check foot_pos_from_chamber_drawing.py script
+		// FOOT detector nominal `z` positions, relative to the outer wall, where the Be target sits nominally. Check foot_pos_from_chamber_drawing.py script
 		"det_pos": [19.0, 19.0, 119.0, 119.0, 255.0, 255.0, 345.0, 345.0],
 		"dx": 0.0, // Small offset in x- direction 
 		"dy": 0.0, // Small offset in x- direction
@@ -19,8 +19,8 @@
 		"mirrored": false,  // can be rotated and mirrored
 		"c_threshold": 4.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
-		"delta_p": 1.7956,  // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
-		"delta_a": 0.0,     // Offset in angle [mrad], around the z-axis.
+		"delta_p": -1.8926, // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
+		"delta_a": 0.12,    // Offset in angle [degrees], around the z-axis.
 		"gain": {
 			"fit": [ // Array of gain fits for 10 individual ASICS, for 9C beam.
 				{ // ASIC[0]
@@ -139,8 +139,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": -1.7555,
-		"delta_a": 0.0,
+		"delta_p": 1.7048,
+		"delta_a": 0.0, // couldn't estimate 
 		"gain": {
 			"fit": [
 				{
@@ -290,8 +290,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": 2.0660,
-		"delta_a": 0.0,
+		"delta_p": -2.0785,
+		"delta_a": 0.18,
 		"gain": {
 			"fit": [
 				{
@@ -409,8 +409,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": -2.8510,
-		"delta_a": 0.0,
+		"delta_p": 2.83622,
+		"delta_a": 0.03,
 		"gain": {
 			"fit": [
 				{
@@ -556,12 +556,12 @@
 	},
 	"FOOT22": {
 		"N": 4,
-		"orientation": "y", /* One rotated by about ~20 deg */
+		"orientation": "y", /* One rotated by about ~10 deg */
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 2.5,
-		"delta_p": 1.6596,
-		"delta_a": 0.0,
+		"delta_p": -1.9367,
+		"delta_a": -10.19,
 		"gain": {
 			"fit": [
 				{
@@ -675,12 +675,12 @@
 	},
 	"FOOT25": {
 		"N": 5,
-		"orientation": "-x", /* One rotated by about ~20 deg */
+		"orientation": "-x", /* One rotated by about ~10 deg */
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": -3.8071,
-		"delta_a": 0.0,
+		"delta_p": 3.6977,
+		"delta_a": -11.75,
 		"gain": { // Potentially asics 0,1 much lower...
 			"fit": [
 				{
@@ -823,8 +823,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": 2.3373,
-		"delta_a": 0.0,
+		"delta_p": -2.4376,
+		"delta_a": -0.04,
 		"gain": {
 			"fit": [
 				{
@@ -942,8 +942,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": -4.7794,
-		"delta_a": 0.0,
+		"delta_p": 4.6508,
+		"delta_a": 0.4345,
 		"gain": {
 			"fit": [
 				{

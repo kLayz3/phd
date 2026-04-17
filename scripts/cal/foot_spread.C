@@ -63,7 +63,7 @@ void foot_spread (
 	uint32_t ifoot = 0, 
 	std::array<double,3> binning_x = {200,-30,30},
 	std::array<double,3> binning_y = {200,-30,30},
-	std::array<double,2> foot_cut = {10,3000},
+	std::array<double,2> foot_cut = {3000,4000},
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
@@ -136,11 +136,11 @@ void foot_spread (
 				binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]); 
 		}
 	}
-	auto* foot_e_vs_d = new TH2P(Form("Cluster E [ADC Units G.M]:Delta [-0.5,0.5]@FOOT%d", ifoot), 
+	auto* foot_e_vs_d = new TH2P(Form("Cluster E [ADC Units G.M]:Delta [-0.5, 0.5]@FOOT%d", ifoot), 
 		80, -0.5, 0.5, 100, foot_cut[0], foot_cut[1]);
-	auto* foot_e_vs_x = new TH2P(Form("Cluster E [ADC Units G.M.]:FOOT x@FOOT%d", ifoot), 
+	auto* foot_e_vs_x = new TH2P(Form("Cluster E [ADC Units G.M.]:FOOT x [mm]@FOOT%d", ifoot), 
 		binning_x[0], binning_x[1], binning_x[2], 100, foot_cut[0], foot_cut[1]);
-	auto* foot_pos = new TH1P(Form("((h1))FOOT measurement@FOOT%d", ifoot), ORGB{0xFF7C0A}, binning_x[0], binning_x[1], binning_x[2]);
+	auto* foot_pos = new TH1P(Form("((h1))FOOT measurement [mm]@FOOT%d", ifoot), ORGB{0xFF7C0A}, binning_x[0], binning_x[1], binning_x[2]);
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
 	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", ORGB{0x009B2F}, 500, 300, 4000);
@@ -203,10 +203,11 @@ void foot_spread (
 		auto fx = PolyFit<1>(z, x);	
 		auto fy = PolyFit<1>(z, y);	
 
-		FillTrack(*h2_track_x, fx);
-		FillTrack(*h2_track_y, fy);
-		h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
-
+		/* In an event, only a SINGLE valid FOOT value must be found. */
+		bool is_foot_event_valid = false;
+		double xFOOT_ = NAN;
+		double eFOOT_ = NAN;
+		double dFOOT_ = NAN;
 		for(const auto& hit : foot->fCl) {
 			double e = hit.fCE;
 			double d = hit.Delta();
@@ -220,23 +221,39 @@ void foot_spread (
 				hit_position = -hit_position;
 
 			hit_position -= offset;
-
-			foot_pos->Fill(hit_position);
-			for(int i=0; i<4; ++i) {
-				x_extrapolated = fx[0] + fx[1]*zFOOT[i]; 
-				y_extrapolated = fy[0] + fy[1]*zFOOT[i]; 
-				
-				if(do_diff == DoDiff::yes) {
-					foot_x[i]->Fill(x_extrapolated, hit_position - x_extrapolated);
-					foot_y[i]->Fill(y_extrapolated, hit_position - y_extrapolated);
-				} else {
-					foot_x[i]->Fill(x_extrapolated, hit_position);
-					foot_y[i]->Fill(y_extrapolated, hit_position);
-				}
+			
+			if( std::isfinite(xFOOT_) ) {
+				/* Already found valid point in the event. */
+				is_foot_event_valid = false; break;
+			} else {
+				/* Export it outside. */
+				xFOOT_ = hit_position;
+				eFOOT_ = e;
+				dFOOT_ = d;
 			}
-			foot_e_vs_d->Fill(d, e);
-			foot_e_vs_x->Fill(hit_position, e);
+			is_foot_event_valid = true;
 		}
+		if(!is_foot_event_valid) continue;
+
+		FillTrack(*h2_track_x, fx);
+		FillTrack(*h2_track_y, fy);
+		h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
+		foot_pos->Fill(xFOOT_);
+
+		for(int i=0; i<4; ++i) {
+			x_extrapolated = fx[0] + fx[1]*zFOOT[i]; 
+			y_extrapolated = fy[0] + fy[1]*zFOOT[i]; 
+			
+			if(do_diff == DoDiff::yes) {
+				foot_x[i]->Fill(x_extrapolated, xFOOT_ - x_extrapolated);
+				foot_y[i]->Fill(y_extrapolated, xFOOT_ - y_extrapolated);
+			} else {
+				foot_x[i]->Fill(x_extrapolated, xFOOT_);
+				foot_y[i]->Fill(y_extrapolated, xFOOT_);
+			}
+		}
+		foot_e_vs_d->Fill(dFOOT_, eFOOT_);
+		foot_e_vs_x->Fill(xFOOT_, eFOOT_);
 	}
 
 	TCanvas* cTr = new TCanvas("TPC-tracks", "TPC-tracks", 2000, 1200);
@@ -254,9 +271,7 @@ void foot_spread (
 		}().c_str()))
 	);
 
-	TCanvas* c = new TCanvas(
-		Form("FOOTXY%s", (do_diff == DoDiff::yes  ? "_diff" : "")), 
-		Form("FOOT%d Position", ifoot),2000,1000);
+	TCanvas* c = new TCanvas("FOOTXY", Form("FOOT%d : trying out positions", ifoot), 2000,1000);
 	c->Divide(4,2);
 	for(int i=0; i<4; ++i) {
 		c->cd(i+1);
@@ -265,6 +280,7 @@ void foot_spread (
 		foot_y[i]->Draw("COLZ");
 	}
 
+	double final_offset = 0.0;
 	if(do_delta == DoDelta::yes and do_delta.as_yes()->position != -1 and do_diff == DoDiff::yes) {
 		int pos = do_delta.as_yes()->position;
 		char o = do_delta.as_yes()->orientation;
@@ -279,8 +295,9 @@ void foot_spread (
 		auto [alph, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX>(hist, xlo, xhi); 
 		g->Draw("L SAME");
 		gerr->Draw("P SAME");
+		final_offset = -alph[0]/(1+alph[1]);
 		WARN("DoDelta(..) result: (%.4f, %.4f) meaning:\n"
-			"Offset: %.4f, slope: %.5f\n", alph[0], alph[1], -alph[0]/(1+alph[1]), 1.0/(1+alph[1]));
+			"Offset: %.4f, slope: %.5f\n", alph[0], alph[1], final_offset, 1.0/(1+alph[1]));
 	}
 
 	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 1800, 800);
@@ -292,7 +309,7 @@ void foot_spread (
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
 
-	TCanvas* efoot = new TCanvas("cf", "FOOTE", 1400, 800);
+	TCanvas* efoot = new TCanvas("cf", "FOOTE", 1800, 800);
 	efoot->Divide(2,2);
 	efoot->cd(1);
 	foot_e_vs_d->Draw("COLZ"); gPad->SetLogz();
@@ -305,8 +322,8 @@ void foot_spread (
 		Form("In setup file it is placed at z0 = %.1f (total: %.1f)\n", 
 			box->det_pos[ifoot], box->GetFOOTZ(ifoot, foot_param)),
 		({ std::stringstream ss{}; ss << "Possible placements: " << box->det_pos; ss.str(); }),
-		Form("Preliminary orientation: \'%s\'", foot_param->orientation.c_str()),
-		"... Check if this matches!"
+		Form("Preliminary orientation: \'%s\' %s", foot_param->orientation.c_str(),
+			(do_diff == DoDiff::yes) ? (std::string(", offset: ") + std::to_string(final_offset) + " mm").c_str() : "")
 	);
 	efoot->cd(3);
 	foot_e_vs_x->Draw("COLZ"); gPad->SetLogz();
@@ -319,6 +336,9 @@ void foot_spread (
 	efoot->cd(4);
 	foot_pos->Draw();
 
-	if(do_save == DoSave::yes)
-		save_all(canvas::Extension::png, { Form("FOOT%d", ifoot) });
+	std::string type_spectrum = (do_diff == DoDiff::no) ? "absolute" : "diff";
+	if(do_save == DoSave::yes) {
+		std::filesystem::path inf( fileName );
+		save_all(canvas::Extension::png, { inf.stem().c_str(), Form("FOOT%d", ifoot), type_spectrum });
+	}
 }

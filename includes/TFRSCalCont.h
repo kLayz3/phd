@@ -139,7 +139,7 @@ struct SCIParam {
 	using arr2 = std::array<double,2>;
 
 	ADD_SERIALIZABLE_FIELD(double, x_offset,  0,  0);
-	ADD_SERIALIZABLE_FIELD(double, x_factor,  0,  1);
+	ADD_SERIALIZABLE_FIELD(double, x_factor,  1,  1);
 	ADD_SERIALIZABLE_FIELD(arr2,   cdiff_lim, {}, 2);
 	ADD_SERIALIZABLE_FIELD(double, z0,        0,  3); 
 

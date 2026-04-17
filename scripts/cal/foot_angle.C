@@ -119,7 +119,7 @@ void foot_angle (
 	std::vector<double> xFOOT;
 	std::vector<double> measurements;
 
-	//ROOT::EnableImplicitMT();
+	ROOT::EnableImplicitMT();
 	
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
@@ -256,11 +256,11 @@ void foot_angle (
 		}().c_str())),
 		Form("Number of measurements: %d", (int)measurements.size()),
 		Form("Points per measurement: %zu", Npts),
-		Form("Result: (%s)°", result.string().c_str())
+		Form("Result: (%s)#circ", result.lstring().c_str())
 	);
 
 	if(do_save == DoSave::yes) {
-		std::filesystem::path inf("caldir/tof_cal/good/expert_trigger_with_target_4.root");
+		std::filesystem::path inf( fileName );
 		save_all(canvas::Extension::png, { inf.stem().c_str(), Form("FOOT%d", ifoot) });
 	}
 }

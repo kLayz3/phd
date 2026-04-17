@@ -11,6 +11,7 @@
 #include "TPad.h"
 #include "TLatex.h"
 #include "TGClient.h"
+#include "TLine.h"
 #include "TCanvas.h"
 
 struct ORGB { uint32_t v; };
@@ -328,24 +329,42 @@ struct PLatex {
 		latex.DrawLatex(START_X, height, to_const_char( std::forward<T>(text) ));
 		++current_text_index;
 	}
-	
-	template<typename T,
-		typename Bare = std::remove_reference_t<std::remove_cv_t<T>>
-	> const char* to_const_char(T&& text) {
-		if constexpr(std::is_same_v<T, std::string>) {
-			__temporary = std::string( std::forward<T>(text) );
-			return __temporary.c_str();
-		}
-		else if constexpr(std::is_same_v<T, std::string_view>) {
-			/* Tricky, because std::string_view isn't null-terminated by default, and it cannot mutate
-			 * the underlying object before taking a local copy first. However, if we materialize a proper std::string
-			 * locally here, its `.c_str()` reference dangles when this call returns, and the caller needs a proper reference. */ 
-			__temporary = std::string(text).c_str(); 
-			return __temporary.c_str();
-		}
-		else {
-			/* It will just yell if it doesn't resolve up to this point. */
-			return text;
+
+	/* Small routine to convert random-C++ text back into non-dangling `const char*` range.
+	 * Also doing things such as replacing different color palettes and ansi codes
+	 * to ROOT-valid styles. */
+	template<typename T> 
+	const char* to_const_char(T&& text) {
+		/* Tricky, because std::string_view isn't null-terminated by default, and it cannot mutate
+		 * the underlying object before taking a local copy first. However, if we materialize a proper std::string
+		 * locally here, its `.c_str()` reference dangles when this call returns, and the caller needs a proper reference. */ 
+		__temporary = std::string( std::forward<T>(text) );
+		
+		ParseProperTLatex();
+		return __temporary.c_str();
+	}
+
+	inline void ParseProperTLatex() {
+		static std::pair<const char*, const char*> rules[] {
+			{ "\e[0m", "}" }, // normal
+			{"\e[0;30m", Form("#color[%d]{", kBlack )},
+			{"\e[0;31m", Form("#color[%d]{", kRed    + 2)},
+			{"\e[0;32m", Form("#color[%d]{", kGreen  + 2)},
+			{"\e[0;33m", Form("#color[%d]{", kYellow + 2)},
+			{"\e[0;34m", Form("#color[%d]{", kBlue   + 2)},
+			{"\e[0;35m", Form("#color[%d]{", kMagenta+ 2)},
+			{"\e[0;36m", Form("#color[%d]{", kCyan   + 2)}
+		};
+		for(const auto [raw, rep] : rules)
+			PLatex::replace_all(__temporary, raw, rep);
+	}
+	static void replace_all(std::string& s, const char* sub, const char* rep) {
+		if(!sub || !*sub) return;
+		size_t pos = 0;
+		
+		while((pos = s.find(sub, pos)) != std::string::npos) {
+			s.replace(pos, strlen(sub), rep);
+			pos += strlen(rep);
 		}
 	}
 
@@ -387,3 +406,45 @@ struct PCanvas {
 	inline const inner_type& operator*()  const noexcept { return c; }
 
 };
+
+namespace hist {
+
+inline double lo_y(TH2D* h2, double r=0) { 
+	if(r > 1 || r <= 0)
+		throw std::runtime_error("lo_y::second arg must be <0, 1]");
+	return  (1-r)/2 * h2->GetYaxis()->GetXmax() + (1+r)/2 * h2->GetYaxis()->GetXmin(); 
+}
+inline double hi_y(TH2D* h2, double r=0) { 
+	if(r > 1 || r <= 0)
+		throw std::runtime_error("hi_y::second arg must be <0, 1]");
+	return  (1+r)/2 * h2->GetYaxis()->GetXmax() + (1-r)/2 * h2->GetYaxis()->GetXmin(); 
+}
+inline double lo_x(TH2D* h2, double r=0) { 
+	if(r > 1 || r <= 0)
+		throw std::runtime_error("lo_x::second arg must be <0, 1]");
+	return  (1-r)/2 * h2->GetXaxis()->GetXmax() + (1+r)/2 * h2->GetXaxis()->GetXmin(); 
+}
+inline double hi_x(TH2D* h2, double r=0) { 
+	if(r > 1 || r <= 0)
+		throw std::runtime_error("hi_x::second arg must be <0, 1]");
+	return  (1+r)/2 * h2->GetXaxis()->GetXmax() + (1-r)/2 * h2->GetXaxis()->GetXmin(); 
+}
+
+inline double lo_y(TH2P* h2, double r=0) { return lo_y(&h2->h, r); };
+inline double hi_y(TH2P* h2, double r=0) { return hi_y(&h2->h, r); };
+inline double lo_x(TH2P* h2, double r=0) { return lo_x(&h2->h, r); };
+inline double hi_x(TH2P* h2, double r=0) { return hi_x(&h2->h, r); };
+
+[[nodiscard ]] 
+inline TLine* vline(TH2D* h2, double x, double r = 0) {
+	TLine* line = new TLine( x, lo_y(h2,r), x, hi_y(h2,r) );
+	line->SetLineColor(kBlack);
+	line->SetLineStyle(3);
+	line->SetLineWidth(6);
+	return line;
+}
+[[nodiscard ]] inline TLine* vline(TH2P* h2, double x, double r = 0) {
+	return vline(&h2->h, x, r);	
+}
+
+}
