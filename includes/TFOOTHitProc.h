@@ -24,7 +24,7 @@ struct TFOOTHitProc : TProcessor <
 	void ProcessEntry() noexcept;
 
 private:
-	void ProcessSingle(const TFOOTCalCont& ) noexcept;
+	void ProcessPair(const TFOOTCalCont&, const TFOOTCalCont& ) noexcept;
 	bool IsCompatible(const double, const double) noexcept; 
 
 	double e_diff_tolerance;

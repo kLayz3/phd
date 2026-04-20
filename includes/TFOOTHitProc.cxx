@@ -10,6 +10,22 @@
 
 static constexpr int FOOTHIT_BUFFER_MAX_SIZE = 50;
 
+namespace mnd {
+template<typename Tuple, typename Callable, std::size_t... Is>
+void _for_pair_in_tuple_impl(Tuple&& t, Callable&& f, std::index_sequence<Is...>) {
+	(..., f (std::get<2*Is>(std::forward<Tuple>(t)), 
+			 std::get<2*Is+1>(std::forward<Tuple>(t))) );
+}
+template<typename Tuple, typename Callable>
+void for_pair_in_tuple(Tuple&& t, Callable&& f) {
+	constexpr std::size_t N = std::tuple_size_v<std::decay_t<Tuple>>;
+	static_assert(N % 2 == 0, "Tuple size must be even");
+
+	_for_pair_in_tuple_impl(std::forward<Tuple>(t), std::forward<Callable>(f), 
+		std::make_index_sequence<N/2>{});
+}
+};
+
 TFOOTHitProc::TFOOTHitProc (
 	TFOOTHitCont& out, 
 	BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_INSTANCE_FOOT, ~),
@@ -37,13 +53,14 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 	for(auto& footbuf : buf)
 		footbuf.Clear();
 
-	mnd::for_each_in_tuple(this->in, [this](const auto& cfoot) {
-		this->ProcessSingle(cfoot);
+	mnd::for_pair_in_tuple(this->in, [this](const auto& f1, const auto& f2) {
+		this->ProcessPair(f1, f2);
 	});
 }
 
-void TFOOTHitProc::ProcessSingle(const TFOOTCalCont& cfoot) noexcept {
-	FOOTParam* p = cfoot.setup;
+void TFOOTHitProc::ProcessPair(const TFOOTCalCont& f1, const TFOOTCalCont& f2) noexcept {
+#if 0
+	FOOTParam *p1 = f1.setup, *p2 = f2.setup;
 	FOOTBoxParam* b = out.box;
 	const i32 n = p->N;
 	const double z = b->GetFOOTZ(n, p); /* Second argument is for `.dz` field that p could expose. */
@@ -77,9 +94,11 @@ void TFOOTHitProc::ProcessSingle(const TFOOTCalCont& cfoot) noexcept {
 
 		ConstructHits(pair, pn);
 	}
+#endif
 }
 
 void TFOOTHitProc::ConstructHits(HitsBuffer& pair, int n) noexcept {
+#if 0
 	auto& xs = pair.xs; auto& ys = pair.ys;
 	using TV = decltype(pair.xs)::value_type;
 	static auto lambda =  [](const TV& l, const TV& r) { return l.e < r.e; };
@@ -110,6 +129,7 @@ void TFOOTHitProc::ConstructHits(HitsBuffer& pair, int n) noexcept {
 		else
 			ys.pop_back();
 	}
+#endif
 }
 
 bool TFOOTHitProc::IsCompatible(const double ex, const double ey) noexcept {

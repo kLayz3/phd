@@ -108,24 +108,23 @@ struct is_range<T, std::void_t <
 template <typename Range,
 	typename = std::enable_if_t<is_range<Range>::value>
 > MeanStddev mean_stddev(const Range& r) {
-    using std::begin;
-    using std::end;
+	using std::end;
 	auto first = std::cbegin(r);
 	auto last = std::cend(r);
 	const auto n = std::distance(first, last);
-    if(n <= 0) return { NAN, NAN };
+	if(n <= 0) return { NAN, NAN };
 
-    double sum = 0.0;
-    for(auto it = first; it != last; ++it) {
-        sum += *it;
-    }
+	double sum = 0.0;
+	for(auto it = first; it != last; ++it) {
+		sum += *it;
+	}
 	double mean = sum / static_cast<double>(n);
 
 	double sq_sum = 0.0;
-    for (auto it = first; it != last; ++it) {
-        double d = *it - mean;
-        sq_sum += d * d;
-    }
+	for(auto it = first; it != last; ++it) {
+		double d = *it - mean;
+		sq_sum += d * d;
+	}
 	double stddev = std::sqrt(sq_sum / static_cast<double>(n-1));
 	return {mean, stddev};
 }

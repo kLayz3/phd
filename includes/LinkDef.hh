@@ -40,6 +40,7 @@
 
 #pragma link C++ class FOOTHit+;
 #pragma link C++ class FOOTBoxParam+;
+#pragma link C++ class RNFOOTPair+;
 #pragma link C++ class RNFOOTHit+;
 
 #endif

@@ -21,7 +21,6 @@ auto it = info.find("Setup");
 	UNROLL_JSON_PARAM(_box, setup["box"], 7);
 }
 
-void Add(FOOTBoxParam&, const FOOTBoxParam&) {}
 void TFOOTHitCont::Setup() {
 	box = RegisterObject<FOOTBoxParam>("Box");
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
@@ -58,4 +57,5 @@ void TFOOTHitCont::Setup() {
 }
 
 ClassImp(FOOTHit);
+ClassImp(RNFOOTPair);
 ClassImp(RNFOOTHit);

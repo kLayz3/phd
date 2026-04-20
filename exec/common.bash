@@ -76,3 +76,6 @@ ask_to_proceed () {
 		do_it=0
 	fi
 }
+
+num_re='^[0-9]+$'
+

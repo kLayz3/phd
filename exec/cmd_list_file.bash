@@ -23,7 +23,14 @@ do_cat=0
 
 handle_c() { do_cat=1; }
 handle_m() { do_create=1; do_exec=0; }
-handle_e() { linenum=$1; do_create=0; do_exec=1; }
+handle_e() {
+	case "$1" in
+		''|*[!0-9]*) echo "-e : Supply a valid number argument "; exit 2;;
+		*) linenum=$1 ;;
+	esac
+	do_create=0
+	do_exec=1 
+}
 handle_f() { cmd_file=$1; }
 
 register_opt h "help" handle_h 0
