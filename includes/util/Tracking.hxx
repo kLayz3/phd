@@ -4,9 +4,13 @@
 #include "TH2D.h"
 #include <array>
 
-struct Point { double x, y; };
+namespace mnd {
+	namespace detail {
+		struct Point { double x, y; };
+	}
+}
 
-inline std::array<double, 2> GetLine(const Point& p1, const Point& p2) noexcept {
+inline std::array<double, 2> GetLine(const mnd::detail::Point& p1, const mnd::detail::Point& p2) noexcept {
 	double slope = (p2.y - p1.y) / (p2.x - p1.x);
 	double offset = -slope * p1.x + p1.y;
 	return { offset, slope };

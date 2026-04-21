@@ -116,6 +116,7 @@ void TFOOTCalCont::Setup() {
 ClassImp(FOOTClusterFit);
 ClassImp(RNFOOTCluster);
 ClassImp(RNFOOTCal);
+ClassImp(FMultiPoly);
 ClassImp(FOOTAsicGainParam);
 ClassImp(FOOTGainParam);
 ClassImp(FOOTDeltaFFT);

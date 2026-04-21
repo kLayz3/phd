@@ -1,6 +1,7 @@
 #pragma once
 
 #include "monad/monad.hxx"
+#include <algorithm>
 #include <cstddef>
 
 #include "TFOOTMapCont.h"
@@ -12,100 +13,134 @@
 
 class TH1D;
 
-struct FOOTAsicGainParam {
+using ExtrapolateLowZ = mnd::BinaryOpt;
+
+struct FMultiPoly {
 	using Vec = std::vector<double>;
+	
 	GET_HELP_AUX_IMPL;
 
-	ADD_SERIALIZABLE_FIELD(Vec, central, {}, 0);
-	ADD_SERIALIZABLE_FIELD(Vec, lateral, {}, 1);
+	ADD_SERIALIZABLE_FIELD(i32, Z,   -1, 0);
+	ADD_SERIALIZABLE_FIELD(Vec, pol, {}, 1);
 
-	inline double ValueCentral(const double x) const noexcept { return poly::Eval(x, central); }
-	inline double ValueLateral(const double x) const noexcept { return poly::Eval(x, lateral); }
+	bool operator<(const FMultiPoly& rhs) const noexcept { return Z < rhs.Z; }
+	FMultiPoly() = default;
+	FMultiPoly(i32 Z_) : Z(Z_), pol{} {};
 
+	virtual ~FMultiPoly() = default;
+	ClassDef(FMultiPoly, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FMultiPoly, 1);
+
+struct FOOTAsicGainParam {
+	using Vec = std::vector<FMultiPoly>;
+	GET_HELP_AUX_IMPL;
+	
+	static constexpr double PROTON_ADC = 100;
+
+	inline static i32 NominalE(i32 Z) noexcept { return Z*Z * PROTON_ADC; }
+	/* Ordered vector, in `Z`. */
+	ADD_SERIALIZABLE_FIELD(Vec, multi_poly, {}, 0);
+
+	inline const FMultiPoly* GetPoly(int Z) const noexcept {
+		for(const auto& p : multi_poly) { if(p.Z == Z) return &p; }
+		return nullptr;
+	}
+	inline FMultiPoly* GetPolyMut(int Z) noexcept {
+		for(auto& p : multi_poly) { if(p.Z == Z) return &p; }
+		return nullptr;
+	}
+	
+	/* `x` here is the absolute value from [0, 640]. */
+	template<ExtrapolateLowZ extrapolate = ExtrapolateLowZ::No>
+	double Value(const double x, const double e) const noexcept {
+		auto it = std::upper_bound( multi_poly.begin(), multi_poly.end(), std::pair{x,e},
+			[](const std::pair<double, double> q, const FMultiPoly& p) {
+				const auto [x,e] = q;
+				return e < poly::Eval(e, p.pol);
+			}
+		);
+		if(it == multi_poly.end()) {
+			if(multi_poly.size() == 0) return NAN;
+			return FOOTAsicGainParam::NominalE( multi_poly.back().Z ) / poly::Eval(x, multi_poly.back().pol);
+		}
+		else if(it == multi_poly.begin()) {
+			if constexpr(extrapolate == ExtrapolateLowZ::Yes) {
+				const auto& [Z1, p1] = *it;
+				const auto& [Z2, p2] = *(it+1);
+				double e1 = poly::Eval(x, p1);
+				double e2 = poly::Eval(x, p2);
+				double g1 = NominalE(Z1) / e1;
+				double g2 = NominalE(Z2) / e2;
+				auto gain_line = GetLine( {e1,g1}, {e2,g2} );
+				return poly::Eval(e, gain_line);
+			} else {
+				return NominalE( multi_poly.back().Z ) / poly::Eval(x, multi_poly.front().pol);
+			}
+		}
+		else {
+			const auto& [Z1, p1] = *it;
+			const auto& [Z2, p2] = *(it-1);
+			double e1 = poly::Eval(x, p1);
+			double e2 = poly::Eval(x, p2);
+			double g1 = NominalE(Z1) / e1;
+			double g2 = NominalE(Z2) / e2;
+			auto gain_line = GetLine( {e1,g1}, {e2,g2} );
+			return poly::Eval(e, gain_line);
+		}
+	}
 	FOOTAsicGainParam() = default;
 	virtual ~FOOTAsicGainParam() = default;
 	ClassDef(FOOTAsicGainParam, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(FOOTAsicGainParam, 1);
+ADD_JSON_TYPE_RESOLUTION(FOOTAsicGainParam, 0);
 
 struct FOOTGainParam {
-	static constexpr double CARBON_ADC = 3600;
+	static constexpr double PROTON_ADC = FOOTAsicGainParam::PROTON_ADC;
 	using AsicArray = std::array<FOOTAsicGainParam, TFOOTMapCont::N_ASIC>;
 	GET_HELP_AUX_IMPL;
 
-	ADD_SERIALIZABLE_FIELD(double,    lat_avg, 0.0, 0);
-	ADD_SERIALIZABLE_FIELD(double,    mid_avg, 0.0, 1);
-	ADD_SERIALIZABLE_FIELD(AsicArray, fit,     {},  2);
+	ADD_SERIALIZABLE_FIELD(AsicArray, fit, {}, 0);
 	
-	inline std::array<double, 2> GetCentralLateralMeanE(const double x) const noexcept {
-		int i = static_cast<int>( x / TFOOTMapCont::N_STRIPS_PER_ASIC );
-		if(i >= (int)fit.size())
-			ERROR("GetCentralLateralMeanE: Requested cluster at %.2f, index=%d > %d\n",
-				x, i, (int)fit.size());
+	inline const FOOTAsicGainParam& GetASIC(double x) const { return fit.at( x / TFOOTMapCont::N_STRIPS_PER_ASIC ); }
+
+	template<ExtrapolateLowZ extrapolate = ExtrapolateLowZ::No>
+	double CorrectionFactor(double x, double e) const noexcept {
+		const auto& asic = GetASIC(x);
+		return asic.Value<extrapolate>(x, e);
+
+	}
+
+	/* Small helper function to plot what we're actually gain matching upon.
+	 * Highly inefficient, but it's w/e. */
+	[[ nodiscard ]] inline TH2D* GetHisto (
+		int nbins_x = 640,
+		int nbins_y = 500,
+		int lo_y    = 0,
+		int hi_y    = 4000
+	) const {
+		TH2D* h = new TH2D("_hFOOTGainParam", "FOOT Gain Parameter", 
+			0, TFOOTMapCont::N_STRIPS, nbins_x,
+			nbins_y, lo_y, hi_y );
 		
-		const auto& p = fit[i]; 
-		return { p.ValueCentral(x), p.ValueLateral(x) };
-	}
-
-	/**
-	 * Get two values, corresponding to the: 
-	 * 1) needed gain at the completely central
-	 *   9C hit, which will be gain-matched into `CARBON_ADC`.
-	 * 2) needed gain at the lateral (non-bonded strip) 9C hit, which will
-	 * be gain matched into `CARBON_ADC * S/M `. 
-	 */
-	inline std::array <
-		std::array<double, 2>, 2 
-	> GetCentralLateralGainValue(const double x) const noexcept {
-		auto [central_e, lateral_e ] = this->GetCentralLateralMeanE(x);	
-		return {{
-			/* pos            gain           */
-			{central_e, CARBON_ADC / central_e}, 
-			{lateral_e, (lat_avg/mid_avg) * CARBON_ADC / lateral_e} 
-		}};
-	}
-
-	/* Factor to divide the measured ADC value to fit the equal C line. */
-	inline double CorrectionFactor(const double x, const double e) const noexcept {
-		auto values = this->GetCentralLateralGainValue(x);
-
-		std::array<double, 2> lin_fit = GetLine(values);
-		
-		/* Point where d/de( g(e) * e) == 0; meaning that the gain matching will reorder two ADC values.
-		 * At this point, the linear curve becomes invalid. */
-		double gain_invalid_after = -lin_fit[0] / (2 * lin_fit[1]);
-		gain_invalid_after = (gain_invalid_after > 0) ? gain_invalid_after : DBL_MAX;
-		double gain_value_at_invalid_point = lin_fit[0] / 2;
-
-		if(x > gain_invalid_after) 
-			return e * gain_value_at_invalid_point;
-		else 
-			return poly::Eval(e, lin_fit);
-	}
-
-	/* Small helper function to plot what we're actually gain matching upon. */
-	[[ nodiscard ]] inline std::pair<TGraph*, TGraph*> GetGraph() const {
-		const int N =  (int)TFOOTMapCont::N_STRIPS;
-		TGraph* g_cen = new TGraph(N);	
-		TGraph* g_lat = new TGraph(N);	
-		for(int i=0; i<N; ++i) {
-			double x0 = i + 0.5;
-			auto [y_cen, y_lat] = this->GetCentralLateralMeanE(x0);
-			g_cen->SetPoint(i, x0, y_cen);
-			g_lat->SetPoint(i, x0, y_lat);
+		for(int ix = 1; ix <= h->GetNbinsX(); ++ix) {
+			double x = h->GetXaxis()->GetBinCenter(ix);
+			const auto& asic = GetASIC(x);
+			
+			for(int iy = 1; iy <= h->GetNbinsY(); ++iy) {
+				double y = h->GetYaxis()->GetBinCenter(iy);
+				double value = asic.Value(x, y);
+				h->SetBinContent(ix, iy, value);
+			}
 		}
-		g_cen->SetLineColor(kRed);
-		g_cen->SetLineWidth(3);
-		g_lat->SetLineColor(kMagenta + 1);
-		g_lat->SetLineWidth(3);
-		return {g_cen, g_lat};
+		return h;
 	}
 
 	FOOTGainParam() = default;
 	virtual ~FOOTGainParam() = default;
 	ClassDef(FOOTGainParam, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(FOOTGainParam, 2);
+ADD_JSON_TYPE_RESOLUTION(FOOTGainParam, 0);
 
 struct FOOTDeltaFFT {
 	using Coeff = std::array<double, 2>;

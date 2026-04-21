@@ -108,12 +108,9 @@ std::array<double, R+1> PolyFit(const std::vector<double>& x, const std::vector<
 
 /* Weighted least squares. 
  * If each point (xi,yi) also has a wi>0 value attached, then just by rescaling
- * xi' = sqrt(wi)*xi
+ * A_ij' = sqrt(wi) * A_ij
  * yi' = sqrt(wi)*yi
  * we come back to ordinary least-square method. */
-
-/* Weights vector `w` must have all elements >= 0. 
- * This check **is not** reinforced at runtime. */
 template<std::size_t R>
 void PolyFit (
 	const std::vector<double>& x, 
@@ -131,10 +128,19 @@ void PolyFit (
 	Eigen::Map<const Eigen::VectorXd> yv(y.data(), N);
 	Eigen::Map<const Eigen::VectorXd> wv(w.data(), N);
 
-	Eigen::VectorXd x_reduced = wv.array().sqrt() * xv.array();
-	Eigen::VectorXd y_reduced = wv.array().sqrt() * yv.array();
-	
-	PolyFit_<R>(x_reduced, y_reduced, N, result);
+	assert((wv.array() >= 0.0).all() && "Weights must be non-negative");
+	assert(wv.array().isFinite().all() && "Weights must be finite");
+
+	const Eigen::VectorXd sqrtw = wv.array().sqrt();
+	Eigen::MatrixXd A(N, R+1);
+	A.col(0) = sqrtw;
+	for(size_t i = 1; i <= R; ++i)
+		A.col(i) = A.col(i-1).cwiseProduct(xv);
+
+	const Eigen::VectorXd b = yv.cwiseProduct(sqrtw);
+
+	const Eigen::Matrix<double, R+1, 1> fit = A.colPivHouseholderQr().solve(b);
+	std::copy_n(fit.data(), R+1, result.data());
 }
 
 template<std::size_t R>
@@ -213,3 +219,42 @@ AngleOffsetFitResult FitAngleOffset (
     const std::vector<double>& y0,
     const std::vector<double>& x
 ); 
+
+extern template void PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , std::array<double,  2>& );
+extern template void PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , std::array<double,  3>& );
+extern template void PolyFit< 3>(const std::vector<double>& , const std::vector<double>& , std::array<double,  4>& );
+extern template void PolyFit< 4>(const std::vector<double>& , const std::vector<double>& , std::array<double,  5>& );
+extern template void PolyFit< 5>(const std::vector<double>& , const std::vector<double>& , std::array<double,  6>& );
+extern template void PolyFit< 6>(const std::vector<double>& , const std::vector<double>& , std::array<double,  7>& );
+extern template void PolyFit< 7>(const std::vector<double>& , const std::vector<double>& , std::array<double,  8>& );
+extern template void PolyFit< 8>(const std::vector<double>& , const std::vector<double>& , std::array<double,  9>& );
+extern template void PolyFit< 9>(const std::vector<double>& , const std::vector<double>& , std::array<double, 10>& );
+extern template void PolyFit<10>(const std::vector<double>& , const std::vector<double>& , std::array<double, 11>& );
+extern template void PolyFit<11>(const std::vector<double>& , const std::vector<double>& , std::array<double, 12>& );
+extern template void PolyFit<12>(const std::vector<double>& , const std::vector<double>& , std::array<double, 13>& );
+
+extern template std::array<double,  2> PolyFit< 1>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  3> PolyFit< 2>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  4> PolyFit< 3>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  5> PolyFit< 4>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  6> PolyFit< 5>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  7> PolyFit< 6>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  8> PolyFit< 7>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  9> PolyFit< 8>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double, 10> PolyFit< 9>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double, 11> PolyFit<10>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double, 12> PolyFit<11>(const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double, 13> PolyFit<12>(const std::vector<double>& , const std::vector<double>& );
+
+extern template std::array<double,  2> PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  3> PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  4> PolyFit< 3>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  5> PolyFit< 4>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  6> PolyFit< 5>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  7> PolyFit< 6>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  8> PolyFit< 7>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double,  9> PolyFit< 8>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double, 10> PolyFit< 9>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double, 11> PolyFit<10>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double, 12> PolyFit<11>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+extern template std::array<double, 13> PolyFit<12>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );

@@ -32,6 +32,7 @@
 #pragma link C++ class FOOTClusterFit+;
 #pragma link C++ class RNFOOTCluster+;
 #pragma link C++ class RNFOOTCal+;
+#pragma link C++ class FMultiPoly+;
 #pragma link C++ class FOOTAsicGainParam+;
 #pragma link C++ class FOOTGainParam+;
 #pragma link C++ class FOOTDeltaFFT+;

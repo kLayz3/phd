@@ -76,10 +76,13 @@ std::pair <
 	
 	std::vector<double> x; x.reserve(N);
 	std::vector<double> y; y.reserve(N);
+	std::vector<double> w; w.reserve(N);
 	for(int i=1; i <= N; ++i) {
 		if(std::isfinite( pfx->GetBinContent(i) )) {
 			x.push_back( pfx->GetBinCenter(i) );
 			y.push_back( pfx->GetBinContent(i));
+			double stddev = pfx->GetBinError(i);
+			w.push_back( 1.0 / (stddev*stddev) );
 		}
 	}
 	TGraphErrors* gerr = new TGraphErrors( pfx.get() ); 
@@ -89,10 +92,12 @@ std::pair <
 	if(v > 0) {
 		std::cout << "Fitting" << std::endl
 			<< "x: " << x << std::endl
-			<< "y: " << y << std::endl;
+			<< "y: " << y << std::endl
+			<< "w: " << w << std::endl;
 	}
 	
-	if(x.size() >= R+1) return { PolyFit<R>(x,y), gerr };
+	if(x.size() >= R+1) return { PolyFit<R>(x,y,w), gerr };
+	//if(x.size() >= R+1) return { PolyFit<R>(x,y), gerr };
 	else return { {}, gerr };
 }
 
@@ -115,14 +120,16 @@ std::tuple <
 	assert((Npts > 0) && "Cannot pass 0 or negative number for points here.");
 	auto [r, gerr] = FitSpline<R, sliceType>(h2, x_lo, x_hi, side_ratio, v);
 
+	if(v > 0) std::cout << "Result: " << r << std::endl;
 	TAxis* xax = h2->GetXaxis();
 	x_lo = std::max( xax->GetXmin(), x_lo );
 	x_hi = std::min( xax->GetXmax(), x_hi );
 	
 	TGraph* g = new TGraph(Npts);
 	for(int i=0; i<Npts; ++i) {
-		double x0 = x_lo + (i+0.5) * (x_hi- x_lo) / Npts; // centre
+		double x0 = x_lo + (i+0.5) * (x_hi - x_lo) / Npts; // centre
 		double y0 = poly::Eval(x0, r);
+		if(v > 0) printf("[%s] Fit: (x0, y0): {%.2f, %.2f}\n", h2->GetName(), x0, y0);
 		g->SetPoint(i, x0, y0);
 	}
 	if constexpr(sliceType == fit_info::PROFILE_MAX) {
