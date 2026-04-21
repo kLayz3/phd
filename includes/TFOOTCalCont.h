@@ -101,7 +101,8 @@ struct FOOTGainParam {
 	GET_HELP_AUX_IMPL;
 
 	ADD_SERIALIZABLE_FIELD(AsicArray, fit, {}, 0);
-	
+
+	/* Throws on invalid access. */ 
 	inline const FOOTAsicGainParam& GetASIC(double x) const { return fit.at( x / TFOOTMapCont::N_STRIPS_PER_ASIC ); }
 
 	template<ExtrapolateLowZ extrapolate = ExtrapolateLowZ::No>
@@ -134,6 +135,21 @@ struct FOOTGainParam {
 			}
 		}
 		return h;
+	}
+	[[ nodiscard ]] inline TGraph* GetGraph (
+		const double x,
+		int nbins_y = 500,
+		int lo_y    = 0,
+		int hi_y    = 4000
+	) const {
+		TGraph* g = new TGraph(nbins_y);
+		const auto& asic = GetASIC(x);
+		for(int i=0; i<nbins_y; ++i) {
+			double y = lo_y + (i+0.5) * (hi_y - lo_y) / nbins_y; // centre
+			double value = asic.Value(x, y);
+			g->SetPoint(i, y, value);
+		}
+		return g;
 	}
 
 	FOOTGainParam() = default;

@@ -185,12 +185,23 @@ struct TH1P {
 	/* Forward only Fill and Draw methods. Don't care about others. */
 	FWD_DRAW(h);
 	FWD_FCN(Fill, h);
-	
-	inline bool IsInside(const double x) const {
+
+
+	inline __attribute__((always_inline)) 
+	bool IsInside(const double x) const noexcept {
 		return (
 			x >= h.GetXaxis()->GetXmin() &&
 			x <  h.GetXaxis()->GetXmax()
 		);
+	}
+	
+	inline auto FillInside(double x) {
+		if(IsInside(x)) return h.Fill(x);
+		else return -1;
+	}
+	inline auto FillInside(double x, double w) {
+		if(IsInside(x)) return h.Fill(x, w);
+		else return -1;
 	}
 
 	/* Implicit ref cvt */
@@ -201,10 +212,10 @@ struct TH1P {
 	operator inner_type*()             noexcept { return &h; }
 	operator const inner_type*() const noexcept { return &h; }
 
-	inline inner_type* operator->() noexcept { return &h; }
-	inline inner_type& operator*()  noexcept { return h; }
-	inline const inner_type* operator->() const noexcept { return &h; }
-	inline const inner_type& operator*()  const noexcept { return h; }
+	inner_type* operator->() noexcept { return &h; }
+	inner_type& operator*()  noexcept { return h; }
+	const inner_type* operator->() const noexcept { return &h; }
+	const inner_type& operator*()  const noexcept { return h; }
 };
 
 /* Wrapper to pretty-decorate standard CERN ROOT histograms
@@ -273,13 +284,22 @@ struct TH2P {
 	FWD_DRAW(h);
 	FWD_FCN(Fill, h);
 
-	inline bool IsInside(const double x, const double y) const {
+	inline __attribute__((always_inline))
+	bool IsInside(const double x, const double y) const noexcept {
 		return (
 			x >= h.GetXaxis()->GetXmin() &&
 			x <  h.GetXaxis()->GetXmax() &&
 			y >= h.GetYaxis()->GetXmin() &&
 			y <  h.GetYaxis()->GetXmax()
 		);
+	}
+	auto FillInside(double x, double y) {
+		if(IsInside(x,y)) return h.Fill(x,y);
+		else return -1;
+	}
+	auto FillInside(double x, double y, double w) {
+		if(IsInside(x,y)) return h.Fill(x,y, w);
+		else return -1;
 	}
 
 	/* Implicit ref cvt */
@@ -290,10 +310,10 @@ struct TH2P {
 	operator inner_type*()             noexcept { return &h; }
     operator const inner_type*() const noexcept { return &h; }
 
-	inline inner_type* operator->() noexcept { return &h; }
-	inline inner_type& operator*()  noexcept { return h; }
-	inline const inner_type* operator->() const noexcept { return &h; }
-	inline const inner_type& operator*()  const noexcept { return h; }
+	inner_type* operator->() noexcept { return &h; }
+	inner_type& operator*()  noexcept { return h; }
+	const inner_type* operator->() const noexcept { return &h; }
+	const inner_type& operator*()  const noexcept { return h; }
 };
 
 /* This instance is thread-unsafe! But anyway if some psycho like me uses latex'ing
@@ -358,7 +378,7 @@ struct PLatex {
 		for(const auto [raw, rep] : rules)
 			PLatex::replace_all(__temporary, raw, rep);
 	}
-	static void replace_all(std::string& s, const char* sub, const char* rep) {
+	inline static void replace_all(std::string& s, const char* sub, const char* rep) {
 		if(!sub || !*sub) return;
 		size_t pos = 0;
 		
@@ -400,10 +420,10 @@ struct PCanvas {
 	operator inner_type*()             noexcept { return &c; }
 	operator const inner_type*() const noexcept { return &c; }
 
-	inline inner_type* operator->() noexcept { return &c; }
-	inline inner_type& operator*()  noexcept { return c; }
-	inline const inner_type* operator->() const noexcept { return &c; }
-	inline const inner_type& operator*()  const noexcept { return c; }
+	inner_type* operator->() noexcept { return &c; }
+	inner_type& operator*()  noexcept { return c; }
+	const inner_type* operator->() const noexcept { return &c; }
+	const inner_type& operator*()  const noexcept { return c; }
 
 };
 

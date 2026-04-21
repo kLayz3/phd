@@ -139,8 +139,8 @@ void foot_gain_match (
 				
 			if(mnd::IsInside(delta, delta_cut_mid) and cl.fCM >= mult_cut) {
 				h1_delta_cut_mid->Fill(delta);
-				hit_energy_mid->Fill(i, e);
-				h1_foot_e_mid->Fill(e); break; // Only one 'hit' per event allowed.
+				hit_energy_mid->FillInside(i, e);
+				h1_foot_e_mid->FillInside(e); break; // Only one 'hit' per event allowed.
 			}
 		}
 	}
@@ -171,7 +171,7 @@ void foot_gain_match (
 	};
 
 	constexpr static size_t POLY_DEG = 4;
-	constexpr static int N_NEEDED_ENTRIES = 150;
+	constexpr static int N_NEEDED_ENTRIES = 400;
 
 	/* Try to fit a spline(s) for middle few ASICs. */
 	if(do_fit == DoFit::yes) { 
