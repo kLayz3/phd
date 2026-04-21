@@ -171,7 +171,7 @@ void foot_gain_match (
 	};
 
 	constexpr static size_t POLY_DEG = 4;
-	constexpr static int N_NEEDED_ENTRIES = 250;
+	constexpr static int N_NEEDED_ENTRIES = 150;
 
 	/* Try to fit a spline(s) for middle few ASICs. */
 	if(do_fit == DoFit::yes) { 
