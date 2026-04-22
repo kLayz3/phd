@@ -15,7 +15,6 @@ using namespace ROOT::Experimental;
 constexpr const char* label[] = {
 	"21", "22", "31", "41"
 }; constexpr int NSCI = static_cast<int>( sizeof(label)/sizeof(*label) );
-enum class DoSave { no, yes };
 
 void sci_x_cal (
 	std::string fileName = "", 

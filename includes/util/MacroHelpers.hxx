@@ -11,6 +11,8 @@
 using A2 = std::array<double, 2>;
 using A3 = std::array<double, 3>;
 
+enum class DoSave { yes, no };
+
 namespace canvas {
 	enum struct Extension { png, jpeg, pdf, C, root };
 

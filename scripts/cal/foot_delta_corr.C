@@ -30,8 +30,6 @@
 using namespace ROOT;
 using namespace ROOT::Experimental;
 
-enum class DoGainMatch {no,yes};
-
 /* Because cling issues the WEIRDEST compiler error,..
  * I cannot just simply return `FOOTDeltaParam` instance. It tries to compile the class
  * from the inputs but loses it on template spec in boost preproc library LOL. PEGI 18. */
@@ -39,15 +37,17 @@ class FOOTDeltaParam;
 FOOTDeltaParam* GetDeltaParams(TH2D*);
 
 constexpr double D_LO = 0.4999;
-constexpr int D_BINS = 80;
 
 void foot_delta_corr (
 	std::string fileName = "", 
 	int ifoot = 0,
-	std::array<double,2> foot_cut = {4,4000}, 
+	std::array<double,3> foot_cut = {80, 1600,4600}, 
+	int delta_bins = 80,
+	int Q_target = 6,
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX} 
+	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
+	DoSave do_save = DoSave::no
 ) {
 #ifndef __USING_LUSTRE_HPC__
 	gSystem->Load ("libfftw3.so");
@@ -69,7 +69,7 @@ void foot_delta_corr (
 		ERROR("Trying to do the delta-correction, but FOOT%d tagged as NOT already gain matched!\n"
 			"Please reodo the file WITH gain-matching flag supplied.", ifoot);
 
-	const double CA = FOOTGainParam::CARBON_ADC;
+	const double CA = FOOTGainParam::PROTON_ADC * Q_target * Q_target;
 
 	ROOT::EnableImplicitMT();
 
@@ -78,19 +78,19 @@ void foot_delta_corr (
 	auto frs = model->MakeField<RNFRSCal>("FRS");
 	auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
 
-	TH1P* h1_delta = new TH1P(Form("((h1_foot%d))Delta@FOOT%d", ifoot, ifoot), kGreen+1, D_BINS, -D_LO, D_LO);
-	TH2P* h2_m_vs_delta = new TH2P(Form("((h2_footm%d))Partial cluster size:delta@FOOT%d", ifoot, ifoot), D_BINS, -D_LO, D_LO, 10, 0.5, 10.5);
+	TH1P* h1_delta = new TH1P(Form("((h1_foot%d))Delta@FOOT%d", ifoot, ifoot), kGreen+1, delta_bins, -D_LO, D_LO);
+	TH2P* h2_m_vs_delta = new TH2P(Form("((h2_footm%d))Partial cluster size:delta@FOOT%d", ifoot, ifoot), delta_bins, -D_LO, D_LO, 10, 0.5, 10.5);
 	TH2P* sum_energy_vs_x = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Strip num@FOOT%d raw", ifoot, ifoot), 
 		160,0,640,
-		D_BINS, foot_cut[0], foot_cut[1]);
+		foot_cut[0], foot_cut[1], foot_cut[2]);
 	TH2P* sum_energy_vs_delta = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Delta@FOOT%d raw", ifoot, ifoot), 
-		D_BINS,-D_LO, D_LO,
-		D_BINS, foot_cut[0], foot_cut[1]);
+		delta_bins,-D_LO, D_LO,
+		foot_cut[0], foot_cut[1], foot_cut[2]);
 	TH2P* corr_energy_vs_delta = new TH2P(Form("((h2_footcorr%d))E1/%.1f - 1:Delta@FOOT%d", ifoot, CA, ifoot), 
-		D_BINS,-D_LO, D_LO,
-		D_BINS, foot_cut[0]/CA - 0.9, foot_cut[1]/CA - 0.9);
+		delta_bins, -D_LO, D_LO,
+		foot_cut[0], foot_cut[1]/CA - 0.9, foot_cut[2]/CA - 0.9);
 	
-	TH1P* h1_m0 = new TH1P(Form("((h_0)) FOOT%d dE [ADC units]@All cluster sizes", ifoot), kYellow - 7, D_BINS, foot_cut[0], foot_cut[1]);
+	TH1P* h1_m0 = new TH1P(Form("((h_0)) FOOT%d dE [ADC units]@All cluster sizes", ifoot), kYellow - 7, foot_cut[0], foot_cut[1], foot_cut[2]);
 
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
@@ -129,8 +129,8 @@ void foot_delta_corr (
 			double delta = cl.Delta(); 
 			double e = cl.fCE;
 			double x = cl.fCX;
-			
-			if(!mnd::IsInside(e, foot_cut)) continue;
+			/* Explicitly skip here so we don't deal with over/underflow bins */
+			if(!mnd::IsInside(e, foot_cut)) continue; 
 			
 			sum_energy_vs_delta -> Fill(delta, e);
 			sum_energy_vs_x -> Fill(x, e);
@@ -166,7 +166,7 @@ void foot_delta_corr (
 			/* Normalize with the triangular delta-correction */
 			e /= d->CorrectionBasic(delta);
 			
-			corr_energy_vs_delta -> Fill(delta, e / FOOTGainParam::CARBON_ADC - 1);
+			corr_energy_vs_delta -> Fill(delta, e / CA - 1);
 		}
 	}
 	
@@ -184,7 +184,7 @@ void foot_delta_corr (
 	auto [fft, gr, g] = DoFFTW<fit_info::GAUSS_MAX>(*corr_energy_vs_delta, -0.5, 0.5, gaus_side_ratio, Q, v);
 	WARN("\n[[FOOT%d]] FFT Params:\n", p->de10_index_);
 	printf("\"s\": %.5f,\n\"f\": %.5f,\n", d->s, d->f);
-	printf("\"f2\": {\n\t\"n\": %d,", D_BINS);
+	printf("\"f2\": {\n\t\"n\": %d,", delta_bins);
 	printf("\n\t\"c\": [");
 	for(int i=0; i<Q; ++i) std::cout << fft.coeff[i] << ", ";
 	std::cout << fft.coeff[Q] << "]";
@@ -228,6 +228,11 @@ void foot_delta_corr (
 	cs2->Divide(2,1);
 	cs2->cd(1); h2_sci->Draw("COLZ");
 	cs2->cd(2); h2_sci3v2->Draw("COLZ");
+	
+	if(do_save == DoSave::yes) {
+		std::filesystem::path inf( fileName );
+		save_all(canvas::Extension::png, { Form("FOOT%d", ifoot), inf.stem().c_str() });
+	}
 }
 
 FOOTDeltaParam* GetDeltaParams(TH2D* e_vs_delta) {

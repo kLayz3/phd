@@ -196,7 +196,7 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, DoGainMatch gm) 
 		 * bounced by a factor (up to 2-3). */
 		const FOOTGainParam& gain = out.par.gain;
 		for(int i=0; i<N_STRIPS; ++i) {
-			double g0 = gain.CorrectionFactor<ExtrapolateLowZ::Yes>(i + 0.5, 0.0); /* Gain factor at ~0 ADC units */
+			double g0 = gain.CorrectionFactor<>(i + 0.5, 0.0); /* Gain factor at ~0 ADC units */
 			c_thr[i] *= g0;
 			n_thr[i] *= g0;
 		}
@@ -225,7 +225,7 @@ void TFOOTCalProc::ProcessEntry() noexcept {
 	if(gm_ == DoGainMatch::kYES) {
 		const FOOTGainParam& gain = out.par.gain;
 		for(int i=0; i<N_STRIPS; ++i) {
-			e[i] *= gain.CorrectionFactor<ExtrapolateLowZ::Yes>( i + 0.5, e[i] );
+			e[i] *= gain.CorrectionFactor<>( i + 0.5, e[i] );
 		}
 	}
 			

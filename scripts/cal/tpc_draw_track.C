@@ -45,7 +45,6 @@ struct DoFit {
 private:
 	std::variant<No, Yes> data_;
 };
-enum class DoSave { no, yes };
 
 void tpc_draw_track (
 	std::string fileName = "", 

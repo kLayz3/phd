@@ -9,7 +9,6 @@
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
-enum class DoSave { yes, no };
 
 constexpr static double NBINS  = 300;
 constexpr static double CUT_LO = 10;
@@ -29,7 +28,6 @@ void verify_foot_delta_gain (
 	if(np > 3) throw std::runtime_error("np parameter (2nd argument) is > 3.");
 	ROOT::EnableImplicitMT();
 
-	const double CA = FOOTGainParam::CARBON_ADC;
 	std::array<FOOTParam*, 2> p;
 	{
 		std::array<TParameter<bool>*, 2> is_gain_matched;

@@ -186,9 +186,8 @@ struct TH1P {
 	FWD_DRAW(h);
 	FWD_FCN(Fill, h);
 
-
 	inline __attribute__((always_inline)) 
-	bool IsInside(const double x) const noexcept {
+	bool IsInside(double x) const noexcept {
 		return (
 			x >= h.GetXaxis()->GetXmin() &&
 			x <  h.GetXaxis()->GetXmax()
@@ -285,7 +284,7 @@ struct TH2P {
 	FWD_FCN(Fill, h);
 
 	inline __attribute__((always_inline))
-	bool IsInside(const double x, const double y) const noexcept {
+	bool IsInside(double x, double y) const noexcept {
 		return (
 			x >= h.GetXaxis()->GetXmin() &&
 			x <  h.GetXaxis()->GetXmax() &&

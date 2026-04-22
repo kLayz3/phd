@@ -19,7 +19,6 @@
 using namespace ROOT;
 using namespace ROOT::Experimental;
 
-enum class DoSave { yes, no };
 struct DoFit {
 	struct No {};
 	struct Yes {
