@@ -22,7 +22,8 @@ void verify_foot_delta_gain (
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> eta_axis = {80, 0.52},
+	std::array<double,2> delta_axis = {80, 0.52},
+	int cl_cut = 1,
 	DoSave do_save = DoSave::no
 ) {
 	if(np > 3) throw std::runtime_error("np parameter (2nd argument) is > 3.");
@@ -60,6 +61,9 @@ void verify_foot_delta_gain (
 	TH2P* final_energy_vs_delta[2];
 	TH2P* final_energy_vs_x[2];
 	TH1P* final_e[2];
+	TH1P* cl_mult[2];
+	TH2P* cl_mult_vs_delta[2];
+	TH2P* cl_mult_e[2][5];
 
 	for(int i: {0,1}) {
 		const auto& lim = (i==0) ? cut0 : cut1;
@@ -67,25 +71,35 @@ void verify_foot_delta_gain (
 		
 		/* ================================================================== */
 		gain_energy_vs_delta[i] = new TH2P(Form("((h2_gain_%d))Cluster E [ADC gain-adjusted]:Delta@FOOT%d gain-matched", i, foot_i),
-			eta_axis[0], -1.0*eta_axis[1], eta_axis[1], lim[0], lim[1], lim[2]	
+			delta_axis[0], -1.0*delta_axis[1], delta_axis[1], lim[0], lim[1], lim[2]	
 		);
 		gain_energy_vs_x[i] = new TH2P(Form("((h2_gain_x%d))Cluster E [ADC gain-adjusted]:x [strip #]@FOOT%d gain-matched", i, foot_i),
-			320, 0, 640, lim[0], lim[1], lim[2]
+			640, 0, 640, lim[0], lim[1], lim[2]
 		);
 		gain_e[i] = new TH1P(Form("((h1_gain_e%d))dE [ADC gain-adjusted]@FOOT%d gain-matched", i, foot_i), 
 			kYellow - 5, lim[0], lim[1], lim[2]
 		);
 		/* ================================================================== */
 		final_energy_vs_delta[i] = new TH2P(Form("((h2_final_d%d))Cluster E [ADC gain-delta adjusted]:Delta@FOOT%d gain-delta adjusted", i, foot_i),
-			eta_axis[0], -1.0*eta_axis[1], eta_axis[1], lim[0], lim[1], lim[2]	
+			delta_axis[0], -1.0*delta_axis[1], delta_axis[1], lim[0], lim[1], lim[2]	
 		);
 		final_energy_vs_x[i] = new TH2P(Form("((h2_final_x%d))Cluster E [ADC gain-delta adjusted]:x [strip #]@FOOT%d gain-delta adjusted", i, foot_i),
-			320, 0, 640, lim[0], lim[1], lim[2]	
+			640, 0, 640, lim[0], lim[1], lim[2]	
 		);
 		final_e[i] = new TH1P(Form("((h1_final_e%d))dE [ADC gain-delta adjusted]@FOOT%d gain-delta adjusted", i, foot_i), 
 			kYellow - 7, lim[0], lim[1], lim[2]
 		);
+		cl_mult[i] = new TH1P(Form("((h1_cl_mult%d))Cluster multiplicity@FOOT%d", i, foot_i),
+			kCyan -3, 10, 0.5, 10.5);
+		cl_mult_vs_delta[i] = new TH2P(Form("((h2_cl_mult%d))Cluster multiplicity:Delta@FOOT%d", i, foot_i),
+			delta_axis[0], -1.0*delta_axis[1], delta_axis[1], 10, 0.5, 10.5);
+		for(int m: {1,2,3,4,5}) {
+			int index = m-1;
+			cl_mult_e[i][index] = new TH2P(Form("((h2_cl_mult_e%d_%d))Cluster E [ADC gain-delta adjusted]:x [strip #]@FOOT%d, mult=%d", i, index, foot_i, m),
+				640, 0, 640, lim[0], lim[1], lim[2]);
+		}
 	}
+
 	TH2P* h2_both = new TH2P(Form("((h2_0)) FOOT%d dE [ADC corrected]:FOOT%d dE [ADC corrected]", 2*np+1, 2*np), 
 		cut0[0], cut0[1], cut0[2],
 		cut1[0], cut1[1], cut1[2]);
@@ -140,11 +154,34 @@ void verify_foot_delta_gain (
 	final_energy_vs_delta[i] -> Fill(delta[i], ef[i]); \
 	final_energy_vs_x[i] -> Fill(x[i], ef[i]); \
 	final_e[i]->Fill( ef[i] ); \
+	\
+	cl_mult[i] -> Fill( cl##i.fCM ); \
+	cl_mult_vs_delta[i] -> Fill( delta[i], cl##i.fCM ); \
+	switch(cl##i.fCM) { \
+		case(1): { \
+			cl_mult_e[i][0] -> Fill(x[i], ef[i]); break; \
+		} \
+		case(2): { \
+			cl_mult_e[i][1] -> Fill(x[i], ef[i]); break; \
+		} \
+		case(3): { \
+			cl_mult_e[i][2] -> Fill(x[i], ef[i]); break; \
+		} \
+		case(4): { \
+			cl_mult_e[i][3] -> Fill(x[i], ef[i]); break; \
+		} \
+		case(5): { \
+			cl_mult_e[i][4] -> Fill(x[i], ef[i]); break; \
+		} \
+		default: { break; } \
+	}
 			
 		for(const auto& cl0 : foot[0]->fCl) {
+			if(cl0.fCM <= cl_cut) continue;
 			EXPAND_(0)
 			
 			for(const auto& cl1 : foot[1]->fCl) {
+				if(cl1.fCM <= cl_cut) continue;
 				EXPAND_(1)
 				h2_both->Fill(ef[0], ef[1]);
 			}
@@ -214,7 +251,21 @@ void verify_foot_delta_gain (
 	cs->cd(4); h1_sci21_cut->Draw();
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
-	
+
+	TCanvas* cmult = new TCanvas("multiplicities", "multiplicities", 2400, 1200);
+	cmult->Divide(5,2);
+	for(int i: {0,1}) {
+		cmult->cd(5*i + 1);
+		cl_mult[i]->Draw();
+		cmult->cd(5*i + 2);
+		cl_mult_vs_delta[i]->Draw("COLZ");
+		
+		for(int m: {1,2,3}) {
+			cmult->cd(5*i + 2 + m);
+			cl_mult_e[i][m-1] -> Draw("COLZ");	
+		}
+	}
+
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
 		std::string postfix = std::string( Form("%d_%d_sc31cut",

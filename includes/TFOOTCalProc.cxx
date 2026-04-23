@@ -151,7 +151,7 @@ auto TFOOTCalProc::GetClusterType() -> ClusterType {
 }
 
 /* Input and output should be properly assigned a priori. */
-TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, DoGainMatch gm) : 
+TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) : 
 	TFOOTCalProc::Base(out, in)
 {
 	TFOOTMapCont& input = std::get<0>(this->in);
@@ -190,19 +190,6 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in, DoGainMatch gm) 
 			ERROR("FOOT[%d -> %d], strip = %d, c_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, c_thr[i]);
 	}
 	
-	this->gm_ = gm;
-	if(gm_ == DoGainMatch::kYES) {
-		/* In this case, the thresholds must adjust, since everything will initially get
-		 * bounced by a factor (up to 2-3). */
-		const FOOTGainParam& gain = out.par.gain;
-		for(int i=0; i<N_STRIPS; ++i) {
-			double g0 = gain.CorrectionFactor<>(i + 0.5, 0.0); /* Gain factor at ~0 ADC units */
-			c_thr[i] *= g0;
-			n_thr[i] *= g0;
-		}
-		out.gain_matched->SetVal(true);
-	}
-
 #define _ALTER_TITLE(x) \
 	x->SetTitle(Form("%s : S=%.1f N=%1.f", x->GetTitle(), X_CENTRE_THR, X_NEIGHB_THR))
 	_ALTER_TITLE(out.h1_cl_type);
@@ -221,14 +208,6 @@ void TFOOTCalProc::ProcessEntry() noexcept {
 	/* Copy	the data over, since there's a write to `e`. */
 	memcpy(e, _e, sizeof(e)); 
 
-	/* In case we do on-the-fly gain matching, adjust each ADC value accordingly. */
-	if(gm_ == DoGainMatch::kYES) {
-		const FOOTGainParam& gain = out.par.gain;
-		for(int i=0; i<N_STRIPS; ++i) {
-			e[i] *= gain.CorrectionFactor<>( i + 0.5, e[i] );
-		}
-	}
-			
 	int i = 0;
 	/* Try to find a central 'seed' strip. */
 	for(; i < N_STRIPS; ++i) {
@@ -421,7 +400,7 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		out.inner()._fHeClSize1.assign(e, e + N_STRIPS);
 	}
 	
-	out.inner().AddCluster(cl_wx, cl_e, _cl_cnt, ct, it_max->e, cl_fit);
+	out.inner().AddCluster(cl_wx, cl_e, _cl_cnt, ct, cl_fit);
 }
 
 /* When noisy strip is found in a middle of the cluster, extrapolate it's value based

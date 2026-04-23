@@ -397,7 +397,6 @@ struct RNFOOTCluster {
 	double fCE = 0; /* Cluster summed energy. */
 	u32    fCM = 0; /* Cluster multiplicity. */
 	ClusterType fCT{}; /* Cluster type. */
-	double fCP = 0; /* Cluster max energy in a single strip. */
 	FOOTClusterFit fit{};
 
 	inline double Delta() const noexcept { return mnd::rround<int>(fCX) - fCX; }
@@ -414,7 +413,7 @@ struct RNFOOTCluster {
 	template<std::size_t I>
 	decltype(auto) get() const && noexcept { return get_helper<I>(std::move(*this)); }
 
-	RNFOOTCluster(double, double, u32, ClusterType, double, FOOTClusterFit);
+	RNFOOTCluster(double, double, u32, ClusterType, FOOTClusterFit);
 	RNFOOTCluster() = default;
 	virtual ~RNFOOTCluster() = default;
 	ClassDef(RNFOOTCluster, 1);
@@ -426,8 +425,7 @@ private:
 		else if constexpr(I == 1) return (std::forward<Self>(self).fCE);
 		else if constexpr(I == 2) return (std::forward<Self>(self).fCM);
 		else if constexpr(I == 3) return (std::forward<Self>(self).fCT);
-		else if constexpr(I == 4) return (std::forward<Self>(self).fCP);
-		else static_assert(I < 5, "Index out of bounds for RNFOOTCluster::get");
+		else static_assert(I < 4, "Index out of bounds for RNFOOTCluster::get");
 	} 
 };
 
@@ -438,7 +436,6 @@ namespace std {
 	template<> struct tuple_element<1, ::RNFOOTCluster> { using type = double; };
     template<> struct tuple_element<2, ::RNFOOTCluster> { using type = u32; };
     template<> struct tuple_element<3, ::RNFOOTCluster> { using type = RNFOOTCluster::ClusterType; };
-    template<> struct tuple_element<4, ::RNFOOTCluster> { using type = double; };
 }
 
 struct alignas(mnd::CL) RNFOOTCal {
@@ -467,8 +464,8 @@ struct alignas(mnd::CL) RNFOOTCal {
 	inline void AddCluster(RNFOOTCluster cl) noexcept {
 		fCl.push_back(std::move(cl));
 	}
-	inline void AddCluster(double x, double e, u32 m, ClusterType ty, double p, FOOTClusterFit f) noexcept {
-		fCl.emplace_back(x, e, m, ty, p, f);
+	inline void AddCluster(double x, double e, u32 m, ClusterType ty, FOOTClusterFit f) noexcept {
+		fCl.emplace_back(x, e, m, ty, f);
 	}
 	virtual ~RNFOOTCal() = default;
 	ClassDef(RNFOOTCal, 1);
@@ -495,8 +492,6 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	FOOTParam* setup;
 	FOOTBoxParam* box; // Optional; not every FOOT will register the box object 
 					   // based on `should_register_box_` predicate.
-	TParameter<bool>* gain_matched;
-
 	TFOOTCalCont() = default;
 
 	void Init(TDictInfo info) override;

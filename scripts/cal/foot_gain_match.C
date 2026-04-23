@@ -53,7 +53,7 @@ void foot_gain_match (
 	DoFit do_fit = DoFit::no,
 	std::array<double,3> foot_binning = {1000, 4, 4000}, 
 	double delta_cut = 0.05,
-	uint32_t mult_cut  = 1, // any multiplicity below that is disallowed 
+	uint32_t mult_cut = 1, // any multiplicity below that is disallowed 
 	int Q_target = 6,
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
@@ -70,20 +70,12 @@ void foot_gain_match (
 	const std::array<double, 2> delta_cut_mid   = { -delta_cut, delta_cut };
 
 	FOOTParam *foot_param; 
-	TParameter<bool> *is_already_gain_matched;
 	{
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
 		foot_param = f->Get<FOOTParam>(Form("FOOT%d_setup", ifoot));
 		if(!foot_param)
 			throw std::runtime_error(Form("FOOT param is nullptr. Fix it (line: %d).", __LINE__));
-		is_already_gain_matched = f->Get<TParameter<bool>>(Form("FOOT%d_gain_matched", ifoot));
-		if(!is_already_gain_matched)
-			ERROR("FOOT%d gain matching tag not fetchable? Line: %d\n", ifoot, __LINE__); 
 	}
-	if(do_fit == DoFit::yes and is_already_gain_matched->GetVal()) 
-		ERROR("Trying to fit the gain matched curve, but FOOT%d tagged as already gain matched!\n"
-			"Either use this to verify, or re-do the file without gain-matching flag upfront.", ifoot);
-	
 	ROOT::EnableImplicitMT();
 	
 	auto model = RNTupleModel::Create();
@@ -130,22 +122,24 @@ void foot_gain_match (
 		h1_sci31_cut->Fill(sci31.E);
 
 		for(const auto& cl : foot->fCl) {
+			if(cl.fCM < mult_cut) continue;
+
 			double delta = cl.Delta();
 			h1_delta->Fill(delta);
 			
 			int i = static_cast<int>( cl.fCX );
-			double e = cl.fCP; /* Take *central* strip value, not the entire cluster! */
+			double e = cl.fCE;
 				
-			if(mnd::IsInside(delta, delta_cut_mid) and cl.fCM >= mult_cut) {
+			if(mnd::IsInside(delta, delta_cut_mid)) {
 				h1_delta_cut_mid->Fill(delta);
 				hit_energy_mid->FillInside(i, e);
-				h1_foot_e_mid->FillInside(e); break; // Only one 'hit' per event allowed.
+				h1_foot_e_mid->FillInside(e); 
 			}
 		}
 	}
 
 	/* Idea is the following. Gain isn't always the same,.. some strips require higher gain for
-	 * lower values. Simply to line up the central hit strip to the `TARGET_ADC`, across the detector. */
+	 * lower values. Simply to line up the total cluster energy values to the `TARGET_ADC`, across the detector. */
 	
 	/* Do the small fit in the 1D plot. */
 	constexpr double sratio = 1.0;
@@ -259,7 +253,7 @@ void foot_gain_match (
 		vlines.push_back( line );
 	}
 	
-	TCanvas *c = new TCanvas("RawFOOT", Form("FOOT%d central", ifoot), 2000, 1400);
+	TCanvas *c = new TCanvas("RawFOOT", Form("FOOT%d central", ifoot), 2400, 1400);
 	hit_energy_mid->Draw("COLZ");
 	for(auto* l0 : vlines) {
 		TLine* l = dynamic_cast<TLine*>(l0->Clone());
@@ -297,12 +291,23 @@ void foot_gain_match (
 
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
-		save_all(canvas::Extension::png, 
-			{ 
-				Form("FOOT%d", ifoot),
-				Form("Z_%d", Q_target),
-				inf.stem().c_str()
-			}
-		);
+		if(do_fit == DoFit::yes) {
+			save_all(canvas::Extension::png, 
+				{
+					Form("FOOT%d", ifoot),
+					Form("Z_%d", Q_target),
+					inf.stem().c_str()
+				}
+			);
+		} else {
+			save_all(canvas::Extension::png, 
+				{
+					Form("FOOT%d", ifoot),
+					Form("Z_%d", Q_target),
+					inf.stem().c_str(),
+					"verification"
+				}
+			);
+		}
 	}
 }

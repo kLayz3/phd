@@ -28,7 +28,6 @@ int main(int argc, char* argv[]) {
 	srand(time(NULL));	
 
 	std::string pStr, fileName, outFile, setupFile, footSetupFile;
-	bool gm {false};
 	u64 maxEvents = -1;
 
 	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
@@ -49,10 +48,6 @@ int main(int argc, char* argv[]) {
 	if(!ParseCmdLine("foot-setup", footSetupFile, argc, argv)) {
 		footSetupFile = PROG_PATH "/params/foot_setup.json";
 		WARN("FOOT setup file not specified. Defaulting to: " EMPH(%s\n), footSetupFile.c_str());
-	}
-	if(IsCmdArg("gain-match", argc, argv) || IsCmdArg("gm", argc, argv)) {
-		gm = true;
-		WARN("FOOT gain matching requested! Will take from: " EMPH(%s\n), footSetupFile.c_str());
 	}
 
 	VerifyNoArgumentsLeft(argc, argv);
@@ -82,18 +77,17 @@ int main(int argc, char* argv[]) {
 		});
 		cfoot[i].Setup();
 	}
-	auto fgm_ = (gm) ? TFOOTCalProc::DoGainMatch::kYES : TFOOTCalProc::DoGainMatch::kNO;
 
 	/* Set up the process pool. */
 	auto pool = TAnalysisProcess<>(fileName, outFile, "h103")
-		.emplace_process<TFOOTCalProc>(cfoot[0], mfoot[0], fgm_)
-		.emplace_process<TFOOTCalProc>(cfoot[1], mfoot[1], fgm_)
-		.emplace_process<TFOOTCalProc>(cfoot[2], mfoot[2], fgm_)
-		.emplace_process<TFOOTCalProc>(cfoot[3], mfoot[3], fgm_)
-		.emplace_process<TFOOTCalProc>(cfoot[4], mfoot[4], fgm_)
-		.emplace_process<TFOOTCalProc>(cfoot[5], mfoot[5], fgm_)
-		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6], fgm_)
-		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7], fgm_)
+		.emplace_process<TFOOTCalProc>(cfoot[0], mfoot[0])
+		.emplace_process<TFOOTCalProc>(cfoot[1], mfoot[1])
+		.emplace_process<TFOOTCalProc>(cfoot[2], mfoot[2])
+		.emplace_process<TFOOTCalProc>(cfoot[3], mfoot[3])
+		.emplace_process<TFOOTCalProc>(cfoot[4], mfoot[4])
+		.emplace_process<TFOOTCalProc>(cfoot[5], mfoot[5])
+		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6])
+		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7])
 		.emplace_process<TFRSCalProc >(cfrs    , mfrs)
 		.MakePool<8>( 4092 );
 		//.MakePool<1>( 512 );

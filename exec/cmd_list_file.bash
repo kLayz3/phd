@@ -68,6 +68,6 @@ else
 	echo | tee -a $cmd_file	
 	for fname in $(ls $dir/$ext); do
 		fname=$(basename "$fname")
-		echo "./cal.exe -file mapdir/$fname -output caldir/$fname -gm" | tee -a $cmd_file
+		echo "./cal.exe -file mapdir/$fname -output caldir/$fname" | tee -a $cmd_file
 	done
 fi

@@ -12,8 +12,8 @@ double FOOTDeltaFFT::Evaluate(const double x) const {
 	return FFTW::Evaluate(this->c, this->n, x, -0.5, 0.5); 	
 }
 
-RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, double p, FOOTClusterFit fit) :
-	fCX(x), fCE(e), fCM(m), fCT(t), fCP(p), fit{fit} {}
+RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, FOOTClusterFit fit) :
+	fCX(x), fCE(e), fCM(m), fCT(t), fit{fit} {}
 
 /* ------------------------------------------------------- */
 
@@ -108,9 +108,6 @@ void TFOOTCalCont::Setup() {
 	/* In the cal step, box object not used. It's just written down for helper scripts to process stuff. */
 	if(should_register_box_)
 		box = RegisterObject<FOOTBoxParam>("box", mnd::noop_fn<FOOTBoxParam>(), this->bpar);
-	
-	gain_matched = RegisterObject<TParameter<bool>>("gain_matched", mnd::noop_fn<TParameter<bool>>());
-	gain_matched->SetVal(false);
 }
 
 ClassImp(FOOTClusterFit);
