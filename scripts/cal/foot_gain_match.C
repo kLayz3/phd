@@ -42,6 +42,8 @@ private:
 	std::variant<No, Yes> data_;
 };
 
+enum class Take { gauss, profile };
+
 constexpr int D_BINS = 1000;
 constexpr int N_STRIPS = 64;
 constexpr double LR_SCALING = 2.5;
@@ -58,7 +60,8 @@ void foot_gain_match (
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
-	DoSave do_save = DoSave::no
+	DoSave do_save = DoSave::no,
+	Take take = Take::gauss
 ) {
 	if(N_STRIPS % bins_per_asic != 0)
 		throw std::runtime_error(Form("Passed: %d , not evenly divisible by %d.\n",
@@ -164,7 +167,7 @@ void foot_gain_match (
 	};
 
 	constexpr static size_t POLY_DEG = 4;
-	constexpr static int N_NEEDED_ENTRIES = 400;
+	constexpr static int N_NEEDED_ENTRIES = 850;
 
 	/* Try to fit a spline(s) for middle few ASICs. */
 	if(do_fit == DoFit::yes) { 
@@ -196,8 +199,12 @@ void foot_gain_match (
 				gauss_raw.push_back(graw); 
 				profile_fit.push_back(pfit); 
 				profile_raw.push_back(praw); 
-
-				mp->pol = std::vector<double>(rg.begin(), rg.end()); 
+				
+				if(take == Take::gauss) {
+					mp->pol = std::vector<double>(rg.begin(), rg.end()); 
+				} else {
+					mp->pol = std::vector<double>(rp.begin(), rp.end());
+				}
 			} 
 			else {
 				TAxis *xax = (*hit_energy_mid)->GetXaxis(); 
@@ -234,7 +241,11 @@ void foot_gain_match (
 				profile_fit.push_back(pfit); 
 
 				mp->pol = std::vector<double>(1); 
-				mp->pol[0] = gauss_mean; 
+				if(take == Take::gauss or pasic->Integral() <= N_NEEDED_ENTRIES) {
+					mp->pol[0] = gauss_mean; 
+				} else {
+					mp->pol[0] = profile_mean; 
+				}
 			}
 
 			std::sort( asic.multi_poly.begin(), asic.multi_poly.end() );
@@ -286,7 +297,8 @@ void foot_gain_match (
 		Form("Detector ID: FOOT%d", ifoot),
 		Form("Delta cut: #pm%.3f", delta_cut),
 		Form("Cluster size >= %d", mult_cut),
-		Form("Gauss fits size ratio: %.2f sigma", sratio)
+		(take == Take::gauss) ? Form("Gauss fits size ratio: %.2f sigma", sratio)
+			: "Fit taken from profile (violet curve)"
 	);
 
 	if(do_save == DoSave::yes) {
