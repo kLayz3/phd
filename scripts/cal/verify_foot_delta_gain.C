@@ -23,7 +23,7 @@ void verify_foot_delta_gain (
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> delta_axis = {80, 0.52},
-	int cl_cut = 1,
+	uint32_t mult_cut = 1, // every cluster with size below this gets rejected
 	DoSave do_save = DoSave::no
 ) {
 	if(np > 3) throw std::runtime_error("np parameter (2nd argument) is > 3.");
@@ -31,21 +31,11 @@ void verify_foot_delta_gain (
 
 	std::array<FOOTParam*, 2> p;
 	{
-		std::array<TParameter<bool>*, 2> is_gain_matched;
-		
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
 		p[0] = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*np));
 		p[1] = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*np + 1));
 		if(!p[0] or !p[1])
 			throw std::runtime_error(Form("FOOT param is nullptr. Fix it (line: %d).", __LINE__));
-		is_gain_matched[0] = f->Get<TParameter<bool>>(Form("FOOT%d_gain_matched", 2*np));
-		is_gain_matched[1] = f->Get<TParameter<bool>>(Form("FOOT%d_gain_matched", 2*np));
-		if(!is_gain_matched[0] or !is_gain_matched[1])
-			ERROR("FOOT%d/%d pair gain matching tag not fetchable?\n", 2*np, 2*np+1); 
-
-		if(!is_gain_matched[0]->GetVal() or !is_gain_matched[1]->GetVal()) 
-			ERROR("Trying to do the delta-correction, but FOOT%d/%d pair tagged as NOT already gain matched!\n"
-					"Please reodo the file WITH gain-matching flag supplied.", 2*np, 2*np+1);
 	}
 
 	std::array<std::shared_ptr<RNFOOTCal>, 2> foot {};
@@ -142,8 +132,10 @@ void verify_foot_delta_gain (
 
 #define EXPAND_(i) \
 	delta[i]  = cl##i.Delta(); \
-	ei[i] = cl##i.fCE; \
 	x[i]  = cl##i.fCX; \
+	ei[i] = cl##i.fCE; \
+	\
+	ei[i] *= p[i]->gain.CorrectionFactor(x[i], ei[i]); \
 	\
 	gain_energy_vs_delta[i] -> Fill(delta[i], ei[i]); \
 	gain_energy_vs_x[i] -> Fill(x[i], ei[i]); \
@@ -177,11 +169,11 @@ void verify_foot_delta_gain (
 	}
 			
 		for(const auto& cl0 : foot[0]->fCl) {
-			if(cl0.fCM <= cl_cut) continue;
+			if(cl0.fCM < mult_cut) continue;
 			EXPAND_(0)
 			
 			for(const auto& cl1 : foot[1]->fCl) {
-				if(cl1.fCM <= cl_cut) continue;
+				if(cl1.fCM < mult_cut) continue;
 				EXPAND_(1)
 				h2_both->Fill(ef[0], ef[1]);
 			}
@@ -216,7 +208,7 @@ void verify_foot_delta_gain (
 		gain_energy_vs_delta[i]->Draw("COLZ");
 		cg->cd(3*i + 2); gPad->SetLogz();
 		gain_energy_vs_x[i]->Draw("COLZ");
-		//DRAW_VLINES(gain_energy_vs_x[i]);
+		DRAW_VLINES(gain_energy_vs_x[i]);
 
 		cg->cd(3*i + 3); 
 		gain_e[i]->Draw();
@@ -225,7 +217,7 @@ void verify_foot_delta_gain (
 		final_energy_vs_delta[i]->Draw("COLZ");
 		cf->cd(3*i + 2); gPad->SetLogz();
 		final_energy_vs_x[i]->Draw("COLZ");
-		//DRAW_VLINES(final_energy_vs_x[i]);
+		DRAW_VLINES(final_energy_vs_x[i]);
 
 		cf->cd(3*i + 3); 
 		final_e[i]->Draw();

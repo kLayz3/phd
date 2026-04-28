@@ -8,6 +8,7 @@
 #include "../../includes/util/PrettyHisto.hxx"
 #include "../../includes/util/GaussFitMax.hxx"
 #include "../../includes/util/MacroHelpers.hxx"
+#include "../../includes/util/FitSpline.hxx"
 
 #if 0
 #	define USING_POLY
@@ -22,13 +23,33 @@
 		R__LOAD_LIBRARY(libfftw3.so)
 #	endif
 #	include "../../includes/util/FFT.h"
-#else
-#	include "../../includes/util/FitSpline.hxx"
-#	include "../../includes/util/PolyFitter.h"
 #endif
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
+
+struct DoFit {
+	struct No {};
+	struct Yes {
+		std::vector<int> values;
+	};
+
+	/* constexpr */ static inline No no{};
+	/* constexpr */ static inline Yes yes{};
+
+	DoFit(No) : data_(No{}) {}
+	DoFit(Yes y) : data_(std::move(y)) {}
+
+	friend bool operator==(const DoFit& lhs, const DoFit& rhs) {
+		return ( lhs.data_.index() == rhs.data_.index() &&
+			lhs.data_.index() != std::variant_npos
+		);
+	}
+	const Yes* as_yes() const { return std::get_if<Yes>(&data_); }
+	
+private:
+	std::variant<No, Yes> data_;
+};
 
 /* Because cling issues the WEIRDEST compiler error,..
  * I cannot just simply return `FOOTDeltaParam` instance. It tries to compile the class
@@ -37,6 +58,8 @@ class FOOTDeltaParam;
 FOOTDeltaParam* GetDeltaParams(TH2D*);
 
 constexpr double D_LO = 0.4999;
+enum class PlotGain { no, yes };
+enum class PlotRaw  { no, yes };
 
 void foot_delta_corr (
 	std::string fileName = "", 
@@ -47,29 +70,46 @@ void foot_delta_corr (
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
-	DoSave do_save = DoSave::no
+	DoSave do_save = DoSave::no,
+	PlotGain plot_gain = PlotGain::no,
+	PlotRaw plot_raw = PlotRaw::no,
+	DoFit do_fit = DoFit::no
 ) {
 #ifndef __USING_LUSTRE_HPC__
 	gSystem->Load ("libfftw3.so");
 #endif
 
+	std::vector<TLine*> vlines;
+	for(int i = 1; i < 10; ++i) {
+		TLine* line = new TLine(i * 64, 0, 
+				i * 64, 1000);
+		line->SetLineColor(kBlack);
+		line->SetLineStyle(2);
+		line->SetLineWidth(2);
+		vlines.push_back( line );
+	}
+#define DRAW_VLINES(name) \
+	{ \
+		TH2D* h2_ = &name->h; \
+		for(auto* l0 : vlines) { \
+			TLine* l = dynamic_cast<TLine*>(l0->Clone()); \
+			l->SetY1(h2_->GetYaxis()->GetXmin()); \
+			l->SetY2(h2_->GetYaxis()->GetXmax()); \
+			l->Draw("SAME"); \
+		} \
+		gPad->SetGridx(false); gPad->Update(); \
+	}
+
 	FOOTParam* p;
-	TParameter<bool> *is_gain_matched;
 	{
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
 		p = f->Get<FOOTParam>(Form("FOOT%d_setup", ifoot));
 		if(!p)
 			throw std::runtime_error(Form("FOOT param is nullptr. Fix it (line: %d).", __LINE__));
-		is_gain_matched = f->Get<TParameter<bool>>(Form("FOOT%d_gain_matched", ifoot));
-		if(!is_gain_matched)
-			ERROR("FOOT%d gain matching tag not fetchable? Line: %d\n", ifoot, __LINE__); 
 	}
 
-	if(!is_gain_matched->GetVal()) 
-		ERROR("Trying to do the delta-correction, but FOOT%d tagged as NOT already gain matched!\n"
-			"Please reodo the file WITH gain-matching flag supplied.", ifoot);
-
 	const double CA = FOOTGainParam::PROTON_ADC * Q_target * Q_target;
+	const auto& gain = p->gain;
 
 	ROOT::EnableImplicitMT();
 
@@ -79,17 +119,22 @@ void foot_delta_corr (
 	auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
 
 	TH1P* h1_delta = new TH1P(Form("((h1_foot%d))Delta@FOOT%d", ifoot, ifoot), kGreen+1, delta_bins, -D_LO, D_LO);
-	TH2P* h2_m_vs_delta = new TH2P(Form("((h2_footm%d))Partial cluster size:delta@FOOT%d", ifoot, ifoot), delta_bins, -D_LO, D_LO, 10, 0.5, 10.5);
-	TH2P* sum_energy_vs_x = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Strip num@FOOT%d raw", ifoot, ifoot), 
+	TH2P* h2_m_vs_delta = new TH2P(Form("((h2_footm%d))Cluster size:delta@FOOT%d", ifoot, ifoot), delta_bins, -D_LO, D_LO, 10, 0.5, 10.5);
+	TH2P* sum_energy_vs_x = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Strip num@FOOT%d gain matched", ifoot, ifoot), 
 		160,0,640,
 		foot_cut[0], foot_cut[1], foot_cut[2]);
-	TH2P* sum_energy_vs_delta = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Delta@FOOT%d raw", ifoot, ifoot), 
+	TH2P* sum_energy_vs_delta = new TH2P(Form("((h2_footraw%d))Cluster sum [ADC]:Delta@FOOT%d gain matched", ifoot, ifoot), 
 		delta_bins,-D_LO, D_LO,
 		foot_cut[0], foot_cut[1], foot_cut[2]);
 	TH2P* corr_energy_vs_delta = new TH2P(Form("((h2_footcorr%d))E1/%.1f - 1:Delta@FOOT%d", ifoot, CA, ifoot), 
 		delta_bins, -D_LO, D_LO,
 		foot_cut[0], foot_cut[1]/CA - 0.9, foot_cut[2]/CA - 0.9);
-	
+
+	TH2P* h2_raw;
+	if(plot_raw == PlotRaw::yes) 
+		h2_raw = new TH2P(Form("((h2_raw))Raw Cluster ADC:Strip num@FOOT%d non-gain matched", ifoot),
+		160,0,640, (int)(foot_cut[0] * 2), foot_cut[1] / 10, foot_cut[2] / 2.0);
+
 	TH1P* h1_m0 = new TH1P(Form("((h_0)) FOOT%d dE [ADC units]@All cluster sizes", ifoot), kYellow - 7, foot_cut[0], foot_cut[1], foot_cut[2]);
 
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
@@ -126,12 +171,18 @@ void foot_delta_corr (
 		h1_sci31_cut->Fill(sci31.E);
 
 		for(const auto& cl : foot->fCl) {
+			if(cl.fCM == 1) continue;
+
 			double delta = cl.Delta(); 
 			double e = cl.fCE;
 			double x = cl.fCX;
+			if(plot_raw == PlotRaw::yes) 
+				h2_raw->Fill(x, e);
+			e *= gain.CorrectionFactor(x, e);
+			
 			/* Explicitly skip here so we don't deal with over/underflow bins */
 			if(!mnd::IsInside(e, foot_cut)) continue; 
-			
+
 			sum_energy_vs_delta -> Fill(delta, e);
 			sum_energy_vs_x -> Fill(x, e);
 			h2_m_vs_delta -> Fill(delta, cl.fCM);
@@ -159,9 +210,12 @@ void foot_delta_corr (
         if(sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut)) continue;
 
 		for(const auto& cl : foot->fCl) {
+			if(cl.fCM == 1) continue;
+
 			double delta = cl.Delta(); 
 			double e = cl.fCE;
 			double x = cl.fCX;
+			e *= gain.CorrectionFactor(x, e);
 
 			/* Normalize with the triangular delta-correction */
 			e /= d->CorrectionBasic(delta);
@@ -176,7 +230,7 @@ void foot_delta_corr (
 
 #ifdef USING_FFT
 	ROOT::DisableImplicitMT();	
-	const int Q = 6;
+	const int Q = 8;
 	
 	/* If: f(x) ≈ a0 + sum_k [ a_k cos(2πk(x-xmin)/P) + b_k sin(2πk(x-xmin)/P) ]
 	 * Then e2 := e1 - sum_k [ a_k cos(2πk(x-xmin)/P) + b_k sin(2πk(x-xmin)/P) ]
@@ -228,7 +282,75 @@ void foot_delta_corr (
 	cs2->Divide(2,1);
 	cs2->cd(1); h2_sci->Draw("COLZ");
 	cs2->cd(2); h2_sci3v2->Draw("COLZ");
-	
+
+	if(plot_gain == PlotGain::yes) {
+		TCanvas* gn = new TCanvas("gain", "Gain factor", 2000, 1300);
+		gn->Divide(2,2);
+		TH2D* hgain = gain.GetHisto();
+		hgain->SetTitle(Form("FOOT%d Gain Parameter", ifoot));
+		gn->cd(1); hgain->Draw("COLZ");
+		gn->cd(2); hgain->Draw("SURF1");
+		auto [p4, graph4] = gain.GetGraph(4*64 + 32);
+		gn->cd(3); graph4->Draw("AL"); p4->Draw("P SAME");
+		PLatex(0.08, "Middle of ASIC[4]"); 
+		auto [p5, graph5] = gain.GetGraph(5*64 + 32);
+		gn->cd(4); graph5->Draw("AL"); p5->Draw("P SAME");
+		PLatex(0.08, "Middle of ASIC[5]"); 
+	}
+	if(plot_raw == PlotRaw::yes) {
+		TCanvas* craw =  new TCanvas("non-gain-matched", "Non gain matched", 1400, 800);
+		h2_raw->Draw("COLZ"); DRAW_VLINES(h2_raw)
+		TGraph* ref6 = gain.GetRefZGraph(6);
+		TGraph* ref5 = gain.GetRefZGraph(5);
+		TGraph* ref4 = gain.GetRefZGraph(4);
+		TGraph* ref3 = gain.GetRefZGraph(3);
+		ref5->SetLineColor(kMagenta + 1);
+		ref4->SetLineColor(kPink - 2);
+		ref3->SetLineColor(kOrange + 7);
+		ref6->Draw("L SAME");
+		ref5->Draw("L SAME");
+		ref4->Draw("L SAME");
+		ref3->Draw("L SAME");
+
+		auto l = new TLegend(0.1,0.75,0.38,0.9);
+		l->AddEntry(*h2_raw, "Non-gain matched cluster energy");
+		l->AddEntry(ref6, "Z=6 reference");
+		l->AddEntry(ref5, "Z=5 reference");
+		l->AddEntry(ref4, "Z=4 reference");
+		l->AddEntry(ref3, "Z=3 reference");
+		gStyle->SetLegendTextSize(0.027);
+		l->Draw();
+		
+		if(do_fit == DoFit::yes and Q_target == 6) {
+			// Try to fit low energy (high-delta part)
+			const auto& v = do_fit.as_yes()->values;
+
+			auto contains = [](const auto& v, const typename std::decay_t<decltype(v)>::value_type& val) -> bool {
+				return std::find(v.begin(), v.end(), val) != v.end();
+			};
+			constexpr static size_t POLY_DEG = 4;
+			constexpr double sratio = 0.1;
+			for(int a : v) {
+				double x_lo  = (a) * 64 + 0.00001;
+				double x_hi = (a+1) * 64 - 0.00001;
+			
+				auto [rg, graw, gfit] = FitSplineAndGraph<POLY_DEG, fit_info::GAUSS_MAX> ( 
+					*h2_raw, x_lo, x_hi, 40, sratio /*, Verbosity::CHATTY */
+				); 
+				gfit->Draw("L SAME");
+				graw->Draw("P SAME");
+				printf("ASIC[%d]: ", a); std::cout << rg << std::endl;
+				const auto* z4 = gain.fit[a].GetPoly(4);
+				FMultiPoly z4_new {};
+				z4_new.Z = 4;
+				z4_new.pol = std::vector(rg.begin(), rg.end());
+
+				std::cout << "Old: " << nlohmann::json(*z4).dump(4) << std::endl;
+				std::cout << "New: " << nlohmann::json(z4_new).dump(4) << std::endl;
+			}
+		}
+	}
+
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
 		save_all(canvas::Extension::png, { Form("FOOT%d", ifoot), inf.stem().c_str() });

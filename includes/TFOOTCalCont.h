@@ -63,6 +63,11 @@ struct FOOTAsicGainParam {
 		}
 		return r;
 	}
+	inline double GetReferentMeasurement(int Z, double x) const { // slow
+		const auto* p = GetPoly(Z);
+		if(!p) return NAN;
+		return poly::Eval(x, p->pol);
+	}
 
 	inline bool IsSaneZ() const {
 		return std::is_sorted(multi_poly.begin(), multi_poly.end(), [](const auto& lhs, const auto& rhs) { return lhs.Z < rhs.Z; });	
@@ -182,6 +187,9 @@ struct FOOTGainParam {
 				h->SetBinContent(ix, iy, value);
 			}
 		}
+		h->GetXaxis()->SetTitle("Strip #");
+		h->GetYaxis()->SetTitle("Cluster ADC");
+
 		return h; /* Draw via: `h->Draw("SURF1")`  :-)  */
 	}
 	[[ nodiscard ]] inline std::pair<TGraph*, TGraph*> GetGraph (
@@ -210,8 +218,22 @@ struct FOOTGainParam {
 		return { gpts, g };
 		/* Draw via:
 		 * auto [pts, graph] = GetGraph();
-		 * pts->Draw("AP"); graph->Draw("L SAME"); */
+		 * graph->Draw("AL"); pts->Draw("P SAME"); */
 	}
+	[[ nodiscard ]] inline TGraph* GetRefZGraph(int Z, int Npts = 640) const {
+		TGraph* g = new TGraph(Npts);
+		double xlo = 0, xhi = 640;
+		for(int i=0; i<Npts; ++i) {
+			double x = xlo + (i+0.5)*(xhi - xlo) / Npts;
+			const auto& asic = GetASIC(x);
+			double val = asic.GetReferentMeasurement(Z, x);
+			g->SetPoint(i, x, val);
+		}
+		g->SetLineWidth(4);
+		g->SetLineColor(kRed + 2);
+		return g;
+	}
+
 
 	FOOTGainParam() = default;
 	virtual ~FOOTGainParam() = default;

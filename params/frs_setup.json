@@ -88,8 +88,8 @@
 	
 	"SCI": {
 		"21": {
-			"x_offset": -55.91179,
-			"x_factor": 1.34929,
+			"x_offset": -55.91179, // [ mm / TDC_UNITS ]
+			"x_factor": 1.34929,   // [ mm ]
 			"cdiff_lim": [-80, 150],
 			"z0": 1554.5
 		},

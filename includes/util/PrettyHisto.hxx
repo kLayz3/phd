@@ -244,10 +244,10 @@ struct TH2P {
 		if(bracket_open !=  nullptr) {
 			const char* bracket_close = strstr(bracket_open, "))");
 			if(bracket_close == nullptr)
-				throw std::invalid_argument("Label input to 'TH1P' contains bracket open \"((\" "
+				throw std::invalid_argument("Label input to 'TH2P' contains bracket open \"((\" "
 					"delimiter but not the closing one \"))\" after the opening bracket.");
 			if(std::distance(bracket_open, bracket_close) <= 2)
-				throw std::invalid_argument("Label input to 'TH1P' has empty block inside \"((\" and \"))\" brackets?");
+				throw std::invalid_argument("Label input to 'TH2P' has empty block inside \"((\" and \"))\" brackets?");
 			hname_extra = std::string(bracket_open+2, bracket_close);
 			label = bracket_close+2;
 			label = ph_detail::skip_whitespace(label);
