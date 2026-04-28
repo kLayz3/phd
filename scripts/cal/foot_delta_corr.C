@@ -90,7 +90,7 @@ void foot_delta_corr (
 	}
 #define DRAW_VLINES(name) \
 	{ \
-		TH2D* h2_ = &name->h; \
+		TH2D* h2_ = name; \
 		for(auto* l0 : vlines) { \
 			TLine* l = dynamic_cast<TLine*>(l0->Clone()); \
 			l->SetY1(h2_->GetYaxis()->GetXmin()); \
@@ -262,7 +262,7 @@ void foot_delta_corr (
 	sum_energy_vs_delta->Draw("COLZ");
 	c->cd(4);  gPad->SetLogz();
 	corr_energy_vs_delta->Draw("COLZ");
-	g->Draw("L SAME");
+	g->Draw("L SAME"); gPad->SetLogz();
 	gr->Draw("P SAME");
 	c->cd(5);
 	sum_energy_vs_x->Draw("COLZ");
@@ -288,7 +288,7 @@ void foot_delta_corr (
 		gn->Divide(2,2);
 		TH2D* hgain = gain.GetHisto();
 		hgain->SetTitle(Form("FOOT%d Gain Parameter", ifoot));
-		gn->cd(1); hgain->Draw("COLZ");
+		gn->cd(1); hgain->Draw("COLZ"); DRAW_VLINES(hgain)
 		gn->cd(2); hgain->Draw("SURF1");
 		auto [p4, graph4] = gain.GetGraph(4*64 + 32);
 		gn->cd(3); graph4->Draw("AL"); p4->Draw("P SAME");
@@ -299,7 +299,7 @@ void foot_delta_corr (
 	}
 	if(plot_raw == PlotRaw::yes) {
 		TCanvas* craw =  new TCanvas("non-gain-matched", "Non gain matched", 1400, 800);
-		h2_raw->Draw("COLZ"); DRAW_VLINES(h2_raw)
+		h2_raw->Draw("COLZ"); DRAW_VLINES(*h2_raw)
 		TGraph* ref6 = gain.GetRefZGraph(6);
 		TGraph* ref5 = gain.GetRefZGraph(5);
 		TGraph* ref4 = gain.GetRefZGraph(4);

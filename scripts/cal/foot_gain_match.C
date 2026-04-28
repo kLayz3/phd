@@ -42,7 +42,8 @@ private:
 	std::variant<No, Yes> data_;
 };
 
-enum class Take { gauss, profile };
+enum class Take { gauss, profile, gauss_fit_only };
+enum class ShowOld { no, yes };
 
 constexpr int D_BINS = 1000;
 constexpr int N_STRIPS = 64;
@@ -61,7 +62,8 @@ void foot_gain_match (
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
 	DoSave do_save = DoSave::no,
-	Take take = Take::gauss
+	Take take = Take::gauss,
+	ShowOld show_old = ShowOld::no
 ) {
 	if(N_STRIPS % bins_per_asic != 0)
 		throw std::runtime_error(Form("Passed: %d , not evenly divisible by %d.\n",
@@ -108,17 +110,17 @@ void foot_gain_match (
 		const auto& sci21 = frs->sci[0];
 		const auto& sci22 = frs->sci[1];
 		const auto& sci31 = frs->sci[2];
-		if(sci21.hits.size() != 1) continue;
-		if(sci22.hits.size() != 1) continue;
-		if(sci31.hits.size() != 1) continue;
+		if(mnd::IsValid(sci21_cut) and sci21.hits.size() != 1) continue;
+		if(mnd::IsValid(sci22_cut) and sci22.hits.size() != 1) continue;
+		if(mnd::IsValid(sci31_cut) and sci31.hits.size() != 1) continue;
 
 		h1_sci21->Fill(sci21.E);
 		h1_sci22->Fill(sci22.E);
 		h1_sci31->Fill(sci31.E);
 
-		if(!mnd::IsInside(sci21.E, sci21_cut)) continue;
-		if(!mnd::IsInside(sci22.E, sci22_cut)) continue;
-		if(!mnd::IsInside(sci31.E, sci31_cut)) continue;
+		if(mnd::IsValid(sci21_cut) and !mnd::IsInside(sci21.E, sci21_cut)) continue;
+		if(mnd::IsValid(sci22_cut) and !mnd::IsInside(sci22.E, sci22_cut)) continue;
+		if(mnd::IsValid(sci31_cut) and !mnd::IsInside(sci31.E, sci31_cut)) continue;
 
 		h1_sci21_cut->Fill(sci21.E);
 		h1_sci22_cut->Fill(sci22.E);
@@ -167,7 +169,7 @@ void foot_gain_match (
 	};
 
 	constexpr static size_t POLY_DEG = 4;
-	constexpr static int N_NEEDED_ENTRIES = 850;
+	constexpr static int N_NEEDED_ENTRIES = 280;
 
 	/* Try to fit a spline(s) for middle few ASICs. */
 	if(do_fit == DoFit::yes) { 
@@ -200,7 +202,7 @@ void foot_gain_match (
 				profile_fit.push_back(pfit); 
 				profile_raw.push_back(praw); 
 				
-				if(take == Take::gauss) {
+				if(take == Take::gauss or take == Take::gauss_fit_only) {
 					mp->pol = std::vector<double>(rg.begin(), rg.end()); 
 				} else {
 					mp->pol = std::vector<double>(rp.begin(), rp.end());
@@ -215,14 +217,14 @@ void foot_gain_match (
 				pasic->SetDirectory(nullptr); 
 
 				double profile_mean, gauss_mean; 
-				if(pasic->Integral() > N_NEEDED_ENTRIES) { /* If it contains less than 500 events, just skip it. */ 
+				if(pasic->Integral() >= N_NEEDED_ENTRIES) { /* If it contains more than 500 events, we can sample it. */ 
 					profile_mean = pasic->GetXaxis()->GetBinCenter( pasic->GetMaximumBin() ); 
 					auto [pg0, err_pg0] = GaussFitMax( pasic.get(), sratio );  
 					gauss_mean = pg0[1]; 
-				} else { /* No clue. Just take profile mean the same, but gauss is invalidated. */ 
-					profile_mean = pasic->GetXaxis()->GetBinCenter( pasic->GetMaximumBin() ); 
+				} else { /* No clue. Just take profile mean the mean, but gauss is invalidated. */ 
+					profile_mean = pasic->GetMean(); 
 					gauss_mean = mean_mid; 
-				} 
+				}
 				TGraph* gfit = new TGraph(60); 
 				TGraph* pfit = new TGraph(60); 
 				for(int i=0; i<60; ++i) { 
@@ -230,7 +232,7 @@ void foot_gain_match (
 					gfit->SetPoint(i, x, gauss_mean); 
 					pfit->SetPoint(i, x, profile_mean); 
 				} 
-				if(pasic->Integral() > N_NEEDED_ENTRIES) { 
+				if(pasic->Integral() >= N_NEEDED_ENTRIES) { 
 					gfit->SetLineColor(gCol_); gfit->SetLineWidth(4); 
 					pfit->SetLineColor(pCol_); pfit->SetLineWidth(4); 
 				} else { 
@@ -240,11 +242,13 @@ void foot_gain_match (
 				gauss_fit.push_back(gfit); 
 				profile_fit.push_back(pfit); 
 
-				mp->pol = std::vector<double>(1); 
-				if(take == Take::gauss or pasic->Integral() <= N_NEEDED_ENTRIES) {
+				mp->pol = std::vector<double>(1);
+				if(pasic->Integral() < N_NEEDED_ENTRIES) {
+					if(take == Take::gauss) { mp->pol[0] = gauss_mean; } 
+					else/*take == fit/prof*/{ mp->pol[0] = profile_mean; }
+				}
+				else { // integral >= N_NEEDED_ENTRIES
 					mp->pol[0] = gauss_mean; 
-				} else {
-					mp->pol[0] = profile_mean; 
 				}
 			}
 
@@ -276,6 +280,19 @@ void foot_gain_match (
 	for(auto* praw : profile_raw) praw->Draw("P SAME");
 	for(auto* gfit : gauss_fit) gfit->Draw("L SAME");
 	for(auto* graw : gauss_raw) graw->Draw("P SAME");
+	
+	auto l = new TLegend(0.1,0.75,0.4,0.9);
+	l->AddEntry(*hit_energy_mid, "Non-gain matched cluster energy (central hits)");
+	l->AddEntry(gauss_fit[0], Form("Gaussian fit +-%.1f sigma around peak", sratio));
+	l->AddEntry(profile_fit[0], "TProfile fit");
+	if(show_old == ShowOld::yes) {
+		const auto& gain = foot_param->gain;
+		TGraph* g = gain.GetRefZGraph(Q_target);
+		g->SetLineColor(kPink - 2);
+		g->Draw("L SAME");
+		l->AddEntry(g, "Current gain curve from the setup file");
+	}
+	gStyle->SetLegendTextSize(0.021); l->Draw();
 
 	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2000, 1200);
 	cs->Divide(3,2);
