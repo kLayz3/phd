@@ -147,7 +147,7 @@ void foot_gain_match (
 	 * lower values. Simply to line up the total cluster energy values to the `TARGET_ADC`, across the detector. */
 	
 	/* Do the small fit in the 1D plot. */
-	constexpr double sratio = 1.0;
+	constexpr double sratio = 0.9;
 	
 	TH1D* h = *h1_foot_e_mid; 
 	auto [fitr_mid, err_mid] = GaussFitMax(h, sratio);
@@ -169,7 +169,8 @@ void foot_gain_match (
 	};
 
 	constexpr static size_t POLY_DEG = 4;
-	constexpr static int N_NEEDED_ENTRIES = 280;
+	constexpr static int N_NEEDED_ENTRIES = 400;
+	constexpr static int N_LOWEST_ENTRIES = 10;
 
 	/* Try to fit a spline(s) for middle few ASICs. */
 	if(do_fit == DoFit::yes) { 
@@ -245,7 +246,8 @@ void foot_gain_match (
 				mp->pol = std::vector<double>(1);
 				if(pasic->Integral() < N_NEEDED_ENTRIES) {
 					if(take == Take::gauss) { mp->pol[0] = gauss_mean; } 
-					else/*take == fit/prof*/{ mp->pol[0] = profile_mean; }
+					else if(pasic->Integral() >= N_LOWEST_ENTRIES) { mp->pol[0] = profile_mean; }
+					else { mp->pol[0] = gauss_mean; }; // in case if there are really no entries there... 
 				}
 				else { // integral >= N_NEEDED_ENTRIES
 					mp->pol[0] = gauss_mean; 
