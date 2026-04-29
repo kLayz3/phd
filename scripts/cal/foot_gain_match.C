@@ -110,21 +110,18 @@ void foot_gain_match (
 		const auto& sci21 = frs->sci[0];
 		const auto& sci22 = frs->sci[1];
 		const auto& sci31 = frs->sci[2];
-		if(mnd::IsValid(sci21_cut) and sci21.hits.size() != 1) continue;
-		if(mnd::IsValid(sci22_cut) and sci22.hits.size() != 1) continue;
-		if(mnd::IsValid(sci31_cut) and sci31.hits.size() != 1) continue;
+		
+		if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
+		if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
+		if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
 
-		h1_sci21->Fill(sci21.E);
-		h1_sci22->Fill(sci22.E);
-		h1_sci31->Fill(sci31.E);
+		if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+		if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+		if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
 
-		if(mnd::IsValid(sci21_cut) and !mnd::IsInside(sci21.E, sci21_cut)) continue;
-		if(mnd::IsValid(sci22_cut) and !mnd::IsInside(sci22.E, sci22_cut)) continue;
-		if(mnd::IsValid(sci31_cut) and !mnd::IsInside(sci31.E, sci31_cut)) continue;
-
-		h1_sci21_cut->Fill(sci21.E);
-		h1_sci22_cut->Fill(sci22.E);
-		h1_sci31_cut->Fill(sci31.E);
+		if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
+		if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
+		if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
 
 		for(const auto& cl : foot->fCl) {
 			if(cl.fCM < mult_cut) continue;
