@@ -108,8 +108,14 @@ void foot_delta_corr (
 			throw std::runtime_error(Form("FOOT param is nullptr. Fix it (line: %d).", __LINE__));
 	}
 
-	const double CA = FOOTGainParam::PROTON_ADC * Q_target * Q_target;
 	const auto& gain = p->gain;
+	/* Check if in gain we have the entry for Z=Q_target. */
+	if(!gain.IsSane())
+		ERROR("Somehow gain for FOOT%d marked as insane?\n", ifoot);
+
+	const double CA = gain.GetNominalValue(Q_target);
+	if(!std::isfinite(CA))
+		ERROR("Z=%d not found in the setup file. Cannot proceed.\n", Q_target);
 
 	ROOT::EnableImplicitMT();
 
@@ -133,7 +139,7 @@ void foot_delta_corr (
 	TH2P* h2_raw;
 	if(plot_raw == PlotRaw::yes) 
 		h2_raw = new TH2P(Form("((h2_raw))Raw Cluster ADC:Strip num@FOOT%d non-gain matched", ifoot),
-		160,0,640, (int)(foot_cut[0] * 2), foot_cut[1] / 10, foot_cut[2] / 2.0);
+		160,0,640, foot_cut[0], foot_cut[1], foot_cut[2]);
 
 	TH1P* h1_m0 = new TH1P(Form("((h_0)) FOOT%d dE [ADC units]@All cluster sizes", ifoot), kYellow - 7, foot_cut[0], foot_cut[1], foot_cut[2]);
 
@@ -143,32 +149,37 @@ void foot_delta_corr (
 	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
 	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
 	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
-	auto* h2_sci    = new TH2P("SCI22 QDC mean [QDC units]:SCI21 QDC mean [QDC units]", 500, 300, 4000, 500, 300, 4000);
+	auto* h2_sci2v2 = new TH2P("SCI22 QDC mean [QDC units]:SCI21 QDC mean [QDC units]", 500, 300, 4000, 500, 300, 4000);
 	auto* h2_sci3v2 = new TH2P("SCI31 QDC mean [QDC units]:SCI22 QDC mean [QDC units]", 500, 300, 4000, 500, 300, 4000);
+	auto* h2_sci2v2_cut = new TH2P("((h2_sc_cut))SCI22 QDC mean [QDC units]:SCI21 QDC mean [QDC units]@With cut", 500, 300, 4000, 500, 300, 4000);
+	auto* h2_sci3v2_cut = new TH2P("((h2_sc_cut))SCI31 QDC mean [QDC units]:SCI22 QDC mean [QDC units]@With cut", 500, 300, 4000, 500, 300, 4000);
 
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
-
+		
 		const auto& sci21 = frs->sci[0];
 		const auto& sci22 = frs->sci[1];
 		const auto& sci31 = frs->sci[2];
-		if(sci21.hits.size() != 1) continue;
-		if(sci22.hits.size() != 1) continue;
-		if(sci31.hits.size() != 1) continue;
 		
-		h1_sci21->Fill(sci21.E);
-		h1_sci22->Fill(sci22.E);
-		h1_sci31->Fill(sci31.E);
-		h2_sci->Fill(sci21.E, sci22.E);
-		h2_sci3v2->Fill(sci22.E, sci31.E);
+		if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
+		if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
+		if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
+		if(sci31.hits.size() >= 1 and sci22.hits.size() >= 1) 
+			h2_sci3v2->Fill(sci22.E, sci31.E);
+		if(sci21.hits.size() >= 1 and sci22.hits.size() >= 1) 
+			h2_sci2v2->Fill(sci21.E, sci22.E);
 
-		if(!mnd::IsInside(sci21.E, sci21_cut)) continue;
-		if(!mnd::IsInside(sci22.E, sci22_cut)) continue;
-		if(!mnd::IsInside(sci31.E, sci31_cut)) continue;
+		if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+		if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+		if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
 
-		h1_sci21_cut->Fill(sci21.E);
-		h1_sci22_cut->Fill(sci22.E);
-		h1_sci31_cut->Fill(sci31.E);
+		if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
+		if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
+		if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
+		if(sci31.hits.size() >= 1 and sci22.hits.size() >= 1) 
+			h2_sci3v2_cut->Fill(sci22.E, sci31.E);
+		if(sci21.hits.size() >= 1 and sci22.hits.size() >= 1) 
+			h2_sci2v2_cut->Fill(sci21.E, sci22.E);
 
 		for(const auto& cl : foot->fCl) {
 			if(cl.fCM == 1) continue;
@@ -194,20 +205,25 @@ void foot_delta_corr (
 	/* Perform the Step (1) of the delta correction.
 	 * Of course, this part isn't threadsafe. */
 	auto* d = GetDeltaParams(*sum_energy_vs_delta);
-
+	
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
 		
 		const auto& sci21 = frs->sci[0];
 		const auto& sci22 = frs->sci[1];
 		const auto& sci31 = frs->sci[2];
-		if(sci21.hits.size() != 1) continue;
-		if(sci22.hits.size() != 1) continue;
-		if(sci31.hits.size() != 1) continue;
+		
+		if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
+		if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
+		if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
 
-		if(sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut)) continue;
-		if(sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut)) continue;
-        if(sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut)) continue;
+		if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+		if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+		if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
+
+		if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
+		if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
+		if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
 
 		for(const auto& cl : foot->fCl) {
 			if(cl.fCM == 1) continue;
@@ -252,7 +268,7 @@ void foot_delta_corr (
 	std::cout << "Fit result e2(delta)  = " << r << std::endl;
 #endif
 
-	TCanvas *c = new TCanvas(Form("cRAW%d", ifoot), Form("Delta%d", ifoot), 2000, 1400);
+	TCanvas *c = new TCanvas("FOOT", Form("Delta%d", ifoot), 2000, 1400);
 	c->Divide(3,2);
 	c->cd(1);
 	h1_delta->Draw();
@@ -269,7 +285,7 @@ void foot_delta_corr (
 	c->cd(6);
 	h1_m0->Draw();
 
-	TCanvas* cs = new TCanvas("cs", "SCI21,22,31", 2000, 1200);
+	TCanvas* cs = new TCanvas("SCI1D", "SCI21,22,31", 2000, 1200);
 	cs->Divide(3,2);
 	cs->cd(1); h1_sci21->Draw();
 	cs->cd(2); h1_sci22->Draw();
@@ -278,10 +294,12 @@ void foot_delta_corr (
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
 
-	TCanvas* cs2 = new TCanvas("cs2", "SCI-Corr", 1600, 1200);
-	cs2->Divide(2,1);
-	cs2->cd(1); h2_sci->Draw("COLZ");
+	TCanvas* cs2 = new TCanvas("SCI2D", "SCI-Corr", 2200, 1400);
+	cs2->Divide(2,2);
+	cs2->cd(1); h2_sci2v2->Draw("COLZ");
 	cs2->cd(2); h2_sci3v2->Draw("COLZ");
+	cs2->cd(3); h2_sci2v2_cut->Draw("COLZ");
+	cs2->cd(4); h2_sci3v2_cut->Draw("COLZ");
 
 	if(plot_gain == PlotGain::yes) {
 		TCanvas* gn = new TCanvas("gain", "Gain factor", 2000, 1300);
@@ -300,24 +318,20 @@ void foot_delta_corr (
 	if(plot_raw == PlotRaw::yes) {
 		TCanvas* craw =  new TCanvas("non-gain-matched", "Non gain matched", 1400, 800);
 		h2_raw->Draw("COLZ"); DRAW_VLINES(*h2_raw)
-		TGraph* ref6 = gain.GetRefZGraph(6);
-		TGraph* ref5 = gain.GetRefZGraph(5);
-		TGraph* ref4 = gain.GetRefZGraph(4);
-		TGraph* ref3 = gain.GetRefZGraph(3);
+		auto [ref6, nom6] = gain.GetRefZGraph(6);
+		auto [ref5, nom5] = gain.GetRefZGraph(5);
+		auto [ref4, nom4] = gain.GetRefZGraph(4);
 		ref5->SetLineColor(kMagenta + 1);
 		ref4->SetLineColor(kPink - 2);
-		ref3->SetLineColor(kOrange + 7);
-		ref6->Draw("L SAME");
-		ref5->Draw("L SAME");
-		ref4->Draw("L SAME");
-		ref3->Draw("L SAME");
+		ref6->Draw("L SAME"); nom6->Draw("SAME"); 
+		ref5->Draw("L SAME"); nom5->Draw("SAME"); 
+		ref4->Draw("L SAME"); nom4->Draw("SAME"); 
 
 		auto l = new TLegend(0.1,0.75,0.38,0.9);
 		l->AddEntry(*h2_raw, "Non-gain matched cluster energy");
 		l->AddEntry(ref6, "Z=6 reference");
 		l->AddEntry(ref5, "Z=5 reference");
 		l->AddEntry(ref4, "Z=4 reference");
-		l->AddEntry(ref3, "Z=3 reference");
 		gStyle->SetLegendTextSize(0.027);
 		l->Draw();
 		
@@ -397,7 +411,6 @@ FOOTDeltaParam* GetDeltaParams(TH2D* e_vs_delta) {
 	A0 = GaussFitMax( h1_e_0.get(), side_ratio, Verbosity::CHATTY ).first.at(1);
 	Ap = GaussFitMax( h1_e_p.get(), side_ratio, Verbosity::CHATTY ).first.at(1);
 	Am = GaussFitMax( h1_e_m.get(), side_ratio, Verbosity::CHATTY ).first.at(1);
-	/* A0, by definition must be FOOTGainParam::CARBON_ADC, usually is within 1% */
 
 	double f = (Ap + Am) / (2 * A0);
 	result->f = f;

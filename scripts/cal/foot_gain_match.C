@@ -152,8 +152,7 @@ void foot_gain_match (
 		h->GetXaxis()->GetBinCenter( h->GetMaximumBin() ), sratio,
 		fitr_mid[1], err_mid[1]);
 	
-	double S;
-	double mean_mid = fitr_mid[1];
+	const double mean_mid = fitr_mid[1];
 
 	printf("\nCentral strip hit ADC gets mapped to: %s%.2f%s [ADC] since supplied: %sZ=%d%s\n", 
 		BOLD, TARGET_ADC, KNRM, BOLD, Q_target, KNRM); 
@@ -255,6 +254,8 @@ void foot_gain_match (
 		}
 
 		std::cout << "\"gain\": " << nlohmann::json(pp).dump(4) << std::endl;
+		printf("Average value: %.5f (bin-center) and %.5f (gauss-fit-center)\n", 
+			(*h1_foot_e_mid)->GetBinCenter((*h1_foot_e_mid)->GetMaximumBin()), mean_mid);
 	}
 
 	std::vector<TLine*> vlines;

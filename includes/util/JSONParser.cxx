@@ -8,11 +8,14 @@
 #ifndef __FILENAME__
 #   define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #endif
-
 #ifndef KNRM
-#define KNRM "\e[0m"
-#define KCYN "\e[0;36m"
-#define KGRN "\e[0;32m"
+#	define KNRM "\e[0m"
+#endif
+#ifndef KCYN
+#	define KCYN "\e[0;36m"
+#endif
+#ifndef KGRN
+#	define KGRN "\e[0;32m"
 #endif
 
 #ifndef ERROR 

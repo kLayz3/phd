@@ -115,6 +115,7 @@ ClassImp(RNFOOTCluster);
 ClassImp(RNFOOTCal);
 ClassImp(FMultiPoly);
 ClassImp(FOOTAsicGainParam);
+ClassImp(FOOTReferentADCMeasurement);
 ClassImp(FOOTGainParam);
 ClassImp(FOOTDeltaFFT);
 ClassImp(FOOTDeltaParam);

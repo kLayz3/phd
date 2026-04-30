@@ -34,6 +34,7 @@
 #pragma link C++ class RNFOOTCal+;
 #pragma link C++ class FMultiPoly+;
 #pragma link C++ class FOOTAsicGainParam+;
+#pragma link C++ class FOOTReferentADCMeasurement+;
 #pragma link C++ class FOOTGainParam+;
 #pragma link C++ class FOOTDeltaFFT+;
 #pragma link C++ class FOOTDeltaParam+;

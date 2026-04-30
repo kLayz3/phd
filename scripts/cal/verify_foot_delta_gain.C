@@ -22,7 +22,7 @@ void verify_foot_delta_gain (
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> delta_axis = {80, 0.52},
+	std::array<double,2> delta_axis = {80, 0.501},
 	uint32_t mult_cut = 1, // every cluster with size below this gets rejected
 	DoSave do_save = DoSave::no
 ) {
@@ -100,6 +100,10 @@ void verify_foot_delta_gain (
 	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
 	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
+	auto* h2_sci2v2 = new TH2P("SCI22 QDC mean [QDC units]:SCI21 QDC mean [QDC units]", 500, 300, 4000, 500, 300, 4000);
+	auto* h2_sci3v2 = new TH2P("SCI31 QDC mean [QDC units]:SCI22 QDC mean [QDC units]", 500, 300, 4000, 500, 300, 4000);
+	auto* h2_sci2v2_cut = new TH2P("((h2_sc_cut))SCI22 QDC mean [QDC units]:SCI21 QDC mean [QDC units]@With cut", 500, 300, 4000, 500, 300, 4000);
+	auto* h2_sci3v2_cut = new TH2P("((h2_sc_cut))SCI31 QDC mean [QDC units]:SCI22 QDC mean [QDC units]@With cut", 500, 300, 4000, 500, 300, 4000);
 
 	double x[2]; // strip x
 	double delta[2]; // delta
@@ -110,25 +114,29 @@ void verify_foot_delta_gain (
 
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
-
 		const auto& sci21 = frs->sci[0];
 		const auto& sci22 = frs->sci[1];
 		const auto& sci31 = frs->sci[2];
-		if(sci21.hits.size() != 1) continue;
-		if(sci22.hits.size() != 1) continue;
-		if(sci31.hits.size() != 1) continue;
-		
-		h1_sci21->Fill(sci21.E);
-		h1_sci22->Fill(sci22.E);
-		h1_sci31->Fill(sci31.E);
 
-		if(!mnd::IsInside(sci21.E, sci21_cut)) continue;
-		if(!mnd::IsInside(sci22.E, sci22_cut)) continue;
-		if(!mnd::IsInside(sci31.E, sci31_cut)) continue;
+		if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
+		if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
+		if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
+		if(sci31.hits.size() >= 1 and sci22.hits.size() >= 1) 
+			h2_sci3v2->Fill(sci22.E, sci31.E);
+		if(sci21.hits.size() >= 1 and sci22.hits.size() >= 1) 
+			h2_sci2v2->Fill(sci21.E, sci22.E);
 
-		h1_sci21_cut->Fill(sci21.E);
-		h1_sci22_cut->Fill(sci22.E);
-		h1_sci31_cut->Fill(sci31.E);
+		if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+		if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+		if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
+
+		if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
+		if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
+		if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
+		if(sci31.hits.size() >= 1 and sci22.hits.size() >= 1) 
+			h2_sci3v2_cut->Fill(sci22.E, sci31.E);
+		if(sci21.hits.size() >= 1 and sci22.hits.size() >= 1) 
+			h2_sci2v2_cut->Fill(sci21.E, sci22.E);
 
 #define EXPAND_(i) \
 	delta[i]  = cl##i.Delta(); \
@@ -235,7 +243,7 @@ void verify_foot_delta_gain (
 		Form("Cut applied on SCI22: (%.1f, %.1f)", sci22_cut[0], sci22_cut[1])
 	);
 	
-	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2000, 1200);
+	TCanvas* cs = new TCanvas("SCI1D", "SCI21,22,31", 2000, 1200);
 	cs->Divide(3,2);
 	cs->cd(1); h1_sci21->Draw();
 	cs->cd(2); h1_sci22->Draw();
@@ -243,6 +251,13 @@ void verify_foot_delta_gain (
 	cs->cd(4); h1_sci21_cut->Draw();
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
+	TCanvas* cs2 = new TCanvas("SCI2D", "SCI-Corr", 2200, 1400);
+	cs2->Divide(2,2);
+	cs2->cd(1); h2_sci2v2->Draw("COLZ");
+	cs2->cd(2); h2_sci3v2->Draw("COLZ");
+	cs2->cd(3); h2_sci2v2_cut->Draw("COLZ");
+	cs2->cd(4); h2_sci3v2_cut->Draw("COLZ");
+
 
 	TCanvas* cmult = new TCanvas("multiplicities", "multiplicities", 2400, 1200);
 	cmult->Divide(5,2);
@@ -258,11 +273,14 @@ void verify_foot_delta_gain (
 		}
 	}
 
+#define PARSE_CUT_ARGS(x) \
+	(sci##x##_cut[0] > 0   ) ? std::to_string((int)sci##x##_cut[0]).c_str() : "inf", \
+	(sci##x##_cut[1] < 5000) ? std::to_string((int)sci##x##_cut[1]).c_str() : "inf" 
+
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
-		std::string postfix = std::string( Form("%d_%d_sc31cut",
-			(sci31_cut[0] > 0) ? (int)sci31_cut[0] : 0, 
-			(sci31_cut[1] < 5000) ? (int)sci31_cut[1] : 5000) );
+		std::string postfix = std::string( Form("21_%s-%s;22_%s-%s;33-%s-%s",
+			PARSE_CUT_ARGS(21), PARSE_CUT_ARGS(22), PARSE_CUT_ARGS(31)) );
 		save_all(canvas::Extension::png, { Form("pair%d", np), inf.stem().c_str(), postfix });
 	}
 }

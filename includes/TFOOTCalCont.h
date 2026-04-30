@@ -3,6 +3,8 @@
 #include "monad/monad.hxx"
 #include <algorithm>
 #include <cstddef>
+#include <iterator>
+#include <stdexcept>
 
 #include "TFOOTMapCont.h"
 #include "util/json_struct_def.hh"
@@ -10,6 +12,7 @@
 #include "util/Tracking.hxx"
 
 #include "TGraph.h"
+#include "TLine.h"
 
 class TH1D;
 
@@ -36,33 +39,18 @@ struct FOOTAsicGainParam {
 	using Vec = std::vector<FMultiPoly>;
 	GET_HELP_AUX_IMPL;
 	
-	static constexpr double PROTON_ADC = 100;
-	inline static i32 NominalE(i32 Z) noexcept { return Z*Z * PROTON_ADC; }
-
-	/* Ordered vector, in `Z`. If not, analysis is fucked. If paranoid, check w/ `IsSane()` method?*/
+	/* Ordered vector, in `Z`. If not, analysis is fucked. Soothe paranoia w/ `IsSane()` method. */
 	ADD_SERIALIZABLE_FIELD(Vec, multi_poly, {}, 0);
 
 	inline const FMultiPoly* GetPoly(int Z) const noexcept {
 		for(const auto& p : multi_poly) { if(p.Z == Z) return &p; }
 		return nullptr;
 	}
-	inline FMultiPoly* GetPolyMut(int Z) noexcept {
+	inline FMultiPoly* GetPoly(int Z) noexcept {
 		for(auto& p : multi_poly) { if(p.Z == Z) return &p; }
 		return nullptr;
 	}
 
-	inline std::vector < 
-		std::tuple<i32, std::array<double, 2>>
-	> GetReferentMeasurements(double x) const {
-		std::vector<std::tuple<i32, std::array<double, 2>>> r;
-		for(const auto& poly : multi_poly) {
-			i32 Z = poly.Z;
-			double e_avg_measured = poly::Eval(x, poly.pol);
-			double gain = NominalE(Z) / e_avg_measured;
-			r.emplace_back(Z, std::array{e_avg_measured, gain});
-		}
-		return r;
-	}
 	inline double GetReferentMeasurement(int Z, double x) const { // slow
 		const auto* p = GetPoly(Z);
 		if(!p) return NAN;
@@ -70,8 +58,17 @@ struct FOOTAsicGainParam {
 	}
 
 	inline bool IsSaneZ() const {
-		return std::is_sorted(multi_poly.begin(), multi_poly.end(), [](const auto& lhs, const auto& rhs) { return lhs.Z < rhs.Z; });	
+		return std::is_sorted( multi_poly.begin(), multi_poly.end(), 
+			[](const auto& lhs, const auto& rhs) { return lhs.Z < rhs.Z; }
+		);	
 	}
+
+	inline std::vector<int> GetZ() const {
+		std::vector<int> Zs{}; Zs.reserve(multi_poly.size());
+		std::transform(multi_poly.begin(), multi_poly.end(), std::back_inserter(Zs), [](const auto& x) { return x.Z; });
+		return Zs;
+	}
+
 	inline bool IsSane(double x, std::vector<double>& evals) const {
 		/* Check for each 'x' that the each consecutive nominal energy evaluation along the `multi_poly` yields decreasing result.
 		 * AKA: that for some `x`, the nominal value of Z cannot be above the value of Z-1. */
@@ -79,90 +76,119 @@ struct FOOTAsicGainParam {
 		for(const auto& mp : multi_poly) {
 			evals.push_back(poly::Eval(x, mp.pol));	
 		}
-		return std::is_sorted(evals.begin(), evals.end());
+		return evals.size() > 0 and std::is_sorted(evals.begin(), evals.end());
 	}
 
-	enum class Bound { Upper, Lower };
-	template<Bound b> 
-	auto GetMeasurement(double x, double e) const -> typename Vec::const_iterator {
-		static auto comparator = [](const std::pair<double, double> q, const FMultiPoly& p) {
-			const auto [x,e] = q;
-			return e < poly::Eval(x, p.pol);
-		};
-		if constexpr(b == Bound::Upper) {
-			return std::upper_bound( multi_poly.begin(), multi_poly.end(), std::pair{x,e}, comparator);
-		} else {
-			return std::lower_bound( multi_poly.begin(), multi_poly.end(), std::pair{x,e}, comparator);
-		}
-	}
-
-	/* `x` here is the absolute value from [0, 640]. */
-	template<ExtrapolateLowZ extrapolate = ExtrapolateLowZ::No>
-	double Value(const double x, const double e) const noexcept {
-		auto it = this->GetMeasurement<Bound::Upper>(x, e);
-		if(it == multi_poly.end()) {
-			if(multi_poly.size() == 0) return NAN;
-			return FOOTAsicGainParam::NominalE( multi_poly.back().Z ) / poly::Eval(x, multi_poly.back().pol);
-		}
-		else if(it == multi_poly.begin()) {
-			if constexpr(extrapolate == ExtrapolateLowZ::Yes) {
-				const auto& [Z1, p1] = *it;
-				const auto& [Z2, p2] = *(it+1);
-				double e1 = poly::Eval(x, p1);
-				double e2 = poly::Eval(x, p2);
-				double g1 = NominalE(Z1) / e1;
-				double g2 = NominalE(Z2) / e2;
-				auto gain_line = GetLine( {e1,g1}, {e2,g2} );
-				return poly::Eval(e, gain_line);
-			} else {
-				return NominalE( multi_poly.front().Z ) / poly::Eval(x, multi_poly.front().pol);
+	/* Return an iterator to the first referent measurment line (along E; for set x) that has ref >= e */
+	inline auto GetMeasurementBound(double x, double e) const -> typename Vec::const_iterator {
+		return std::lower_bound( multi_poly.begin(), multi_poly.end(), std::pair{x,e}, 
+			[](const FMultiPoly& p, const std::pair<double, double>& q) noexcept {
+				const auto [x, e] = q;
+				return poly::Eval(x, p.pol) < e;
 			}
-		}
-		else {
-			const auto& [Z1, p1] = *it;
-			const auto& [Z2, p2] = *(it-1);
-			double e1 = poly::Eval(x, p1);
-			double e2 = poly::Eval(x, p2);
-			double g1 = NominalE(Z1) / e1;
-			double g2 = NominalE(Z2) / e2;
-			auto gain_line = GetLine( {e1,g1}, {e2,g2} );
-			return poly::Eval(e, gain_line);
-		}
+		);
 	}
+
 	FOOTAsicGainParam() = default;
 	virtual ~FOOTAsicGainParam() = default;
 	ClassDef(FOOTAsicGainParam, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(FOOTAsicGainParam, 0);
 
+struct FOOTReferentADCMeasurement {
+	GET_HELP_AUX_IMPL;
+	ADD_SERIALIZABLE_FIELD(i32,    Z,   0,   0);
+	ADD_SERIALIZABLE_FIELD(double, val, NAN, 1);
+
+	inline bool operator<(const FOOTReferentADCMeasurement& rhs) const noexcept {
+		return (Z < rhs.Z) and (val < rhs.val);
+	}
+	
+	FOOTReferentADCMeasurement() = default;
+	virtual ~FOOTReferentADCMeasurement() = default;
+	ClassDef(FOOTReferentADCMeasurement, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FOOTReferentADCMeasurement, 1);
+
 struct FOOTGainParam {
-	static constexpr double PROTON_ADC = FOOTAsicGainParam::PROTON_ADC;
+	static constexpr int N_STRIPS_PER_ASIC = TFOOTMapCont::N_STRIPS_PER_ASIC;
 	using AsicArray = std::array<FOOTAsicGainParam, TFOOTMapCont::N_ASIC>;
+	using NominalValues = std::vector<FOOTReferentADCMeasurement>;
+
 	GET_HELP_AUX_IMPL;
 
-	ADD_SERIALIZABLE_FIELD(AsicArray, fit, {}, 0);
+	ADD_SERIALIZABLE_FIELD(AsicArray,     fit,           {}, 0);
+	ADD_SERIALIZABLE_FIELD(NominalValues, nominal_value, {}, 1);
 
 	/* Throws on invalid access. */ 
-	inline const FOOTAsicGainParam& GetASIC(double x) const { return fit.at( x / TFOOTMapCont::N_STRIPS_PER_ASIC ); }
+	inline const FOOTAsicGainParam& GetASIC(double x) const { return fit.at( x / N_STRIPS_PER_ASIC ); }
 
-	template<ExtrapolateLowZ extrapolate = ExtrapolateLowZ::No>
-	double CorrectionFactor(double x, double e) const noexcept {
-		const auto& asic = GetASIC(x);
-		return asic.Value<extrapolate>(x, e);
+	inline std::vector<int> GetNominalZ() const {
+		std::vector<int> Zs{}; Zs.reserve(nominal_value.size());
+		std::transform(nominal_value.begin(), nominal_value.end(), std::back_inserter(Zs), [](const auto& x) { return x.Z; });
+		return Zs;
 	}
 
 	inline bool IsSane() const {
 		std::vector<double> evals(20);
+		const auto nominalZ = GetNominalZ();
+
 		for(int i=0; i<TFOOTMapCont::N_ASIC; ++i) {
 			const auto& asic = fit[i];			
-			if(! asic.IsSaneZ() ) return false;
+			if(!asic.IsSaneZ()) return false;
+			
+			const auto Zs = asic.GetZ();
+			if(Zs != nominalZ) return false;
 
 			for(int n=0; n < TFOOTMapCont::N_STRIPS_PER_ASIC; ++n) {
 				double x = TFOOTMapCont::N_STRIPS_PER_ASIC*i + n + 0.5; // centre of the strip. 
-				if(! asic.IsSane(x, evals) ) return false;
+				if(!asic.IsSane(x, evals)) return false;
 			}
 		}
-		return true;
+		/* Check also if the referent Z measurements are sorted, and all are unique. */	
+		return ( 
+			std::is_sorted(nominal_value.begin(), nominal_value.end()) and
+			std::adjacent_find(nominal_value.begin(), nominal_value.end(), 
+				[](const auto& lo, const auto& hi) { return lo.Z == hi.Z; }) == nominal_value.end()
+		);
+	}
+
+	inline double GetNominalValue(i32 Z) const noexcept {
+		auto it = std::find_if( nominal_value.begin(), nominal_value.end(), [Z](const auto& x) { return x.Z == Z; });	
+		if(it == nominal_value.end()) return NAN;
+		return it->val;
+	}
+
+	double CorrectionFactor(double x, double e) const noexcept {
+		const auto& asic = GetASIC(x);
+		double gain;
+		
+		auto ref_hi = asic.GetMeasurementBound(x, e);
+		if(ref_hi == asic.multi_poly.begin()) { // `e` smaller than the lower bound.
+			const auto& [Z, poly] = *ref_hi;
+			double avg_val = GetNominalValue(Z);
+			double val_x = poly::Eval(x, poly);
+			gain = avg_val / val_x;
+		} else if(ref_hi == asic.multi_poly.end()) { // `e` bigger than the upper bound.
+			const auto& [Z, poly] = asic.multi_poly.back();
+			double avg_val = GetNominalValue(Z);
+			double val_x = poly::Eval(x, poly);
+			gain = avg_val / val_x;
+		}
+		else { // Iterator valid and not pointed at the range head.
+			const auto& [Z_lo, poly_lo] = *(ref_hi - 1);
+			const auto& [Z_hi, poly_hi] = *ref_hi;
+			
+			double nom_lo = GetNominalValue(Z_lo);
+			double nom_hi = GetNominalValue(Z_hi);
+			double evaluated_lo = poly::Eval(x, poly_lo);
+			double evaluated_hi = poly::Eval(x, poly_hi);
+			double gain_lo = nom_lo / evaluated_lo;
+			double gain_hi = nom_hi / evaluated_hi;
+			auto line = GetLine( {evaluated_lo, gain_lo}, {evaluated_hi, gain_hi} );
+			gain = poly::Eval(e, line);
+		}
+		return gain;
 	}
 
 	/* Small helper function to plot what we're actually gain matching upon.
@@ -179,11 +205,11 @@ struct FOOTGainParam {
 		
 		for(int ix = 1; ix <= h->GetNbinsX(); ++ix) {
 			double x = h->GetXaxis()->GetBinCenter(ix);
-			const auto& asic = GetASIC(x);
 			
 			for(int iy = 1; iy <= h->GetNbinsY(); ++iy) {
 				double y = h->GetYaxis()->GetBinCenter(iy);
-				double value = asic.Value(x, y);
+
+				double value = this->CorrectionFactor(x, y);
 				h->SetBinContent(ix, iy, value);
 			}
 		}
@@ -192,6 +218,7 @@ struct FOOTGainParam {
 
 		return h; /* Draw via: `h->Draw("SURF1")`  :-)  */
 	}
+
 	[[ nodiscard ]] inline std::pair<TGraph*, TGraph*> GetGraph (
 		const double x,
 		int nbins_y = 500,
@@ -202,44 +229,66 @@ struct FOOTGainParam {
 		const auto& asic = GetASIC(x);
 		for(int i=0; i<nbins_y; ++i) {
 			double y = lo_y + (i+0.5) * (hi_y - lo_y) / nbins_y; // centre
-			double value = asic.Value(x, y);
+			double value = this->CorrectionFactor(x, y);
 			g->SetPoint(i, y, value);
 		}
 		g->SetLineWidth(4);
 		g->SetLineColor(kRed + 2);
-		auto m = asic.GetReferentMeasurements(x);
-		TGraph* gpts = new TGraph(m.size());
-		for(int i=0; i<(int)m.size(); ++i) {
-			const auto& [e_ref, gain_ref] = std::get<1>(m[i]);
-			gpts->SetPoint(i, e_ref, gain_ref);
+		const std::vector<i32> Zs = this->GetNominalZ();
+		TGraph* gpts = new TGraph{};
+		for(i32 Z : Zs) {
+			double value = asic.GetReferentMeasurement(Z, x);
+			double gain = this->CorrectionFactor(x, value);
+			gpts->AddPoint(value, gain);
 		}
+
 		gpts->SetMarkerStyle(20);
 		gpts->SetMarkerSize(1.35);
 		return { gpts, g };
 		/* Draw via:
 		 * auto [pts, graph] = GetGraph();
-		 * graph->Draw("AL"); pts->Draw("P SAME"); */
+		 * graph->Draw("AL"); pts->Draw("P SAME"), ; */
 	}
-	[[ nodiscard ]] inline TGraph* GetRefZGraph(int Z, int Npts = 640) const {
+	[[ nodiscard ]] inline std::pair<TGraph*, TLine*> GetRefZGraph(
+		int Z, 
+		int Npts = 640
+	) const {
 		TGraph* g = new TGraph(Npts);
+		double nm = this->GetNominalValue(Z);
+		if(!std::isfinite(nm)) 
+			throw std::invalid_argument(Form("FOOTGainParam::GetRefZGraph, Passed Z=%d, which isn't found in the config.", Z));
 		double xlo = 0, xhi = 640;
+		TLine *lref = new TLine(xlo, nm, xhi, nm);
 		for(int i=0; i<Npts; ++i) {
 			double x = xlo + (i+0.5)*(xhi - xlo) / Npts;
 			const auto& asic = GetASIC(x);
 			double val = asic.GetReferentMeasurement(Z, x);
 			g->SetPoint(i, x, val);
 		}
-		g->SetLineWidth(4);
+		constexpr double lwidth_ = 4.0;
+		g->SetLineWidth(lwidth_);
 		g->SetLineColor(kRed + 2);
-		return g;
-	}
+		lref->SetLineStyle(2);
+		lref->SetLineColor(kMagenta + 2);
+		lref->SetLineWidth(lwidth_);
 
+		return {g, lref};
+	}
+	[[ nodiscard ]] inline std::vector<std::pair<TGraph*, TLine*>> GetAllRefZGraph(
+		int Npts = 640
+	) const {
+		std::vector<std::pair<TGraph*, TLine*>> r;
+		const auto nominalZ = GetNominalZ();
+		for(const i32 Z : nominalZ) 
+			r.emplace_back( GetRefZGraph(Z, Npts) );
+		return r;
+	}
 
 	FOOTGainParam() = default;
 	virtual ~FOOTGainParam() = default;
 	ClassDef(FOOTGainParam, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(FOOTGainParam, 0);
+ADD_JSON_TYPE_RESOLUTION(FOOTGainParam, 1);
 
 struct FOOTDeltaFFT {
 	using Coeff = std::array<double, 2>;
