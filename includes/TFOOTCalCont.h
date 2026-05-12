@@ -12,11 +12,15 @@
 #include "util/Tracking.hxx"
 
 #include "TGraph.h"
+#include "TH1D.h"
+#include "TH2D.h"
 #include "TLine.h"
 
 class TH1D;
 
 using ExtrapolateLowZ = mnd::BinaryOpt;
+
+enum class Orientation { X, Y, UNKNOWN };
 
 struct FMultiPoly {
 	using Vec = std::vector<double>;
@@ -88,7 +92,7 @@ struct FOOTAsicGainParam {
 			}
 		);
 	}
-
+	
 	FOOTAsicGainParam() = default;
 	virtual ~FOOTAsicGainParam() = default;
 	ClassDef(FOOTAsicGainParam, 1);
@@ -197,7 +201,7 @@ struct FOOTGainParam {
 		int nbins_x = 640,
 		int nbins_y = 500,
 		int lo_y    = 0,
-		int hi_y    = 4000
+		int hi_y    = 2500
 	) const {
 		TH2D* h = new TH2D("_hFOOTGainParam", "FOOT Gain Parameter", 
 			nbins_x, 0, TFOOTMapCont::N_STRIPS,
@@ -381,11 +385,32 @@ struct FOOTParam {
 	ADD_SERIALIZABLE_FIELD(FOOTGainParam,    gain,        {},                 8);
 	ADD_SERIALIZABLE_FIELD(FOOTDeltaParam,   de,          {},                 9);
 
+	inline Orientation GetOrientation() const noexcept {
+		if(orientation == "x" or orientation == "-x") return Orientation::X;
+		if(orientation == "y" or orientation == "-y") return Orientation::Y;
+		return Orientation::UNKNOWN;
+	};
+
+	inline double R() const noexcept {
+		if(orientation == "-x" or orientation == "-y") return -1.0;
+		return 1.0;
+	}
+
 	int de10_index_ = -1;
 	virtual ~FOOTParam() = default;
 	ClassDef(FOOTParam, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(FOOTParam, 9)
+
+struct ExpertTarget {
+	GET_HELP_AUX_IMPL
+	ADD_SERIALIZABLE_FIELD(double, thickness, 0.0, 0)
+	ADD_SERIALIZABLE_FIELD(double, width_x,   0.0, 1)
+	ADD_SERIALIZABLE_FIELD(double, width_y,   0.0, 2)
+	ADD_SERIALIZABLE_FIELD(double, dx,        0.0, 3)
+	ADD_SERIALIZABLE_FIELD(double, dy,        0.0, 4)
+};
+ADD_JSON_TYPE_RESOLUTION(ExpertTarget, 4)
 
 /* Parameters describing the whole FOOT box. Whatever the box may be :) */
 struct FOOTBoxParam {
@@ -400,9 +425,22 @@ struct FOOTBoxParam {
 	ADD_SERIALIZABLE_FIELD(double, dy,          NAN, 5)
 	ADD_SERIALIZABLE_FIELD(double, da,          NAN, 6)
 	ADD_SERIALIZABLE_FIELD(double, db,          NAN, 7)
+	ADD_SERIALIZABLE_FIELD(ExpertTarget, target, {}, 8)
 
 	inline double GetTargetZ() const noexcept { return z0 - (width_outer / 2); }
-
+	
+	inline std::array<std::array<double, 2>, 2> TargetXYGeom() const noexcept {
+		return {
+			std::array {
+				this->dx + target.dx - target.width_x / 2,
+				this->dx + target.dx + target.width_x / 2,
+			},
+			std::array {
+				this->dy + target.dy - target.width_y/ 2,
+				this->dy + target.dy + target.width_y/ 2,
+			}
+		};
+	}
 	/* Calculate the absolute z- position of n-th FOOT detector in the box. */
 	inline double GetFOOTZ(const int n, const FOOTParam* p = nullptr) const noexcept {
 		double zf = GetTargetZ() + det_pos.at(n);
@@ -421,7 +459,7 @@ struct FOOTBoxParam {
 	virtual ~FOOTBoxParam() = default;
 	ClassDef(FOOTBoxParam, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(FOOTBoxParam, 7)
+ADD_JSON_TYPE_RESOLUTION(FOOTBoxParam, 8)
 
 /* f(x; (a0,mu,sigma)) = a0 * exp( -0.5 * ((x-mu)/sigma)^2 ) */
 struct FOOTClusterFit {
@@ -456,6 +494,7 @@ struct FOOTClusterFit {
 };
 
 struct RNFOOTCluster {
+	GET_HELP_AUX_IMPL
 	enum ClusterType : u32 {
 		kUNKNOWN    = 0, /* Unqualified. */
 		kGOOD       = 1, /* Good cluster. Monotonically rising ADC values to peak ADC strip, then monotonically decreasing. */
@@ -471,19 +510,7 @@ struct RNFOOTCluster {
 	FOOTClusterFit fit{};
 
 	inline double Delta() const noexcept { return mnd::rround<int>(fCX) - fCX; }
-
-	template<std::size_t I>
-	decltype(auto) get() &        noexcept { return get_helper<I>(*this); }
-
-	template<std::size_t I>
-	decltype(auto) get() const &  noexcept { return get_helper<I>(*this); }
-
-	template<std::size_t I>
-	decltype(auto) get() &&       noexcept { return get_helper<I>(std::move(*this)); }
-
-	template<std::size_t I>
-	decltype(auto) get() const && noexcept { return get_helper<I>(std::move(*this)); }
-
+ 
 	RNFOOTCluster(double, double, u32, ClusterType, FOOTClusterFit);
 	RNFOOTCluster() = default;
 	virtual ~RNFOOTCluster() = default;
@@ -502,7 +529,7 @@ private:
 
 /* Make it structured-binding decomposable. */
 namespace std {
-	template<> struct tuple_size<::RNFOOTCluster> : integral_constant<size_t, 5> {};
+	template<> struct tuple_size<::RNFOOTCluster> : integral_constant<size_t, 4> {};
 	template<> struct tuple_element<0, ::RNFOOTCluster> { using type = double; };
 	template<> struct tuple_element<1, ::RNFOOTCluster> { using type = double; };
     template<> struct tuple_element<2, ::RNFOOTCluster> { using type = u32; };

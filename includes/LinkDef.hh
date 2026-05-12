@@ -5,6 +5,8 @@
 #pragma link C++ nestedclasses;
 #pragma link C++ nestedtypedefs;
 
+#pragma link C++ enum Orientation+;
+
 #pragma link C++ class RNSciMap+;
 #pragma link C++ class RNSciMap::Measurement+;
 #pragma link C++ class RNTPCMap+;
@@ -43,6 +45,7 @@
 #pragma link C++ class FOOTHit+;
 #pragma link C++ class FOOTBoxParam+;
 #pragma link C++ class RNFOOTPair+;
+#pragma link C++ class RNFOOTTrack+;
 #pragma link C++ class RNFOOTHit+;
 
 #endif

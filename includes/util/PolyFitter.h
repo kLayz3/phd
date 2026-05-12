@@ -2,11 +2,38 @@
 
 #include "PolyFitter.hxx"
 
-/* This hack is used to instantiate the template for small-ish N's.
- * This has the advantage that then these procedures can be used in the ROOT macros.
- *
- * Problem is that Eigen is heavily optimized from rank 2 onward for algorithms such
- * as colPivHouseholderQr() decomposition and CLING when it compiles the source of macro
- * won't enable Eigen optimizations, and you will catch the weirdest segfault in your life.
- *
- * Don't ask me why, but I was swearing in 4 different languages debugging this... */
+
+/* One extra algorithm to solve general 2D linear problem,
+ * arising from solving rotational measurements:
+ * x' = cos(t)*x + sin(t)*y  , AKA:
+ * x' = a*x + b*y      where a^2 + b^2 == 1
+ * Where `(x,y)` is the 'true' referent measurement,
+ * and `x'` is what the detector gives us.
+ * We want to solve for `a` and `b`.
+ * We are given sequences of events: `(x,y, x')` here
+ * given as the vectors `x0`, `y0`, `x` respectively.
+ */
+
+struct AngleFitResult {
+	enum class Direction { X, Y };
+	double a; // cos(tx)
+	double b; // sin(tx)
+	double Angle(const Direction ) const noexcept; // tx
+};
+
+AngleFitResult FitAngle (
+    const std::vector<double>& x0,
+    const std::vector<double>& y0,
+    const std::vector<double>& x
+);
+
+struct AngleOffsetFitResult {
+	AngleFitResult t;
+	double c; // -dx*cos(t.tx) - dy*sin(t.tx)
+};
+
+AngleOffsetFitResult FitAngleOffset (
+    const std::vector<double>& x0,
+    const std::vector<double>& y0,
+    const std::vector<double>& x
+);

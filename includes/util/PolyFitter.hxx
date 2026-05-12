@@ -13,7 +13,7 @@
 
 template<std::size_t N, std::size_t R>
 struct StaticPolyFitter {
-	static_assert(R >= 0, "Fit rank (polynomial) must be greater than 0");
+	static_assert(R > 0, "Fit rank (polynomial) must be greater than 0");
 
 	using QR = Eigen::ColPivHouseholderQR<Eigen::Matrix<double, N, R+1>>;
 
@@ -68,6 +68,7 @@ private:
 	QR qr;
 };
 
+namespace mnd { namespace detail {
 
 template<std::size_t R>
 inline void PolyFit_(
@@ -84,10 +85,11 @@ inline void PolyFit_(
 	std::copy_n(fit.data(), R+1, result.data());
 }
 
+}}
+
 template<std::size_t R>
 void PolyFit(const std::vector<double>& x, const std::vector<double>& y, std::array<double, R+1>& result) {
-	static_assert(R >= 0, "Fit rank (polynomial) must be greater than 0");
-
+	static_assert(R > 0, "Fit rank (polynomial) must be greater than 0");
 	assert(((void)("Vectors must be equally sized"), x.size() == y.size()));
 	
 	const std::size_t N = x.size();
@@ -96,13 +98,37 @@ void PolyFit(const std::vector<double>& x, const std::vector<double>& y, std::ar
 	Eigen::Map<const Eigen::VectorXd> xv(x.data(), N);
 	Eigen::Map<const Eigen::VectorXd> yv(y.data(), N);
 
-	PolyFit_<R>(xv, yv, N, result);
+	mnd::detail::PolyFit_<R>(xv, yv, N, result);
+}
+template<std::size_t R, std::size_t N>
+void PolyFit(const std::array<double, N>& x, const std::array<double, N>& y, std::array<double, R+1>& result,
+	size_t L = N) {
+	static_assert(R > 0, "Fit rank (polynomial) must be greater than 0");
+	static_assert(N >= R + 1, "Static array needs to be sized least R+1.");
+	assert((L >= R + 1 && L <= N) && "Need at least R+1 points, and points supplied mustn't be more than array size.");
+
+	Eigen::Map<const Eigen::VectorXd> xv(x.data(), L);
+	Eigen::Map<const Eigen::VectorXd> yv(y.data(), L);
+
+	mnd::detail::PolyFit_<R>(xv, yv, N, result);
 }
 
+/* Fit a dataset (xi,yi) represented by two vectors `x` and `y` by a polynomial. Returns an array of coefficients. */
 template<std::size_t R>
 std::array<double, R+1> PolyFit(const std::vector<double>& x, const std::vector<double>& y) {
 	std::array<double, R+1> res;
 	PolyFit<R>(x,y, res);
+	return res;
+}
+/* Cache friendlier version.
+ * Fit a dataset (xi,yi) represented by two equally-sized arrays `x` and `y` by a polynomial. 
+ * Also (optionally) supply the number of points (a slice size parameter) 
+ * Returns an array of coefficients. */
+template<std::size_t R, std::size_t N>
+std::array<double, R+1> PolyFit(const std::array<double, N>& x, const std::array<double, N>& y,
+	size_t L = N) {
+	std::array<double, R+1> res;
+	PolyFit<R>(x,y, res, L);
 	return res;
 }
 
@@ -157,6 +183,7 @@ std::array<double, R+1> PolyFit (
 /* Horner's algorithm: https://en.wikipedia.org/wiki/Horner%27s_method 
  * Written recursive to unroll everything. */
 namespace poly {
+	namespace detail {
 	template<std::size_t I, std::size_t R>
 	double EvalImpl__(double x, const std::array<double,R>& a) noexcept {
 		if constexpr(I == R - 1)
@@ -170,56 +197,23 @@ namespace poly {
 		else
 			return a[0] + x * EvalImpl__(x, a+1, N-1);
 	}
+	}
 
 	template<std::size_t R>
 	double Eval(const double x, const std::array<double, R>& a) noexcept {
 		if constexpr(R == 0) 
 			return 0.0;
 		else
-			return EvalImpl__<0>(x, a);
+			return detail::EvalImpl__<0>(x, a);
 	}
 
 	inline double Eval(const double x, const std::vector<double>& a) noexcept {
 		if(a.size() == 0) return 0;
-		return EvalImpl__(x, a.data(), static_cast<int>(a.size()) );
+		return detail::EvalImpl__(x, a.data(), static_cast<int>(a.size()) );
 	}
 }
 
-/* One extra algorithm to solve general 2D linear problem,
- * arising from solving rotational measurements:
- * x' = cos(t)*x + sin(t)*y  , AKA:
- * x' = a*x + b*y      where a^2 + b^2 == 1
- * Where `(x,y)` is the 'true' referent measurement,
- * and `x'` is what the detector gives us.
- * We want to solve for `a` and `b`.
- * We are given sequences of events: `(x,y, x')` here
- * given as the vectors `x0`, `y0`, `x` respectively.
- */
-
-struct AngleFitResult {
-	enum class Direction { X, Y };
-	double a; // cos(tx)
-	double b; // sin(tx)
-	double Angle(const Direction ) const noexcept; // tx
-};
-
-AngleFitResult FitAngle (
-    const std::vector<double>& x0,
-    const std::vector<double>& y0,
-    const std::vector<double>& x
-);
-
-struct AngleOffsetFitResult {
-	AngleFitResult t;
-	double c; // -dx*cos(t.tx) - dy*sin(t.tx)
-};
-
-AngleOffsetFitResult FitAngleOffset (
-    const std::vector<double>& x0,
-    const std::vector<double>& y0,
-    const std::vector<double>& x
-); 
-
+/* Check the .cxx file to explain this monstrosity.. */
 extern template void PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , std::array<double,  2>& );
 extern template void PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , std::array<double,  3>& );
 extern template void PolyFit< 3>(const std::vector<double>& , const std::vector<double>& , std::array<double,  4>& );
@@ -245,6 +239,9 @@ extern template std::array<double, 10> PolyFit< 9>(const std::vector<double>& , 
 extern template std::array<double, 11> PolyFit<10>(const std::vector<double>& , const std::vector<double>& );
 extern template std::array<double, 12> PolyFit<11>(const std::vector<double>& , const std::vector<double>& );
 extern template std::array<double, 13> PolyFit<12>(const std::vector<double>& , const std::vector<double>& );
+
+extern template
+std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>& , const std::array<double, 4>& , std::size_t);
 
 extern template std::array<double,  2> PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 extern template std::array<double,  3> PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );

@@ -143,7 +143,6 @@
 #define ADD_JSON_TYPE_RESOLUTION_11(TYPE) ADD_JSON_TYPE_RESOLUTION_10(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 11)
 #define ADD_JSON_TYPE_RESOLUTION_12(TYPE) ADD_JSON_TYPE_RESOLUTION_11(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 12)
 
-
 #define MND_HAS_RANGE_OSTREAM_
 
 template<typename T>
@@ -184,7 +183,7 @@ Suppose your json looks like this:
 Then define a structure with some label:
 
 struct MyStruct {
-    GET_HELP_AUX_IMPL;
+	GET_HELP_AUX_IMPL;
 	using T1 = std::array<std::array<int, 2>, 2>;
 	using T2 = std::array<double, 2>;
     

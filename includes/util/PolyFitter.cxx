@@ -1,5 +1,13 @@
 #include "PolyFitter.h"
-#include "util/PolyFitter.hxx"
+
+/* This hack is used to instantiate the template for small-ish N's.
+ * This has the advantage that then these procedures can be used in the ROOT macros.
+ *
+ * Problem is that Eigen is heavily optimized from rank 2 onward for algorithms such
+ * as colPivHouseholderQr() decomposition and CLING when it compiles the source of macro
+ * won't enable Eigen optimizations, and you will catch the weirdest segfault in your life.
+ *
+ * Don't ask me why, but I was swearing in 4 different languages debugging this... */
 
 template void PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , std::array<double,  2>& );
 template void PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , std::array<double,  3>& );
@@ -26,6 +34,8 @@ template std::array<double, 10> PolyFit< 9>(const std::vector<double>& , const s
 template std::array<double, 11> PolyFit<10>(const std::vector<double>& , const std::vector<double>& );
 template std::array<double, 12> PolyFit<11>(const std::vector<double>& , const std::vector<double>& );
 template std::array<double, 13> PolyFit<12>(const std::vector<double>& , const std::vector<double>& );
+
+template std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>& , const std::array<double, 4>& , std::size_t);
 
 template std::array<double,  2> PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 template std::array<double,  3> PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );

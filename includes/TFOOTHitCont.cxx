@@ -24,7 +24,7 @@ auto it = info.find("Setup");
 void TFOOTHitCont::Setup() {
 	box = RegisterObject<FOOTBoxParam>("Box");
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
-	for(int i=0; i<N_PAIRS; ++i) {
+	for(u32 i=0; i<N_PAIRS; ++i) {
 		h_corr_all[i] = RegisterObject<TH2I>(
 			Form("h2_corr_all%d", i), 
 			Form("Correlation in dE FOOT%d:FOOT%d for all clusters", 2*i, 2*i+1),
@@ -58,4 +58,5 @@ void TFOOTHitCont::Setup() {
 
 ClassImp(FOOTHit);
 ClassImp(RNFOOTPair);
+ClassImp(RNFOOTTrack);
 ClassImp(RNFOOTHit);

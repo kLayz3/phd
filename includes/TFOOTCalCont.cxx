@@ -81,7 +81,7 @@ void TFOOTCalCont::Init(TDictInfo info) {
 			ERROR("Container meant to also register the FOOT box, but inside %s file, \"box\" key not found?",
 				file_name.c_str());
 		
-		UNROLL_JSON_PARAM(bpar, j["box"], 7);
+		UNROLL_JSON_PARAM(bpar, j["box"], 8);
 	}
 }
 

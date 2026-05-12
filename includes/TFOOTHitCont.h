@@ -5,11 +5,14 @@
 #include "util/json_struct_def.hh"
 #include "TFOOTCalCont.h"
 
+#include "util/HitMatrix.hxx"
+#include "util/FTrack.h"
+
 class TH2I;
 
 struct FOOTHit {
 	double Q; 
-	double m; // [ mm ]
+	double m; // measurement [mm]
 	
 	FOOTHit() = default;
 	FOOTHit(double Q_, double m_) :
@@ -22,25 +25,43 @@ struct FOOTHit {
 struct RNFOOTPair {
 	std::vector<FOOTHit> x;
 	std::vector<FOOTHit> y;
+	double z;
 	RNFOOTPair() = default;
 
 	inline void Clean() noexcept { x.clear(); y.clear(); }
 	virtual ~RNFOOTPair() = default;
 	ClassDef(RNFOOTPair, 1);
 };
+extern template struct HitMatrix<RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
+extern template struct Track<RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
+
+struct RNFOOTTrack {
+	double x0, y0;
+	double theta, phi;
+	double Q;
+
+	RNFOOTTrack() = default;
+	virtual ~RNFOOTTrack() = default;
+	ClassDef(RNFOOTTrack, 1);
+};
 
 struct RNFOOTHit {
-	static constexpr int N_PAIRS = N_FOOT_DETECTORS / 2;
+	static constexpr u32 N_PAIRS = N_FOOT_DETECTORS / 2;
 	std::array<RNFOOTPair, N_PAIRS> pair;
+	std::vector<RNFOOTTrack> track;
+
 	RNFOOTHit() = default;
 
-	inline void Clean() noexcept { for(auto& p: pair) p.Clean(); }
+	inline void Clean() noexcept { 
+		for(auto& p: pair) p.Clean(); 
+		track.clear(); 
+	}
 	virtual ~RNFOOTHit() = default;
 	ClassDef(RNFOOTHit, 1);
 };
 
 struct TFOOTHitCont : TContainer<RNFOOTHit> {
-	static constexpr int N_PAIRS = RNFOOTHit::N_PAIRS;
+	static constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
 	inline static nlohmann::json setup {};
 	inline static FOOTBoxParam _box;
 	
