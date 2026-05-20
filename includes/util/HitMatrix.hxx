@@ -1,16 +1,20 @@
 #pragma once
 
-#include <tuple>
 #include <cmath>
 #include <optional>
 #include <type_traits>
 #include "../Eigen/Dense"
 #include "../monad/monad.hxx"
 
+#define MND_HITMATRIX_DO_BOUNDS_CHECK
+
 namespace mnd { namespace hm {
 
 struct Q {
-	double qx, qy;
+	double qx = NAN, qy = NAN;
+
+	Q() = default;
+	Q(double qx_, double qy_): qx(qx_), qy(qy_) {}
 
 	inline double mean() const noexcept { return 0.5*(qx+qy)/2; }
 	inline double var() const noexcept {
@@ -18,14 +22,22 @@ struct Q {
 		return 0.5*d*d;
 	}
 	inline double s() const noexcept { return std::sqrt( var() ); } 
+
+	inline bool HasValue() const noexcept { return std::isfinite(qx); }
+	inline explicit operator bool() const noexcept { return HasValue(); }
+
+	friend std::ostream& operator<<(std::ostream& os, const Q& rhs) {
+		return os << rhs.mean() << "±" << rhs.s();
+	}
 };
 
 struct Data {
 	using q_type = Q;
 	using xy_type = Eigen::Vector2d;
 
-	q_type q; 
+	q_type q {}; 
 	xy_type v; 
+
 	inline double X() const noexcept { return v(0); }
 	inline double Y() const noexcept { return v(1); }
 };
@@ -87,6 +99,7 @@ DECL_TYPE_TRAIT_HAS_FIELD(x)
 DECL_TYPE_TRAIT_HAS_FIELD(y)
 DECL_TYPE_TRAIT_HAS_FIELD(z)
 DECL_TYPE_TRAIT_HAS_FIELD(Q)
+DECL_TYPE_TRAIT_HAS_FIELD(q)
 DECL_TYPE_TRAIT_HAS_FIELD(m)
 
 } /* namespace mnd */ 
@@ -115,93 +128,91 @@ private:
 		"hit_type must have field .m");
 	static_assert(mnd::has_Q_field<hit_type_x>::value,
 		"hit_type must have field .Q");
+	
+	using q_type_x = std::decay_t<decltype( std::declval<hit_type_x>().Q )>;
+	static_assert(mnd::has_q_field<q_type_x>::value,
+		"Q_type must have field .q");
 
 public:
 	using hit_type = hit_type_x;
+	using q_type = q_type_x;
 	using Entry = mnd::hm::Data;
 	using Cached  = mnd::hm::Cached;
 	using ActiveIndex = uint32_t;
-
+	static constexpr size_t X = 0;
+	static constexpr size_t Y = 1;
 	
 	HitMatrix() = default;
 	HitMatrix(FOOTPair const& rhs): p(&rhs) {}
-	static constexpr size_t X = 0;
-	static constexpr size_t Y = 1;
 
-	/* Evaluate c_ij element. Note there's no bounds checking! */
+	/* Evaluate c(i,j) element. */
 	Entry const& operator()(ActiveIndex i, ActiveIndex j) const noexcept {
-		const auto real_i = static_cast<Eigen::Index>(active_x[i]);
-		const auto real_j = static_cast<Eigen::Index>(active_y[j]);
+#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
+		if(i > static_cast<ActiveIndex>(GetN<X>()))
+			ERROR("HitMatrix::at(): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<X>());
+		if(j > static_cast<ActiveIndex>(GetN<Y>()))
+			ERROR("HitMatrix::at(): Requested y-index %u out of bounds (%zu)", static_cast<u32>(j), GetN<Y>());
+#endif
+		const ActiveIndex real_i = active_x[i];
+		const ActiveIndex real_j = active_y[j];
+
+#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
+		if((size_t)real_i > GetNBase<X>())
+			ERROR("HitMatrix::at(): Real x-index %u out of bounds (%zu)", static_cast<u32>(real_i), GetNBase<X>());
+		if((size_t)real_j > GetNBase<Y>())
+			ERROR("HitMatrix::at(): Real y-index %u out of bounds (%zu)", static_cast<u32>(real_j), GetNBase<Y>());
+#endif
 
 		auto& slot = cache(real_i, real_j);
 		if(! slot.has_value() ) {
 			const hit_type& hx = p->x[real_i];
 			const hit_type& hy = p->y[real_j];
 			slot = Entry {
-				{hx.Q, hy.Q}, 
+				{hx.Q.q, hy.Q.q}, 
 				A * Eigen::Vector2d(hx.m, hy.m) + dxy
 			}; 
 		}
 		return *slot;
 	}
 	
-	/* Bound checking version of operator() */
-	Entry const& at(ActiveIndex i, ActiveIndex j) const {
-		if(i > static_cast<ActiveIndex>(GetN<X>()))
-			ERROR("HitMatrix::at(): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<X>());
-		if(i > static_cast<ActiveIndex>(GetN<X>()))
-			ERROR("HitMatrix::at(): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<Y>());
-		return this->operator()(i,j);
-	}
-	
 	/* Called at the start of tracking, to initialize the entry. */
-	void InitEvent(const FOOTPair& cont ) {
+	void InitEvent(const FOOTPair& cont ) noexcept {
 		p = &cont;
 		size_t const nx = p->x.size(), ny = p->y.size();
-		cache.resize_and_clear(p->x.size(), p->y.size());
+		cache.resize_and_clear(nx, ny);
 
 		active_x.resize(nx); active_y.resize(ny);
 		std::iota(active_x.begin(), active_x.end(), 0);
 		std::iota(active_y.begin(), active_y.end(), 0);
 	}
 
-	/* Remove a row/column from current the hit matrix by removing that entry from the index redirection table. 
-	 * Does not check for bounds! */
+	/* Remove a row/column from current the hit matrix by removing that entry from the index redirection table. */
 	template<size_t L> void pop(ActiveIndex index) noexcept {
+#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
+		if(index > static_cast<ActiveIndex>(GetN<L>())) {
+			ERROR("HitMatrix::pop_checked<%zu>(): Requested %s-index %d out of bounds (%zu)", 
+				L, (L == X) ? "X" : "Y", index, GetN<L>() );
+		}
+#endif
 		if      constexpr(L == X) active_x.erase(active_x.begin() + index);
 		else if constexpr(L == Y) active_y.erase(active_x.begin() + index);
 		else static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
 	}
 	inline void pop(ActiveIndex i, ActiveIndex j) noexcept { pop<X>(i); pop<Y>(j); }
 
-	/* Remove last row or column. Does not check for bounds. */
+	/* Remove the last row or column (template parameter) */
 	template<size_t L> void pop_back() noexcept {
+#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
+		if(0 == GetN<L>()) ERROR("HitMatrix::pop_back<%s>(): Vector is empty.", (L == X) ? "X" : "Y");
+#endif
 		if      constexpr(L == X) active_x.pop_back();
 		else if constexpr(L == Y) active_y.pop_back();
 		else static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
 	}
 	inline void pop_back() noexcept { pop_back<X>(); pop_back<Y>(); }
 
-	/* Remove last row or column while doing the bounds check. */
-	template<size_t L> void pop_back_checked() noexcept {
-		if(0 == GetN<L>()) ERROR("HitMatrix::pop_back_checked<%s>(): Vector is empty.", (L == X) ? "X" : "Y");
-		pop_back<L>();
-	}
-	inline void pop_back_checked() noexcept { pop_back_checked<X>(); pop_back_checked<Y>(); }
-
-	/* Remove a row/column from current hitmatrix by removing that entry from the index redirection table. 
-	 * while doing a bounds checked. */
-	template<size_t L> void pop_checked(ActiveIndex index) {
-		if(index > static_cast<ActiveIndex>(GetN<L>())) {
-			ERROR("HitMatrix::pop_checked<%zu>(): Requested %s-index %d out of bounds (%zu)", 
-				L, (L == X) ? "X" : "Y", index, GetN<L>() );
-		}
-		pop<L>(index);
-	}
-	inline void pop_checked(ActiveIndex i, ActiveIndex j) noexcept { pop_checked<X>(i); pop_checked<Y>(j); }
-
 	/* Eager function, force the computation of the entire matrix. */
-	const Cached& EvalAll() const {
+	const Cached& EvalAll() const noexcept {
 		const size_t nx = GetNBase<X>();
 		const size_t ny = GetNBase<Y>();
 		cache.resize(nx, ny);
@@ -213,7 +224,7 @@ public:
 
 				const hit_type& hy = p->y[j];
 				cache(i,j) = Entry {
-					{hx.Q, hy.Q}, 
+					{hx.Q.q, hy.Q.q}, 
 					A * Eigen::Vector2d(hx.m, hy.m) + dxy
 				};
 			}
@@ -231,7 +242,7 @@ public:
 		else
 			static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
 	}   
-	/* Dimension of the current state of the matrix along the axes. */
+	/* Dimension of the current state of the matrix along the axis specified as the template parameter. */
 	template<size_t L>
 	inline size_t GetN() const noexcept {
 		if constexpr(L == X)
@@ -242,8 +253,30 @@ public:
 			static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
 	}
 
-	Eigen::Matrix2d A;
-	Eigen::Vector2d dxy;
+	Eigen::Matrix2d A; // Rotation matrix, each detector might be rotated by an angle θx or θy
+	Eigen::Vector2d dxy; // Translation vector, each detector might be translated by dx/dy
+
+	friend std::ostream& operator<<(std::ostream& os, const HitMatrix& hm) {
+		constexpr size_t X = HitMatrix<FOOTPair>::X;
+		constexpr size_t Y = HitMatrix<FOOTPair>::Y;
+
+		const size_t nx =  hm.template GetN<X>();
+		const size_t ny =  hm.template GetN<Y>();
+
+		os << KBH_YEL << " -----HM----- " << KNRM;
+		for(size_t i=0; i < nx; ++i) {
+			const auto real_i = static_cast<std::size_t>(hm.active_x[i]);
+			os << hm.p->x[real_i];
+			if(i != hm.template GetN<X>()-1)
+				os << ", ";
+		}	
+		for(size_t j=0; j < ny; ++j) {
+			const auto real_j = static_cast<std::size_t>(hm.active_y[j]);
+			os << '\n' << hm.p->y[real_j];
+		}
+		os << KBH_YEL << " -----END---- " << KNRM;
+		return os;
+	}
 
 private: 
 	/* Index indirection tables. */
@@ -259,4 +292,4 @@ struct RNFOOTPair;
 struct FOOTHit;
 //extern template struct HitMatrix<RNFOOTPair>;
 
-/* No implementation file. The type is instantiated in the TFOOTHitProc.h. */
+/* No implementation file. The type is instantiated in the TFOOTHitProc.cxx. */

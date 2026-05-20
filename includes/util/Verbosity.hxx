@@ -5,10 +5,12 @@
 
 #pragma once
 
+#include <optional>
 enum class Verbosity : int { 
 	SILENT = 0,
 	INFO   = 1,
-	CHATTY = 2
+	CHATTY = 2,
+	SPAM   = 3
 };
 
 inline bool operator==(Verbosity v, int rhs) noexcept { return static_cast<int>(v) == rhs; }
@@ -17,3 +19,16 @@ inline bool operator< (Verbosity v, int rhs) noexcept { return static_cast<int>(
 inline bool operator> (Verbosity v, int rhs) noexcept { return static_cast<int>(v) >  rhs; }
 inline bool operator<=(Verbosity v, int rhs) noexcept { return static_cast<int>(v) <= rhs; }
 inline bool operator>=(Verbosity v, int rhs) noexcept { return static_cast<int>(v) >= rhs; }
+
+namespace mnd {
+
+inline std::optional<Verbosity> itov(int value) noexcept {
+	switch(value) {
+		case 0: return Verbosity::SILENT;
+		case 1: return Verbosity::INFO;
+		case 2: return Verbosity::CHATTY;
+		case 3: return Verbosity::SPAM;
+		default: return std::nullopt;
+	}
+}
+}

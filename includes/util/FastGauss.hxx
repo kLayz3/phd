@@ -19,7 +19,7 @@
 //#define FGF_LIB_ADD_PRINTER_
 //#define FGF_LIB_DEBUG_
 
-#include "Eigen/Dense"
+#include "../Eigen/Dense"
 #include <cmath>
 #include <algorithm>
 

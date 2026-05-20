@@ -10,17 +10,38 @@
 
 class TH2I;
 
+/* Represent the 'charge' measurement of each layer. */
+struct FOOTQ {
+	using ClusterType = RNFOOTCluster::ClusterType;
+
+	double q; // nominal 'value'
+
+	/* Few fields taken from RNFOOTCluster.. */
+	u32 fCM = 0; /* Cluster multiplicity. */ 
+	ClusterType fCT{}; /* Cluster type. */
+	
+	FOOTQ() = default;
+	FOOTQ(double q_, u32 fCM_, ClusterType fCT_) :
+		q(q_), fCM(fCM_), fCT(fCT_) {}
+
+	virtual ~FOOTQ() = default;
+	ClassDef(FOOTQ, 1);
+};
+
 struct FOOTHit {
-	double Q; 
-	double m; // measurement [mm]
+	using ClusterType = FOOTQ::ClusterType;
+
+	FOOTQ Q; 
+	double m; // measurement [ strip units ]
 	
 	FOOTHit() = default;
-	FOOTHit(double Q_, double m_) :
-		Q(Q_), m(m_) {}
+	FOOTHit(double q_, u32 fCM_, ClusterType fCT_, double m_) :
+		Q(q_, fCM_, fCT_), m(m_) {}
 
 	virtual ~FOOTHit() = default;
 	ClassDef(FOOTHit, 1);
 };
+std::ostream& operator<<(std::ostream& , const FOOTHit& ) noexcept;
 
 struct RNFOOTPair {
 	std::vector<FOOTHit> x;
@@ -32,15 +53,18 @@ struct RNFOOTPair {
 	virtual ~RNFOOTPair() = default;
 	ClassDef(RNFOOTPair, 1);
 };
-extern template struct HitMatrix<RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
-extern template struct Track<RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
 
 struct RNFOOTTrack {
 	double x0, y0;
-	double theta, phi;
+	double ax, ay;
 	double Q;
 
+	double score;
+	std::size_t n; // number of collected pts, size_t anyway chosen as it will be aligned to 8-byte
+
 	RNFOOTTrack() = default;
+	RNFOOTTrack(const std::array<double, 2>& , const std::array<double, 2>& , double , double, std::size_t );
+
 	virtual ~RNFOOTTrack() = default;
 	ClassDef(RNFOOTTrack, 1);
 };
@@ -77,3 +101,6 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	void Setup() override;
 	void Init(TDictInfo ) override;
 };
+
+extern template struct HitMatrix<RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
+extern template struct Track<TFOOTHitCont::N_PAIRS + 1, RNFOOTPair>; // instantiated in TFOOTHitProc.cxx

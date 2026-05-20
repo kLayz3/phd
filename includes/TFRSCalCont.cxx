@@ -1,10 +1,12 @@
 #include "TFRSCalCont.h"
 #include "TH2I.h"
 #include <stdexcept>
+#include <filesystem>
 
 #include "util/JSONParser.h"
 
 using nlohmann::json;
+namespace fs = std::filesystem;
 
 TFRSCalCont::TFRSCalCont() : TContainer("FRS") {}
 
@@ -14,7 +16,14 @@ void TFRSCalCont::Init(TDictInfo info) {
 		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
 	const std::string& file_name = it->second;
 	setup = ParseJSON(file_name);
-	setup["file_name"] = file_name;
+
+	/* `file_name` could've been passed relative. Fetch the full path. */
+	try {
+		fs::path pfull = fs::canonical(file_name);
+		setup["file_name"] = pfull.c_str();
+	} catch(...) {
+		ERROR("Fetching full path from: \'%s\' failed?", file_name.c_str());
+	}
 
 	/* Verify the JSON static + add to static param object. */
 	for(const auto& [_tpc_i, params] : setup.at("TPC").items()) {

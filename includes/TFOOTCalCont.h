@@ -190,7 +190,7 @@ struct FOOTGainParam {
 			double gain_lo = nom_lo / evaluated_lo;
 			double gain_hi = nom_hi / evaluated_hi;
 			auto line = GetLine( {evaluated_lo, gain_lo}, {evaluated_hi, gain_hi} );
-			gain = poly::Eval(e, line);
+			gain = poly::Eval(e, line.array());
 		}
 		return gain;
 	}
@@ -409,6 +409,8 @@ struct ExpertTarget {
 	ADD_SERIALIZABLE_FIELD(double, width_y,   0.0, 2)
 	ADD_SERIALIZABLE_FIELD(double, dx,        0.0, 3)
 	ADD_SERIALIZABLE_FIELD(double, dy,        0.0, 4)
+	virtual ~ExpertTarget() = default;
+	ClassDef(ExpertTarget, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(ExpertTarget, 4)
 
@@ -507,6 +509,7 @@ struct RNFOOTCluster {
 	double fCE = 0; /* Cluster summed energy. */
 	u32    fCM = 0; /* Cluster multiplicity. */
 	ClusterType fCT{}; /* Cluster type. */
+	
 	FOOTClusterFit fit{};
 
 	inline double Delta() const noexcept { return mnd::rround<int>(fCX) - fCX; }
@@ -588,8 +591,9 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	TH2I* h2_mult_e;
 
 	FOOTParam* setup;
-	FOOTBoxParam* box; // Optional; not every FOOT will register the box object 
-					   // based on `should_register_box_` predicate.
+	FOOTBoxParam* box;      // Optional; not every FOOT will register the box/name objects
+	std::string* setupName; // based on `should_register_box_` predicate.
+
 	TFOOTCalCont() = default;
 
 	void Init(TDictInfo info) override;

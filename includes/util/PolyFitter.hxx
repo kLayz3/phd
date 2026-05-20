@@ -120,13 +120,13 @@ std::array<double, R+1> PolyFit(const std::vector<double>& x, const std::vector<
 	PolyFit<R>(x,y, res);
 	return res;
 }
+
 /* Cache friendlier version.
  * Fit a dataset (xi,yi) represented by two equally-sized arrays `x` and `y` by a polynomial. 
  * Also (optionally) supply the number of points (a slice size parameter) 
  * Returns an array of coefficients. */
 template<std::size_t R, std::size_t N>
-std::array<double, R+1> PolyFit(const std::array<double, N>& x, const std::array<double, N>& y,
-	size_t L = N) {
+std::array<double, R+1> PolyFit(const std::array<double, N>& x, const std::array<double, N>& y, size_t L = N) {
 	std::array<double, R+1> res;
 	PolyFit<R>(x,y, res, L);
 	return res;
@@ -213,7 +213,7 @@ namespace poly {
 	}
 }
 
-/* Check the .cxx file to explain this monstrosity.. */
+/* Check the .cxx file to explain the reason behind explicit instantiations. */
 extern template void PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , std::array<double,  2>& );
 extern template void PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , std::array<double,  3>& );
 extern template void PolyFit< 3>(const std::vector<double>& , const std::vector<double>& , std::array<double,  4>& );

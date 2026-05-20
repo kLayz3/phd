@@ -1,6 +1,12 @@
 #### Analysis for my PhD
 All the code presented here is meant for (personal) use. 
 Feel free to use it or fork it.
+``
+git clone --recurse-submodules
+``
+
+Only external dependency should be [https://www.boost.org/doc/user-guide/getting-started.html](boost).
+Note that few of the subroutines from `util/` won't compile on non-POSIX systems.
 
 Remember:
 `git submodule update --init --recursive`

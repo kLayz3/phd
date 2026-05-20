@@ -1,9 +1,14 @@
 #pragma once
+
 #include <array>
 #include <cmath>
+#include <ostream>
+#include "json_struct_def.hh"
 
 /* This is only for a temporary container,
  * lines will always be saved in Cartesian coordinates. */
+
+#define FORMAT_ANGLES_IN_RADIANS
 
 namespace mnd {
 namespace geom {
@@ -25,11 +30,32 @@ struct Point3D {
 
 struct SphericalAngles {
 	double theta, phi;
+	friend std::ostream& operator<<(std::ostream& os, const SphericalAngles& rhs) {
+		return os << "(θ: " << rhs.theta <<  ", φ: " << rhs.phi << ')';	
+	}
 };
 
-using Line2D = std::array<double, 2>;
+// Nullable 
+struct Line2D {
+	using Arr = std::array<double, 2>;
+	using value_type = Arr::value_type;
+
+	Line2D(value_type f1, value_type f2) : value{f1,f2} {}
+	Line2D(const Arr& arr) : value(arr) {}
+	
+	inline value_type& operator[](Arr::size_type pos) noexcept { return value[pos]; } 
+	inline value_type const& operator[](Arr::size_type pos) const noexcept { return value[pos]; } 
+	inline bool HasValue() const noexcept { return std::isfinite(value[0]); }
+
+	Arr& array() noexcept { return value; }
+	Arr const& array() const noexcept { return value; }
+
+private:
+	 Arr value {NAN,NAN};
+};
+
 struct Line3D {
-	std::array<double, 2> a, b;
+	Line2D a, b;
 	inline SphericalAngles Spherical() const noexcept {
 		return { 
 			std::acos( 1.0 / std::sqrt( a[1]*a[1] + b[1]*b[1] + 1) ), // theta
@@ -37,17 +63,26 @@ struct Line3D {
 		};
 	}
 
+	friend std::ostream& operator<<(std::ostream& os, const Line3D& rhs) {
+		return os << "(Lx: " << rhs.a.array() 
+		          << " , Ly: " << rhs.b.array() 
+				  << " :: " << rhs.Spherical() << ')';
+	}
+
+	inline bool HasValue() const noexcept { return a.HasValue(); }
 	double AngleRelativeTo(const Line3D& ref) const noexcept; 
 };
 
 struct Rectangle2D {
-	// Spanned by bottom left and top right:
-	//   .----------------- (x1,y1)
-	//   |                     | 
-	//   |                     |
-	//   |                     |
-	// (x0,y0) ----------------^
+	/* Spanned by bottom left and top right:
+	 *   .----------------- (x1,y1)
+	 *   |                     | 
+	 *   |                     |
+	 *   |                     |
+	 * (x0,y0) ----------------^ */
 	Rectangle2D() = default;
+
+	/* Take the mid point coordinates, and width in x- and y- respectively. */ 
 	Rectangle2D(Point midpoint, double wx, double wy);
 
 	Point p0, p1;

@@ -10,7 +10,7 @@
 		"dx": 0.0, // Small offset in x- direction 
 		"dy": 0.0, // Small offset in x- direction
 		"da": 0.0, // Small offset in x- angle relative to the TPCs' defined axis.
-		"db": 0.0  // Small offset in y- angle relative to the TPCs' defined axis.
+		"db": 0.0, // Small offset in y- angle relative to the TPCs' defined axis.
 		"target": {
 			"thickness": 2000, // mg/cm
 			"width_x": 400.0, // mm

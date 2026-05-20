@@ -1,7 +1,9 @@
 #include "TFOOTMapCont.h"
 #include "monad/monad.hxx"
 #include <csignal>
+#include <exception>
 #include <memory>
+#include <string>
 
 #include "util/CMDLineParser.h"
 #include "TFOOTCalCont.h"
@@ -12,6 +14,7 @@
 #include "TFRSHitProc.h"
 #include "TFOOTHitCont.h"
 #include "TFOOTHitProc.h"
+#include "util/Verbosity.hxx"
 
 using namespace CMDLineParser;
 using namespace std::literals;
@@ -27,20 +30,48 @@ int main(int argc, char* argv[]) {
 	CMDLineParser::Mandatory::SetDefMessage(hit_help);
 
 	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
+	
 	std::string pStr, fileName, outFile, setupFile, footSetupFile;
+	
+	u64 maxEvents = -1;
+	double foot_qt = TFOOTHitProc::DEFAULT_MAX_Q_TOLERANCE;
+	double foot_mc = TFOOTHitProc::DEFAULT_MAX_COST;
+	Verbosity v = Verbosity::SILENT;
 
 	ParseCmdLine("file", fileName, argc, argv, true);
 	{
 		auto f = std::make_unique<TFile>(fileName.c_str(), "READ");
-		setupFile = *f->Get<std::string>("FRS_setup_file");
-		footSetupFile = PROG_PATH "/params/foot_setup.json";
+		auto* _p1 = f->Get<std::string>("FRS_setup_file");
+		if(!_p1 or !_p1->length())
+			ERROR("`FRS_setup_file` (std::string) object not found (or is blank) in: %s\n", fileName.c_str());
+		setupFile = *_p1;
+
+		_p1 = f->Get<std::string>("FOOT0_setup_file");
+		if(!_p1 or !_p1->length())
+			ERROR("`FOOT0_setup_file` (std::string) object not found (or is blank) in: %s\n", fileName.c_str());
+		footSetupFile = *_p1;
 	}
-	if(setupFile.length() == 0) 
-		ERROR("Setup file mismatched");
 	
 	if(!ParseCmdLine("output", outFile, argc, argv)) {
 		outFile = fileName.substr(0, fileName.find('.')) + "_hit.root"; 
 		WARN("No output file specified. Writing to file: %s\n", outFile.c_str());
+	}
+	if(ParseCmdLine("max-events", pStr, argc, argv)) {
+		try {
+			maxEvents = std::stoull(pStr);
+		} catch(const std::exception& e) {
+			ERROR("Conversion \'%s\' to unsigned long long failed. Reason: %s", pStr.c_str(), e.what());
+		}
+	}
+	if(ParseCmdLine("v", pStr, argc, argv)) {
+		int val;
+		try {
+			val = std::stoi(pStr);
+		} catch(std::exception& e) {
+			ERROR("Value parsed from `v`: \'%s\' not convertible to int.\n", pStr.c_str());
+		}
+		auto ov = mnd::itov(val);
+		v = ov ? *ov : Verbosity::CHATTY;
 	}
 
 	VerifyNoArgumentsLeft(argc, argv);
@@ -54,7 +85,7 @@ int main(int argc, char* argv[]) {
 	hfrs.Init( {{"Setup", setupFile }} );
 	hfrs.Setup();
 
-	TFOOTCalCont cfoot[N_FOOT_DETECTORS]; // output container.
+	TFOOTCalCont cfoot[N_FOOT_DETECTORS];
 	for(int i=0; i<N_FOOT_DETECTORS; ++i) {
 		cfoot[i].Init({
 			{ "ID", std::to_string(::static_detectors[i] ) }, 
@@ -69,12 +100,13 @@ int main(int argc, char* argv[]) {
 	hfoot.Setup();
 
 	auto pool = TAnalysisProcess<>(fileName, outFile, "h104")
-		.emplace_process<TFRSHitProc >(hfrs    , cfrs, 0x7)
+		//.emplace_process<TFRSHitProc >(hfrs    , cfrs, 0x7)
 		.emplace_process<TFOOTHitProc>(hfoot,
 			cfoot[0], cfoot[1], cfoot[2], cfoot[3], 
-			cfoot[4], cfoot[5], cfoot[6], cfoot[7]) 
+			cfoot[4], cfoot[5], cfoot[6], cfoot[7],
+			foot_qt, foot_mc, v) 
 		//.MakePool<8>( 4092 );
-		.MakePool<1>( 512 );
+		.MakePool<1>( 10 );
 	
 	ProgressBar bar {
 		option::BarWidth{50},
@@ -93,7 +125,7 @@ int main(int argc, char* argv[]) {
 
 	tv.emplace_back(TimePoint("start"));
 
-	pool.Start(bar);	
+	pool.Start(bar, maxEvents);	
 	pool.Collect();
 
 	tv.emplace_back(TimePoint("end"));
@@ -109,7 +141,9 @@ For either single or multiple values.\n\
 \n\
 -file input.root            ..Input file(s).\n\
 -output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_cal' suffix.\n\
+-max-events N               ..Specify total number of events. Default: all events in the input ROOT file.\n\
+-v    [0,1,2]               ..Specify verbosity. Default 0 (silent).\n\
 -help                       ..Print this message to stdout. \n\
 \n\
-This program will do FRS tracking S2/S3 plus full PID and also FOOT tracking.\n\
+This program will do FOOT tracking (and tbd: S2/S3 FRS PID + momentum measurement).\n\
 Always remember: PHYSICS IS FUN <(^.^)>\n\n";

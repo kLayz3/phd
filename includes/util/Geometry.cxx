@@ -26,6 +26,11 @@ bool Rectangle2D::IsInside(const Point& test) const noexcept {
 		test.x > p0.x && test.x < p1.x && 
 		test.y > p0.y && test.y < p1.y; 
 }
+bool Rectangle2D::IsInside(double x, double y) const noexcept {
+	return 
+		x > p0.x && x < p1.x && 
+		y > p0.y && y < p1.y; 
+}
 
 Line2D GetLine(const mnd::geom::Point& p1, const mnd::geom::Point& p2) noexcept {
 	double slope = (p2.y - p1.y) / (p2.x - p1.x);

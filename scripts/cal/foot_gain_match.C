@@ -99,7 +99,7 @@ void foot_gain_match (
 
 	auto* h1_foot_e_mid = new TH1P("((h1_e_mid))FOOT E [ADC units]@Central strip value", ORGB{0xB2FD30}, (int)(1.5*foot_binning[0]), foot_binning[1], foot_binning[2]); 
 
-	auto* hit_energy_mid = new TH2P(Form("((h2_mid))Max Signal [ADC]:Strip number [0..640]@FOOT%d Raw, Requested Q=%d", ifoot, Q_target), 
+	auto* hit_energy_mid = new TH2P(Form("((h2_mid))Cluster energy [ADC]:Strip number [0..640]@FOOT%d Raw, Requested Q=%d", ifoot, Q_target), 
 		bins_per_asic*10, 0,640, foot_binning[0], foot_binning[1], foot_binning[2]);
 
 	const double TARGET_ADC = Q_target*Q_target * 100.0;
@@ -178,7 +178,7 @@ void foot_gain_match (
 		for(int a=0; a < TFOOTMapCont::N_ASIC; ++a) {
 			FOOTAsicGainParam& asic = pp.fit.at(a);
 			
-			FMultiPoly* mp = asic.GetPolyMut(Q_target);
+			FMultiPoly* mp = asic.GetPoly(Q_target);
 			if(!mp) {
 				asic.multi_poly.emplace_back(Q_target); 
 				mp = &asic.multi_poly.back();
@@ -287,7 +287,7 @@ void foot_gain_match (
 	l->AddEntry(profile_fit[0], "TProfile fit");
 	if(show_old == ShowOld::yes) {
 		const auto& gain = foot_param->gain;
-		TGraph* g = gain.GetRefZGraph(Q_target);
+		auto [g, _] = gain.GetRefZGraph(Q_target);
 		g->SetLineColor(kPink - 2);
 		g->Draw("L SAME");
 		l->AddEntry(g, "Current gain curve from the setup file");

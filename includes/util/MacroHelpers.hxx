@@ -21,14 +21,14 @@ namespace canvas {
 		std::vector<std::string_view> extra_tag = {}
 	) { 
 		const char* ext;
-#define HANDLE_CASE(e) case(Extension::e): { ext = #e; break; }
+#define HANDLE_CASE_SAVE_ALL(e) case(Extension::e): { ext = #e; break; }
 
 		switch(extension) {
-			HANDLE_CASE(png)
-			HANDLE_CASE(jpeg)
-			HANDLE_CASE(pdf)
-			HANDLE_CASE(C)
-			HANDLE_CASE(root)
+			HANDLE_CASE_SAVE_ALL(png)
+			HANDLE_CASE_SAVE_ALL(jpeg)
+			HANDLE_CASE_SAVE_ALL(pdf)
+			HANDLE_CASE_SAVE_ALL(C)
+			HANDLE_CASE_SAVE_ALL(root)
 		}
 
 		const char* macro_name = gInterpreter->GetCurrentMacroName(); 
@@ -130,3 +130,4 @@ template <typename Range,
 	double stddev = std::sqrt(sq_sum / static_cast<double>(n-1));
 	return {mean, stddev};
 }
+#undef HANDLE_CASE_SAVE_ALL

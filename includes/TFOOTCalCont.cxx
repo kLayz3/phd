@@ -6,7 +6,10 @@
 #include "nlohmann/json.hpp"
 #include "util/json_struct_def.hh"
 #include "util/FFT.h"
+#include "filesystem"
+
 using json = nlohmann::json;
+namespace fs = std::filesystem;
 
 double FOOTDeltaFFT::Evaluate(const double x) const {
 	return FFTW::Evaluate(this->c, this->n, x, -0.5, 0.5); 	
@@ -41,6 +44,8 @@ std::vector<double> RNFOOTCal::X() const noexcept {
 }
 
 /* ------------------------------------------------------- */
+
+static std::string full_setup_file_name {};
 
 /* Initialized with 2 keys: "ID" and "Setup" */
 void TFOOTCalCont::Init(TDictInfo info) {
@@ -82,6 +87,14 @@ void TFOOTCalCont::Init(TDictInfo info) {
 				file_name.c_str());
 		
 		UNROLL_JSON_PARAM(bpar, j["box"], 8);
+		
+		/* `file_name` could've been passed relative. Fetch the full path and bake it in. */
+		try {
+			fs::path pfull = fs::canonical(file_name);
+			full_setup_file_name = pfull.c_str();
+		} catch(std::filesystem::filesystem_error const& e) {
+			ERROR("Fetching full path from: \'%s\' failed? Reason: %s", file_name.c_str(), e.what());
+		}
 	}
 }
 
@@ -89,7 +102,7 @@ using A2 = std::array<double, 2>;
 template<> void Add(A2& lhs, const A2& rhs) {}
 
 void TFOOTCalCont::Setup() {
-	if(strlen(GetName()) == 0) ERROR("Setup called before Init? or name field set to '' ?");
+	if(strlen(GetName()) == 0) ERROR("Setup called before Init() ? Or name field set to '' ?");
 	h1_mult     = RegisterObject<TH1I>("h1_mult", Form("FOOT (%2d: %d) multiplicity", FOOT_N, par.N), 200,0,50);
 	h1_dE       = RegisterObject<TH1I>("h1_dE", Form("FOOT(%2d: %d) energy", FOOT_N, par.N), 5000,0,1000);
 	h1_X        = RegisterObject<TH1I>("h1_x", Form("FOOT(%2d: %d) clust position", FOOT_N, par.N), 5*N_STRIPS, 0, N_STRIPS);
@@ -106,8 +119,10 @@ void TFOOTCalCont::Setup() {
 	setup = RegisterObject<FOOTParam>("setup", mnd::noop_fn<FOOTParam>(), this->par /* copy ctor */);
 	
 	/* In the cal step, box object not used. It's just written down for helper scripts to process stuff. */
-	if(should_register_box_)
+	if(should_register_box_) {
 		box = RegisterObject<FOOTBoxParam>("box", mnd::noop_fn<FOOTBoxParam>(), this->bpar);
+		setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), full_setup_file_name); 
+	}
 }
 
 ClassImp(FOOTClusterFit);
@@ -120,4 +135,5 @@ ClassImp(FOOTGainParam);
 ClassImp(FOOTDeltaFFT);
 ClassImp(FOOTDeltaParam);
 ClassImp(FOOTParam);
+ClassImp(ExpertTarget);
 ClassImp(FOOTBoxParam);

@@ -5,7 +5,24 @@
 
 using json = nlohmann::json;
 
+std::ostream& operator<<(std::ostream& os, const FOOTHit& rhs) noexcept {
+	os << mnd::msg("(%s%.2f%s,%d,%s%5.1f%s)", 
+		KBH_CYN, rhs.Q.q, KNRM,
+		rhs.Q.fCM,
+		KBH_RED, rhs.m, KNRM);
+	return os;
+}
+
 TFOOTHitCont::TFOOTHitCont() : TContainer("FOOT") {}
+
+RNFOOTTrack::RNFOOTTrack (
+	const std::array<double, 2>& xline, 
+	const std::array<double, 2>& yline, 
+	double Q_, 
+	double score_,
+	std::size_t n_
+) : x0(xline[0]), y0(yline[0]), ax(xline[1]), ay(yline[1]),
+	Q(Q_), score(score_), n(n_) {}
 
 void TFOOTHitCont::Init(TDictInfo info) {
 auto it = info.find("Setup");	
@@ -56,6 +73,7 @@ void TFOOTHitCont::Setup() {
 	}
 }
 
+ClassImp(FOOTQ);
 ClassImp(FOOTHit);
 ClassImp(RNFOOTPair);
 ClassImp(RNFOOTTrack);

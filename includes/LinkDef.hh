@@ -42,7 +42,9 @@
 #pragma link C++ class FOOTDeltaParam+;
 #pragma link C++ class FOOTParam+;
 
+#pragma link C++ class FOOTQ+;
 #pragma link C++ class FOOTHit+;
+#pragma link C++ class ExpertTarget+;
 #pragma link C++ class FOOTBoxParam+;
 #pragma link C++ class RNFOOTPair+;
 #pragma link C++ class RNFOOTTrack+;
