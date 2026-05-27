@@ -21,7 +21,7 @@ Steps [1], [2], [3] can be chained together, but before draw a real object must 
 
 
 `TCutG` objects can be used via the `TCutG::IsInside(double, double) -> bool` predicate. They might not be thread safe,
-so one can capture the global `TCutG` pointer and call `TObject::Clone()` on it and stuff in `static thread_local std::unique_ptr<TCutG>`
+so one can capture the global `TCutG` pointer and call `TObject::Clone()` on it and stuff in `thread_local std::unique_ptr<TCutG>`
 
 
 ### Cal Step

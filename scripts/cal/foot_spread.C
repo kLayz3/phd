@@ -25,7 +25,6 @@ constexpr bool _take[N] = {
 
 enum class DoDiff {no, yes};
 enum class DoOrientation {no, yes};
-enum class DoSave {no, yes};
 
 struct DoDelta {
 	struct No {};
@@ -203,7 +202,7 @@ void foot_spread (
 		auto fx = PolyFit<1>(z, x);	
 		auto fy = PolyFit<1>(z, y);	
 
-		/* In an event, only a SINGLE valid FOOT value must be found. */
+		/* In an event, only a SINGLE valid FOOT cluster must be found. */
 		bool is_foot_event_valid = false;
 		double xFOOT_ = NAN;
 		double eFOOT_ = NAN;
@@ -211,12 +210,14 @@ void foot_spread (
 		for(const auto& hit : foot->fCl) {
 			double e = hit.fCE;
 			double d = hit.Delta();
-			if(do_delta == DoDelta::yes)
-				e /= foot_param->de.CorrectionFactor(d);
+			double cx = hit.fCX;
+			
+			e *= foot_param->gain.CorrectionFactor(cx, e);
+			e /= foot_param->de.CorrectionFactor(d);
 
 			if(!mnd::IsInside(e, foot_cut)) continue;
 
-			double hit_position = (hit.fCX - 319.5) * 0.150; // readout index to mm scale
+			double hit_position = (cx - 319.5) * 0.150; // readout index to mm scale
 			if(do_orientation == DoOrientation::yes and wrong_way)
 				hit_position = -hit_position;
 
@@ -234,6 +235,7 @@ void foot_spread (
 			is_foot_event_valid = true;
 		}
 		if(!is_foot_event_valid) continue;
+		printf("YAAAY FITTER\n");
 
 		FillTrack(*h2_track_x, fx);
 		FillTrack(*h2_track_y, fy);

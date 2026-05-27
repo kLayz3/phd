@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../monad/monad.hxx" // only used for assert stuff
 #include <array>
 #include <cmath>
 #include <ostream>
@@ -35,7 +36,8 @@ struct SphericalAngles {
 	}
 };
 
-// Nullable 
+// Nullable, we don't directly expose the value as a public field,
+// due to nullability (maybe idiotic design by me, but who cares) 
 struct Line2D {
 	using Arr = std::array<double, 2>;
 	using value_type = Arr::value_type;
@@ -45,6 +47,8 @@ struct Line2D {
 	
 	inline value_type& operator[](Arr::size_type pos) noexcept { return value[pos]; } 
 	inline value_type const& operator[](Arr::size_type pos) const noexcept { return value[pos]; } 
+
+	/* Predicate to see if track is valid or null. */
 	inline bool HasValue() const noexcept { return std::isfinite(value[0]); }
 
 	Arr& array() noexcept { return value; }
@@ -89,8 +93,15 @@ struct Rectangle2D {
 	Point Mid() const noexcept;
 	bool IsInside(const Point& ) const noexcept;
 	bool IsInside(double, double ) const noexcept;
+	
+	friend std::ostream& operator<<(std::ostream& os, const Rectangle2D& r) {
+		return os << "{R (" 
+			<< r.p0.x << ',' << r.p0.y 
+			<< ") <> (" 
+			<< r.p1.x << ',' << r.p1.y 
+			<< ") R}";
+	}
 };
-
 } // namespace geom
 } // namespace mnd
 

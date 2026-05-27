@@ -21,7 +21,8 @@ LIBS := $(shell root-config --libs) \
 		-L$(shell pwd -P)/includes/build \
 		-Wl,-rpath,$(shell pwd -P)/includes/build \
 		-lStructures \
-		-L. -lGo4UserAnalysis
+		-L. -lGo4UserAnalysis \
+		-Wl,-rpath,'$$ORIGIN'
 
 SRC:=$(wildcard $(SRC_DIR)/*.cc)
 

@@ -39,7 +39,7 @@ struct DirectedAGraph {
 	using Index = DAGIndex<IType>;
 	
 	struct /* __attribute__((packed)) */ DAGPath {
-		Index __node_dummy__;
+		Index __node_dummy__; // do I actually need this? Huh?
 		std::array<Index, Depth> node {};
 	}; 
 

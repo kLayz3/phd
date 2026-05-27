@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Eigen/Core"
 #include "monad/monad.hxx"
+#include "Eigen/Core"
 
 #include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"
@@ -29,15 +29,18 @@ struct TrackCost {
 	static constexpr double DEFAULT_COST_P = 1e2;  // default cost if next layer missed
 
 	enum F { KR, KQ, KP, KT };
-	double kr() const noexcept { return kr_; }
-	double kq() const noexcept { return kq_; }
-	double kp() const noexcept { return kp_; }
-	double kt() const noexcept { return kt_; }
+
+	/* Exposing setters and getters because the sideffect is bookkeeping
+	 * the sum on the fly, which raw reference accesses would invalidate :-) */
+	inline double kr() const noexcept { return kr_; }
+	inline double kq() const noexcept { return kq_; }
+	inline double kp() const noexcept { return kp_; }
+	inline double kt() const noexcept { return kt_; }
 	
 	template<enum F o>
 	void set(double v) noexcept {
 #ifdef MND_HITMATRIX_DO_BOUNDS_CHECK
-		assert(std::isfinite(v));
+		assert(std::isfinite(v) && "Must pass a finite value here.");
 #endif
 		if(!sum_) sum_ = 0;
 
@@ -87,6 +90,7 @@ struct TFOOTHitProc : TProcessor <
 	constexpr static double CLUSTER_SIZE_ONE_Q_CUTOFF = 1.5; // when cluster size == 1 doesn't make sense anymore.
 	constexpr static double DEFAULT_MAX_Q_TOLERANCE = 0.8;
 	constexpr static double DEFAULT_MAX_COST = 100;
+	constexpr static double TARGET_Z = 0.0; // convention; safe to hard-bake
 
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
@@ -96,16 +100,16 @@ struct TFOOTHitProc : TProcessor <
 		Verbosity = Verbosity::SILENT);
 	TFOOTHitProc() = default;
 
-	// If the dependence E(Z) = A * Z^a, then:
-	// f = 1/A, c = 1/a <=> Z(E) = (f * E)^a 
-	struct e_to_z_t {
+	// If the dependence E(Q) = A * Q^a, then:
+	// f = 1/A, c = 1/a <=> Q(E) = (f * E)^a 
+	struct e_to_q_t {
 		double f, c;
 		inline double operator()(double e) const noexcept {
 			return std::pow(f*e, c);
 		}
 		void Init(const FOOTParam& );
 	}; 
-	std::array<e_to_z_t, N_FOOT_DETECTORS> e_to_z;
+	std::array<e_to_q_t, N_FOOT_DETECTORS> e_to_q;
 	
 	double q_tolerance;
 	double max_cost;
@@ -128,7 +132,6 @@ private:
 	void ConstructDAG() noexcept;
 
 	std::array<double, N_PAIRS> pair_z;
-	double target_z;
 	mnd::geom::Rectangle2D target_xy;
 
 	DAG dag;

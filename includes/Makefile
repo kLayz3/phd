@@ -13,7 +13,8 @@ CXXFLAGS := $(shell root-config --cflags) -Wall -MMD -MP -fPIC \
 include monad/common.mk
 
 LDFLAGS := $(shell root-config --ldflags)
-LIBS := $(shell root-config --libs) -lROOTNTuple
+LIBS := $(shell root-config --libs) -lROOTNTuple \
+		-Wl,-rpath,'$$ORIGIN'
 
 # Normally on lustre.hpc the libfftw3 is fucked so I found
 # one normally on a /usr/lib that works and ported it over to $HOME/.local/lib

@@ -1,8 +1,8 @@
 #pragma once
 
+#include "monad/monad.hxx"
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
-#include "monad/monad.hxx"
 
 //#define TFRSCALPROC_VERBOSE_
 #define TFRSCALPROC_SINGLEHIT

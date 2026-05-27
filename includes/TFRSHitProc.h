@@ -1,8 +1,8 @@
  #pragma once
 
+#include "monad/monad.hxx"
 #include "TFRSCalCont.h"
 #include "TFRSHitCont.h"
-#include "monad/monad.hxx"
 
 struct TFRSHitProc : TProcessor <
 	TFRSHitCont

@@ -105,8 +105,8 @@ int main(int argc, char* argv[]) {
 			cfoot[0], cfoot[1], cfoot[2], cfoot[3], 
 			cfoot[4], cfoot[5], cfoot[6], cfoot[7],
 			foot_qt, foot_mc, v) 
-		//.MakePool<8>( 4092 );
-		.MakePool<1>( 10 );
+		.MakePool<8>( 4092 );
+		//.MakePool<1>( 10 );
 	
 	ProgressBar bar {
 		option::BarWidth{50},

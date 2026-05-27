@@ -1,8 +1,8 @@
 #pragma once
 
+#include "monad/monad.hxx"
 #include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"
-#include "monad/monad.hxx"
 #include <type_traits>
 
 struct TFOOTMapCont;

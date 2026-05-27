@@ -28,12 +28,13 @@ constexpr bool _take[N] = {
 
 enum class DoOffset {no, yes};
 
-void foot_angle (
+void foot_pair_angle (
 	std::string fileName = "",
-	uint32_t ifoot = 0, 
+	uint32_t ipair = 0, 
 	std::array<double,2> acceptance_x = {-30,30},
 	std::array<double,2> acceptance_y = {-30,30},
-	std::array<double,2> foot_cut = {3000,4000},
+	std::array<double,2> foot_x_cut = {3000,4000},
+	std::array<double,2> foot_y_cut = {3000,4000},
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
@@ -41,28 +42,37 @@ void foot_angle (
 	DoOffset do_offset = DoOffset::no,
 	DoSave do_save = DoSave::no
 ) {
-	if(ifoot > 7)
-		throw std::invalid_argument("Second argument `ifoot` can be only {0,..,7}.");
+	if(ifoot > 3)
+		throw std::invalid_argument("Second argument `ipair` can be only {0,1,2,3}.");
 	
 	using Measurement = RNTPCCal::Measurement;
 	
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param;
-	FOOTParam *foot_param; 
+	FOOTParam *foot_param_x, *foot_param_y; 
 	FOOTBoxParam *box;
 	{
+		FOOTParam *p1, *p2;
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
 		tpc_param = f->Get < 
 			std::remove_reference_t<decltype(*tpc_param)>
 		> ("FRS_tpc_parameters");
 		if(!tpc_param)
 			throw std::runtime_error(Form("TPC param is nullptr. Fix it (line: %d).", __LINE__));
-		foot_param = f->Get<FOOTParam>(Form("FOOT%d_setup", ifoot));
-		if(!foot_param)
+		p1 = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*ipair));
+		p2 = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*ipair + 1));
+		if(!p1 || !p2)
 			throw std::runtime_error(Form("FOOT param is nullptr. Fix it (line: %d).", __LINE__));
 		box = f->Get<FOOTBoxParam>("FOOT0_box");
 		if(!box)
 			throw std::runtime_error(Form("FOOT box param is nullptr. Fix it (line: %d).", __LINE__));
+		char o1 = p1->orientation[0];
+		char o2 = p2->orientation[0];
+		if(o1 == o2)
+			ERROR("Orientations of subsequent entries have to be different\n");
+		foot_param_x = (o1 == 'x') : p1 ? p2;
+		foot_param_y = (o1 == 'y') : p1 ? p2;
 	}
+
 	const std::array<double, N> zTPC = {
 		tpc_param->at(0).z0,
 		tpc_param->at(1).z0,

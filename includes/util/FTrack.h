@@ -1,15 +1,18 @@
 #pragma once
 
+#include "../monad/monad.hxx" // only used for assert stuff
+
 #include "PolyFitter.hxx"
 #include <cmath>
 #include <limits>
 #include <type_traits>
-#include "../Eigen/Dense"
 
 #include "json_struct_def.hh"
 #include "HitMatrix.hxx"
 #include "Geometry.h"
 #include "DirectedAGraph.hxx"
+
+#include "../Eigen/Dense"
 
 namespace mnd {
 namespace track {
@@ -76,7 +79,7 @@ template <
 
 	QCombinator& operator--() { pop_back(); return *this; }
 
-	/* We could have null values stashed in there. 
+	/* Result accesses are lazily calculated. We could have null values stashed in there. 
 	 * Don't take them into account when calculating the statistics. */
 	const ResultType& get() const noexcept {
 		if(!value) {
@@ -114,7 +117,8 @@ private:
 	std::size_t N = 0;
 	std::array<EntryType, Capacity> buffer;
 	mutable std::optional<ResultType> value {}; // lazily evaluated and cached.
-};
+
+}; // struct QCombinator
 
 namespace mnd {
 #define DECL_TYPE_TRAIT_HAS_STATIC(VAR) \
@@ -128,7 +132,7 @@ namespace mnd {
 		};
 
 DECL_TYPE_TRAIT_HAS_STATIC(N_PAIRS);
-}
+} // namespace mnd
 
 template<typename QResultType = mnd::track::Q>
 struct TrackTau {
@@ -144,7 +148,7 @@ TrackTau(mnd::geom::Line3D, T) -> TrackTau<T>;
 extern template struct TrackTau<>;
 
 /* Type encapsulating an 'online' track object to be handed over 
- * to the Kalman filter. It nullable! */
+ * to the Kalman filter. Is nullable! */
 template <
 	std::size_t Capacity,
 	typename FOOTPair, 
@@ -212,9 +216,9 @@ struct Track {
 		double sp = 0, sq = 0;
 		
 		for(size_t i=0; i < n_current; ++i) {
-			const auto e = this->extrapolate_to( zs[i] ).array();
-			double dx = xs[i] - e.x();
-			double dy = ys[i] - e.y();
+			const XYEntryType e = this->extrapolate_to( zs[i] );
+			double dx = xs[i] - e(0);
+			double dy = ys[i] - e(1);
 			
 			sp += dx*dx + dy*dy;
 
@@ -241,14 +245,15 @@ struct Track {
 	friend std::ostream& operator<<(std::ostream& os, const Track& t) {
 		const size_t N = t.N();
 
-		//std::streamsize old_precision = os.precision();
-		//os << std::setprecision(4);
+		std::streamsize old_precision = os.precision();
+		os << std::setprecision(4);
+		os << "{| ";
 		os << "x: "; ::mnd_output_homogeneous_range_(os, t.xs.data(), N);
-		os << "y: "; ::mnd_output_homogeneous_range_(os, t.ys.data(), N);
-		os << "z: "; ::mnd_output_homogeneous_range_(os, t.zs.data(), N);
-		//os << "q: " << t.q
-		//   << ", R: " << t.get();
-		//os.precision(old_precision);
+		os << ", y: "; ::mnd_output_homogeneous_range_(os, t.ys.data(), N);
+		os << ", z: "; ::mnd_output_homogeneous_range_(os, t.zs.data(), N);
+		os << ", q: " << t.q
+		   << ", R: " << t.get() << " |}";
+		os.precision(old_precision);
 		return os;
 	}
 

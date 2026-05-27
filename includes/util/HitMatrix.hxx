@@ -1,10 +1,11 @@
 #pragma once
 
+#include "../monad/monad.hxx"
+
 #include <cmath>
 #include <optional>
 #include <type_traits>
 #include "../Eigen/Dense"
-#include "../monad/monad.hxx"
 
 #define MND_HITMATRIX_DO_BOUNDS_CHECK
 
@@ -16,7 +17,7 @@ struct Q {
 	Q() = default;
 	Q(double qx_, double qy_): qx(qx_), qy(qy_) {}
 
-	inline double mean() const noexcept { return 0.5*(qx+qy)/2; }
+	inline double mean() const noexcept { return 0.5*(qx+qy); }
 	inline double var() const noexcept {
 		double d = qx-qy;
 		return 0.5*d*d;
@@ -41,6 +42,9 @@ struct Data {
 	inline double X() const noexcept { return v(0); }
 	inline double Y() const noexcept { return v(1); }
 };
+inline std::ostream& operator<<(std::ostream& os, const Data& d) {
+	return os << '(' << d.v.transpose() << "; " << d.q << ')';
+}
 
 struct Cached {
 	using Storage = Eigen::Matrix<
@@ -263,16 +267,19 @@ public:
 		const size_t nx =  hm.template GetN<X>();
 		const size_t ny =  hm.template GetN<Y>();
 
-		os << KBH_YEL << " -----HM----- " << KNRM;
-		for(size_t i=0; i < nx; ++i) {
-			const auto real_i = static_cast<std::size_t>(hm.active_x[i]);
-			os << hm.p->x[real_i];
-			if(i != hm.template GetN<X>()-1)
-				os << ", ";
-		}	
+		os << KBH_YEL 
+		   << " --- == |Y| ==> " << KNRM;
 		for(size_t j=0; j < ny; ++j) {
 			const auto real_j = static_cast<std::size_t>(hm.active_y[j]);
-			os << '\n' << hm.p->y[real_j];
+			os << hm.p->y[real_j];
+			if(j != hm.template GetN<Y>()-1)
+				os << ", ";
+		}	
+		os << std::endl << KBH_YEL 
+		   << " --- vv |X| vvv";
+		for(size_t i=0; i < nx; ++i) {
+			const auto real_i = static_cast<std::size_t>(hm.active_x[i]);
+			os << '\n' << hm.p->x[real_i];
 		}
 		os << KBH_YEL << " -----END---- " << KNRM;
 		return os;

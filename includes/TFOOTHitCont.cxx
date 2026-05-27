@@ -21,8 +21,26 @@ RNFOOTTrack::RNFOOTTrack (
 	double Q_, 
 	double score_,
 	std::size_t n_
+#ifdef MND_FOOTTRACK_DEBUG
+		,
+		const std::array<double, N_PAIRS>& _ox, 
+		const std::array<double, N_PAIRS>& _oy, 
+		const std::array<double, N_PAIRS>& _oz,
+		const std::array<double, N_PAIRS>& _oq,
+		const std::array<double, N_PAIRS>& _osq
+#endif
 ) : x0(xline[0]), y0(yline[0]), ax(xline[1]), ay(yline[1]),
-	Q(Q_), score(score_), n(n_) {}
+	Q(Q_), score(score_), n(n_) 
+#ifdef MND_FOOTTRACK_DEBUG
+		,
+		_x(_ox), 
+		_y(_oy), 
+		_z(_oz),
+		_q(_oq),
+		_sq(_osq)
+#endif
+
+{}
 
 void TFOOTHitCont::Init(TDictInfo info) {
 auto it = info.find("Setup");	
@@ -35,42 +53,16 @@ auto it = info.find("Setup");
 	
 	if(!setup.contains("box")) ERROR("\'box\' key not found in JSON file: %s\n", file_name.c_str());
 		
-	UNROLL_JSON_PARAM(_box, setup["box"], 7);
+	UNROLL_JSON_PARAM(_box, setup["box"], 8);
 }
 
 void TFOOTHitCont::Setup() {
-	box = RegisterObject<FOOTBoxParam>("Box");
+	box = RegisterObject<FOOTBoxParam>("box", mnd::noop_fn<FOOTBoxParam>(), _box);
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
-	for(u32 i=0; i<N_PAIRS; ++i) {
-		h_corr_all[i] = RegisterObject<TH2I>(
-			Form("h2_corr_all%d", i), 
-			Form("Correlation in dE FOOT%d:FOOT%d for all clusters", 2*i, 2*i+1),
-			300,0,3000,300,0,3000
-		);
-		h_corr_gud[i] = RegisterObject<TH2I>(
-			Form("h2_corr_gud%d", i), 
-			Form("Correlation in dE FOOT%d:FOOT%d for only paired up clusters", 2*i, 2*i+1),
-			300,0,3000,300,0,3000
-		);
-		h_corr_all_sorted[i] = RegisterObject<TH2I>(
-			Form("h2_corr_all_sorted%d", i), 
-			Form("Correlation in dE FOOT%d:FOOT%d for sorted clusters (by energy)", 2*i, 2*i+1),
-			300,0,3000,300,0,3000
-		);
-	}
-
-	for(int i=0; i<N_FOOT_DETECTORS; ++i) {
-		h_single_all[i] = RegisterObject<TH1I>(
-			Form("h1_single_all%d", i), 
-			Form("dE FOOT%d (after eta-correction) for all clusters", i),
-			300,0,3000
-		);
-		h_single_gud[i] = RegisterObject<TH1I>(
-			Form("h1_single_gud%d", i), 
-			Form("dE FOOT%d (after eta-correction) for only paired-up clusters", i),
-			300,0,3000
-		);
-	}
+	h1_qtrack = RegisterObject<TH1I>("h1_qtrack", "Charge (Q) of recognized tracks",
+		100, 0, 8);
+	h1_track_nsampled = RegisterObject<TH1I>("h1_qtrack_nsampled", "Points sampled (N) in the track",
+		12, -0.5, 5.5);
 }
 
 ClassImp(FOOTQ);

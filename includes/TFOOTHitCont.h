@@ -1,7 +1,7 @@
 #pragma once
 
-#include "TFOOTMapCont.h"
 #include "monad/monad.hxx"
+#include "TFOOTMapCont.h"
 #include "util/json_struct_def.hh"
 #include "TFOOTCalCont.h"
 
@@ -9,6 +9,8 @@
 #include "util/FTrack.h"
 
 class TH2I;
+
+#define MND_FOOTTRACK_DEBUG
 
 /* Represent the 'charge' measurement of each layer. */
 struct FOOTQ {
@@ -32,7 +34,7 @@ struct FOOTHit {
 	using ClusterType = FOOTQ::ClusterType;
 
 	FOOTQ Q; 
-	double m; // measurement [ strip units ]
+	double m; // measurement [ mm ]
 	
 	FOOTHit() = default;
 	FOOTHit(double q_, u32 fCM_, ClusterType fCT_, double m_) :
@@ -62,9 +64,27 @@ struct RNFOOTTrack {
 	double score;
 	std::size_t n; // number of collected pts, size_t anyway chosen as it will be aligned to 8-byte
 
-	RNFOOTTrack() = default;
-	RNFOOTTrack(const std::array<double, 2>& , const std::array<double, 2>& , double , double, std::size_t );
+#ifdef MND_FOOTTRACK_DEBUG
+	static constexpr u32 N_PAIRS = N_FOOT_DETECTORS / 2;
+	
+	std::array<double, N_PAIRS> _x; 
+	std::array<double, N_PAIRS> _y; 
+	std::array<double, N_PAIRS> _z;
+	std::array<double, N_PAIRS> _q;
+	std::array<double, N_PAIRS> _sq;
+#endif
 
+	RNFOOTTrack() = default;
+	RNFOOTTrack(const std::array<double, 2>& , const std::array<double, 2>& , double , double, std::size_t
+#ifdef MND_FOOTTRACK_DEBUG
+		,
+		const std::array<double, N_PAIRS>& , 
+		const std::array<double, N_PAIRS>& , 
+		const std::array<double, N_PAIRS>& ,
+		const std::array<double, N_PAIRS>& ,
+		const std::array<double, N_PAIRS>& 
+#endif
+	);
 	virtual ~RNFOOTTrack() = default;
 	ClassDef(RNFOOTTrack, 1);
 };
@@ -77,7 +97,8 @@ struct RNFOOTHit {
 	RNFOOTHit() = default;
 
 	inline void Clean() noexcept { 
-		for(auto& p: pair) p.Clean(); 
+		for(auto& p: pair) 
+			p.Clean(); 
 		track.clear(); 
 	}
 	virtual ~RNFOOTHit() = default;
@@ -91,11 +112,8 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	
 	FOOTBoxParam* box;
 	std::string* setupName;
-	TH2I* h_corr_all[N_PAIRS];
-	TH2I* h_corr_all_sorted[N_PAIRS];
-	TH2I* h_corr_gud[N_PAIRS];
-	TH1I* h_single_all[N_FOOT_DETECTORS];
-	TH1I* h_single_gud[N_FOOT_DETECTORS];
+	TH1I* h1_qtrack;
+	TH1I* h1_track_nsampled;
 	TFOOTHitCont();
 
 	void Setup() override;

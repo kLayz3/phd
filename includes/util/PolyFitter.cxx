@@ -35,8 +35,6 @@ template std::array<double, 11> PolyFit<10>(const std::vector<double>& , const s
 template std::array<double, 12> PolyFit<11>(const std::vector<double>& , const std::vector<double>& );
 template std::array<double, 13> PolyFit<12>(const std::vector<double>& , const std::vector<double>& );
 
-template std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>& , const std::array<double, 4>& , std::size_t);
-
 template std::array<double,  2> PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 template std::array<double,  3> PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 template std::array<double,  4> PolyFit< 3>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
@@ -49,6 +47,10 @@ template std::array<double, 10> PolyFit< 9>(const std::vector<double>& , const s
 template std::array<double, 11> PolyFit<10>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 template std::array<double, 12> PolyFit<11>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 template std::array<double, 13> PolyFit<12>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+
+template std::array<double, 2> PolyFit<1,2>(const std::array<double, 2>&, const std::array<double, 2>&, size_t );
+template std::array<double, 2> PolyFit<1,3>(const std::array<double, 3>&, const std::array<double, 3>&, size_t );
+template std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>&, const std::array<double, 4>&, size_t );
 
 double AngleFitResult::Angle(AngleFitResult::Direction d) const noexcept {
 	switch(d) {

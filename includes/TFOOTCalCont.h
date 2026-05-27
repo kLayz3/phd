@@ -443,9 +443,9 @@ struct FOOTBoxParam {
 			}
 		};
 	}
-	/* Calculate the absolute z- position of n-th FOOT detector in the box. */
-	inline double GetFOOTZ(const int n, const FOOTParam* p = nullptr) const noexcept {
-		double zf = GetTargetZ() + det_pos.at(n);
+	/* Calculate z- position of n-th FOOT detector in the box, relative to the target */
+	inline double GetFOOTZRel(const int n, const FOOTParam* p = nullptr) const noexcept {
+		double zf = det_pos.at(n);
 		if(p) {
 			/* For sanity check. The `N` field supplied there must be factor 2- up to `n` 
 			 * since FOOTs by convention go in order. */
@@ -455,6 +455,12 @@ struct FOOTBoxParam {
 			zf += p->dz;
 		}
 		return zf;
+	}
+	inline double GetFOOTZRel(const FOOTParam* p) const noexcept { return GetFOOTZRel(p->N/2, p); }
+
+	/* Calculate the absolute z- position of n-th FOOT detector in the box. */
+	inline double GetFOOTZ(const int n, const FOOTParam* p = nullptr) const noexcept {
+		return GetFOOTZRel(n, p) + GetTargetZ();
 	}
 	inline double GetFOOTZ(const FOOTParam* p) const noexcept { return GetFOOTZ(p->N/2, p); }
 

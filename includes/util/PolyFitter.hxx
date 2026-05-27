@@ -101,8 +101,12 @@ void PolyFit(const std::vector<double>& x, const std::vector<double>& y, std::ar
 	mnd::detail::PolyFit_<R>(xv, yv, N, result);
 }
 template<std::size_t R, std::size_t N>
-void PolyFit(const std::array<double, N>& x, const std::array<double, N>& y, std::array<double, R+1>& result,
-	size_t L = N) {
+void PolyFit (
+	const std::array<double, N>& x, 
+	const std::array<double, N>& y, 
+	std::array<double, R+1>& result,
+	size_t L = N
+) {
 	static_assert(R > 0, "Fit rank (polynomial) must be greater than 0");
 	static_assert(N >= R + 1, "Static array needs to be sized least R+1.");
 	assert((L >= R + 1 && L <= N) && "Need at least R+1 points, and points supplied mustn't be more than array size.");
@@ -110,7 +114,7 @@ void PolyFit(const std::array<double, N>& x, const std::array<double, N>& y, std
 	Eigen::Map<const Eigen::VectorXd> xv(x.data(), L);
 	Eigen::Map<const Eigen::VectorXd> yv(y.data(), L);
 
-	mnd::detail::PolyFit_<R>(xv, yv, N, result);
+	mnd::detail::PolyFit_<R>(xv, yv, L, result);
 }
 
 /* Fit a dataset (xi,yi) represented by two vectors `x` and `y` by a polynomial. Returns an array of coefficients. */
@@ -240,9 +244,6 @@ extern template std::array<double, 11> PolyFit<10>(const std::vector<double>& , 
 extern template std::array<double, 12> PolyFit<11>(const std::vector<double>& , const std::vector<double>& );
 extern template std::array<double, 13> PolyFit<12>(const std::vector<double>& , const std::vector<double>& );
 
-extern template
-std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>& , const std::array<double, 4>& , std::size_t);
-
 extern template std::array<double,  2> PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 extern template std::array<double,  3> PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 extern template std::array<double,  4> PolyFit< 3>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
@@ -255,3 +256,7 @@ extern template std::array<double, 10> PolyFit< 9>(const std::vector<double>& , 
 extern template std::array<double, 11> PolyFit<10>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 extern template std::array<double, 12> PolyFit<11>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
 extern template std::array<double, 13> PolyFit<12>(const std::vector<double>& , const std::vector<double>& , const std::vector<double>& );
+
+extern template std::array<double, 2> PolyFit<1,2>(const std::array<double, 2>&, const std::array<double, 2>&, size_t );
+extern template std::array<double, 2> PolyFit<1,3>(const std::array<double, 3>&, const std::array<double, 3>&, size_t );
+extern template std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>&, const std::array<double, 4>&, size_t );
