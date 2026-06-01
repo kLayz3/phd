@@ -59,6 +59,10 @@ void foot_track_analysis (
 	TH2P* h2q = new TH2P("((h2q))Q value:FOOT ID",
 		N_PAIRS, -0.5, N_PAIRS-0.5, binning_q[0], binning_q[1], binning_q[2]);
 
+	TH2P* h2_kq = new TH2P("Kq cost [charge^2]:FOOT ID",
+		N_PAIRS, -0.5, N_PAIRS-0.5, 500, 0, 1);
+	TH2P* h2_kr = new TH2P("Kr cost [mm^2]:FOOT ID",
+		N_PAIRS, -0.5, N_PAIRS-0.5, 400, 0, 50);
 	for(const auto& cut : cut_q) {
 		if(cut.first >= N_PAIRS)
 			ERROR("Supplied index: %u >= %u as Q-cut pair index.\n", cut.first, N_PAIRS);
@@ -99,11 +103,12 @@ void foot_track_analysis (
 				
 				double x_extr = fx[0] + fx[1]*z;
 				double y_extr = fy[0] + fy[1]*z;
-				double q_extr = mnd::avg(qf);
+				double q_extr = mnd::mean(qf);
 				
 				double dx = t._x[i] - x_extr;
 				double dy = t._y[i] - y_extr;
 				double dq = t._q[i] - q_extr;
+				double sq = t._sq[i]; // is sigma == sqrt(var);
 
 				resx[i]->Fill(dx);
 				resy[i]->Fill(dy);
@@ -114,6 +119,11 @@ void foot_track_analysis (
 
 				h1q[i]->Fill(t._q[i]);
 				h2q->Fill(i, t._q[i]);
+				
+				/* Find the 3-measurement 'test' track charge params.. */
+				double track_qvar = mnd::var(qf);
+				h2_kq->Fill( i, sqrt(dq*dq + sq*sq) );
+				h2_kr->Fill( i, sqrt(dx*dx + dy*dy) );
 			}
 		}
 	}
@@ -144,6 +154,10 @@ void foot_track_analysis (
 	TCanvas* cq2d = new TCanvas("Charge2D", "Charge of track measured by layers", 2000, 1200);
 	h2q->Draw("COLZ");
 	
+	TCanvas* ckv = new TCanvas("CostValues2D", "Cost Values 2D", 2200, 1400);
+	ckv->Divide(2, 1);
+	ckv->cd(1); h2_kq->Draw("COLZ");
+	ckv->cd(2); h2_kr->Draw("COLZ");
 
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );

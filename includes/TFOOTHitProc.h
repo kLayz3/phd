@@ -25,8 +25,11 @@
 struct TrackCost {
 	static constexpr double DEFAULT_COST_R = 1.0;  // default cost per mm^2 difference
 	static constexpr double DEFAULT_COST_Q = 5.0;  // default cost per charge^2 difference
-	static constexpr double DEFAULT_COST_T = 1e10; // default cost if target missed
+	static constexpr double DEFAULT_COST_T = 1e20; // default cost if target missed
 	static constexpr double DEFAULT_COST_P = 1e2;  // default cost if next layer missed
+	/* For 12C the average sqrt(kq) cost is ~0.3 or so, so variance is ~0.1 or so.
+	 * sqrt(kr) is anything between 1-5mm (worst case, probably I fucked up alignment. 
+	 * Should be ~1mm on a good day. */
 
 	enum F { KR, KQ, KP, KT };
 
@@ -36,7 +39,7 @@ struct TrackCost {
 	inline double kq() const noexcept { return kq_; }
 	inline double kp() const noexcept { return kp_; }
 	inline double kt() const noexcept { return kt_; }
-	
+
 	template<enum F o>
 	void set(double v) noexcept {
 #ifdef MND_HITMATRIX_DO_BOUNDS_CHECK
