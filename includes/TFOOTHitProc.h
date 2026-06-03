@@ -103,17 +103,6 @@ struct TFOOTHitProc : TProcessor <
 		Verbosity = Verbosity::SILENT);
 	TFOOTHitProc() = default;
 
-	// If the dependence E(Q) = A * Q^a, then:
-	// f = 1/A, c = 1/a <=> Q(E) = (f * E)^a 
-	struct e_to_q_t {
-		double f, c;
-		inline double operator()(double e) const noexcept {
-			return std::pow(f*e, c);
-		}
-		void Init(const FOOTParam& );
-	}; 
-	std::array<e_to_q_t, N_FOOT_DETECTORS> e_to_q;
-	
 	double q_tolerance;
 	double max_cost;
 	static Verbosity v;	

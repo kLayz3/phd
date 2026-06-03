@@ -23,24 +23,14 @@ constexpr bool _take[N] = {
 	0  // 24
 };
 
-enum class DoDiff {no, yes};
-enum class DoOrientation {no, yes};
-
 struct DoDelta {
 	struct No {};
 	struct Yes { 
-		int position = -1;
-		char orientation;
 		double xlo, xhi;
-
-		Yes() = default;
-		constexpr Yes(int v) : position(v), orientation('\0'), xlo(0), xhi(0) {}; 
-		constexpr Yes(int v, const char* o, double lo, double hi) : 
-			position(v), orientation(o[0]), xlo(lo), xhi(hi) {}; 
 	};
 
 	/* constexpr */ static inline No no {};
-	/* constexpr */ static inline Yes yes{-1};
+	/* constexpr */ static inline Yes yes {};
 
 	DoDelta(No) : data_(No{}) {}
 	DoDelta(Yes y) : data_(y) {}
@@ -62,13 +52,13 @@ void foot_spread (
 	uint32_t ifoot = 0, 
 	std::array<double,3> binning_x = {200,-30,30},
 	std::array<double,3> binning_y = {200,-30,30},
-	std::array<double,2> foot_cut = {3000,4000},
-	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
+	std::array<double,2> foot_q_cut = {5.4, 6.6},
+	std::array<double,2> sci21_cut = {NAN, NAN},
+	std::array<double,2> sci22_cut = {NAN, NAN},
+	std::array<double,2> sci31_cut = {NAN, NAN},
+	std::array<double,2> angle_cut_x = {NAN, NAN},
+	std::array<double,2> angle_cut_y = {NAN, NAN},
 	DoDelta do_delta = DoDelta::no,
-	DoDiff do_diff = DoDiff::no,
-	DoOrientation do_orientation = DoOrientation::no,
 	DoSave do_save = DoSave::no
 ) {
 	if(ifoot > 7)
@@ -93,21 +83,19 @@ void foot_spread (
 		if(!box)
 			throw std::runtime_error(Form("FOOT box param is nullptr. Fix it (line: %d).", __LINE__));
 	}
+	Orientation o = foot_param->GetOrientation();
+	if(o == Orientation::UNKNOWN)
+		throw std::runtime_error("FOOT orientation not specified. I won't allow it.\n");
 
-	const bool wrong_way = ((foot_param->orientation == "-x") or (foot_param->orientation == "-y"));
-	const double offset = foot_param->delta_a;
-
+	const double z0 = box->GetFOOTZ(foot_param);
+	const double R = foot_param->R();
+	const char* ostr = (o == Orientation::X) ? "X" : "Y";
+	
 	const std::array<double, N> zTPC = {
 		tpc_param->at(0).z0,
 		tpc_param->at(1).z0,
 		tpc_param->at(2).z0,
 		tpc_param->at(3).z0
-	};
-	std::array<double, 4> zFOOT = {
-		box->GetFOOTZ(0),
-		box->GetFOOTZ(2),
-		box->GetFOOTZ(4),
-		box->GetFOOTZ(6)
 	};
 
 	TH2P* h2_track_x = new TH2P("Track density (X) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60);
@@ -115,30 +103,13 @@ void foot_spread (
 	TH2P* h2_ab = new TH2P("Y-angle [mrad]:X-angle [mrad]", 100, -20, 20, 100, -20, 20);
 
 	/* 4 possible placements along x, and y. */
-	TH2P *foot_x[4];
-	TH2P *foot_y[4];
-	for(int i=0; i<4; ++i) {
-
-		if(do_diff == DoDiff::no) {
-			foot_x[i] = new TH2P(Form("((h2_x))FOOT Position Uncalibrated [mm]:TPC projection X at Z=%.1f,pos=%d@FOOT%d", 
-				zFOOT[i], i, ifoot),
-				binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]);
-			foot_y[i] = new TH2P(Form("((h2_y))FOOT Position Uncalibrated [mm]:TPC projection Y at Z=%.1f,pos=%d@FOOT%d", 
-				zFOOT[i], i, ifoot),
-				binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]); 
-		} else {
-			foot_x[i] = new TH2P(Form("((h2_x))FOOT Position - TPC proj X [mm]:TPC projection X at Z=%.1f,pos=%d@FOOT%d", 
-				zFOOT[i], i, ifoot),
-				binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]);
-			foot_y[i] = new TH2P(Form("((h2_y))FOOT Position - TPC proj Y [mm]:TPC projection Y at Z=%.1f,pos=%d@FOOT%d", 
-				zFOOT[i], i, ifoot),
-				binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]); 
-		}
-	}
-	auto* foot_e_vs_d = new TH2P(Form("Cluster E [ADC Units G.M]:Delta [-0.5, 0.5]@FOOT%d", ifoot), 
-		80, -0.5, 0.5, 100, foot_cut[0], foot_cut[1]);
-	auto* foot_e_vs_x = new TH2P(Form("Cluster E [ADC Units G.M.]:FOOT x [mm]@FOOT%d", ifoot), 
-		binning_x[0], binning_x[1], binning_x[2], 100, foot_cut[0], foot_cut[1]);
+	TH2P* foot_diff = new TH2P(Form("FOOT measurement - TPC ref [mm]:TPC projection %s at Z=%.1f,pos=%d@FOOT%d", 
+		ostr, z0, ifoot, ifoot), binning_x[0], binning_x[1], binning_x[2], binning_y[0], binning_y[1], binning_y[2]);
+ 
+	auto* foot_q_vs_d = new TH2P(Form("Cluster Charge:Delta [-0.5, 0.5]@FOOT%d", ifoot), 
+		80, -0.5, 0.5, 100, foot_q_cut[0], foot_q_cut[1]);
+	auto* foot_q_vs_x = new TH2P(Form("Cluster Charge:FOOT measurement [mm]@FOOT%d", ifoot), 
+		binning_x[0], binning_x[1], binning_x[2], 100, foot_q_cut[0], foot_q_cut[1]);
 	auto* foot_pos = new TH1P(Form("((h1))FOOT measurement [mm]@FOOT%d", ifoot), ORGB{0xFF7C0A}, binning_x[0], binning_x[1], binning_x[2]);
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
@@ -164,23 +135,20 @@ void foot_spread (
 		const auto& sci21 = frs->sci[0];
 		const auto& sci22 = frs->sci[1];
 		const auto& sci31 = frs->sci[2];
-		if(sci21.hits.size() != 1) continue;
-		if(sci22.hits.size() != 1) continue;
-		if(sci31.hits.size() != 1) continue;
 		
-		h1_sci21->Fill(sci21.E);
-		h1_sci22->Fill(sci22.E);
-		h1_sci31->Fill(sci31.E);
+		if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
+		if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
+		if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
 
-		if(!mnd::IsInside(sci21.E, sci21_cut)) continue;
-		if(!mnd::IsInside(sci22.E, sci22_cut)) continue;
-		if(!mnd::IsInside(sci31.E, sci31_cut)) continue;
+		if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+		if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+		if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
 
-		h1_sci21_cut->Fill(sci21.E);
-		h1_sci22_cut->Fill(sci22.E);
-		h1_sci31_cut->Fill(sci31.E);
+		if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
+		if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
+		if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
 
-		double x_extrapolated, y_extrapolated;
+		double ref_extrapolated;
 
 		x.clear(); y.clear(); z.clear();
 		for(int i = 0; i < N; ++i) {
@@ -202,119 +170,81 @@ void foot_spread (
 		auto fx = PolyFit<1>(z, x);	
 		auto fy = PolyFit<1>(z, y);	
 
-		/* In an event, only a SINGLE valid FOOT cluster must be found. */
+		if(mnd::IsValid(angle_cut_x) and !mnd::IsInside(fx[1]*1000, angle_cut_x)) continue;
+		if(mnd::IsValid(angle_cut_y) and !mnd::IsInside(fy[1]*1000, angle_cut_y)) continue;
+
+		/* In an event, only a single valid FOOT cluster must be found. */
 		bool is_foot_event_valid = false;
 		double xFOOT_ = NAN;
-		double eFOOT_ = NAN;
+		double qFOOT_ = NAN;
 		double dFOOT_ = NAN;
 		for(const auto& hit : foot->fCl) {
-			double e = hit.fCE;
+			
+			double q = foot_param->Q( hit );
+			if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(q, foot_q_cut)) continue;
+			
 			double d = hit.Delta();
 			double cx = hit.fCX;
-			
-			e *= foot_param->gain.CorrectionFactor(cx, e);
-			e /= foot_param->de.CorrectionFactor(d);
 
-			if(!mnd::IsInside(e, foot_cut)) continue;
+			double hit_position = R*(cx - 319.5) * 0.150; // readout index to mm scale
 
-			double hit_position = (cx - 319.5) * 0.150; // readout index to mm scale
-			if(do_orientation == DoOrientation::yes and wrong_way)
-				hit_position = -hit_position;
-
-			hit_position -= offset;
-			
 			if( std::isfinite(xFOOT_) ) {
 				/* Already found valid point in the event. */
 				is_foot_event_valid = false; break;
 			} else {
 				/* Export it outside. */
 				xFOOT_ = hit_position;
-				eFOOT_ = e;
+				qFOOT_ = q;
 				dFOOT_ = d;
 			}
 			is_foot_event_valid = true;
 		}
 		if(!is_foot_event_valid) continue;
-		printf("YAAAY FITTER\n");
 
 		FillTrack(*h2_track_x, fx);
 		FillTrack(*h2_track_y, fy);
 		h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
 		foot_pos->Fill(xFOOT_);
-
-		for(int i=0; i<4; ++i) {
-			x_extrapolated = fx[0] + fx[1]*zFOOT[i]; 
-			y_extrapolated = fy[0] + fy[1]*zFOOT[i]; 
-			
-			if(do_diff == DoDiff::yes) {
-				foot_x[i]->Fill(x_extrapolated, xFOOT_ - x_extrapolated);
-				foot_y[i]->Fill(y_extrapolated, xFOOT_ - y_extrapolated);
-			} else {
-				foot_x[i]->Fill(x_extrapolated, xFOOT_);
-				foot_y[i]->Fill(y_extrapolated, xFOOT_);
-			}
-		}
-		foot_e_vs_d->Fill(dFOOT_, eFOOT_);
-		foot_e_vs_x->Fill(xFOOT_, eFOOT_);
+		
+		ref_extrapolated = (o == Orientation::X) ? (fx[0] + fx[1]*z0) : (fy[0] + fy[1]*z0); 
+		
+		foot_diff->Fill(ref_extrapolated, xFOOT_ - ref_extrapolated);
+		foot_q_vs_d->Fill(dFOOT_, qFOOT_);
+		foot_q_vs_x->Fill(xFOOT_, qFOOT_);
 	}
 
-	TCanvas* cTr = new TCanvas("TPC-tracks", "TPC-tracks", 2000, 1200);
-	cTr->Divide(2,2);
-	cTr->cd(1); h2_track_x->Draw("COLZ");
-	cTr->cd(3); h2_track_y->Draw("COLZ");
-	cTr->cd(2); h2_ab->Draw("COLZ");
-	cTr->cd(4);
-	PLatex(0.08,
-		Form("Tracks derived from TPC: %s", ( []()->std::string {
-			std::string s;
-			for(int i=0; i<N; ++i) 
-				if(_take[i]) { s+=::tpc_moniker[i]; s+=", "; };
-			return s.substr(0, s.size()-2);
-		}().c_str()))
-	);
-
-	TCanvas* c = new TCanvas("FOOTXY", Form("FOOT%d : trying out positions", ifoot), 2000,1000);
-	c->Divide(4,2);
-	for(int i=0; i<4; ++i) {
-		c->cd(i+1);
-		foot_x[i]->Draw("COLZ");
-		c->cd(i+5);
-		foot_y[i]->Draw("COLZ");
-	}
+	TCanvas* c = new TCanvas("FOOTDiff", Form("FOOT%d position difference plot", ifoot), 2000,1000);
+	foot_diff->Draw("COLZ");
 
 	double final_offset = 0.0;
-	if(do_delta == DoDelta::yes and do_delta.as_yes()->position != -1 and do_diff == DoDiff::yes) {
-		int pos = do_delta.as_yes()->position;
-		char o = do_delta.as_yes()->orientation;
-		if(pos > 3) ERROR("Position %d requested, >3. Not allowed\n", pos);
-		if(o != 'x' and o != 'y') ERROR("Orientation \'%c\' requested, isn't x or y.\n", o); 
-		
+	if(do_delta == DoDelta::yes) {
 		TH2D* hist; 
-		if(o == 'x') { hist = &foot_x[pos]->h; c->cd(pos+1); }
-		if(o == 'y') { hist = &foot_y[pos]->h; c->cd(pos+5); } 
 		double xlo = do_delta.as_yes()->xlo;
 		double xhi = do_delta.as_yes()->xhi;
-		auto [alph, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX>(hist, xlo, xhi); 
+		auto [alph, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX>(*foot_diff, xlo, xhi); 
 		g->Draw("L SAME");
 		gerr->Draw("P SAME");
-		final_offset = -alph[0]/(1+alph[1]);
+		final_offset = -alph[0];
 		WARN("DoDelta(..) result: (%.4f, %.4f) meaning:\n"
-			"Offset: %.4f, slope: %.5f\n", alph[0], alph[1], final_offset, 1.0/(1+alph[1]));
+			"Offset: %.4f\n", alph[0], alph[1], final_offset);
 	}
 
-	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 1800, 800);
-	cs->Divide(3,2);
+	TCanvas* cs = new TCanvas("SCIs&TPCs", "SCI21,22,31 and TPC ref", 2200, 1200);
+	cs->Divide(3,3);
 	cs->cd(1); h1_sci21->Draw();
 	cs->cd(2); h1_sci22->Draw();
 	cs->cd(3); h1_sci31->Draw();
 	cs->cd(4); h1_sci21_cut->Draw();
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
+	cs->cd(7); h2_track_x->Draw("COLZ");
+	cs->cd(8); h2_track_y->Draw("COLZ");
+	cs->cd(9); h2_ab->Draw("COLZ");
 
 	TCanvas* efoot = new TCanvas("cf", "FOOTE", 1800, 800);
 	efoot->Divide(2,2);
 	efoot->cd(1);
-	foot_e_vs_d->Draw("COLZ"); gPad->SetLogz();
+	foot_q_vs_d->Draw("COLZ"); gPad->SetLogz();
 	efoot->cd(2);
 	PLatex(0.07,
 		[](){ std::string s = "Extrapolation done from: ";
@@ -322,13 +252,12 @@ void foot_spread (
 			s.erase(s.size() - 2); return s; }(),
 		Form("FOOT%d comes from DE10: %d", ifoot, foot_param->de10_index_),
 		Form("In setup file it is placed at z0 = %.1f (total: %.1f)\n", 
-			box->det_pos[ifoot], box->GetFOOTZ(ifoot, foot_param)),
-		({ std::stringstream ss{}; ss << "Possible placements: " << box->det_pos; ss.str(); }),
-		Form("Preliminary orientation: \'%s\' %s", foot_param->orientation.c_str(),
-			(do_diff == DoDiff::yes) ? (std::string(", offset: ") + std::to_string(final_offset) + " mm").c_str() : "")
+			box->det_pos[ifoot], z0),
+		Form("Orientation: \'%s\', offset: %.4f mm", foot_param->orientation.c_str(),
+			final_offset)
 	);
 	efoot->cd(3);
-	foot_e_vs_x->Draw("COLZ"); gPad->SetLogz();
+	foot_q_vs_x->Draw("COLZ"); gPad->SetLogz();
 	printf("Positions at FOOT taken from extrapolating TPC: ");
 	for(int i=0; i<N; ++i) {
 		if(_take[i]) printf("%s ", tpc_moniker[i]);
@@ -338,9 +267,8 @@ void foot_spread (
 	efoot->cd(4);
 	foot_pos->Draw();
 
-	std::string type_spectrum = (do_diff == DoDiff::no) ? "absolute" : "diff";
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
-		save_all(canvas::Extension::png, { inf.stem().c_str(), Form("FOOT%d", ifoot), type_spectrum });
+		save_all(canvas::Extension::png, { inf.stem().c_str(), Form("FOOT%d", ifoot) });
 	}
 }

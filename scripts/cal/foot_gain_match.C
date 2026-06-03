@@ -58,9 +58,9 @@ void foot_gain_match (
 	double delta_cut = 0.05,
 	uint32_t mult_cut = 1, // any multiplicity below that is disallowed 
 	int Q_target = 6,
-	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
+	std::array<double,2> sci21_cut = {NAN, NAN},
+	std::array<double,2> sci22_cut = {NAN, NAN},
+	std::array<double,2> sci31_cut = {NAN, NAN},
 	DoSave do_save = DoSave::no,
 	Take take = Take::gauss,
 	ShowOld show_old = ShowOld::no

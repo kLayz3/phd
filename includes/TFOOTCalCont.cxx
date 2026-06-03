@@ -15,6 +15,22 @@ double FOOTDeltaFFT::Evaluate(const double x) const {
 	return FFTW::Evaluate(this->c, this->n, x, -0.5, 0.5); 	
 }
 
+double FOOTParam::E(const RNFOOTCluster& clust) const noexcept {
+	double ce = clust.fCE;
+	double d  = clust.Delta();
+	double cx = clust.fCX;
+
+	ce *= this->gain.CorrectionFactor(cx, ce);
+	ce /= this->de.CorrectionFactor(d);
+
+	return ce;
+};
+
+double FOOTParam::Q(const RNFOOTCluster& clust) const noexcept {
+	double e = this->E(clust); 
+	return this->Q(e);
+}
+
 RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, FOOTClusterFit fit) :
 	fCX(x), fCE(e), fCM(m), fCT(t), fit{fit} {}
 
@@ -86,7 +102,7 @@ void TFOOTCalCont::Init(TDictInfo info) {
 			ERROR("Container meant to also register the FOOT box, but inside %s file, \"box\" key not found?",
 				file_name.c_str());
 		
-		UNROLL_JSON_PARAM(bpar, j["box"], 8);
+		UNROLL_JSON_PARAM(bpar, j["box"], 7);
 		
 		/* `file_name` could've been passed relative. Fetch the full path and bake it in. */
 		try {

@@ -22,13 +22,13 @@ extern "C" {
  * @note Thread un-safe. */
 struct FFTW {
 	static constexpr int Q_DEFAULT = 10;
-	static constexpr double pi = 3.141592653589793238462643383279502884;
+	static constexpr double pi = M_PI;
 	struct Coeff { double a, b; };
 
 	int n_full{0};   // number of real input samples
 	int n_freq{0};   // number of r2c output bins = n_full/2 + 1
 	
-	fftw_complex *data {}; 
+	fftw_complex *data = nullptr; 
 	std::vector<Coeff> coeff {};
 	bool is_computed {false};
 

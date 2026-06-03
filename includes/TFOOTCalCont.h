@@ -18,8 +18,6 @@
 
 class TH1D;
 
-using ExtrapolateLowZ = mnd::BinaryOpt;
-
 enum class Orientation { X, Y, UNKNOWN };
 
 struct FMultiPoly {
@@ -360,12 +358,13 @@ struct FOOTDeltaParam {
 		return g;
 	}
 
-
 	FOOTDeltaParam() = default;
 	virtual ~FOOTDeltaParam() = default;
 	ClassDef(FOOTDeltaParam, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(FOOTDeltaParam, 2);
+
+struct RNFOOTCluster;
 
 /* Parameters specific to a single FOOT detector. */
 struct FOOTParam {
@@ -386,16 +385,66 @@ struct FOOTParam {
 	ADD_SERIALIZABLE_FIELD(FOOTDeltaParam,   de,          {},                 9);
 
 	inline Orientation GetOrientation() const noexcept {
-		if(orientation == "x" or orientation == "-x") return Orientation::X;
-		if(orientation == "y" or orientation == "-y") return Orientation::Y;
+		if(orientation[0] == 'x' or (orientation.length() > 1 and orientation[1] == 'x')) return Orientation::X;
+		if(orientation[0] == 'y' or (orientation.length() > 1 and orientation[1] == 'y')) return Orientation::Y;
 		return Orientation::UNKNOWN;
 	};
 
 	inline double R() const noexcept {
-		if(orientation == "-x" or orientation == "-y") return -1.0;
+		if(orientation[0] == '-') return -1.0;
 		return 1.0;
 	}
 
+	/* Convert raw cluster position `cx` and its integrated ADC value
+	 * `ce` into the final calibrated ADC value. */
+	double E(const RNFOOTCluster& ) const noexcept;
+
+	/* Main method: convert cluster energy (E) to nominal charge (Q)
+	 * If the dependence is E(Q) = A * Q^a, then:
+	 * f = 1/A, c = 1/a <=> Q(E) = (f * E)^c 
+	 * This energy, has to be properly both gain-matched and delta-corrected. */
+	inline double Q(double E) const noexcept {
+		if(!this->is_initialized_)
+			QParamInit();
+		return std::pow(f_*E, c_);
+	}
+	double Q(const RNFOOTCluster& ) const noexcept;
+	
+	/* Get params for the nominal dependence: E(Q) = <0> * Q ^ <1> */
+	template<size_t N>
+	double GetQParam() const noexcept {
+		if(!this->is_initialized_)
+			QParamInit();
+		if constexpr(N == 0) {
+			return 1.0 / f_; 
+		} else if constexpr(N == 1) {
+			return 1.0 / c_;
+		} else {
+			static_assert(N < 2, "Template param must be 0 or 1.");
+		}
+	}
+	inline void ResetQ() const noexcept { this->is_initialized_ = false; }
+	
+protected: 
+	/* Some cached values for quick Q- calculation.
+	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but 
+	 * JSON propagator cannot know this. Meaning that `ResetQ` has to be called manually. */
+	mutable double f_, c_;
+	mutable bool is_initialized_ = 0;
+
+	inline void QParamInit() const {
+		std::vector<double> x, y;
+		for(auto [Q,E] : gain.nominal_value) {
+			x.push_back( std::log(Q) );
+			y.push_back( std::log(E) );
+		}
+		auto r = PolyFit<1>(x,y);
+		this->f_ = std::exp(-r[0]);
+		this->c_ = 1.0 / r[1];
+		this->is_initialized_ = true;
+	}
+
+public:
 	int de10_index_ = -1;
 	virtual ~FOOTParam() = default;
 	ClassDef(FOOTParam, 1);
@@ -409,10 +458,11 @@ struct ExpertTarget {
 	ADD_SERIALIZABLE_FIELD(double, width_y,   0.0, 2)
 	ADD_SERIALIZABLE_FIELD(double, dx,        0.0, 3)
 	ADD_SERIALIZABLE_FIELD(double, dy,        0.0, 4)
+	ADD_SERIALIZABLE_FIELD(double, dz,        0.0, 5)
 	virtual ~ExpertTarget() = default;
 	ClassDef(ExpertTarget, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(ExpertTarget, 4)
+ADD_JSON_TYPE_RESOLUTION(ExpertTarget, 5)
 
 /* Parameters describing the whole FOOT box. Whatever the box may be :) */
 struct FOOTBoxParam {
@@ -420,16 +470,15 @@ struct FOOTBoxParam {
 	using Arr1 = std::array<double, N_FOOT_DETECTORS>;
 
 	ADD_SERIALIZABLE_FIELD(double, z0,          NAN, 0)
-	ADD_SERIALIZABLE_FIELD(double, width_inner, NAN, 1)
+	ADD_SERIALIZABLE_FIELD(double, width_outer, NAN, 1)
 	ADD_SERIALIZABLE_FIELD(Arr1,   det_pos,     {},  2)
-	ADD_SERIALIZABLE_FIELD(double, width_outer, NAN, 3)
-	ADD_SERIALIZABLE_FIELD(double, dx,          NAN, 4)
-	ADD_SERIALIZABLE_FIELD(double, dy,          NAN, 5)
-	ADD_SERIALIZABLE_FIELD(double, da,          NAN, 6)
-	ADD_SERIALIZABLE_FIELD(double, db,          NAN, 7)
-	ADD_SERIALIZABLE_FIELD(ExpertTarget, target, {}, 8)
+	ADD_SERIALIZABLE_FIELD(double, dx,          NAN, 3)
+	ADD_SERIALIZABLE_FIELD(double, dy,          NAN, 4)
+	ADD_SERIALIZABLE_FIELD(double, da,          NAN, 5)
+	ADD_SERIALIZABLE_FIELD(double, db,          NAN, 6)
+	ADD_SERIALIZABLE_FIELD(ExpertTarget, target, {}, 7)
 
-	inline double GetTargetZ() const noexcept { return z0 - (width_outer / 2); }
+	inline double GetTargetZ() const noexcept { return z0 - (width_outer / 2) + target.dz; }
 	
 	inline std::array<std::array<double, 2>, 2> TargetXYGeom() const noexcept {
 		return {
@@ -440,34 +489,31 @@ struct FOOTBoxParam {
 			std::array {
 				this->dy + target.dy - target.width_y/ 2,
 				this->dy + target.dy + target.width_y/ 2,
-			}
+		}
 		};
 	}
-	/* Calculate z- position of n-th FOOT detector in the box, relative to the target */
-	inline double GetFOOTZRel(const int n, const FOOTParam* p = nullptr) const noexcept {
-		double zf = det_pos.at(n);
-		if(p) {
-			/* For sanity check. The `N` field supplied there must be factor 2- up to `n` 
-			 * since FOOTs by convention go in order. */
-			if(n != (p->N / 2))
-				WARN("Fetching FOOT z-position, but from box requested n=%d, "
-					"supplied FOOT param handle reads .N=%d (position=%d)\n", n, p->N, p->N/2);
-			zf += p->dz;
-		}
-		return zf;
-	}
-	inline double GetFOOTZRel(const FOOTParam* p) const noexcept { return GetFOOTZRel(p->N/2, p); }
-
 	/* Calculate the absolute z- position of n-th FOOT detector in the box. */
 	inline double GetFOOTZ(const int n, const FOOTParam* p = nullptr) const noexcept {
-		return GetFOOTZRel(n, p) + GetTargetZ();
+		double zfoot = z0 - (width_outer / 2) + det_pos.at(n);
+		if(p) {
+			zfoot += p->dz;
+		}
+		return zfoot;
 	}
-	inline double GetFOOTZ(const FOOTParam* p) const noexcept { return GetFOOTZ(p->N/2, p); }
+	inline double GetFOOTZ(const FOOTParam* p) const noexcept { return GetFOOTZ(p->N, p); }
 
+	/* Calculate z- position of n-th FOOT detector in the box, relative to the target */
+	inline double GetFOOTZRel(const int n, const FOOTParam* p = nullptr) const noexcept {
+		return GetFOOTZ(n, p) - GetTargetZ();
+	}
+	inline double GetFOOTZRel(const FOOTParam* p) const noexcept { 
+		return GetFOOTZ(p) - GetTargetZ();
+	}
+	
 	virtual ~FOOTBoxParam() = default;
 	ClassDef(FOOTBoxParam, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(FOOTBoxParam, 8)
+ADD_JSON_TYPE_RESOLUTION(FOOTBoxParam, 7)
 
 /* f(x; (a0,mu,sigma)) = a0 * exp( -0.5 * ((x-mu)/sigma)^2 ) */
 struct FOOTClusterFit {

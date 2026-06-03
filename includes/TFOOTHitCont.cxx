@@ -53,7 +53,7 @@ auto it = info.find("Setup");
 	
 	if(!setup.contains("box")) ERROR("\'box\' key not found in JSON file: %s\n", file_name.c_str());
 		
-	UNROLL_JSON_PARAM(_box, setup["box"], 8);
+	UNROLL_JSON_PARAM(_box, setup["box"], 7);
 }
 
 void TFOOTHitCont::Setup() {

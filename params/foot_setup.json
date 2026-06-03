@@ -3,10 +3,10 @@
 	// Taken from Chamber_ASM_dwg_v3_1
 	"box" : {
 		"z0": 3355, // Nominal placement of the center of the box.
-		"width_inner": 412,
-		"width_outer": 440,
-		// FOOT detector nominal `z` positions, relative to the outer wall, where the Be target sits nominally. Check foot_pos_from_chamber_drawing.py script
-		"det_pos": [19.0, 19.0, 119.0, 119.0, 255.0, 255.0, 345.0, 345.0],
+		"width_outer": 435.5,
+		// FOOT detector nominal `z` positions, relative to the box' outer edge (edge with smaller z)
+		//         [27.95, 38.0, 147.8, 157.85, 284.6, 294.65, 404.6, 414.65] <--- nominally
+		"det_pos": [26.95, 39.0, 146.8, 158.85, 283.6, 295.65, 403.6, 415.65],
 		"dx": 0.0, // Small offset in x- direction 
 		"dy": 0.0, // Small offset in x- direction
 		"da": 0.0, // Small offset in x- angle relative to the TPCs' defined axis.
@@ -16,7 +16,8 @@
 			"width_x": 200.0, // mm
 			"width_y": 20.0,  // mm
 			"dx": 0.0,        // mm 
-			"dy": 0.0         // mm
+			"dy": 0.0,        // mm
+			"dz": -6.1        // mm; distance relative to the box' inner outer edge (i.e: without the metal frame)
 		}
 	},
 	"FOOT10": {  // Per detector parameters
@@ -26,7 +27,7 @@
 		"mirrored": false,  // can be rotated and mirrored
 		"c_threshold": 4.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
-		"delta_p": -1.8926, // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
+		"delta_p": -1.9288, // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
 		"delta_a": 0.12,    // Offset in angle [degrees], around the z-axis.
 		"gain": {
 			"fit": [
@@ -361,7 +362,7 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": 1.7048,
+		"delta_p": 1.7404,
 		"delta_a": 0.0, // couldn't estimate 
 		"gain": {
 			"fit": [
@@ -704,7 +705,7 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": -2.0785,
+		"delta_p": -2.2363,
 		"delta_a": 0.18,
 		"gain": {
 			"fit": [
@@ -1035,7 +1036,7 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": 2.83622,
+		"delta_p": 2.8002,
 		"delta_a": 0.03,
 		"gain": {
 			"fit": [
@@ -1378,7 +1379,7 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 2.5,
-		"delta_p": -1.9367,
+		"delta_p": -2.1627,
 		"delta_a": -10.19,
 		"gain": {
 			"fit": [
@@ -1709,7 +1710,7 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": 3.6977,
+		"delta_p": 3.6998,
 		"delta_a": -11.75,
 		// ASICs #0 and #1 are weird. In fact whole det is shifted low in energy ...
 		// Some of the params are completely eye-balled.
@@ -2068,7 +2069,7 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": -2.4376,
+		"delta_p": -2.7057,
 		"delta_a": -0.04,
 		"gain": {
 			"fit": [
@@ -2407,7 +2408,7 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": 4.6508,
+		"delta_p": 4.6684,
 		"delta_a": 0.4345,
 		"gain": {
 			"fit": [

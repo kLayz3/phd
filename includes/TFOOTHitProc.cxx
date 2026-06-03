@@ -54,17 +54,18 @@ std::ostream& operator<<(std::ostream& os, const TrackCost& rhs) {
 }
 
 /* Read the param file and create the matrix `A`:
- *  1/cos(θx-θy) * ( cos(θx)  -sin(θx) )
- *                 ( sin(θy)   cos(θy) ) 
- *  and the offset vector `dxy`. */
+ *  1/cos(θx-θy) * (  cos(θx)  sin(θx) )
+ *                 ( -sin(θy)  cos(θy) ) 
+ *  and the offset vector `d_xy`. */
 void TFOOTHitProc::SetConversionMatrices(int ipair, const FOOTParam& px, const FOOTParam& py ) {
+	using std::cos; using std::sin;
 	double tx = px.delta_a * M_PI / 180.0, ty = py.delta_a * M_PI / 180.0;	
-	hm[ipair].A << std::cos(ty), sin(tx),
-	              -std::sin(ty), cos(tx);
-	hm[ipair].A *= 1.0/std::cos(tx-ty);
+	hm[ipair].A << cos(ty), -sin(tx),
+	               sin(ty),  cos(tx);
+	hm[ipair].A *= 1.0/cos(tx-ty);
 
-	A_inv[ipair] << std::cos(tx), -sin(tx),
-	                std::sin(ty), cos(ty);
+	A_inv[ipair] << cos(tx), sin(tx),
+	               -sin(ty), cos(ty);
 
 	hm[ipair].dxy << px.delta_p, // already in [mm] scale, don't need to convert.
 	                 py.delta_p;
@@ -72,21 +73,6 @@ void TFOOTHitProc::SetConversionMatrices(int ipair, const FOOTParam& px, const F
 	refl[ipair] << ((px.orientation[0] == '-') ? -1.0 : 1.0),
 		           ((py.orientation[0] == '-') ? -1.0 : 1.0);
 }
-
-void TFOOTHitProc::e_to_q_t::Init(const FOOTParam& p) {
-	const auto& values = p.gain.nominal_value;
-	std::vector<double> x, y;
-	for(auto [Z,E] : values) {
-		x.push_back( std::log(Z) );
-		y.push_back( std::log(E) );
-	}
-	auto r = PolyFit<1>(x,y);
-	if(TFOOTHitProc::v > 0) {
-		WARN("FOOT%d energy dependence: E(Z) = %.1f * Z^%.2f\n", p.N, std::exp(r[0]), r[1]);
-	}
-	this->f = std::exp(-r[0]);
-	this->c = 1.0 / r[1];
-};
 
 TFOOTHitProc::TFOOTHitProc (
 	TFOOTHitCont& out, 
@@ -126,8 +112,6 @@ TFOOTHitProc::TFOOTHitProc (
 			ERROR("Checking for input setup validity, encountered %i>%i ?", ipair, N_PAIRS);	
 		auto& map = test_vec[ipair];
 		map.insert({o,z});
-
-		this->e_to_q[i].Init(*s);
 
 		++i;
 	});
@@ -214,36 +198,30 @@ void TFOOTHitProc::ProcessPair (
 	const std::pair<const TFOOTCalCont&, const TFOOTCalCont&>& f, i32 ipair
 ) noexcept {
 	const FOOTParam &px = *f.first.setup, &py = *f.second.setup;
-	const int nx = px.N, ny = py.N;
 	const RNFOOTCal &fx = f.first.inner(), &fy = f.second.inner();
 
 	RNFOOTPair& output = out.inner().pair[ipair];
 
 	for(const RNFOOTCluster& hit : fx.fCl) {
-		double delta = hit.Delta();
-		auto [cx, E, mult, ctype] = hit;
-		E *= px.gain.CorrectionFactor(cx, E);
-		E /= px.de.CorrectionFactor(delta);
+		auto [cx, _, mult, ctype] = hit;
 
-		double Q = e_to_q[nx](E);
+		double q = px.Q(hit);
 		
 		double x = refl[ipair].x() * (cx - DETECTOR_MIDPOINT) * STRIP_TO_MM; 
 		// Cluster size 1 fucks with everything above Z >~ 1,
 		// so only care about it if its sitting at low energies.. 
-		if(mult > 1 or Q < CLUSTER_SIZE_ONE_Q_CUTOFF)
-			output.x.emplace_back(Q, mult, ctype, x);
+		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
+			output.x.emplace_back(q, mult, ctype, x);
 	}
 
 	for(const RNFOOTCluster& hit : fy.fCl) {
-		double delta = hit.Delta();
-		auto [cx, E, mult, ctype] = hit;
-		E *= py.gain.CorrectionFactor(cx, E);
-		E /= py.de.CorrectionFactor(delta);
+		auto [cx, _, mult, ctype] = hit;
 
-		double Q = e_to_q[ny](E);
+		double q = py.Q(hit);
+
 		double y = refl[ipair].y() * (cx - DETECTOR_MIDPOINT) * STRIP_TO_MM; 
-		if(mult > 1 or Q < CLUSTER_SIZE_ONE_Q_CUTOFF)
-			output.y.emplace_back(Q, mult, ctype, y);
+		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
+			output.y.emplace_back(q, mult, ctype, y);
 	}
 
 	/* Sort these vectors, in ascending values of average charge (Q) */
