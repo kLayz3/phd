@@ -75,22 +75,6 @@ private:
 };
 } /* namespace hm */ 
 
-template<typename, typename = void>
-struct is_indexable_range : std::false_type {};
-template<typename T>
-struct is_indexable_range <
-	T,
-	std::void_t <
-		typename T::value_type,
-		decltype(std::begin(std::declval<T&>())),
-		decltype(std::end(std::declval<T&>())),
-		decltype(std::declval<T&>().size()),
-		decltype(std::declval<T&>()[std::declval<std::size_t>()])
-	>
-> : std::true_type { 
-	using underlying_type = typename T::value_type;
-};
-
 #define DECL_TYPE_TRAIT_HAS_FIELD(FIELD) \
 	template<typename, typename = void> \
 	struct has_##FIELD##_field : std::false_type {}; \

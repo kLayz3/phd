@@ -31,6 +31,13 @@ double FOOTParam::Q(const RNFOOTCluster& clust) const noexcept {
 	return this->Q(e);
 }
 
+double FOOTParam::BarePosition(const RNFOOTCluster& clust) const noexcept {
+	return R() * (clust.fCX - DETECTOR_MIDPOINT) * STRIP_TO_MM;
+}
+double FOOTParam::X0(const RNFOOTCluster& clust) const noexcept {
+	return BarePosition(clust) + delta_p;
+}
+
 RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, FOOTClusterFit fit) :
 	fCX(x), fCE(e), fCM(m), fCT(t), fit{fit} {}
 

@@ -1,13 +1,14 @@
 #include "PolyFitter.h"
 
 /* This hack is used to instantiate the template for small-ish N's.
- * This has the advantage that then these procedures can be used in the ROOT macros.
+ * This has the advantage that then these calls can then be used in ROOT macros.
  *
  * Problem is that Eigen is heavily optimized from rank 2 onward for algorithms such
- * as colPivHouseholderQr() decomposition and CLING when it compiles the source of macro,
- * it sees opaque Eigen optimizations, and you will catch the weirdest segfault in your life.
+ * as colPivHouseholderQr() decomposition and ROOT's cling when it tries to compile the source of macro,
+ * it sees opaque Eigen optimizations (SIMD stuff), and you will catch the weirdest segfault in your life.
+ * Who would've thought that making a C++ interpreter would make users' lives easier?
  *
- * Don't ask me why, but I was swearing in 4 different languages debugging this... */
+ * Don't ask me why, but I was swearing in >4 different languages debugging this... */
 
 template void PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , std::array<double,  2>& );
 template void PolyFit< 2>(const std::vector<double>& , const std::vector<double>& , std::array<double,  3>& );
@@ -63,13 +64,13 @@ double AngleFitResult::Angle(AngleFitResult::Direction d) const noexcept {
 }
 
 AngleFitResult FitAngle (
-    const std::vector<double>& x0,
-    const std::vector<double>& y0,
-    const std::vector<double>& x
+    const std::vector<double>& x0, // Referent measurement (along the device's axis)
+    const std::vector<double>& y0, // Referent measurement (orthogonal to the device's axis)
+    const std::vector<double>& x   // Device's measurements
 ) {
 	const std::size_t N = x.size();
-	assert(x0.size() == N && "FitAngle(): vectors `x0` must be identically sized.");
-	assert(y0.size() == N && "FitAngle(): vectors `y0` must be identically sized.");
+	assert(x0.size() == N && "FitAngle(): vectors `x0` and `x` must be identically sized.");
+	assert(y0.size() == N && "FitAngle(): vectors `y0` and `x` must be identically sized.");
 	assert(N >= 2 && "Must supply more than 2 points.");
 
 	Eigen::MatrixXd A(N, 2);
@@ -81,12 +82,9 @@ AngleFitResult FitAngle (
 	}
 	Eigen::Vector2d fit = A.colPivHouseholderQr().solve(b);
 
-	[[ maybe_unused ]] const double c = fit(0);  // ~ cos(tx)
-	[[ maybe_unused ]] const double d = fit(1);  // ~ sin(tx)
-	
 	return {
-		fit(0),
-		fit(1)
+		fit(0), // ~ cos(tx)
+		fit(1)  // ~ sin(tx)
 	};
 }
 

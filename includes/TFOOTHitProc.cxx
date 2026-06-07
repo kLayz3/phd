@@ -70,8 +70,8 @@ void TFOOTHitProc::SetConversionMatrices(int ipair, const FOOTParam& px, const F
 	hm[ipair].dxy << px.delta_p, // already in [mm] scale, don't need to convert.
 	                 py.delta_p;
 	
-	refl[ipair] << ((px.orientation[0] == '-') ? -1.0 : 1.0),
-		           ((py.orientation[0] == '-') ? -1.0 : 1.0);
+	refl[ipair] << px.R(), 
+	               py.R();
 }
 
 TFOOTHitProc::TFOOTHitProc (
@@ -207,7 +207,7 @@ void TFOOTHitProc::ProcessPair (
 
 		double q = px.Q(hit);
 		
-		double x = refl[ipair].x() * (cx - DETECTOR_MIDPOINT) * STRIP_TO_MM; 
+		double x = refl[ipair].x() * (cx - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM; 
 		// Cluster size 1 fucks with everything above Z >~ 1,
 		// so only care about it if its sitting at low energies.. 
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
@@ -219,7 +219,7 @@ void TFOOTHitProc::ProcessPair (
 
 		double q = py.Q(hit);
 
-		double y = refl[ipair].y() * (cx - DETECTOR_MIDPOINT) * STRIP_TO_MM; 
+		double y = refl[ipair].y() * (cx - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM; 
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
 			output.y.emplace_back(q, mult, ctype, y);
 	}
@@ -285,15 +285,17 @@ std::pair<double,double> TFOOTHitProc::kt_kp(const FTrack& ft, const FHitMatrix:
 		// Check that track goes through next layer `k+1`. If we are in last layer, it's a no-op.
 		if(k < static_cast<u32>(pair_z.size() - 1)) {
 			Eigen::Vector2d extrapolate_to_next_layer = mft.extrapolate_to( pair_z[k+1] );
-			
-			Eigen::Array2d pair_coords = MM_TO_STRIP * refl[k+1].cwiseProduct( 
+		
+			// Convert the [mm x mm] measurement from next layer, the hitmatrix entry,
+			// back into strip units.
+			Eigen::Array2d pair_coords = FOOTParam::MM_TO_STRIP * refl[k+1].cwiseProduct( 
 					A_inv[k+1] * (extrapolate_to_next_layer - hm[k+1].dxy)
-				).array() + DETECTOR_MIDPOINT;
+				).array() + FOOTParam::DETECTOR_MIDPOINT;
 			
 			double cx = pair_coords.x();
 			double cy = pair_coords.y();
 			
-			if(cx < 0 || cx > N_STRIPS || cy < 0 || cy > N_STRIPS)
+			if(cx < 0 || cx > FOOTParam::N_STRIPS || cy < 0 || cy > FOOTParam::N_STRIPS)
 				cost_p = Cp;
 		}
 	}

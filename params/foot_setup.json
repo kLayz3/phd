@@ -27,7 +27,7 @@
 		"mirrored": false,  // can be rotated and mirrored
 		"c_threshold": 4.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
-		"delta_p": -1.9288, // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
+		"delta_p": -1.9246, // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
 		"delta_a": 0.12,    // Offset in angle [degrees], around the z-axis.
 		"gain": {
 			"fit": [
@@ -362,8 +362,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": 1.7404,
-		"delta_a": 0.0, // couldn't estimate 
+		"delta_p": 1.7390,
+		"delta_a": 0.3, // couldn't estimate 
 		"gain": {
 			"fit": [
 				{
@@ -705,8 +705,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": -2.2363,
-		"delta_a": 0.18,
+		"delta_p": -2.2302,
+		"delta_a": 0.2,
 		"gain": {
 			"fit": [
 				{
@@ -1036,8 +1036,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": 2.8002,
-		"delta_a": 0.03,
+		"delta_p": 2.7855,
+		"delta_a": 0.23,
 		"gain": {
 			"fit": [
 				{
@@ -1380,7 +1380,7 @@
 		"c_threshold": 4.0,
 		"n_threshold": 2.5,
 		"delta_p": -2.1627,
-		"delta_a": -10.19,
+		"delta_a": -11.3,
 		"gain": {
 			"fit": [
 				{
@@ -1711,9 +1711,9 @@
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
 		"delta_p": 3.6998,
-		"delta_a": -11.75,
+		"delta_a": -9.76,
 		// ASICs #0 and #1 are weird. In fact whole det is shifted low in energy ...
-		// Some of the params are completely eye-balled.
+		// Some of the params are completely eye-balled, not gonna lie.
 		"gain": {
 			"fit": [
 				{ // ASIC[0]
@@ -2070,7 +2070,7 @@
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
 		"delta_p": -2.7057,
-		"delta_a": -0.04,
+		"delta_a": 0.09,
 		"gain": {
 			"fit": [
 				{ // ASIC[0]
@@ -2408,8 +2408,8 @@
 		"mirrored": false,
 		"c_threshold": 4.0,
 		"n_threshold": 1.5,
-		"delta_p": 4.6684,
-		"delta_a": 0.4345,
+		"delta_p": 4.6487,
+		"delta_a": 0.35,
 		"gain": {
 			"fit": [
 				{

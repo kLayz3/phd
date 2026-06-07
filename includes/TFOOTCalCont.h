@@ -368,6 +368,12 @@ struct RNFOOTCluster;
 
 /* Parameters specific to a single FOOT detector. */
 struct FOOTParam {
+	constexpr static int N_STRIPS = TFOOTMapCont::N_STRIPS;
+	constexpr static double DETECTOR_MIDPOINT = static_cast<double>(N_STRIPS - 1) / 2; // strip units
+	constexpr static double DETECTOR_SIZE     = 96.0; // [ mm ]
+	constexpr static double STRIP_TO_MM       = DETECTOR_SIZE / N_STRIPS; // 0.150 mm/strip
+	constexpr static double MM_TO_STRIP       = 1.0 / STRIP_TO_MM; // 6.67 strip/mm
+
 	constexpr static double CENTRE_THR_DEFAULT = 3.3;
 	constexpr static double NEIGHB_THR_DEFAULT = 1.3;
 
@@ -409,7 +415,15 @@ struct FOOTParam {
 		return std::pow(f_*E, c_);
 	}
 	double Q(const RNFOOTCluster& ) const noexcept;
+
+	/* Calculate the (bare) position of a cluster hit in millimeters. Note: this does not 
+	 * take rotations into account. */
+	double BarePosition(const RNFOOTCluster& ) const noexcept;
 	
+	/* Calculate the (bare) position of a cluster hit in millimetrs. Note: this does not 
+	 * take rotations into account. Just the (raw) translation along it's principal axis. */
+	double X0(const RNFOOTCluster& ) const noexcept;
+
 	/* Get params for the nominal dependence: E(Q) = <0> * Q ^ <1> */
 	template<size_t N>
 	double GetQParam() const noexcept {

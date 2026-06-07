@@ -123,6 +123,7 @@ void foot_spread (
 	auto foot = model->MakeField<RNFOOTCal>(Form("FOOT%d", ifoot));
 	auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
 	
+	/* Containers for TPC extrapolation. */
 	std::vector<double> x; x.reserve(N);
 	std::vector<double> y; y.reserve(N);
 	std::vector<double> z; x.reserve(N);
@@ -186,7 +187,7 @@ void foot_spread (
 			double d = hit.Delta();
 			double cx = hit.fCX;
 
-			double hit_position = R*(cx - 319.5) * 0.150; // readout index to mm scale
+			double hit_position = foot_param->BarePosition(hit);
 
 			if( std::isfinite(xFOOT_) ) {
 				/* Already found valid point in the event. */
@@ -226,7 +227,7 @@ void foot_spread (
 		gerr->Draw("P SAME");
 		final_offset = -alph[0];
 		WARN("DoDelta(..) result: (%.4f, %.4f) meaning:\n"
-			"Offset: %.4f\n", alph[0], alph[1], final_offset);
+			"Offset to be put in JSON file: " EBOLD(%.4f) "\n", alph[0], alph[1], final_offset);
 	}
 
 	TCanvas* cs = new TCanvas("SCIs&TPCs", "SCI21,22,31 and TPC ref", 2200, 1200);

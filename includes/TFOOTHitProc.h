@@ -84,17 +84,12 @@ struct TFOOTHitProc : TProcessor <
 	using FHitMatrix = HitMatrix<RNFOOTPair>;
 	using FTrack = Track<N_PAIRS, RNFOOTPair>;
 
-	constexpr static int N_STRIPS = TFOOTCalCont::N_STRIPS;
-	constexpr static double DETECTOR_MIDPOINT = static_cast<double>(N_STRIPS - 1) / 2; // strip units
-	constexpr static double DETECTOR_SIZE     = 96.0; // [ mm ]
-	constexpr static double STRIP_TO_MM       = DETECTOR_SIZE / N_STRIPS; // 0.150 mm/strip
-	constexpr static double MM_TO_STRIP       = 1.0 / STRIP_TO_MM; // 6.67 strip/mm
-
 	constexpr static double CLUSTER_SIZE_ONE_Q_CUTOFF = 1.5; // when cluster size == 1 doesn't make sense anymore.
 	constexpr static double DEFAULT_MAX_Q_TOLERANCE = 0.8;
 	constexpr static double DEFAULT_MAX_COST = 100;
-	constexpr static double TARGET_Z = 0.0; // convention; safe to hard-bake
 
+	constexpr static double TARGET_Z = 0.0; // by convention. In Kalman coordinates, place target nominally at 0.0
+											// Will be shifted back to "real" FRS coordinates later.
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
 	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ), 
