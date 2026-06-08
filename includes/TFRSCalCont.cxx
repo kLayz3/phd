@@ -47,12 +47,8 @@ void TFRSCalCont::Init(TDictInfo info) {
 	}
 }
 
-/* A small Add function for this type, which is a no-op. If it's not defined,
- * then folding `Collect` over this type will be compile error. */
-using T1 = std::remove_reference_t<decltype(TFRSCalCont::_tpc_param)>; // std::array<TPCParam, _>
-using T2 = std::remove_reference_t<decltype(TFRSCalCont::_sci_param)>; // std::array<SCIParam, _>
-void Add(T1&, const T1&) {}
-void Add(T2&, const T2&) {}
+using T1 = std::remove_reference_t<decltype(*TFRSCalCont::tpc_param)>; // std::array<TPCParam, _>
+using T2 = std::remove_reference_t<decltype(*TFRSCalCont::sci_param)>; // std::array<SCIParam, _>
 
 void TFRSCalCont::Setup() {
 	std::string setupFileName = "INVALID";

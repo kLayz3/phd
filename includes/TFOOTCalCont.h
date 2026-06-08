@@ -605,7 +605,7 @@ namespace std {
     template<> struct tuple_element<3, ::RNFOOTCluster> { using type = RNFOOTCluster::ClusterType; };
 }
 
-struct alignas(mnd::CL) RNFOOTCal {
+struct RNFOOTCal {
 	static constexpr size_t INIT_CAPACITY = _FOOT_N_STRIPS_PER_ASIC;
 	static constexpr int N_STRIPS = _FOOT_N_STRIPS;
 
@@ -637,6 +637,9 @@ struct alignas(mnd::CL) RNFOOTCal {
 	virtual ~RNFOOTCal() = default;
 	ClassDef(RNFOOTCal, 1);
 };
+
+inline void Add(FOOTParam&, const FOOTParam&) {}
+inline void Add(FOOTBoxParam&, const FOOTBoxParam&) {}
 
 struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	friend struct TFOOTCalProc;

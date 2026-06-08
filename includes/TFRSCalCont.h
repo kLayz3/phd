@@ -86,7 +86,7 @@ struct RNTPCCal {
 	ClassDef(RNTPCCal, 1);
 };
 
-struct alignas(mnd::CL) RNFRSCal {
+struct RNFRSCal {
 	constexpr static i32 N_VALID_SCI = RNFRSMap::N_VALID_SCI;
 	constexpr static i32 N_VALID_TPC = RNFRSMap::N_VALID_TPC;
 	
@@ -105,7 +105,7 @@ struct alignas(mnd::CL) RNFRSCal {
 		for(auto& t : tpc) t.Clean();
 	}
 	virtual ~RNFRSCal() = default;
-	ClassDef(RNFRSCal, 1);
+	ClassDef(RNFRSCal, 2);
 };
 
 struct TPCParam {
@@ -147,12 +147,11 @@ struct SCIParam {
 	ClassDef(SCIParam, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(SCIParam, 3)
+	
+inline void Add(TPCParam&, const TPCParam&) {}
+inline void Add(SCIParam&, const SCIParam&) {}
 
 struct TFRSCalCont : TContainer<RNFRSCal> {
-	inline static nlohmann::json setup {}; 
-	inline static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
-	inline static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
-	
 	// Which name corresponds to which index in later naming convention.
 	// Note, we keep this to match Go4.
 	inline static const std::map<std::string, u32> tpc_moniker { 
@@ -177,4 +176,10 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
 	TFRSCalCont();
 	void Setup() override;
 	void Init(TDictInfo info) override;
+
+	friend struct TFRSCalProc;
+private:
+	inline static nlohmann::json setup {}; 
+	inline static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
+	inline static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
 };

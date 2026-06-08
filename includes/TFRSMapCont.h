@@ -92,7 +92,7 @@ struct RNMUSICMap {
 	ClassDef(RNMUSICMap, 1);
 };
 
-struct alignas(mnd::CL) RNFRSMap {
+struct RNFRSMap {
 	constexpr static i32 N_VALID_SCI = 4;
 	constexpr static i32 N_VALID_TPC = 7;
 
@@ -142,7 +142,7 @@ struct TFRSMapCont : TContainer<RNFRSMap> {
 
 /* Trick is, we don't really care about full 64-bit White Rabbit, the 32-bit is fine up to ~20s or so. */
 
-struct alignas(mnd::CL) RNTrigMap {
+struct RNTrigMap {
 	constexpr static u32 INVALID_TPAT = -1;
 
 	u32 tpat; // Nullable, if tpat == INVALID_TPAT

@@ -121,9 +121,6 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	}
 }
 
-using A2 = std::array<double, 2>;
-template<> void Add(A2& lhs, const A2& rhs) {}
-
 void TFOOTCalCont::Setup() {
 	if(strlen(GetName()) == 0) ERROR("Setup called before Init() ? Or name field set to '' ?");
 	h1_mult     = RegisterObject<TH1I>("h1_mult", Form("FOOT (%2d: %d) multiplicity", FOOT_N, par.N), 200,0,50);
@@ -139,11 +136,11 @@ void TFOOTCalCont::Setup() {
 	h2_mult_e->GetXaxis()->SetTitle("Individual energy per strip hit");
 	h2_mult_e->GetYaxis()->SetTitle("Multiplicity");
 
-	setup = RegisterObject<FOOTParam>("setup", mnd::noop_fn<FOOTParam>(), this->par /* copy ctor */);
+	setup = RegisterObject<FOOTParam>("setup", this->par /* copy ctor */);
 	
 	/* In the cal step, box object not used. It's just written down for helper scripts to process stuff. */
 	if(should_register_box_) {
-		box = RegisterObject<FOOTBoxParam>("box", mnd::noop_fn<FOOTBoxParam>(), this->bpar);
+		box = RegisterObject<FOOTBoxParam>("box", this->bpar);
 		setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), full_setup_file_name); 
 	}
 }

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "monad/monad.hxx"
+
+#include "TFRSCalCont.h"
 #include "util/json_struct_def.hh"
 #include <utility>
 
@@ -51,29 +53,38 @@ struct RNFRSHit {
 		double a = NAN;
 		double b = NAN;
 		double beta = NAN;
+		
+		Id() = default;
 
-		void Clean() noexcept {
+		inline void Clean() noexcept {
 			x=y=a=b=beta = NAN;
 		}
 		virtual ~Id() = default;
 		ClassDef(Id, 1);
-	} s2_bt, s2_at, s3; /* `bt` == before target; `at` == after target */
+	};
+	Id s2_bt, s2_at, s3; /* `bt` == before target; `at` == after target */
 	
+	/* To keep a bit of a debug-handle on previous step,
+	 * just send the RNFRSCal here. */
+	RNFRSCal cal;
+
+	RNFRSHit() = default;
 	inline void Clean() noexcept {
 		s2_bt.Clean();
 		s2_at.Clean();
 		s3.Clean();
+		//cal.Clean(); // dont need since it's just copied over from prev. step
 	}
+
 	virtual ~RNFRSHit() = default;
 	ClassDef(RNFRSHit, 1);
 };
 
 struct TFRSHitCont : TContainer<RNFRSHit> {
-	inline static nlohmann::json setup {};
-	inline static FRSIdParam _s2p, _s3p;
-	inline static FRSTargetParam _sTar;
-
 	TH2D *h2_track_x, *h2_track_y;
+
+	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param{};
+	std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_param{};
 
 	FRSIdParam *s2p, *s3p;
 	FRSTargetParam *sTar;

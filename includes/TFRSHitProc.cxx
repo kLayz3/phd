@@ -47,7 +47,8 @@ TFRSHitProc::TFRSHitProc(TFRSHitCont& out, const TFRSCalCont& in, int s2_bt_mask
 void TFRSHitProc::ProcessEntry() noexcept {
 	RNFRSHit& out = (this->out).inner();
 	out.Clean();
-		
+	
+	out.cal = std::get<0>(this->in).inner(); // RNFRSCal& operator=(RNFRSCal& )
 	//ProcessS2BT();
 }
 

@@ -10,13 +10,13 @@
 TFOOTMapCont::TFOOTMapCont(int N) : TContainer(Form("FOOT%d", N)), FOOT_N(N) {}
 
 using TA = std::array<double, _FOOT_N_STRIPS>;
+using TV = std::vector<int>; 
+
 template<> void Add(TA& lhs, const TA& rhs) {
 	for(int i=0; i < _FOOT_N_STRIPS; ++i) {
 		lhs[i] += rhs[i], lhs[i] /= 2;
 	}
 }
-
-using TV = std::vector<int>; 
 template<> void Add(TV& lhs, const TV& rhs) {
 	TV r; r.reserve(lhs.size() + rhs.size());
 	r.insert(r.end(), lhs.begin(), lhs.end());
@@ -26,8 +26,8 @@ template<> void Add(TV& lhs, const TV& rhs) {
 	r.erase(std::unique(r.begin(), r.end()), r.end());
 }
 
-static_assert(mnd::has_free_add_fn<TA>::value, "Really bro? (Arr)");
-static_assert(mnd::has_free_add_fn<TA>::value, "Really bro? (Vec)");
+static_assert(mnd::has_free_add_fn<TA>::value, "Sanity check: Arr failed.");
+static_assert(mnd::has_free_add_fn<TV>::value, "Sanity check: Vec failed.");
 
 void TFOOTMapCont::Init(TDictInfo info) {
 	auto n_it = info.find("FOOT_ID");

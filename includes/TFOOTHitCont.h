@@ -111,6 +111,7 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	inline static FOOTBoxParam _box;
 	
 	FOOTBoxParam* box;
+	std::array<FOOTParam, 2>* foot_param[N_PAIRS];
 	std::string* setupName;
 	TH1I* h1_qtrack;
 	TH1I* h1_track_nsampled;

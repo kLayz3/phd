@@ -1,4 +1,5 @@
 #include "TFOOTHitCont.h"
+#include "TFOOTHitProc.h"
 #include "TH2I.h"
 #include "TH1I.h"
 #include "util/JSONParser.h"
@@ -56,13 +57,26 @@ auto it = info.find("Setup");
 	UNROLL_JSON_PARAM(_box, setup["box"], 7);
 }
 
+using FOOTParams = std::array<FOOTParam, 2>;
+template<> void Add(FOOTParams&, const FOOTParams&) {}
+
 void TFOOTHitCont::Setup() {
-	box = RegisterObject<FOOTBoxParam>("box", mnd::noop_fn<FOOTBoxParam>(), _box);
-	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 	h1_qtrack = RegisterObject<TH1I>("h1_qtrack", "Charge (Q) of recognized tracks",
 		100, 0, 8);
 	h1_track_nsampled = RegisterObject<TH1I>("h1_qtrack_nsampled", "Points sampled (N) in the track",
 		12, -0.5, 5.5);
+	
+	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
+	box = RegisterObject<FOOTBoxParam>("box", _box);
+
+	/* TFOOTHitCont cannot know ahead of time which FOOT will get put into which position,
+	 * for the tracking. It's the Proc which decides that.
+	 * Therefore, we allocate the `foot_param` objects here, but leave them defaulted.
+	 * The TFOOTHitProc ctor will fill the rest. */
+
+	for(u32 i=0; i<N_PAIRS; ++i) {
+		foot_param[i] = RegisterObject<FOOTParams>(Form("%u_setup", i), {});
+	}
 }
 
 ClassImp(FOOTQ);

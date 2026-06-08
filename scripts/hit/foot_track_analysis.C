@@ -103,7 +103,7 @@ void foot_track_analysis (
 				
 				double x_extr = fx[0] + fx[1]*z;
 				double y_extr = fy[0] + fy[1]*z;
-				double q_extr = mnd::mean(qf);
+				auto [q_extr, track_qvar] = mnd::mean_var(qf);
 				
 				double dx = t._x[i] - x_extr;
 				double dy = t._y[i] - y_extr;
@@ -121,7 +121,6 @@ void foot_track_analysis (
 				h2q->Fill(i, t._q[i]);
 				
 				/* Find the 3-measurement 'test' track charge params.. */
-				double track_qvar = mnd::var(qf);
 				h2_kq->Fill( i, sqrt(dq*dq + sq*sq) );
 				h2_kr->Fill( i, sqrt(dx*dx + dy*dy) );
 			}

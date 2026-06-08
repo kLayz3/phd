@@ -140,17 +140,22 @@ TFOOTHitProc::TFOOTHitProc (
 
 	/* Assign the average z-values of each of the pairs. */
 	int ipair = 0;
-	const FOOTBoxParam* b = out.box;
-	mnd::for_pair_in_tuple(this->in, [this, &ipair, b](const auto& f1, const auto& f2) {
+	mnd::for_pair_in_tuple(this->in, [this, &ipair, box](const TFOOTCalCont& f1, const TFOOTCalCont& f2) {
 			this->pair_z[ipair] = ( 
-				b->GetFOOTZRel(f1.setup->N) + f1.setup->dz + 
-				b->GetFOOTZRel(f2.setup->N) + f2.setup->dz
+				box->GetFOOTZRel(f1.setup->N) + f1.setup->dz + 
+				box->GetFOOTZRel(f2.setup->N) + f2.setup->dz
 			) / 2.0 + TFOOTHitProc::TARGET_Z;
 			Orientation o1 = (f1.setup->orientation[1] == 'x') ? Orientation::X : Orientation::Y;
 			if(o1 == Orientation::X) { 
 				this->SetConversionMatrices(ipair, *f1.setup, *f2.setup);
+
+				this->out.foot_param[ipair]->at(0) = *f1.setup;
+				this->out.foot_param[ipair]->at(1) = *f2.setup;
 			} else { 
 				this->SetConversionMatrices(ipair, *f2.setup, *f1.setup);
+
+				this->out.foot_param[ipair]->at(0) = *f2.setup;
+				this->out.foot_param[ipair]->at(1) = *f1.setup;
 			}
 			++ipair;
 		}

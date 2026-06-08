@@ -1380,7 +1380,7 @@
 		"c_threshold": 4.0,
 		"n_threshold": 2.5,
 		"delta_p": -2.1627,
-		"delta_a": -11.3,
+		"delta_a": -10.7,
 		"gain": {
 			"fit": [
 				{
