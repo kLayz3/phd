@@ -21,16 +21,16 @@ struct AngleFitResult {
 	double Angle(const Direction ) const noexcept; // tx
 };
 
+struct AngleOffsetFitResult {
+	AngleFitResult t;
+	double c; // -dx*cos(t.tx) - dy*sin(t.tx)
+};
+
 AngleFitResult FitAngle (
     const std::vector<double>& x0,
     const std::vector<double>& y0,
     const std::vector<double>& x
 );
-
-struct AngleOffsetFitResult {
-	AngleFitResult t;
-	double c; // -dx*cos(t.tx) - dy*sin(t.tx)
-};
 
 AngleOffsetFitResult FitAngleOffset (
     const std::vector<double>& x0,

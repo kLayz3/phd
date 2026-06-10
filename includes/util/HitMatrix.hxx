@@ -157,7 +157,7 @@ public:
 			const hit_type& hy = p->y[real_j];
 			slot = Entry {
 				{hx.Q.q, hy.Q.q}, 
-				A * Eigen::Vector2d(hx.m, hy.m) + dxy
+				A * ( Eigen::Vector2d(hx.m, hy.m) + dxy )
 			}; 
 		}
 		return *slot;
@@ -213,7 +213,7 @@ public:
 				const hit_type& hy = p->y[j];
 				cache(i,j) = Entry {
 					{hx.Q.q, hy.Q.q}, 
-					A * Eigen::Vector2d(hx.m, hy.m) + dxy
+					A * (Eigen::Vector2d(hx.m, hy.m) + dxy)
 				};
 			}
 		}

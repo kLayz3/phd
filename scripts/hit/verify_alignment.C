@@ -44,7 +44,7 @@ void verify_alignment (
 		ERROR("MND_FOOTTRACK_DEBUG not compiled in, when the ROOT file got generated. Can't proceed\n");
 
 	if(i >= N_PAIRS)
-		ERROR("Second argument `i` can be only {0,..,%u}.", N_PAIRS);
+		ERROR("Second argument `i` can be only {0,..,%u}.", N_PAIRS-1);
 
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param;
 	std::array<FOOTParam,2>* foot_param; 
@@ -78,12 +78,18 @@ void verify_alignment (
 		tpc_param->at(3).z0
 	};
 
-	auto* resx = new TH1P(Form("((h1_fitrx))DiffX FOOT-Ref[mm]@FOOT%d X", i),
+	auto* resx = new TH1P(Form("((h1_fitrx))Difference FOOTX-RefX [mm]@Pair%d X", i),
 			kMagenta-9, binning_x[0], binning_x[1], binning_x[2]);
-	auto* resy = new TH1P(Form("((h1_fitry))DiffY FOOT-Ref [mm]@FOOT%d Y", i),
+	auto* resy = new TH1P(Form("((h1_fitry))Difference FOOTY-RefY [mm]@Pair%d Y", i),
 		kYellow-9, binning_y[0], binning_y[1], binning_y[2]);
-	auto* resxy = new TH1P(Form("((h1_fitrxy))Total diff [mm]@FOOT%d-XY", i),
+	auto* resxy = new TH1P(Form("((h1_fitrxy))Total diff [mm]@Pair%d XY", i),
 		kCyan-9, 
+		(int)(binning_x[0] + binning_y[0])/2,
+		0, 
+		(abs(binning_x[1]) + abs(binning_y[1]) + abs(binning_x[2]) + abs(binning_y[2])) / 4
+	);
+	auto* h2_diff_vs_angle = new TH2P(Form("((h2_da))Total difference [mm]:Track angle [mrad]@Pair%d XY", i),
+		80,0,30,
 		(int)(binning_x[0] + binning_y[0])/2,
 		0, 
 		(abs(binning_x[1]) + abs(binning_y[1]) + abs(binning_x[2]) + abs(binning_y[2])) / 4
@@ -158,27 +164,34 @@ void verify_alignment (
 
 		FillTrack(*h2_track_x, fx);
 		FillTrack(*h2_track_y, fy);
-		h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
+		double ax = fx[1]*1000.0;
+		double ay = fy[1]*1000.0;
+		h2_ab->Fill(ax, ay);
 
 		double x0 = fx[0] + fx[1]*z0;
 		double y0 = fy[0] + fy[1]*z0; 
 		h2_xy->Fill(x0, y0);
-		
-		for(const RNFOOTTrack& t : foot->track) {
-			if(t.n != N_PAIRS) continue; // get only tracks going thru all 4 layers. 
 
-			double  Q = t._q[i];
-			double xf = t._x[i];
-			double yf = t._y[i];
-			if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(Q, foot_q_cut)) continue;
-	
-			h2_foot->Fill(xf, yf);
-			resx->Fill(xf - x0);
-			resy->Fill(yf - y0);
-			
-			double r = std::sqrt( (xf-x0)*(xf-x0) +  (yf-y0)*(yf-y0) );
-			resxy->Fill(r);
-		}
+		// Total polar angle of the TPC's track:
+		// cos(theta) = 1 / (1 + ax^2 + ay^2) 
+		double theta = std::sqrt(2) * std::sqrt(ax*ax + ay*ay);
+		
+		if(foot->track.size() != 1) continue;
+		const RNFOOTTrack& t = foot->track[0];
+		if(t.n != N_PAIRS) continue; // get only tracks going thru all 4 layers. 
+
+		double  Q = t._q[i];
+		double xf = t._x[i];
+		double yf = t._y[i];
+		if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(Q, foot_q_cut)) continue;
+
+		h2_foot->Fill(xf, yf);
+		resx->Fill(xf - x0);
+		resy->Fill(yf - y0);
+		
+		double r = std::sqrt( (xf-x0)*(xf-x0) +  (yf-y0)*(yf-y0) );
+		resxy->Fill(r);
+		h2_diff_vs_angle->Fill(theta, r);
 	}
 	
 	TCanvas* cs = new TCanvas("SCIs&TPCs", "SCI21,22,31; TPC Ref", 2150, 1400);
@@ -193,17 +206,14 @@ void verify_alignment (
 	cs->cd(8); h2_track_y->Draw("COLZ");
 	cs->cd(9); h2_ab->Draw("COLZ");
 
-	TCanvas* cRes = new TCanvas("FitResidue", "Fit residue", 2150, 1400);
+	TCanvas* cRes = new TCanvas("Residue", "FOOT-Reference differences", 2150, 1400);
 	cRes->Divide(3, 2);
 	cRes->cd(1); resx->Draw();
 	cRes->cd(2); resy->Draw();
 	cRes->cd(3); resxy->Draw();
 	cRes->cd(4); h2_xy->Draw("COLZ");
 	cRes->cd(5); h2_foot->Draw("COLZ");
-	cRes->cd(6);
-	PLatex(0.08,
-		"Here's some info..."
-	);
+	cRes->cd(6); h2_diff_vs_angle->Draw("COLZ");
 
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );

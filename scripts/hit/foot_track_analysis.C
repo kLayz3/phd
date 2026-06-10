@@ -37,7 +37,7 @@ void foot_track_analysis (
 	
 	ROOT::EnableImplicitMT();
 
-	TH1P *resx[N_PAIRS], *resy[N_PAIRS], *resq[N_PAIRS], *h1q[N_PAIRS];
+	TH1P *resx[N_PAIRS], *resy[N_PAIRS], *resq[N_PAIRS], *h1q[N_PAIRS], *h1_footx[N_PAIRS], *h1_footy[N_PAIRS];
 	for(u32 i=0; i<N_PAIRS; ++i) {
 		resx[i] = new TH1P(Form("((h1_fitrx_%d))Fit residue [mm]@FOOT%d X", i, i),
 			kMagenta-9, binning_x[0], binning_x[1], binning_x[2]);
@@ -48,6 +48,10 @@ void foot_track_analysis (
 
 		h1q[i] = new TH1P(Form("((h1q_%d))Q value@FOOT%d", i, i),
 			kBlue-9, binning_q[0], binning_q[1], binning_q[2]);
+		h1_footx[i] = new TH1P(Form("((h1_footx_%d))FOOT%d X [mm]", i, i),
+			kMagenta-9, 320, -50, 50);
+		h1_footy[i] = new TH1P(Form("((h1_footy_%d))FOOT%d Y [mm]", i, i),
+			kMagenta-9, 320, -50, 50);
 	}
 	TH2P* h2_resx = new TH2P("((h2_fitrx))Fit residue:FOOT ID@X-orientation",
 		N_PAIRS, -0.5, N_PAIRS-0.5, binning_x[0], binning_x[1], binning_x[2]);
@@ -100,7 +104,9 @@ void foot_track_analysis (
 
 				auto fx = PolyFit<1>(zf, xf);
 				auto fy = PolyFit<1>(zf, yf);
-				
+				//auto fx = std::array<double, 2> { t.x0, t.ax };	
+				//auto fy = std::array<double, 2> { t.y0, t.ay };
+
 				double x_extr = fx[0] + fx[1]*z;
 				double y_extr = fy[0] + fy[1]*z;
 				auto [q_extr, track_qvar] = mnd::mean_var(qf);
@@ -110,6 +116,8 @@ void foot_track_analysis (
 				double dq = t._q[i] - q_extr;
 				double sq = t._sq[i]; // is sigma == sqrt(var);
 
+				h1_footx[i]->Fill( t._x[i] );
+				h1_footy[i]->Fill( t._y[i] );
 				resx[i]->Fill(dx);
 				resy[i]->Fill(dy);
 				resq[i]->Fill(dq);
@@ -127,8 +135,8 @@ void foot_track_analysis (
 		}
 	}
 
-	TCanvas* c1d = new TCanvas("FitResidue1D", "Fit residues 1D", 2200, 1400);
-	c1d->Divide(N_PAIRS, 3);
+	TCanvas* c1d = new TCanvas("FitResidue1D", "Fit residues 1D", 2150, 1650);
+	c1d->Divide(N_PAIRS, 5);
 	for(size_t i=0; i<N_PAIRS; ++i) {
 		c1d->cd(i+1);
 		resx[i]->Draw();
@@ -136,6 +144,11 @@ void foot_track_analysis (
 		resy[i]->Draw();
 		c1d->cd(i+1 + 2*N_PAIRS);
 		resq[i]->Draw();
+
+		c1d->cd(i+1+ 3*N_PAIRS);
+		h1_footx[i]->Draw();
+		c1d->cd(i+1+ 4*N_PAIRS);
+		h1_footy[i]->Draw();
 	}
 	
 	TCanvas* c2d = new TCanvas("FitResidue2D", "Fit residues 2D", 2200, 1400);

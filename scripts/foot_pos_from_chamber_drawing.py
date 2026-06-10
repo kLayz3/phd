@@ -1,34 +1,47 @@
 #!/usr/bin/env python3
 
+import numpy as np
 
-width_outer = 440
-width_inner = 412
+# FOOT box has equidistance two pairs, always ~109.7 mm
+# So it is always:
+# |FOOT12| - 109.7mm - |FOOT23|  -????-  |FOOT45| - 109.7mm - |FOOT67|
 
-target='right' # or left
-dist = [89,90,136,100]
-dist_from = ['left', 'middle'] # right, outer, inner
+width_outer = 435.5
+pair_width = 10.15
+foot_width = 0.9
+dfixed = 129.9
 
-# Thickness of box edge, along x/y axis, on only one end.
-z_thickness = (width_outer - width_inner)/2
+dx = 5.5 # dx = 5.5 best found now. 
+d0 = 48.0 - dx
+dist12 = 136.85 + dx
 
-print('Target sitting at nominally at the right-side outer edge: 0.0')
+dtarget = -6.1
 
-dist_cumulative = 0
-for dist_raw in dist:
-    dist_cumulative = dist_cumulative + dist_raw
+# Distances always measured with respect to the outer edge:
+# ====>>> BEAM DIRECTION ====>>>
+#                   (0)    (1)                   (2)    (3)                    (4)    (5)                   (6)    (7)
+# | W  |             | FOOT |                     | FOOT |                      | FOOT |                     | FOOT |
+# | A  |             | PAIR |                     | PAIR |                      | PAIR |                     | PAIR |
+# | L  |             |  0   |                     |  1   |                      |  2   |                     |  3   |
+# | L  |             |      |                     |      |                      |      |                     |      |
+#                    <------>  `pair_width`       <------> `pair_width`         <------> `pair_width`        <------> `pair_width                         
+# <------------------------->  `d0`; CHANGING     <------------------------------------> `dist12`; CHANGING                       
+#                    <-----------------------------------> `dfixed`             <-----------------------------------> `dfixed` 
+#                                                 
+#                                                                               
 
-    # Distance from left inner:
-    zLI = dist_cumulative - (z_thickness / 2)
+print('Outer box-edge: 0.0')
 
-    # Distance from right inner:
-    zRI = width_inner - zLI
+dist = []
+dist.append( d0 - pair_width - foot_width ); # dist[0]
+dist.append( d0              + foot_width ); # dist[1]
+dist.append( dist[0] + dfixed - pair_width - foot_width); # dist[2]
+dist.append( dist[0] + dfixed              + foot_width); # dist[3]
+dist.append( dist[2] + dist12 - pair_width - foot_width); # dist[4]
+dist.append( dist[2] + dist12              + foot_width); # dist[5]
+dist.append( dist[4] + dfixed - pair_width - foot_width); # dist[6]
+dist.append( dist[4] + dfixed              + foot_width); # dist[7]
 
-    # Distance from right outer:
-    zRO = zRI + z_thickness
 
-    # Correct it by ~1 mm accounting for FOOT non-exact placements
-    zROC = zRO + 1.0
-    print(f'Right outer: {zRO} | right inner: {zRI} ; nominal outer: {zROC}')
-
-
-print(f'Box thickness along 1 wall: {z_thickness}')
+print(f"\"det_pos\": [{', '.join(f'{x:.2f}' for x in dist)}],")
+print(f'Target: {dtarget:.2f}')

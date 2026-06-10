@@ -212,21 +212,21 @@ void TFOOTHitProc::ProcessPair (
 
 		double q = px.Q(hit);
 		
-		double x = refl[ipair].x() * (cx - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM; 
+		double xprime = refl[ipair].x() * (cx - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM; 
 		// Cluster size 1 fucks with everything above Z >~ 1,
 		// so only care about it if its sitting at low energies.. 
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
-			output.x.emplace_back(q, mult, ctype, x);
+			output.x.emplace_back(q, mult, ctype, xprime);
 	}
 
 	for(const RNFOOTCluster& hit : fy.fCl) {
-		auto [cx, _, mult, ctype] = hit;
+		auto [cy, _, mult, ctype] = hit;
 
 		double q = py.Q(hit);
 
-		double y = refl[ipair].y() * (cx - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM; 
+		double yprime = refl[ipair].y() * (cy - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM; 
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
-			output.y.emplace_back(q, mult, ctype, y);
+			output.y.emplace_back(q, mult, ctype, yprime);
 	}
 
 	/* Sort these vectors, in ascending values of average charge (Q) */
@@ -294,7 +294,7 @@ std::pair<double,double> TFOOTHitProc::kt_kp(const FTrack& ft, const FHitMatrix:
 			// Convert the [mm x mm] measurement from next layer, the hitmatrix entry,
 			// back into strip units.
 			Eigen::Array2d pair_coords = FOOTParam::MM_TO_STRIP * refl[k+1].cwiseProduct( 
-					A_inv[k+1] * (extrapolate_to_next_layer - hm[k+1].dxy)
+					A_inv[k+1] * (extrapolate_to_next_layer) - hm[k+1].dxy
 				).array() + FOOTParam::DETECTOR_MIDPOINT;
 			
 			double cx = pair_coords.x();
