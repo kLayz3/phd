@@ -15,7 +15,7 @@ dx = 5.5 # dx = 5.5 best found now.
 d0 = 48.0 - dx
 dist12 = 136.85 + dx
 
-dtarget = -6.1
+dtarget = -10.1
 
 # Distances always measured with respect to the outer edge:
 # ====>>> BEAM DIRECTION ====>>>

@@ -101,11 +101,10 @@ void tpc_draw_track (
 	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
 	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
 	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
-
-	TH2P* h2_xy = new TH2P(Form("Y [mm]:X [mm]@target z=%.1f", zT), 100, -40, 40, 100, -40, 40);
-	TH2P* h2_ab = new TH2P(Form("Y-angle [mrad]:X-angle [mrad]@target z=%.1f", zT), 100, -20, 20, 100, -20, 20);
-	TH2P* h2_track_x = new TH2P("Track density (X) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60); 
-	TH2P* h2_track_y = new TH2P("Track density (Y) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60); 
+	auto* h2_track_x = new TH2P("Track density (X) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60); 
+	auto* h2_track_y = new TH2P("Track density (Y) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60); 
+	auto* h2_xy = new TH2P(Form("Y [mm]:X [mm]@target z=%.1f", zT), 100, -40, 40, 100, -40, 40);
+	auto* h2_ab = new TH2P(Form("Y-angle [mrad]:X-angle [mrad]@target z=%.1f", zT), 100, -20, 20, 100, -20, 20);
 
 	TH2P* h2_tpc_xy[N];
 	TH2P* h2_tpc_xd[N][2];
@@ -132,28 +131,23 @@ void tpc_draw_track (
 
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
-		x.clear(); y.clear(); z.clear();
 		
-		/* Veto out the event based on SCI's first... */
 		const auto& sci21 = frs->sci[0];
 		const auto& sci22 = frs->sci[1];
 		const auto& sci31 = frs->sci[2];
-		if(sci21.hits.size() != 1) continue;
-		if(sci22.hits.size() != 1) continue;
-		if(sci31.hits.size() != 1) continue;
+		if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
+		if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
+		if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
 
-		h1_sci21->Fill(sci21.E);
-		h1_sci22->Fill(sci22.E);
-		h1_sci31->Fill(sci31.E);
+		if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+		if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+		if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
 
-		if(!mnd::IsInside(sci21.E, sci21_cut)) continue;
-		if(!mnd::IsInside(sci22.E, sci22_cut)) continue;
-		if(!mnd::IsInside(sci31.E, sci31_cut)) continue;
+		if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
+		if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
+		if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
 
-		h1_sci21_cut->Fill(sci21.E);
-		h1_sci22_cut->Fill(sci22.E);
-		h1_sci31_cut->Fill(sci31.E);
-
+		x.clear(); y.clear(); z.clear();
 		for(int i = 0; i < N; ++i) {
 			const auto& tpc = frs->tpc[i];
 			const std::array<std::vector<Measurement>, 2>& tpc_hits = tpc.hits;
@@ -311,7 +305,7 @@ void tpc_draw_track (
 		const auto [lo, hi] = *do_fit.as_yes();
 		
 		for(int i=0; i<N; ++i) {
-			const TPCParam& p = tpc_params->at(i);
+			TPCParam& p = tpc_params->at(i);
 			TCanvas* c = cdiff[i];
 
 			WARN("\n" EMPH1(TPC%s) " " EBOLD(fitting parameters) "\n", label[i]);
@@ -327,6 +321,10 @@ void tpc_draw_track (
 				WARN("\rOffset/slope: %.9f, %.9f\n", l, k);
 				printf("\rBefore: (%.6f , %.6f)\n",             b0,                 a0);
 				printf("\rNew   : " EBOLD((%.6f , %.6f)) "\n",  b0/(k+1) - l/(k+1), a0/(k+1));
+
+				p.x_offset[d] = b0;
+				p.x_factor[d] = a0;
+
 				c->cd(3*d + 1); 
 				gerr->Draw("P SAME");
 				g->Draw("L SAME");
@@ -343,12 +341,23 @@ void tpc_draw_track (
 				WARN("\rOffset/slope: %.5f, %.5f\n", l, k);
 				printf("\rBefore: (%.6f , %.6f)\n",             b0,                 a0);
 				printf("\rNew   : " EBOLD((%.6f , %.6f)) "\n",  b0/(k+1) - l/(k+1), a0/(k+1));
+
+				p.y_offset[a] = b0;
+				p.y_factor[a] = a0;
 				
 				GET_ANODE_PAD(a); 
 				gerr->Draw("P SAME");
 				g->Draw("L SAME");
 			}
 		}
+	}
+	for(int i=0; i<3; ++i) {
+		printf(BOLD ">> TPC%s: <<\n" KNRM, label[i]);
+		std::cout << "\"x_factor\": " << tpc_params->at(i).x_factor << endl;
+		std::cout << "\"x_offset\": " << tpc_params->at(i).x_offset << endl;
+		std::cout << "\"y_factor\": " << tpc_params->at(i).y_factor << endl;
+		std::cout << "\"y_offset\": " << tpc_params->at(i).y_offset << endl;
+		std::cout << " ====================================================== \n";
 	}
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
