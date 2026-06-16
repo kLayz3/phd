@@ -10,7 +10,7 @@
 
 #include "../../includes/util/PrettyHisto.hxx"
 #include "../../includes/util/FitSpline.hxx"
-#include "../../includes/util/Tracking.hxx"
+#include "../../includes/util/Tracking.h"
 #include "../../includes/util/MacroHelpers.hxx"
 
 using namespace ROOT;
@@ -126,6 +126,8 @@ void foot_spread (
 		foot_q_vs_d->Fill(dFOOT_, qFOOT_);
 		foot_q_vs_x->Fill(xFOOT_, qFOOT_);
 	}
+	/* Some strips/regions are dead and not to confuse the gauss-chan 🥺 👉👈,
+	 * exclude these regions from the fit. Passed in as a region sequence. */
 	constexpr double fit_area_factor = 0.5;
 	auto mygaus = [dead_regions](Double_t* x, Double_t* par) -> Double_t {
 		double xx = x[0];
@@ -140,7 +142,7 @@ void foot_spread (
 		);
 	};
 	ROOT::DisableImplicitMT();
-	
+
 	TF1* f = new TF1("f", mygaus, fit_area_factor*binning_x[1], fit_area_factor*binning_x[2], 3);
 	f->SetParNames("A", "mu", "sigma");
     f->SetParameters((*foot_pos)->GetMaximum(), (*foot_pos)->GetMean(), (*foot_pos)->GetStdDev());

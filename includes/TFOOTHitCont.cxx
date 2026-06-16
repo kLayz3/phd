@@ -3,8 +3,14 @@
 #include "TH2I.h"
 #include "TH1I.h"
 #include "util/JSONParser.h"
+#include "util/Geometry.h"
 
 using json = nlohmann::json;
+
+static nlohmann::json setup {};
+static FOOTBoxParam _box {};
+
+double g_expert_target_z {};
 
 std::ostream& operator<<(std::ostream& os, const FOOTHit& rhs) noexcept {
 	os << mnd::msg("(%s%.2f%s,%d,%s%5.1f%s)", 
@@ -55,6 +61,9 @@ auto it = info.find("Setup");
 	if(!setup.contains("box")) ERROR("\'box\' key not found in JSON file: %s\n", file_name.c_str());
 		
 	UNROLL_JSON_PARAM(_box, setup["box"], 7);
+
+	/* Single global to be shipped over to TFRSHitProc */
+	g_expert_target_z = _box.GetTargetZ(); 
 }
 
 using FOOTParams = std::array<FOOTParam, 2>;
@@ -64,6 +73,8 @@ void TFOOTHitCont::Setup() {
 	h1_qtrack = RegisterObject<TH1I>("h1_qtrack", "Charge (Q) of recognized tracks",
 		100, 0, 8);
 	h1_track_nsampled = RegisterObject<TH1I>("h1_qtrack_nsampled", "Points sampled (N) in the track",
+		12, -0.5, 5.5);
+	diff_heavy_frag_vs_upstream = RegisterObject<TH1I>("diff_heavy_frag_vs_upstream", "Distance heaviest fragment to TPC extrapolated",
 		12, -0.5, 5.5);
 	
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
@@ -78,6 +89,8 @@ void TFOOTHitCont::Setup() {
 		foot_param[i] = RegisterObject<FOOTParams>(Form("%u_setup", i), {});
 	}
 }
+
+mnd::geom::Line3D RNFOOTTrackToLine3D(const RNFOOTTrack& t) { return { t.x0, t.ax, t.y0, t.ay }; }
 
 ClassImp(FOOTQ);
 ClassImp(FOOTHit);

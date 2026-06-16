@@ -9,7 +9,7 @@
 #include "TFOOTMapCont.h"
 #include "util/json_struct_def.hh"
 #include "util/PolyFitter.hxx"
-#include "util/Tracking.hxx"
+#include "util/Tracking.h"
 
 #include "TGraph.h"
 #include "TH1D.h"
@@ -187,7 +187,7 @@ struct FOOTGainParam {
 			double evaluated_hi = poly::Eval(x, poly_hi);
 			double gain_lo = nom_lo / evaluated_lo;
 			double gain_hi = nom_hi / evaluated_hi;
-			auto line = GetLine( {evaluated_lo, gain_lo}, {evaluated_hi, gain_hi} );
+			auto line = GetLine2D( {evaluated_lo, gain_lo}, {evaluated_hi, gain_hi} );
 			gain = poly::Eval(e, line.array());
 		}
 		return gain;

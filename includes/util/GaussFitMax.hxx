@@ -8,7 +8,7 @@
 static constexpr double GAUSS_FIT_SIDE_RATIO_DEFAULT = 1.5;
 /**
  * @brief For a projection, TH1D, quickly fit a gauss around it's peak value, and +-2 sigma 
- * @note Thread-unsafe.
+ * @note Thread-unsafe. The predicate that fit succeeded is: `std::isfinite( result.first[0] )`
  */
 inline std::pair <
 	std::array<double, 3>,
@@ -37,15 +37,14 @@ inline std::pair <
 			fprintf(stderr, "Hist name: '%s', m=%.2f, s=%.2f\n",
 				h->GetName(), m, s);
 		}
-		/* In this case, don't quietly return the NAN's, try to give the best estimate if it
-		 * were just a random distribution (uniform) */
-		// return {{NAN, NAN, NAN}, {NAN, NAN, NAN}};
+		/* In case the fit diverges, don't quietly return the NAN's, 
+		 * try to give the best estimate if it were just a random distribution (uniform). */
 		return {{ NAN, m, s }, { NAN, s, s/3 }};
 	}
 	if(v > 1) std::cout << "[GaussFitMax] (" << h->GetTitle() << ") Result: {" 
-		<< f.GetParameter(0) << " +- " << f.GetParError(0) << ", "
-		<< f.GetParameter(1) << " +- " << f.GetParError(1) << ", "
-		<< f.GetParameter(2) << " +- " << f.GetParError(2) << "}" << std::endl;
+		<< f.GetParameter(0) << " ± " << f.GetParError(0) << ", "
+		<< f.GetParameter(1) << " ± " << f.GetParError(1) << ", "
+		<< f.GetParameter(2) << " ± " << f.GetParError(2) << "}" << std::endl;
 
 	return { 
 		std::array<double, 3> { 
@@ -58,6 +57,7 @@ inline std::pair <
 			f.GetParError(1), /* Mean */
 			f.GetParError(2)  /* Sigma */
 		}
+		// Full covariant matrix I don't really care about. Trust the gauss-chan 🥺 👉👈.
 	};
 }
 

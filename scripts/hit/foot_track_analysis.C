@@ -5,6 +5,7 @@
 #include "ROOT/RNTupleDS.hxx"
 #include "ROOT/RDataFrame.hxx"
 
+#include "../../includes/util/Geometry.h"
 #include "../../includes/util/PrettyHisto.hxx"
 #include "../../includes/util/Tracking.h"
 #include "../../includes/util/MacroHelpers.hxx"
@@ -101,6 +102,7 @@ void foot_track_analysis (
 					qf[w] = t._q[j];
 					++w;
 				}
+				if(w != 3) ERROR("w must be 3, no?");
 
 				auto fx = PolyFit<1>(zf, xf);
 				auto fy = PolyFit<1>(zf, yf);
@@ -135,15 +137,20 @@ void foot_track_analysis (
 		}
 	}
 
+	/* Around each residue, also fit a teeny-weeny gauss-chan 🥺 👉👈 */
 	TCanvas* c1d = new TCanvas("FitResidue1D", "Fit residues 1D", 2150, 1650);
 	c1d->Divide(N_PAIRS, 5);
 	for(size_t i=0; i<N_PAIRS; ++i) {
 		c1d->cd(i+1);
-		resx[i]->Draw();
+		auto [fit_result_x, _x_] = resx[i]->DrawAndFit(2.0, kMagenta + 2, 4.8);
+		WARN("FOOT%zu X: " KBH_MAG "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_x[1], 1e3*fit_result_x[2]);
 		c1d->cd(i+1 + N_PAIRS);
-		resy[i]->Draw();
+		auto [fit_result_y, _y_] = resy[i]->DrawAndFit(2.0, kMagenta + 2, 4.8);
+		WARN("FOOT%zu Y: " KBH_YEL "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_y[1], 1e3*fit_result_y[2]);
+
 		c1d->cd(i+1 + 2*N_PAIRS);
-		resq[i]->Draw();
+		auto [fit_result_q, _q_] = resq[i]->DrawAndFit(2.0, kMagenta + 2, 4.8);
+		WARN("FOOT%zu Q: " KBH_CYN "%.3f, %.3f" KRNM " [Q]\n", i, fit_result_q[1], fit_result_q[2]);
 
 		c1d->cd(i+1+ 3*N_PAIRS);
 		h1_footx[i]->Draw();

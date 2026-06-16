@@ -24,30 +24,18 @@ constexpr bool _take[N] = {
 
 enum class DoOffset { no, yes};
 
-void verify_alignment (
+constexpr static A3 binning_da = {200, 0, 0.5};
+void incoming_vs_outgoing (
 	std::string fileName = "",
-	uint32_t i = 0, 
-	std::array<double,3> binning_x = {200,-10,10},
-	std::array<double,3> binning_y = {200,-10,10},
-	std::array<double,2> foot_q_cut = {5.4, 6.6},
-	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> sci22_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
-	std::array<double,2> angle_cut_x = {NAN, NAN},
-	std::array<double,2> angle_cut_y = {NAN, NAN},
+	A3 binning_x = {200,-10,10},
+	A3 binning_y = {200,-10,10},
+	A2 foot_q_cut = {5.4, 6.6},
+	A2 sci21_cut = {-DBL_MAX, DBL_MAX},
+	A2 sci22_cut = {-DBL_MAX, DBL_MAX},
+	A2 sci31_cut = {-DBL_MAX, DBL_MAX},
 	DoSave do_save = DoSave::no
 ) {
-	using std::abs;
-
-	TClass* cl = TClass::GetClass(typeid(RNFOOTTrack));
-	if(!cl or !cl->GetDataMember("_x")) 
-		ERROR("MND_FOOTTRACK_DEBUG not compiled in, when the ROOT file got generated. Can't proceed\n");
-
-	if(i >= N_PAIRS)
-		ERROR("Second argument `i` can be only {0,..,%u}.", N_PAIRS-1);
-
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param;
-	std::array<FOOTParam,2>* foot_param; 
 	FOOTBoxParam *box;
 	{
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
@@ -55,21 +43,14 @@ void verify_alignment (
 			std::remove_reference_t<decltype(*tpc_param)>
 		> ("FRS_tpc_parameters");
 		if(!tpc_param) ERROR("TPC param is nullptr.");
-		foot_param = f->Get<std::array<FOOTParam,2>>(Form("FOOT_%d_setup", i));
-		if(!foot_param) ERROR("FOOT_%d_setup is nullptr", i);
 		
 		box = f->Get<FOOTBoxParam>("FOOT_box");
 		if(!box) ERROR("FOOT box param is nullptr.");
 	}
 
-	const double zfx_ = box->GetFOOTZ(&foot_param->at(0));
-	const double zfy_ = box->GetFOOTZ(&foot_param->at(1));
-	const double z0 = (zfx_ + zfy_) / 2;
-	WARN("FOOTs heuristically identified as: X:%d, Y:%d\n"
-		"Distances: X: %.1f | Y: %.1f\n"
-		"All together: z0 = %.2f\n", 
-		foot_param->at(0).N, foot_param->at(1).N,
-		zfx_, zfy_, z0);
+	WARN(BOLD "Upstream reference constructed by: ");
+	for(int i=0; i<N; ++i) if(_take[i]) fprintf(stderr, "TPC%s ", RNFRSCal::tpc_label[i]);
+	fprintf(stderr, "\n");
 
 	const std::array<double, N> zTPC = {
 		tpc_param->at(0).z0,
@@ -77,23 +58,19 @@ void verify_alignment (
 		tpc_param->at(2).z0,
 		tpc_param->at(3).z0
 	};
+	const double z0 = box->GetTargetZ();
 
-	auto* resx = new TH1P(Form("((h1_fitrx))Difference FOOTX-RefX [mm]@Pair%d X", i),
-			kMagenta-9, binning_x[0], binning_x[1], binning_x[2]);
-	auto* resy = new TH1P(Form("((h1_fitry))Difference FOOTY-RefY [mm]@Pair%d Y", i),
+	auto* diffx = new TH1P("Difference Outgoing - Incoming X [mm]",
+		kMagenta-9, binning_x[0], binning_x[1], binning_x[2]);
+	auto* diffy = new TH1P("Difference Outgoing - Incoming Y [mm]",
 		kYellow-9, binning_y[0], binning_y[1], binning_y[2]);
-	auto* resxy = new TH1P(Form("((h1_fitrxy))Total diff [mm]@Pair%d XY", i),
+	auto* diffxy = new TH1P("Total difference [mm]",
 		kCyan-9, 
 		(int)(binning_x[0] + binning_y[0])/2,
 		0, 
 		(abs(binning_x[1]) + abs(binning_y[1]) + abs(binning_x[2]) + abs(binning_y[2])) / 4
 	);
-	auto* h2_diff_vs_angle = new TH2P(Form("((h2_da))Total difference [mm]:Track angle [mrad]@Pair%d XY", i),
-		80,0,30,
-		(int)(binning_x[0] + binning_y[0])/2,
-		0, 
-		(abs(binning_x[1]) + abs(binning_y[1]) + abs(binning_x[2]) + abs(binning_y[2])) / 4
-	);
+	auto* diffa = new TH1P("Difference Angle [mrad]", kGreen-5, binning_da[0], binning_da[1], binning_da[2]);
 
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
@@ -103,12 +80,16 @@ void verify_alignment (
 	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
 	auto* h2_track_x = new TH2P("Track density (X) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60);
 	auto* h2_track_y = new TH2P("Track density (Y) [mm]:Depth z [mm]@S2 area", 600, 0, 4500, 500, -60, 60);
-	auto* h2_ab = new TH2P("Y-angle [mrad]:X-angle [mrad]", 100, -20, 20, 100, -20, 20);
-	auto* h2_xy = new TH2P(Form("Referent y-position [mm]:Referent X-position [mm]@Pair%d", i), 
+	auto* h2_ab_upst = new TH2P("TPC Y-angle [mrad]:TPC X-angle [mrad]", 100, -20, 20, 100, -20, 20);
+	auto* h2_ab_down = new TH2P("FOOT Y-angle [mrad]:FOOT X-angle [mrad]", 100, -20, 20, 100, -20, 20);
+	auto* h2_xy_upst = new TH2P("TPC y-position [mm]:TPC X-position [mm]@at target", 
 		320, -50, 50, 320, -50, 50);
-
-	auto* h2_foot = new TH2P(Form("FOOT Y measurement [mm]:FOOT X measurement [mm]@Pair%d", i), 
+	auto* h2_xy_down = new TH2P("FOOT y-position [mm]:FOOT X-position [mm]@at target", 
 		320, -50, 50, 320, -50, 50);
+	auto* h2_diffa_vs_diffx = new TH2P("Angle diff [mrad]:Difference in X [mm]@FOOT - TPC at target",
+		 binning_x[0], binning_x[1], binning_x[2], binning_da[0], binning_da[1], binning_da[2]);
+	auto* h2_diffa_vs_diffy = new TH2P("Angle diff [mrad]:Difference in Y [mm]@FOOT - TPC at target",
+		 binning_y[0], binning_y[1], binning_y[2], binning_da[0], binning_da[1], binning_da[2]);
 
 	auto model = RNTupleModel::Create();
 	auto frs  = model->MakeField<RNFRSHit>("FRS"); 
@@ -156,68 +137,89 @@ void verify_alignment (
 			}
 		}
 		if(z.size() < 2) continue;
-		auto fx = PolyFit<1>(z, x);	
-		auto fy = PolyFit<1>(z, y);
-		
-		if(mnd::IsValid(angle_cut_x) and !mnd::IsInside(fx[1]*1000, angle_cut_x)) continue;
-		if(mnd::IsValid(angle_cut_y) and !mnd::IsInside(fy[1]*1000, angle_cut_y)) continue;
 
-		FillTrack(*h2_track_x, fx);
-		FillTrack(*h2_track_y, fy);
-		double ax = fx[1]*1000.0;
-		double ay = fy[1]*1000.0;
-		h2_ab->Fill(ax, ay);
-
-		double x0 = fx[0] + fx[1]*z0;
-		double y0 = fy[0] + fy[1]*z0; 
-		h2_xy->Fill(x0, y0);
-
-		// Total polar angle of the TPC's track:
-		// cos(theta) = 1 / (1 + ax^2 + ay^2) 
-		double theta = std::sqrt(2) * std::sqrt(ax*ax + ay*ay);
-		
 		if(foot->track.size() != 1) continue;
 		const RNFOOTTrack& t = foot->track[0];
-		if(t.n != N_PAIRS) continue; // get only tracks going thru all 4 layers. 
+		if(t.n != N_PAIRS) continue; // get only tracks going thru all 4 layers.
 
-		double  Q = t._q[i];
-		double xf = t._x[i];
-		double yf = t._y[i];
-		if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(Q, foot_q_cut)) continue;
+		if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(t.Q, foot_q_cut)) continue;
 
-		h2_foot->Fill(xf, yf);
-		resx->Fill(xf - x0);
-		resy->Fill(yf - y0);
+		/* 3D line describing the track inside the box (downstream). */
+		const mnd::geom::Line3D ft = RNTrackToLine3D(t);
+
+		/* 2x 2D lines describing the track upstream. */
+		const std::array<double,2> fx_tpc = PolyFit<1>(z, x);	
+		const std::array<double,2> fy_tpc = PolyFit<1>(z, y);
 		
-		double r = std::sqrt( (xf-x0)*(xf-x0) +  (yf-y0)*(yf-y0) );
-		resxy->Fill(r);
-		h2_diff_vs_angle->Fill(theta, r);
+		/* ======= TPC ======= */
+		const double x0_tpc = fx_tpc[0] + fx_tpc[1]*z0;
+		const double y0_tpc = fy_tpc[0] + fy_tpc[1]*z0; 
+		h2_xy_upst->Fill(x0_tpc, y0_tpc);
+		h2_ab_upst->Fill(fx_tpc[1]*1000, fy_tpc[1]*1000);
+		
+		FillTrack(*h2_track_x, fx_tpc, -HUGE_VAL, z0);
+		FillTrack(*h2_track_y, fy_tpc, -HUGE_VAL, z0);
+		
+		/* ======= FOOT ======= */
+		mnd::geom::Line2D fx_foot = ft.XLine();
+		mnd::geom::Line2D fy_foot = ft.YLine();
+		const double x0_foot = fx_foot.Eval( 0.0 );
+		const double y0_foot = fy_foot.Eval( 0.0 );
+		h2_xy_down->Fill(x0_foot, y0_foot);
+		h2_ab_down->Fill(fx_foot[1]*1000, fy_foot[1]*1000);
+
+		/* FOOT coordinate system is +z0 relative to the FRS one,
+		 * represent it in the FRS coord. syst. which is `-z0` away from FOOTs' */
+		fx_foot %= -z0;
+		fy_foot %= -z0;
+		FillTrack(*h2_track_x, fx_foot, z0, HUGE_VAL);
+		FillTrack(*h2_track_y, fy_foot, z0, HUGE_VAL);
+
+		double dx = x0_foot - x0_tpc; 
+		double dy = y0_foot - y0_tpc; 
+		double dr = std::sqrt( dx*dx + dy*dy );
+		diffx ->Fill(dx);
+		diffy ->Fill(dy);
+		diffxy->Fill(dr);
+		
+		double da  = mnd::geom::Line3D(fx_foot, fy_foot)
+			.AngleRelativeTo( mnd::geom::Line3D(fx_tpc,  fy_tpc) );
+
+		diffa->Fill(da);
+		h2_diffa_vs_diffx->Fill(dx, da);
+		h2_diffa_vs_diffy->Fill(dy, da);
 	}
 	
-	TCanvas* cs = new TCanvas("SCIs&TPCs", "SCI21,22,31; TPC Ref", 2150, 1400);
-	cs->Divide(3,3);
+	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2150, 1400);
+	cs->Divide(3,2);
 	cs->cd(1); h1_sci21->Draw();
 	cs->cd(2); h1_sci22->Draw();
 	cs->cd(3); h1_sci31->Draw();
 	cs->cd(4); h1_sci21_cut->Draw();
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
-	cs->cd(7); h2_track_x->Draw("COLZ");
-	cs->cd(8); h2_track_y->Draw("COLZ");
-	cs->cd(9); h2_ab->Draw("COLZ");
 
-	TCanvas* cRes = new TCanvas("Residue", "FOOT-Reference differences", 2150, 1400);
-	cRes->Divide(3, 2);
-	cRes->cd(1); resx->Draw();
-	cRes->cd(2); resy->Draw();
-	cRes->cd(3); resxy->Draw();
-	cRes->cd(4); h2_xy->Draw("COLZ");
-	cRes->cd(5); h2_foot->Draw("COLZ");
-	cRes->cd(6); h2_diff_vs_angle->Draw("COLZ");
+	TCanvas* cTr = new TCanvas("Tracks", "Tracks", 2150, 1400);
+	cTr->Divide(3,2);
+	cTr->cd(1); h2_xy_upst->Draw("COLZ");
+	cTr->cd(4); h2_xy_down->Draw("COLZ");
+	cTr->cd(2); h2_ab_upst->Draw("COLZ");
+	cTr->cd(5); h2_ab_down->Draw("COLZ");
+	cTr->cd(3); h2_track_x->Draw("COLZ");
+	cTr->cd(6); h2_track_y->Draw("COLZ");
+
+	TCanvas* cDiff = new TCanvas("Diff", "FOOT-Reference differences", 2150, 1400);
+	cDiff->Divide(3, 2);
+	cDiff->cd(1); diffx->Draw();
+	cDiff->cd(2); diffy->Draw();
+	cDiff->cd(3); diffxy->Draw();
+	cDiff->cd(4); diffa->Draw("COLZ");
+	cDiff->cd(5); h2_diffa_vs_diffx->Draw("COLZ");
+	cDiff->cd(6); h2_diffa_vs_diffy->Draw("COLZ");
 
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
-		save_all(canvas::Extension::png, { inf.stem().c_str(), Form("pair%d",i) });
+		save_all(canvas::Extension::png, { inf.stem().c_str() });
 	}
 }
 

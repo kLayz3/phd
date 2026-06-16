@@ -7,7 +7,7 @@
 
 #include "../../includes/util/PrettyHisto.hxx"
 #include "../../includes/util/FitSpline.hxx"
-#include "../../includes/util/Tracking.hxx"
+#include "../../includes/util/Tracking.h"
 #include "../../includes/util/MacroHelpers.hxx"
 #include "../../includes/util/json_struct_def.hh"
 #include <sstream>
@@ -25,30 +25,24 @@ constexpr double zT = 3355 - 440/2;
 
 using namespace hist;
 
+enum class dir { x, y, both };
+
 struct DoFit {
-	struct No {};
-	struct Yes { double lo, hi; };
-
-	/* constexpr */ static inline No no{};
-	/* constexpr */ static inline Yes yes{};
-
-	DoFit(No) : data_(No{}) {}
-	DoFit(Yes y) : data_(std::move(y)) {}
-
-	friend bool operator==(const DoFit& lhs, const DoFit& rhs) {
-		return ( lhs.data_.index() == rhs.data_.index() &&
-			lhs.data_.index() != std::variant_npos
-		);
+	struct Info { 
+		int i; 
+		dir d; 
+		double lo, hi; 
+	};
+	std::vector<Info> data;
+	DoFit() = default;
+	DoFit(std::initializer_list<Info> lst) {
+		for(auto elem : lst) data.push_back(elem);
 	}
-	const Yes* as_yes() const { return std::get_if<Yes>(&data_); }
-	
-private:
-	std::variant<No, Yes> data_;
 };
 
 void tpc_draw_track (
 	std::string fileName = "", 
-	DoFit do_fit = DoFit::no,
+	DoFit do_fit = {},
 	A3 binning_x  = {100, -30, 30},
 	A3 binning_xd = {100, -10, 10},
 	A3 binning_y  = {100, -30, 30},
@@ -298,65 +292,69 @@ void tpc_draw_track (
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
 
-	if(do_fit == DoFit::yes) {
-		/* Idea is to take central bin positions (xi),
-		 * their TH1D* projection has a peak around value (yi) with counts (wi)
-		 * and then do a weighted linear fit. */
-		const auto [lo, hi] = *do_fit.as_yes();
-		
-		for(int i=0; i<N; ++i) {
-			TPCParam& p = tpc_params->at(i);
-			TCanvas* c = cdiff[i];
+	/* Idea is to take central bin positions (xi),
+	 * their TH1D* projection has a peak around value (yi) with counts (wi)
+	 * and then do a weighted linear fit. */
+	const std::vector<DoFit::Info>& info = do_fit.data;
 
-			WARN("\n" EMPH1(TPC%s) " " EBOLD(fitting parameters) "\n", label[i]);
+	for(const auto [i,o,lo,hi] : info) {
+		TPCParam& p = tpc_params->at(i);
+		TCanvas* c = cdiff[i];
+
+		WARN("\n" EMPH1(TPC%s) " " EBOLD(fitting %s parameters) "\n", (o==dir::x?"X":(o==dir::y?"Y":"both")), label[i]);
+		if(o == dir::x || o == dir::both) {
 			for(int d: {0,1}) {
 				const double b0 = p.x_offset[d];
 				const double a0 = p.x_factor[d];
 
 				auto [rg, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX> (
-					*h2_tpc_xd[i][d], lo, hi, 40, 1.1
-				);
+						*h2_tpc_xd[i][d], lo, hi, 40, 1.1
+						);
 				auto [l,k] = rg;
 				WARN("DL%d found \'more optimized\' parameter\n", d);
 				WARN("\rOffset/slope: %.9f, %.9f\n", l, k);
 				printf("\rBefore: (%.6f , %.6f)\n",             b0,                 a0);
 				printf("\rNew   : " EBOLD((%.6f , %.6f)) "\n",  b0/(k+1) - l/(k+1), a0/(k+1));
 
-				p.x_offset[d] = b0;
-				p.x_factor[d] = a0;
+				p.x_offset[d] = b0/(k+1) - l/(k+1);
+				p.x_factor[d] = a0/(k+1);
 
 				c->cd(3*d + 1); 
 				gerr->Draw("P SAME");
 				g->Draw("L SAME");
 			}
+		}
+		if(o == dir::y || o == dir::both) {
 			for(int a: {0,1,2,3}) {
 				const double b0 = p.y_offset[a];
 				const double a0 = p.y_factor[a];
 
 				auto [rg, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX> (
-					*h2_tpc_yd[i][a], lo, hi, 40, 1.1
-				);
+						*h2_tpc_yd[i][a], lo, hi, 40, 1.1
+						);
 				auto [l,k] = rg;
 				WARN("A %d found \'more optimized\' parameter\n", a);
 				WARN("\rOffset/slope: %.5f, %.5f\n", l, k);
 				printf("\rBefore: (%.6f , %.6f)\n",             b0,                 a0);
 				printf("\rNew   : " EBOLD((%.6f , %.6f)) "\n",  b0/(k+1) - l/(k+1), a0/(k+1));
 
-				p.y_offset[a] = b0;
-				p.y_factor[a] = a0;
-				
+				p.y_offset[a] = b0/(k+1) - l/(k+1);
+				p.y_factor[a] = a0/(k+1);
+
 				GET_ANODE_PAD(a); 
 				gerr->Draw("P SAME");
 				g->Draw("L SAME");
 			}
 		}
 	}
+
+	std::cout << setprecision(10);
 	for(int i=0; i<3; ++i) {
 		printf(BOLD ">> TPC%s: <<\n" KNRM, label[i]);
-		std::cout << "\"x_factor\": " << tpc_params->at(i).x_factor << endl;
-		std::cout << "\"x_offset\": " << tpc_params->at(i).x_offset << endl;
-		std::cout << "\"y_factor\": " << tpc_params->at(i).y_factor << endl;
-		std::cout << "\"y_offset\": " << tpc_params->at(i).y_offset << endl;
+		std::cout << "\"x_factor\": " << tpc_params->at(i).x_factor << ",\n";
+		std::cout << "\"x_offset\": " << tpc_params->at(i).x_offset << ",\n";
+		std::cout << "\"y_factor\": " << tpc_params->at(i).y_factor << ",\n";
+		std::cout << "\"y_offset\": " << tpc_params->at(i).y_offset << ",\n";
 		std::cout << " ====================================================== \n";
 	}
 	if(do_save == DoSave::yes) {

@@ -82,7 +82,7 @@ struct TFOOTHitProc : TProcessor <
 	constexpr static u32 N_PAIRS = TFOOTHitCont::N_PAIRS;
 
 	using FHitMatrix = HitMatrix<RNFOOTPair>;
-	using FTrack = Track<N_PAIRS, RNFOOTPair>;
+	using FTrackOnline = Track<N_PAIRS, RNFOOTPair>;
 
 	constexpr static double CLUSTER_SIZE_ONE_Q_CUTOFF = 1.5; // when cluster size == 1 doesn't make sense anymore.
 	constexpr static double DEFAULT_MAX_Q_TOLERANCE = 0.8;
@@ -107,9 +107,9 @@ struct TFOOTHitProc : TProcessor <
 	double Ct = TrackCost::DEFAULT_COST_T;
 	double Cp = TrackCost::DEFAULT_COST_P;
 
-	double kr(const FTrack& , const FHitMatrix::Entry& , u32 ) const; 
-	double kq(const FTrack& , const FHitMatrix::Entry& , u32 ) const; 
-	std::pair<double, double> kt_kp(const FTrack& , const FHitMatrix::Entry& , u32 ) const; 
+	double kr(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const; 
+	double kq(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const; 
+	std::pair<double, double> kt_kp(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const; 
 
 	void ProcessEntry() noexcept;
 
@@ -128,6 +128,6 @@ private:
 	std::array<Eigen::Vector2d, N_PAIRS> refl; // +-1 based on the on each of the `orientation` params  
 	void SetConversionMatrices(int , const FOOTParam& , const FOOTParam& );
 
-	FTrack GetPrelimTrackFromPath(const DAG::DAGPath& ) const;
+	FTrackOnline GetPrelimTrackFromPath(const DAG::DAGPath& ) const;
 };
 

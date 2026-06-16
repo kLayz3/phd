@@ -107,14 +107,15 @@ struct RNFOOTHit {
 
 struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	static constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
-	inline static nlohmann::json setup {};
-	inline static FOOTBoxParam _box;
 	
 	FOOTBoxParam* box;
 	std::array<FOOTParam, 2>* foot_param[N_PAIRS];
 	std::string* setupName;
 	TH1I* h1_qtrack;
 	TH1I* h1_track_nsampled;
+
+	TH1I* diff_heavy_frag_vs_upstream;
+
 	TFOOTHitCont();
 
 	void Setup() override;
@@ -123,3 +124,6 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 
 extern template struct HitMatrix<RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
 extern template struct Track<TFOOTHitCont::N_PAIRS + 1, RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
+
+mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& );
+extern mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& ); // CLING is sometimes stupid I swear to God ... 

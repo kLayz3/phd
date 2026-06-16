@@ -4,30 +4,25 @@
 #include <array>
 #include <cmath>
 #include <ostream>
-#include "json_struct_def.hh"
+#include "json_struct_def.hh" // std::ostream& operator<<(array<T,N> const&) 
 
 /* This is only for a temporary container,
  * lines will always be saved in Cartesian coordinates. */
 
 #define FORMAT_ANGLES_IN_RADIANS
 
-namespace mnd {
-namespace geom {
+namespace mnd { namespace geom {
 
-struct Point { 
-	Point() = default;
-	Point(double x_, double y_) : x(x_), y(y_) {}
-	Point(const std::array<double, 2>& v) : x(v[0]), y(v[1]) {}
-
+struct Point2D { 
 	double x, y; 
 };
 struct Point3D { 
-	Point3D() = default;
-	Point3D(double x_, double y_, double z_) : x(x_), y(y_), z(z_) {}
-	Point3D(const std::array<double, 3>& v) : x(v[0]), y(v[1]), z(v[2]) {}
-
 	double x, y, z; 
 };
+
+// Conventiently, a vector shall just be stored as a point.
+using Vector2D = Point2D;
+using Vector3D = Point3D;
 
 struct SphericalAngles {
 	double theta, phi;
@@ -36,45 +31,136 @@ struct SphericalAngles {
 	}
 };
 
-// Nullable, we don't directly expose the value as a public field,
-// due to nullability (maybe idiotic design by me, but who cares) 
+/* Usual way to represent lines in 2D:
+ * x(z) = a[1]*z + a[0]
+ */
 struct Line2D {
 	using Arr = std::array<double, 2>;
 	using value_type = Arr::value_type;
 
+	Line2D() = default;
 	Line2D(value_type f1, value_type f2) : value{f1,f2} {}
-	Line2D(const Arr& arr) : value(arr) {}
+	Line2D(Arr const& arr) : value(arr) {}
 	
 	inline value_type& operator[](Arr::size_type pos) noexcept { return value[pos]; } 
 	inline value_type const& operator[](Arr::size_type pos) const noexcept { return value[pos]; } 
 
-	/* Predicate to see if track is valid or null. */
+	/* Predicate to see if the line is valid or null. */
 	inline bool HasValue() const noexcept { return std::isfinite(value[0]); }
+
+	/* Translate the line by an offset. */ 
+	Line2D& operator+=(double ) noexcept; // only along x-axis direction
+	Line2D& operator+=(const Vector2D& ) noexcept;
+
+	/* Represent the line in a coordinate system made by an offset. */ 
+	Line2D& operator%=(double ) noexcept; // only along x-axis direction
+	Line2D& operator%=(const Vector2D& ) noexcept;
+	
+	/* Rotate the line by an an angle (amount) */ 
+	Line2D& Rotate(double ) noexcept;
+
+	/* Represent the line in a coordinate system made by a unary rotation,
+	 * which is represented by an angle (amount). */ 
+	Line2D& RepresentInRotated(double ) noexcept;
+
+	/* Offset the line in a coordinate system and rotate by a unary rotation. */ 
+	Line2D& ShiftAndRotate(const Vector2D& , double ) noexcept;
+
+	/* Represent the line in a coordinate system by an offset and unary rotation. */ 
+	Line2D& RepresentInShifted(const Vector2D& , double ) noexcept;
 
 	Arr& array() noexcept { return value; }
 	Arr const& array() const noexcept { return value; }
 
-private:
-	 Arr value {NAN,NAN};
+	inline double Eval(double z) const noexcept { return value[0] + value[1]*z; }
+
+	std::array<double, 2> value {NAN,NAN}; // {a0, a1} = {offset, slope} 
 };
 
+
+/* Two ways to represent lines in 3D:
+ * Usual experiment:
+ * x(z) = a[0] + a[1]*z
+ * y(z) = b[0] + b[1]*z
+ * ... and also:
+ * vec{r} = vec{p} + λ*vec{v}
+ */
 struct Line3D {
-	Line2D a, b;
-	inline SphericalAngles Spherical() const noexcept {
+	Line3D() = default;
+	Line3D ( 
+		double a0_, /* offset x:z */ 
+		double a1_, /* slope  x:z */
+		double b0_, /* offset y:z */
+		double b1_  /* slope  y:z */
+	) : p{a0_, b0_, 0}, v{a1_, b1_, 1} {}
+
+	Line3D(std::array<double, 2> const& a_, std::array<double, 2> const& b_) : 
+		p{a_[0], b_[0], 0}, v{a_[1], b_[1], 1} {}
+
+	explicit Line3D(const Line2D& a_, const Line2D& b_ ) :
+		p{a_[0], b_[0], 0}, v{a_[1], b_[1], 1} {}
+
+	inline bool HasValue() const noexcept { return std::isfinite( p[0] ); }
+	
+	double AngleRelativeTo(const Line3D& ) const noexcept; 
+	double DistanceTo(const Line3D& ) const noexcept;
+
+	/* Translate the line by an offset. */ 
+	Line3D& operator+=(double ) noexcept; // only along z-axis direction
+	Line3D& operator+=(const Vector3D& ) noexcept;
+
+	/* Represent the line in a coordinate system made by an offset. */ 
+	Line3D& operator%=(double ) noexcept; // only along z-axis direction
+	Line3D& operator%=(const Vector3D& ) noexcept;
+	
+	/* Rotate the line by an unary rotation, represented by a unit vector and an angle (amount) */ 
+	Line3D& Rotate(const Vector3D& , double ) noexcept;
+
+	/* Represent the line in a coordinate system made by a unary rotation,
+	 * which is represented by a unit vector and an angle (amount). */ 
+	Line3D& RepresentInRotated(const Vector3D& , double ) noexcept;
+
+	/* Offset the line in a coordinate system and rotate by a unary rotation. */ 
+	Line3D& ShiftAndRotate(const Vector3D& , const Vector3D&, double ) noexcept;
+
+	/* Represent the line in a coordinate system by an offset and unary rotation. */ 
+	Line3D& RepresentInShifted(const Vector3D& , const Vector3D&, double ) noexcept;
+
+	inline friend std::ostream& operator<<(std::ostream& os, const Line3D& line) { 
+		return os << "p: (" << line.p 
+			<< "), v: (" 
+			<< line.v << ')'; 
+	}
+	inline Point2D Eval(double z) const noexcept { 
+		if(!HasValue() || std::abs(v[2]) < 1e-20)
+			return {NAN, NAN};
 		return { 
-			std::acos( 1.0 / std::sqrt( a[1]*a[1] + b[1]*b[1] + 1) ), // theta
-			std::atan2( b[1] , a[1] ) // phi
+			p[0] + v[0]/v[2] * (z - p[2]), // x
+			p[1] + v[1]/v[2] * (z - p[2])  // y
 		};
 	}
 
-	friend std::ostream& operator<<(std::ostream& os, const Line3D& rhs) {
-		return os << "(Lx: " << rhs.a.array() 
-		          << " , Ly: " << rhs.b.array() 
-				  << " :: " << rhs.Spherical() << ')';
+	[[ nodiscard ]] inline Line2D XLine() const noexcept { 
+		if(!HasValue() || std::abs(v[2]) < 1e-20) {
+			return {NAN, NAN};
+		}
+		const double a1 = v[0] / v[2];
+		const double a0 = p[0] - a1 * p[2];
+		return {a0, a1};
+	} 
+	[[ nodiscard ]] inline Line2D YLine() const noexcept { 
+		if(!HasValue() || std::abs(v[2]) < 1e-20) {
+			return {NAN, NAN};
+		}
+		const double b1 = v[1] / v[2];
+		const double b0 = p[1] - b1 * p[2];
+		return {b0, b1};
 	}
+	[[ nodiscard ]] inline std::array<double,2> xarray() const noexcept { return XLine().array(); } 
+	[[ nodiscard ]] inline std::array<double,2> yarray() const noexcept { return YLine().array(); }
 
-	inline bool HasValue() const noexcept { return a.HasValue(); }
-	double AngleRelativeTo(const Line3D& ref) const noexcept; 
+	std::array<double, 3> p {NAN,NAN,NAN}; // {a0, b0, 0} , nominally
+	std::array<double, 3> v {NAN,NAN,NAN}; // {a1, b1, 1} , nominally
 };
 
 struct Rectangle2D {
@@ -87,11 +173,11 @@ struct Rectangle2D {
 	Rectangle2D() = default;
 
 	/* Take the mid point coordinates, and width in x- and y- respectively. */ 
-	Rectangle2D(Point midpoint, double wx, double wy);
+	Rectangle2D(Point2D midpoint, double wx, double wy);
 
-	Point p0, p1;
-	Point Mid() const noexcept;
-	bool IsInside(const Point& ) const noexcept;
+	Point2D p0, p1;
+	Point2D Mid() const noexcept;
+	bool IsInside(const Point2D& ) const noexcept;
 	bool IsInside(double, double ) const noexcept;
 	
 	friend std::ostream& operator<<(std::ostream& os, const Rectangle2D& r) {
@@ -102,9 +188,11 @@ struct Rectangle2D {
 			<< ") R}";
 	}
 };
-} // namespace geom
+} // namespace geom 
 } // namespace mnd
 
-mnd::geom::Line2D GetLine(const mnd::geom::Point& , const mnd::geom::Point& ) noexcept;
-mnd::geom::Line2D GetLine(const std::array<std::array<double, 2>, 2> ) noexcept;
 
+/* Can't share the same symbol, as it will confuse the overload resolver:
+ * `GetLine(<brace-enclosed initializer list>, <brace-enclosed initializer list>)` is ambiguous */
+mnd::geom::Line2D GetLine2D(const mnd::geom::Point2D& , const mnd::geom::Point2D& ) noexcept;
+mnd::geom::Line3D GetLine3D(const mnd::geom::Point3D& , const mnd::geom::Point3D& ) noexcept;

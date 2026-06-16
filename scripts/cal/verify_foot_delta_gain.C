@@ -14,9 +14,11 @@ constexpr static double NBINS  = 300;
 constexpr static double CUT_LO = 10;
 constexpr static double CUT_HI = 3000;
 
+enum class DoMagic {no, yes};
+
 void verify_foot_delta_gain (
 	std::string fileName = "", 
-	int np = 0,
+	int i_pair = 0,
 	std::array<double,3> cut0 = {NBINS, CUT_LO, CUT_HI}, 
 	std::array<double,3> cut1 = {NBINS, CUT_LO, CUT_HI},
 	std::array<double,2> sci21_cut = {-DBL_MAX, DBL_MAX},
@@ -24,16 +26,17 @@ void verify_foot_delta_gain (
 	std::array<double,2> sci31_cut = {-DBL_MAX, DBL_MAX},
 	std::array<double,2> delta_axis = {80, 0.501},
 	uint32_t mult_cut = 1, // every cluster with size below this gets rejected
+	DoMagic do_magic = DoMagic::no,
 	DoSave do_save = DoSave::no
 ) {
-	if(np > 3) throw std::runtime_error("np parameter (2nd argument) is > 3.");
+	if(i_pair > 3) throw std::runtime_error("i_pair parameter (2nd argument) is > 3.");
 	ROOT::EnableImplicitMT();
 
 	std::array<FOOTParam*, 2> p;
 	{
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
-		p[0] = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*np));
-		p[1] = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*np + 1));
+		p[0] = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*i_pair));
+		p[1] = f->Get<FOOTParam>(Form("FOOT%d_setup", 2*i_pair + 1));
 		if(!p[0] or !p[1])
 			throw std::runtime_error(Form("FOOT param is nullptr. Fix it (line: %d).", __LINE__));
 	}
@@ -41,7 +44,7 @@ void verify_foot_delta_gain (
 	std::array<std::shared_ptr<RNFOOTCal>, 2> foot {};
 	auto model = RNTupleModel::Create();
 	for(int i: {0,1}) 
-		foot[i] = model->MakeField<RNFOOTCal>(Form("FOOT%d", 2*np + i));
+		foot[i] = model->MakeField<RNFOOTCal>(Form("FOOT%d", 2*i_pair + i));
 	auto frs = model->MakeField<RNFRSCal>("FRS");
 	auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
 
@@ -57,7 +60,7 @@ void verify_foot_delta_gain (
 
 	for(int i: {0,1}) {
 		const auto& lim = (i==0) ? cut0 : cut1;
-		int foot_i = 2*np + i;
+		int foot_i = 2*i_pair + i;
 		
 		/* ================================================================== */
 		gain_energy_vs_delta[i] = new TH2P(Form("((h2_gain_%d))Cluster E [ADC gain-adjusted]:Delta@FOOT%d gain-matched", i, foot_i),
@@ -90,7 +93,7 @@ void verify_foot_delta_gain (
 		}
 	}
 
-	TH2P* h2_both = new TH2P(Form("((h2_0)) FOOT%d dE [ADC corrected]:FOOT%d dE [ADC corrected]", 2*np+1, 2*np), 
+	TH2P* h2_both = new TH2P(Form("((h2_0)) FOOT%d dE [ADC corrected]:FOOT%d dE [ADC corrected]", 2*i_pair+1, 2*i_pair), 
 		cut0[0], cut0[1], cut0[2],
 		cut1[0], cut1[1], cut1[2]);
 	
@@ -231,14 +234,14 @@ void verify_foot_delta_gain (
 		final_e[i]->Draw();
 	}
 
-	TCanvas* c2 = new TCanvas("PairXY", Form("FOOT Pair %d XY", np), 2000, 1400);
+	TCanvas* c2 = new TCanvas("PairXY", Form("FOOT Pair %d XY", i_pair), 2000, 1400);
 	c2->Divide(2,1);
 	c2->cd(1); gPad->SetLogz();
 	h2_both->Draw("COLZ");
 	c2->cd(2);
 	PLatex(0.08, 
-		Form("FOOT%d measuring '%s'", 2*np+0, p[0]->orientation.c_str()),
-		Form("FOOT%d measuring '%s'", 2*np+1, p[1]->orientation.c_str()),
+		Form("FOOT%d measuring '%s'", 2*i_pair+0, p[0]->orientation.c_str()),
+		Form("FOOT%d measuring '%s'", 2*i_pair+1, p[1]->orientation.c_str()),
 		Form("Cut applied on SCI21: (%.1f, %.1f)", sci21_cut[0], sci21_cut[1]),
 		Form("Cut applied on SCI22: (%.1f, %.1f)", sci22_cut[0], sci22_cut[1])
 	);
@@ -281,6 +284,6 @@ void verify_foot_delta_gain (
 		std::filesystem::path inf( fileName );
 		std::string postfix = std::string( Form("21_%s-%s;22_%s-%s;33-%s-%s",
 			PARSE_CUT_ARGS(21), PARSE_CUT_ARGS(22), PARSE_CUT_ARGS(31)) );
-		save_all(canvas::Extension::png, { Form("pair%d", np), inf.stem().c_str(), postfix });
+		save_all(canvas::Extension::png, { Form("pair%d", i_pair), inf.stem().c_str(), postfix });
 	}
 }

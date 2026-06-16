@@ -1,3 +1,6 @@
 #include "FTrack.h"
 
-template struct TrackTau<>;
+std::ostream& operator<<(std::ostream& os, const FTrack& rhs) {
+	return os << "L -> " << rhs.l << ", Q: " << rhs.q;
+}
+

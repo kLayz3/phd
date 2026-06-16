@@ -99,8 +99,9 @@ int main(int argc, char* argv[]) {
 	hfoot.Init( {{"Setup", footSetupFile }} );
 	hfoot.Setup();
 
+	/* FRS process must be *before* FOOT process. Must get invoked before FOOT, per event. */
 	auto pool = TAnalysisProcess<>(fileName, outFile, "h104")
-		.emplace_process<TFRSHitProc>(hfrs    , cfrs, 0xa)
+		.emplace_process<TFRSHitProc>(hfrs    , cfrs, 0xa )
 		.emplace_process<TFOOTHitProc>(hfoot,
 			cfoot[0], cfoot[1], cfoot[2], cfoot[3], 
 			cfoot[4], cfoot[5], cfoot[6], cfoot[7],

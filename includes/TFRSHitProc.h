@@ -22,7 +22,7 @@ struct TFRSHitProc : TProcessor <
 	/* Local buffer containers. */
 	std::array<double, 2> fit_result;
 	std::vector<double> x, y, zx, zy;
+	
+	/* EXPERT target parameters. */
 	double z0, tar_width;
 };
-
-

@@ -134,25 +134,17 @@ namespace mnd {
 DECL_TYPE_TRAIT_HAS_STATIC(N_PAIRS);
 } // namespace mnd
 
-template<typename QResultType = mnd::track::Q>
-struct TrackTau {
+struct FTrack {
 	mnd::geom::Line3D l;
-	QResultType q;
-	friend std::ostream& operator<<(std::ostream& os, const TrackTau& rhs) {
-		return os << "L -> " << rhs.l << ", Q: " << rhs.q;
-	}
+	mnd::track::Q q;
+	friend std::ostream& operator<<(std::ostream& , const FTrack& ); 
 };
-template<typename T> 
-TrackTau(mnd::geom::Line3D, T) -> TrackTau<T>;
-
-extern template struct TrackTau<>;
 
 /* Type encapsulating an 'online' track object to be handed over 
  * to the Kalman filter. Is nullable! */
 template <
 	std::size_t Capacity,
-	typename FOOTPair, 
-	typename QResultType = mnd::track::Q
+	typename FOOTPair
 >
 struct Track {
 	using FHitMatrix = HitMatrix<FOOTPair>;
@@ -164,18 +156,18 @@ struct Track {
 	static constexpr double SQ = 0.7 * 0.7; // [ Q*Q ; 'Q' = one charge unit ]
 
 	inline static const auto BareTrack 
-		= TrackTau { 
-			mnd::geom::Line3D{{NAN,NAN}, {NAN,NAN}},
-				QResultType{}
+		= FTrack { 
+			mnd::geom::Line3D{NAN,NAN, NAN,NAN},
+			{}
 		};
 
 	// Containers
 	std::array<double, Capacity> xs, ys, zs;
-	QCombinator<Capacity, QEntryType, QResultType> q;
+	QCombinator<Capacity, QEntryType, mnd::track::Q> q;
 	inline size_t N() const noexcept { return q.size(); }
 
 	/* If track currently holds 0 or 1 points, fill the undeterminable fit fields with NAN. */
-	const TrackTau<QResultType>& get() const noexcept { 
+	const FTrack& get() const noexcept { 
 		if(!t) 
 			evaluate_track(); 
 		return *t;	
@@ -201,11 +193,9 @@ struct Track {
 	 }
 
 	XYEntryType extrapolate_to(double z) const noexcept {
-		const auto& fit = this->get();
-		return {
-			poly::Eval(z, fit.l.a.array()),
-			poly::Eval(z, fit.l.b.array()) 
-		}; /* Eigen::Vector2d */
+		const FTrack& fit = this->get();
+		mnd::geom::Point2D val = fit.l.Eval(z);
+		return { val.x, val.y }; /* Eigen::Vector2d */
 	}
 
 	double GetScore() const noexcept {
@@ -281,7 +271,5 @@ private:
 	}
 
 	// Result track. Calculated on demand.
-	mutable std::optional < 
-		TrackTau<QResultType> 
-	> t; 
+	mutable std::optional<FTrack> t; 
 }; // struct Track

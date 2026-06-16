@@ -8,7 +8,8 @@
 
 /* This struct serves as a fitting container.
  * for polynomials of arbitrary rank.
- * Static in a sense that the `x[N]` points remains invariant. 
+ * Static in a sense that the `x[N]` points remains invariant.
+ * This initialization is at constructor call location.
  * `R` is the rank of the polynomial (linear => R==1 )*/
 
 template<std::size_t N, std::size_t R>
@@ -85,7 +86,8 @@ inline void PolyFit_(
 	std::copy_n(fit.data(), R+1, result.data());
 }
 
-}}
+} // namespace detail
+} // namespace mnd
 
 template<std::size_t R>
 void PolyFit(const std::vector<double>& x, const std::vector<double>& y, std::array<double, R+1>& result) {
@@ -215,7 +217,7 @@ namespace poly {
 		if(a.size() == 0) return 0;
 		return detail::EvalImpl__(x, a.data(), static_cast<int>(a.size()) );
 	}
-}
+} // namespace poly
 
 /* Check the .cxx file to explain the reason behind explicit instantiations. */
 extern template void PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , std::array<double,  2>& );

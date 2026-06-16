@@ -9,7 +9,7 @@ using namespace ROOT::Experimental;
 
 #include "../../includes/util/PrettyHisto.hxx"
 #include "../../includes/util/FitSpline.hxx"
-#include "../../includes/util/Tracking.hxx"
+#include "../../includes/util/Tracking.h"
 #include "../../includes/util/MacroHelpers.hxx"
 
 constexpr const char* label[] = {

@@ -14,6 +14,8 @@
 #include "TLine.h"
 #include "TCanvas.h"
 
+#include "GaussFitMax.hxx"
+
 struct ORGB { uint32_t v; };
 
 namespace ph_detail {
@@ -94,18 +96,19 @@ struct __ARGB {
 		mode_ = Mode::root_col;
 	}
 
-	void ApplyFill(TH1* h) {
-		Int_t idx;
+	Int_t GetColorCode() {
 		switch(mode_) {
-			case Mode::empty: return;
-			case Mode::argb: {
-				idx = TColor::GetColor((Float_t)r, (Float_t)g, (Float_t)b);
-				break;
-			}
-			case Mode::root_col: {
-				idx = id;
-			}
+			case Mode::empty: 
+				return 0;
+			case Mode::argb: 
+				return TColor::GetColor((Float_t)r, (Float_t)g, (Float_t)b);
+			case Mode::root_col:
+				return id;
 		}
+	}
+	void ApplyFill(TH1* h) {
+		Int_t idx = GetColorCode();
+		
 		/* Sometimes setting alpha doesn't work. The transparency is implicitly enabled through
 		 * $ROOTSYS/etc/system.rootrc
 		 * OpenGL.CanvasPreferGL = 1
@@ -185,6 +188,41 @@ struct TH1P {
 	/* Forward only Fill and Draw methods. Don't care about others. */
 	FWD_DRAW(h);
 	FWD_FCN(Fill, h);
+
+	/* Draw while also fitting a small gauss-chan 🥺 👉👈 around the peak value. */
+	inline auto DrawAndFit (
+		double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
+		ph_detail::__ARGB col = kRed,
+		Double_t w = 1.8,
+		Verbosity v = Verbosity::SILENT
+	) {
+		auto fitresult   = GaussFitMax(&h, side_ratio, v);
+		const auto& res = fitresult.first;
+		const double A     = res[0];
+		const double mu    = res[1];
+		const double sigma = res[2];
+
+		const double m_  = h.GetXaxis()->GetBinCenter( h.GetMaximumBin() );
+		const double s_  = h.GetStdDev();
+		const double xlo = m_ - side_ratio * s_;
+		const double xhi = m_ + side_ratio * s_;
+
+		auto* f = new TF1 (
+			Form("extern_gaus[%.1f]:%s", side_ratio, h.GetName()),
+			"[0]*exp(-0.5*((x-[1])/[2])^2)",
+			xlo, xhi
+		);
+		
+		f->SetParameters(A, mu, sigma);
+		f->SetParNames("A", "#mu", "#sigma");
+		f->SetLineColor( col.GetColorCode() );
+		f->SetLineWidth( w );
+
+		this->Draw();
+		f->Draw("same");
+
+		return fitresult;
+	}
 
 	inline __attribute__((always_inline)) 
 	bool IsInside(double x) const noexcept {

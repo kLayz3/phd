@@ -1,13 +1,37 @@
 #include "TFRSHitCont.h"
 #include "util/JSONParser.h"
 
+#include "util/Geometry.h"
+
 using nlohmann::json;
 
 static nlohmann::json setup {};
 static FRSIdParam _s2p, _s3p;
 static FRSTargetParam _sTar;
+
 static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
 static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
+
+std::string RNFRSHit::DecodeS2() const noexcept {
+	std::stringstream info;
+	info << "S2 BT tracking: ";
+	if(s2_bt.code & S2_BT_TRACKING_INCLUDE_SCI21_MASK) {
+		info << "SCI21 ";	
+	} 
+	if(s2_bt.code & S2_BT_TRACKING_INCLUDE_TPC21_MASK) {
+		info << "TPC21 ";
+	} 
+	if(s2_bt.code & S2_BT_TRACKING_INCLUDE_TPC22_MASK) {
+		info << "TPC22 ";
+	}
+	if(s2_bt.code & S2_BT_TRACKING_INCLUDE_TPC23_MASK) {
+		info << "TPC23 ";
+	}
+	return info.str();
+}
+std::string RNFRSHit::DecodeS3() const noexcept {
+	return "Work in progress! 🚧";
+}
 
 TFRSHitCont::TFRSHitCont() : TContainer("FRS") {}  
  
@@ -63,8 +87,10 @@ void Add(FRSIdParam&, const FRSIdParam&) {}
 void Add(FRSTargetParam&, const FRSTargetParam&) {}
 
 void TFRSHitCont::Setup() {
-	h2_track_x = RegisterObject<TH2D>("h2_s2_track_x", "S2 Tracking;z[mm];x[mm]", 400, 0, 4200, 200, -100, 100);
-	h2_track_y = RegisterObject<TH2D>("h2_s2_track_y", "S2 Tracking;z[mm];y[mm]", 400, 0, 4200, 200, -100, 100);
+	h2_track_x   = RegisterObject<TH2D>("s2_upstream_track_x", "S2 TPC Tracking;z[mm];x[mm]", 400, 0, 4200, 200, -100, 100);
+	h2_track_y   = RegisterObject<TH2D>("s2_upstream_track_y", "S2 TPC Tracking;z[mm];y[mm]", 400, 0, 4200, 200, -100, 100);
+	h2_target_xy = RegisterObject<TH2D>("s2_target_xy", "S2 Upstream Target Hit;x[mm];y[mm]", 200, -20, 20, 200, -20, 20);
+	
 	/* no-op collector taken deduces from free Add fnc's implemented above. */
 	tpc_param = RegisterObject<std::array<TPCParam, RNFRSCal::N_VALID_TPC>>("tpc_parameters", {});
 	sci_param = RegisterObject<std::array<SCIParam, RNFRSCal::N_VALID_SCI>>("sci_parameters", {});
@@ -81,6 +107,8 @@ void TFRSHitCont::Setup() {
 
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 }
+
+mnd::geom::Line3D RNFOOTTrackToLine3D(const RNFRSHit::Id& t) { return { t.x0, t.ax, t.y0, t.ay }; }
 
 ClassImp(FRSIdParam);
 ClassImp(FRSTargetParam);

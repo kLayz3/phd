@@ -4,9 +4,10 @@
 #include "TFOOTHitCont.h"
 #include "TFOOTMapCont.h"
 #include "util/DirectedAGraph.hxx"
-#include "util/PolyFitter.h"
 #include <algorithm>
 #include <cmath>
+
+extern thread_local mnd::geom::Point2D g_upstream_vertex; // extern'ed from `includes/TFRSHitProc.cxx`
 
 #define GEN_ARG_INSTANCE_FOOT(z, n, data) \
 	const TFOOTCalCont& in_##n
@@ -20,13 +21,13 @@
  * Cute little fact: when the compiler first sees `TFOOTHitProc::hm`, it will instantiate just enough
  * of the template to answer: alignof, alignas, sizeof, and all the ABI stuff 
  * (vptr/vtable / dispatches). But it does not need to implicitly define all the
- * member functions/statics/dtor/ctors. That part is extern'ed.
+ * member functions/inlined statics/dtor/ctors. That part is extern'ed.
  * These actually get their definition and home right here. :-) */
 template struct HitMatrix<RNFOOTPair>;
 template struct Track<TFOOTHitCont::N_PAIRS, RNFOOTPair>;
 
 using FHitMatrix = TFOOTHitProc::FHitMatrix;
-using FTrack = TFOOTHitProc::FTrack; 
+using FTrackOnline = TFOOTHitProc::FTrackOnline; 
 
 namespace mnd {
 template<typename Tuple, typename BinaryOp, std::size_t... Is>
@@ -241,7 +242,7 @@ constexpr auto X = FHitMatrix::X;
 constexpr auto Y = FHitMatrix::Y;
 using Entry = FHitMatrix::Entry;
 
-double TFOOTHitProc::kr(const FTrack& ft, const FHitMatrix::Entry& candidate, u32 k) const {
+double TFOOTHitProc::kr(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const {
 	const Eigen::Vector2d& measured = candidate.v;
 
 	Eigen::Vector2d extrapolated = ft.extrapolate_to( pair_z[k] );
@@ -253,7 +254,7 @@ double TFOOTHitProc::kr(const FTrack& ft, const FHitMatrix::Entry& candidate, u3
 
 /* kQ = Cq || Qij - Qn ||^2 
  * ==== Cq( (mean(Qij) - mean(Qtrack))^2 + variance_ij )  */
-double TFOOTHitProc::kq(const FTrack& ft, const FHitMatrix::Entry& candidate, u32 k) const {
+double TFOOTHitProc::kq(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const {
 	(void)k;
 
 	double mean_track_q = ft.q.mean();
@@ -268,8 +269,8 @@ double TFOOTHitProc::kq(const FTrack& ft, const FHitMatrix::Entry& candidate, u3
 }
 
 /* Bundle these two cost fncs together since both need to calculate the track update. */
-std::pair<double,double> TFOOTHitProc::kt_kp(const FTrack& ft, const FHitMatrix::Entry& candidate, u32 k) const {
-	FTrack& mft = const_cast<FTrack&>(ft);
+std::pair<double,double> TFOOTHitProc::kt_kp(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const {
+	FTrackOnline& mft = const_cast<FTrackOnline&>(ft);
 	mft.Add(candidate, pair_z[k]);
 	const auto& tt = mft.get();
 
@@ -335,7 +336,7 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 		if(nx == 0 or ny == 0) break; 
 
 		// Fetch the preliminary track that the path describes.
-		FTrack tau = this->GetPrelimTrackFromPath(path);
+		FTrackOnline tau = this->GetPrelimTrackFromPath(path);
 
 		double cost_min_current = INFINITY;
 		DAG::Index best_i;
@@ -390,14 +391,14 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 		}
 	}
 
-	FTrack tau = this->GetPrelimTrackFromPath(path);
+	FTrackOnline tau = this->GetPrelimTrackFromPath(path);
 	const size_t N = tau.N();
 	
 	// Demand all the layers
 	if(N != N_PAIRS) return;
 
 	double score = tau.GetScore();
-	const auto& t = tau.get();
+	const auto& t = tau.get(); // evaluate the actual track fit.
 	
 #ifdef MND_FOOTTRACK_DEBUG
 	std::array<double, N_PAIRS> qm, sqm;
@@ -408,7 +409,7 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 #endif
 
 	out.inner().track.emplace_back (
-		t.l.a.array(), t.l.b.array(), t.q.mean(), score, N
+		t.l.xarray(), t.l.yarray(), t.q.mean(), score, N
 #ifdef MND_FOOTTRACK_DEBUG
 		,
 		tau.xs,
@@ -428,6 +429,7 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 }
 
 void TFOOTHitProc::ConstructDAG() noexcept {
+#if 0
 	/* Idea is explained in the PhD writeup. 
 	 * If you don't have it, ask Klayze. */
 
@@ -497,10 +499,11 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 		
 		dag.path = std::move( new_paths );
 	}
+#endif
 }
 
-FTrack TFOOTHitProc::GetPrelimTrackFromPath(const DAG::DAGPath& p) const {
-	FTrack t{};
+FTrackOnline TFOOTHitProc::GetPrelimTrackFromPath(const DAG::DAGPath& p) const {
+	FTrackOnline t{};
 	static_assert(DAG::depth == N_PAIRS, "Just in case. Must pass");
 	for(size_t i_ = 0; i_ < N_PAIRS; ++i_) {
 		const DAG::Index& i = p.node[i_];
