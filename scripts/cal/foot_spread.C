@@ -96,7 +96,7 @@ void foot_spread (
 		double qFOOT_ = NAN;
 		double dFOOT_ = NAN;
 		for(const auto& hit : foot->fCl) {
-			
+			if(hit.fCM == 1) continue;	
 			double q = foot_param->Q( hit );
 			if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(q, foot_q_cut)) continue;
 			

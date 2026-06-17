@@ -13,13 +13,11 @@
 using namespace ROOT;
 using namespace ROOT::Experimental;
 
-constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
-
 constexpr static std::array<double, 3> dq_binning = {120, -2.1, 2.1};
 void foot_track_analysis (
 	std::string fileName = "",
 	std::vector <
-		std::pair<u32, std::array<double, 2>>
+		std::pair<uint32_t, std::array<double, 2>>
 	> cut_q = {},
 	std::array<double, 3> binning_x = {100,-5,5},
 	std::array<double, 3> binning_y = {100,-5,5},
@@ -36,6 +34,8 @@ void foot_track_analysis (
 	auto foot = model->MakeField<RNFOOTHit>("FOOT");
 	auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
 	
+	constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
+
 	ROOT::EnableImplicitMT();
 
 	TH1P *resx[N_PAIRS], *resy[N_PAIRS], *resq[N_PAIRS], *h1q[N_PAIRS], *h1_footx[N_PAIRS], *h1_footy[N_PAIRS];

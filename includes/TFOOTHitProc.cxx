@@ -4,10 +4,11 @@
 #include "TFOOTHitCont.h"
 #include "TFOOTMapCont.h"
 #include "util/DirectedAGraph.hxx"
+#include "util/Geometry.h"
 #include <algorithm>
 #include <cmath>
 
-extern thread_local mnd::geom::Point2D g_upstream_vertex; // extern'ed from `includes/TFRSHitProc.cxx`
+extern thread_local mnd::geom::Line3D g_upstream_track; // extern'ed from `includes/TFRSHitProc.cxx`
 
 #define GEN_ARG_INSTANCE_FOOT(z, n, data) \
 	const TFOOTCalCont& in_##n
@@ -197,6 +198,7 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 
 	ConstructObviousTracks();
 	//ConstructDAG();
+	PostProcess();
 }
 
 /* First std::pair member is `x`, second is `y` */
@@ -515,5 +517,31 @@ FTrackOnline TFOOTHitProc::GetPrelimTrackFromPath(const DAG::DAGPath& p) const {
 	return t;
 }
 
+void TFOOTHitProc::PostProcess() noexcept {
+	using namespace mnd::geom;
 
+	/* For recognised tracks, try to find their vertex, together with the upstream track.
+	 * Upstream track, however is in FRS coordinates, and must be represented in FOOT coordinates. */
+	g_upstream_track %= ( out.box->GetTargetZ() + TFOOTHitProc::TARGET_Z );
+
+	std::sort( /* Sort in descending charge (.Q) attribute. */ 
+		out.inner().track.begin(), 
+		out.inner().track.end() 
+	);
+	
+	lines.clear();
+	for(const auto& t : out.inner().track) {
+		lines.emplace_back( RNTrackToLine3D(t) );
+	}
+	lines.push_back( g_upstream_track ); // copy-ctor
+
+	mnd::geom::Point3D vertex = FindVertex( mnd::as_span(lines) );
+	out.inner().vertex = RNFOOTHit::Vertex{ vertex };
+
+	if(lines.size() >= 2) {
+		out.diff_heavy_frag_vs_upstream->Fill (	
+			lines.front().DistanceTo( g_upstream_track )
+		);
+	}
+};
 

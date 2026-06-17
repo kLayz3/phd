@@ -108,7 +108,7 @@ void TFRSHitCont::Setup() {
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 }
 
-mnd::geom::Line3D RNFOOTTrackToLine3D(const RNFRSHit::Id& t) { return { t.x0, t.ax, t.y0, t.ay }; }
+mnd::geom::Line3D RNTrackToLine3D(const RNFRSHit::Id& t) { return { t.x0, t.ax, t.y0, t.ay }; }
 
 ClassImp(FRSIdParam);
 ClassImp(FRSTargetParam);

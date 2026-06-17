@@ -117,9 +117,12 @@ private:
 	void ProcessPair(const std::pair<const TFOOTCalCont&, const TFOOTCalCont&>&, i32) noexcept;
 	void ConstructObviousTracks() noexcept;
 	void ConstructDAG() noexcept;
+	void PostProcess() noexcept;
 
 	std::array<double, N_PAIRS> pair_z;
 	mnd::geom::Rectangle2D target_xy;
+	mnd::geom::Point3D upstream_hit_loc;
+	std::vector<mnd::geom::Line3D> lines{};
 
 	DAG dag;
 	

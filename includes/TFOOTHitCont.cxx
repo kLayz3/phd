@@ -74,8 +74,8 @@ void TFOOTHitCont::Setup() {
 		100, 0, 8);
 	h1_track_nsampled = RegisterObject<TH1I>("h1_qtrack_nsampled", "Points sampled (N) in the track",
 		12, -0.5, 5.5);
-	diff_heavy_frag_vs_upstream = RegisterObject<TH1I>("diff_heavy_frag_vs_upstream", "Distance heaviest fragment to TPC extrapolated",
-		12, -0.5, 5.5);
+	diff_heavy_frag_vs_upstream = RegisterObject<TH1I>("diff_heavy_frag_vs_upstream", 
+		"Distance heaviest fragment track to TPC track;d [mm]", 500, 0.0, 5);
 	
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 	box = RegisterObject<FOOTBoxParam>("box", _box);
@@ -90,10 +90,11 @@ void TFOOTHitCont::Setup() {
 	}
 }
 
-mnd::geom::Line3D RNFOOTTrackToLine3D(const RNFOOTTrack& t) { return { t.x0, t.ax, t.y0, t.ay }; }
+mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& t) { return { t.x0, t.ax, t.y0, t.ay }; }
 
 ClassImp(FOOTQ);
 ClassImp(FOOTHit);
 ClassImp(RNFOOTPair);
 ClassImp(RNFOOTTrack);
 ClassImp(RNFOOTHit);
+ClassImp(RNFOOTHit::Vertex);

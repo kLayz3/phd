@@ -1,5 +1,14 @@
 #pragma once
 
+#define MHELPER_RUSTIFY_TYPE(N) \
+	using u##N = uint##N##_t; \
+	using i##N = int##N##_t;
+
+MHELPER_RUSTIFY_TYPE( 8)
+MHELPER_RUSTIFY_TYPE(16)
+MHELPER_RUSTIFY_TYPE(32)
+MHELPER_RUSTIFY_TYPE(64)
+
 #include <filesystem>
 #include <sstream>
 #include <cmath>

@@ -24,7 +24,7 @@ constexpr bool _take[N] = {
 
 enum class DoOffset { no, yes};
 
-constexpr static A3 binning_da = {200, 0, 0.5};
+constexpr static A3 binning_da = {200, 0, 10};
 void incoming_vs_outgoing (
 	std::string fileName = "",
 	A3 binning_x = {200,-10,10},
@@ -91,6 +91,12 @@ void incoming_vs_outgoing (
 	auto* h2_diffa_vs_diffy = new TH2P("Angle diff [mrad]:Difference in Y [mm]@FOOT - TPC at target",
 		 binning_y[0], binning_y[1], binning_y[2], binning_da[0], binning_da[1], binning_da[2]);
 
+	auto* h2_vertex_xy = new TH2P("Vertex y-position [mm]:Vertex X-position [mm]@at target", 
+		320, -50, 50, 320, -50, 50);
+
+	auto* h1_vertex_z = new TH1P("Vertex z-position [mm]@at target=0.0", kMagenta-10, 
+		300, -100, 100);
+
 	auto model = RNTupleModel::Create();
 	auto frs  = model->MakeField<RNFRSHit>("FRS"); 
 	auto foot = model->MakeField<RNFOOTHit>("FOOT");
@@ -145,7 +151,7 @@ void incoming_vs_outgoing (
 		if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(t.Q, foot_q_cut)) continue;
 
 		/* 3D line describing the track inside the box (downstream). */
-		const mnd::geom::Line3D ft = RNTrackToLine3D(t);
+const mnd::geom::Line3D ft = RNTrackToLine3D(t);
 
 		/* 2x 2D lines describing the track upstream. */
 		const std::array<double,2> fx_tpc = PolyFit<1>(z, x);	
@@ -175,19 +181,28 @@ void incoming_vs_outgoing (
 		FillTrack(*h2_track_x, fx_foot, z0, HUGE_VAL);
 		FillTrack(*h2_track_y, fy_foot, z0, HUGE_VAL);
 
-		double dx = x0_foot - x0_tpc; 
-		double dy = y0_foot - y0_tpc; 
-		double dr = std::sqrt( dx*dx + dy*dy );
+		const double dx = x0_foot - x0_tpc; 
+		const double dy = y0_foot - y0_tpc; 
+		const double dr = std::sqrt( dx*dx + dy*dy );
 		diffx ->Fill(dx);
 		diffy ->Fill(dy);
 		diffxy->Fill(dr);
-		
-		double da  = mnd::geom::Line3D(fx_foot, fy_foot)
-			.AngleRelativeTo( mnd::geom::Line3D(fx_tpc,  fy_tpc) );
+	
+		const auto foot_line3d = mnd::geom::Line3D(fx_foot, fy_foot);
+		auto tpc_line3d  = mnd::geom::Line3D(fx_tpc,  fy_tpc);
+		double da = foot_line3d.AngleRelativeTo(tpc_line3d);
 
-		diffa->Fill(da);
-		h2_diffa_vs_diffx->Fill(dx, da);
-		h2_diffa_vs_diffy->Fill(dy, da);
+		diffa->Fill(da*1000.0);
+		h2_diffa_vs_diffx->Fill(dx, da*1000.0);
+		h2_diffa_vs_diffy->Fill(dy, da*1000.0);
+	
+		/* Vertex stuff... */
+		/* Represent the TPC line in FOOT coordinate system. */
+		tpc_line3d %= z0;
+		mnd::geom::Point3D vertex = mnd::geom::FindVertex(foot_line3d, tpc_line3d);
+		
+		h2_vertex_xy->Fill(vertex.x, vertex.y);
+		h1_vertex_z ->Fill(vertex.z);
 	}
 	
 	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2150, 1400);
@@ -216,6 +231,11 @@ void incoming_vs_outgoing (
 	cDiff->cd(4); diffa->Draw("COLZ");
 	cDiff->cd(5); h2_diffa_vs_diffx->Draw("COLZ");
 	cDiff->cd(6); h2_diffa_vs_diffy->Draw("COLZ");
+
+	TCanvas* cV = new TCanvas("Vertex", "TPC<->FOOT vertex", 2150, 1400);
+	cV->Divide(2,1);
+	cV->cd(1); h2_vertex_xy->Draw("COLZ");
+	cV->cd(2); h1_vertex_z->Draw();
 
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );

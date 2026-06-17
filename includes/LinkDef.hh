@@ -49,5 +49,6 @@
 #pragma link C++ class RNFOOTPair+;
 #pragma link C++ class RNFOOTTrack+;
 #pragma link C++ class RNFOOTHit+;
+#pragma link C++ class RNFOOTHit::Vertex+;
 
 #endif

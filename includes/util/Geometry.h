@@ -1,22 +1,52 @@
 #pragma once
 
-#include "../monad/monad.hxx" // only used for assert stuff
 #include <array>
 #include <cmath>
 #include <ostream>
 #include "json_struct_def.hh" // std::ostream& operator<<(array<T,N> const&) 
 
-/* This is only for a temporary container,
- * lines will always be saved in Cartesian coordinates. */
+#if __cplusplus >= 202000L 
+#	include <span>
+	namespace mnd {
+		template<typename T>
+		using span = std::span<T>;
+	}
+#elif __has_include("boost/beast/core/span.hpp")
+#	include "boost/beast/core/span.hpp"
+	namespace mnd {
+		    template<typename T>
+			using span = boost::beast::span<T>;
+	}
+#else
+#	error "Neither C++20 given, nor boost library for span found. Cannot proceed"
+#endif
 
 #define FORMAT_ANGLES_IN_RADIANS
 
-namespace mnd { namespace geom {
+namespace mnd { 
+	
+template<typename T>
+span<const T> as_span(const std::vector<T>& v) noexcept {
+	return span<const T>{v.data(), v.size()};
+}
+
+template<typename T, std::size_t N>
+span<const T> as_span(const std::array<T, N>& a) noexcept {
+	return span<const T>{a.data(), a.size()};
+}
+
+namespace geom {
 
 struct Point2D { 
+	static const Point2D null;
+	inline bool is_null() const noexcept { return std::isfinite(x); }
+	
 	double x, y; 
 };
 struct Point3D { 
+	static const Point3D null;
+	inline bool is_null() const noexcept { return std::isfinite(x); }
+
 	double x, y, z; 
 };
 
@@ -42,6 +72,8 @@ struct Line2D {
 	Line2D(value_type f1, value_type f2) : value{f1,f2} {}
 	Line2D(Arr const& arr) : value(arr) {}
 	
+	static const Line2D null;
+
 	inline value_type& operator[](Arr::size_type pos) noexcept { return value[pos]; } 
 	inline value_type const& operator[](Arr::size_type pos) const noexcept { return value[pos]; } 
 
@@ -100,10 +132,12 @@ struct Line3D {
 	explicit Line3D(const Line2D& a_, const Line2D& b_ ) :
 		p{a_[0], b_[0], 0}, v{a_[1], b_[1], 1} {}
 
+	static const Line3D null;
 	inline bool HasValue() const noexcept { return std::isfinite( p[0] ); }
 	
-	double AngleRelativeTo(const Line3D& ) const noexcept; 
+	double DistanceTo(const Point3D& ) const noexcept;
 	double DistanceTo(const Line3D& ) const noexcept;
+	double AngleRelativeTo(const Line3D& ) const noexcept; 
 
 	/* Translate the line by an offset. */ 
 	Line3D& operator+=(double ) noexcept; // only along z-axis direction
@@ -188,6 +222,11 @@ struct Rectangle2D {
 			<< ") R}";
 	}
 };
+
+/* Find a point with a minimal distance to a sequence of lines (aka: a vertex). */
+Point3D FindVertex(::mnd::span<const Line3D> ) noexcept;
+Point3D FindVertex(const Line3D&, const Line3D& ) noexcept;
+
 } // namespace geom 
 } // namespace mnd
 

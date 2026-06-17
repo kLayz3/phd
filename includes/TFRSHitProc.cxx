@@ -10,7 +10,7 @@
 
 constexpr double TWO_PI = 6.283185307179586;
 
-thread_local mnd::geom::Point2D g_upstream_vertex {};
+thread_local mnd::geom::Line3D g_upstream_track {};
 
 #ifdef _MSC_VER
 #	include <intrin.h>
@@ -65,8 +65,8 @@ void TFRSHitProc::ProcessEntry() noexcept {
 }
 
 void TFRSHitProc::ProcessS2BT() noexcept {
-	x.clear(); y.clear();;
-	zx.clear(); zy.clear();;
+	x.clear(); y.clear();
+	zx.clear(); zy.clear();
 
 	const TFRSCalCont& cal = std::get<0>( this->in );
 	const RNFRSCal& in = cal.inner();
@@ -132,5 +132,5 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 	
 	out.h2_target_xy->Fill(xT, yT);
 	
-	g_upstream_vertex = { .x = xT, .y = yT };
+	g_upstream_track = RNTrackToLine3D(bt); // could be null.
 }

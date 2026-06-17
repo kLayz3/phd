@@ -64,6 +64,9 @@ struct RNFOOTTrack {
 	double score;
 	std::size_t n; // number of collected pts, size_t anyway chosen as it will be aligned to 8-byte
 
+	inline bool operator<(const RNFOOTTrack& rhs) const noexcept {
+		return Q > rhs.Q; // descending charge.
+	}
 #ifdef MND_FOOTTRACK_DEBUG
 	static constexpr u32 N_PAIRS = N_FOOT_DETECTORS / 2;
 	
@@ -94,12 +97,25 @@ struct RNFOOTHit {
 	std::array<RNFOOTPair, N_PAIRS> pair;
 	std::vector<RNFOOTTrack> track;
 
+	struct Vertex {
+		double x = NAN, y = NAN, z = NAN;
+
+		Vertex() = default;
+		Vertex(const mnd::geom::Point3D& p) : x(p.x), y(p.y), z(p.z) {}
+
+		inline void Clean() noexcept { *this = Vertex{}; }
+
+		virtual ~Vertex() = default;
+		ClassDef(Vertex, 1);
+	} vertex;
+
 	RNFOOTHit() = default;
 
 	inline void Clean() noexcept { 
 		for(auto& p: pair) 
 			p.Clean(); 
 		track.clear(); 
+		vertex.Clean();
 	}
 	virtual ~RNFOOTHit() = default;
 	ClassDef(RNFOOTHit, 1);
@@ -126,4 +142,4 @@ extern template struct HitMatrix<RNFOOTPair>; // instantiated in TFOOTHitProc.cx
 extern template struct Track<TFOOTHitCont::N_PAIRS + 1, RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
 
 mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& );
-extern mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& ); // CLING is sometimes stupid I swear to God ... 
+extern mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& ); // CLING is sometimes stupid I swear to God .. :) 

@@ -101,35 +101,29 @@ void tpc_alignment (
 	std::cout << setprecision(10) << KRED;
 	std::cout << "\"x_offset\": " << tpc_param.x_offset << std::endl;
 	std::cout << "\"y_offset\": " << tpc_param.y_offset << KNRM << setprecision(6) << std::endl;
-	/* Fit Gauss around those values. */
-	for(int i=0; i<2; ++i) {
-		auto [r, err] = GaussFitMax( *h1_x[i], 1.0); 
-		auto [_, mu, sigma] = r;
-		std::cout << "Fit result: \"DL" << i << ": " << r << "\n";
-		tpc_param.x_offset[i] -= mu;
-	}
-
-	for(int i=0; i<4; ++i) {
-		// Due to the TPC's y cutting out, no clue how wide is the gauss-chan 
-		auto [r, err] = GaussFitMax( *h1_y[i], 1.0);
-		auto [_, mu, sigma] = r;
-		std::cout << "Fit result: \"AN" << i << ": " << r << "\n";
-		tpc_param.y_offset[i] -= mu;
-	}
-	std::cout << setprecision(10) << KBH_GRN;
-	std::cout << "\"x_offset\": " << tpc_param.x_offset << ",\n";
-	std::cout << "\"y_offset\": " << tpc_param.y_offset << KNRM << ",\n";
 
 	TCanvas* c = new TCanvas("TPC", "TPC", 2050, 1400);
 	c->Divide(3,2);
 	for(int d : {0,1}) {
 		c->cd(3*d+1);
-		h1_x[ d ]->Draw();
+		auto [r, err] = h1_x[d]->DrawAndFit(1.5, kMagenta+2, 5.8); 
+		auto [_, mu, sigma] = r;
+		std::cout << "Fit result: \"DL" << d << ": " << r << "\n";
+		tpc_param.x_offset[d] -= mu;
+
 		for(int a: {0,1}) {
 			c->cd(3*d + 2 + a);
-			h1_y[ 2*d + a ]->Draw();
+			const int i = 2*d + a;
+			auto [r, err] = h1_y[i]->DrawAndFit(1.5, kBlue+2, 5.8); 
+			auto [_, mu, sigma] = r;
+			std::cout << "Fit result: \"AN" << i << ": " << r << "\n";
+			tpc_param.y_offset[i] -= mu;
 		}
 	}
+	
+	std::cout << setprecision(10) << KBH_GRN;
+	std::cout << "\"x_offset\": " << tpc_param.x_offset << ",\n";
+	std::cout << "\"y_offset\": " << tpc_param.y_offset << KNRM << ",\n";
 	
 	TCanvas* cs = new TCanvas("SCIe", "SCI21,22,31", 1800, 800);
 	cs->Divide(3,2);

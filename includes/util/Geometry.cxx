@@ -3,12 +3,21 @@
 #include <cmath>
 
 namespace mnd { namespace geom { namespace detail {
-
+	static_assert(std::is_standard_layout_v<Vector3D>);
+	static_assert(sizeof(Vector3D) == 3*sizeof(double));
+	
 	static Eigen::Map<const Eigen::Vector3d> mapv(const std::array<double, 3>& a) noexcept {
 		return Eigen::Map<const Eigen::Vector3d>{a.data()};
 	}
 	static Eigen::Map<Eigen::Vector3d> mapv(std::array<double, 3>& a) noexcept {
 		return Eigen::Map<Eigen::Vector3d>{a.data()};
+	}
+	/* Not sure if this is legal, but works so far. */
+	static Eigen::Map<const Eigen::Vector3d> mapv(const Vector3D& a) noexcept {
+		return Eigen::Map<const Eigen::Vector3d>{&a.x};
+	}
+	[[ maybe_unused ]] static Eigen::Map<Eigen::Vector3d> mapv(Vector3D& a) noexcept {
+		return Eigen::Map<Eigen::Vector3d>{&a.x};
 	}
 	static Eigen::Matrix3d rotation_matrix(const Vector3D& axis, double angle) noexcept {
 		Eigen::Vector3d u{axis.x, axis.y, axis.z};
@@ -36,6 +45,11 @@ namespace mnd { namespace geom { namespace detail {
 }}}
 
 using namespace mnd::geom;
+
+const Point2D Point2D::null { NAN, NAN };
+const Point3D Point3D::null { NAN, NAN };
+const Line2D Line2D::null { NAN, NAN };
+const Line3D Line3D::null { NAN, NAN, NAN, NAN };
 
 /* Translate the line by an offset vector (val  0). */
 Line2D& Line2D::operator+=(double val) noexcept { 
@@ -101,12 +115,17 @@ Line2D& Line2D::RepresentInShifted (
 
 /* ====================== 3D ====================== */
 
-double Line3D::AngleRelativeTo(const Line3D& rhs) const noexcept {
-	auto v1 = detail::mapv(this->v);
-	auto v2 = detail::mapv( rhs.v );
-	double c = v1.dot(v2) / (v1.norm() * v2.norm());
-	c = std::clamp(c, -1.0, 1.0);
-	return std::acos(c);
+double Line3D::DistanceTo(const Point3D& pt) const noexcept {
+	const auto p = detail::mapv(this->p);
+	const auto v = detail::mapv(this->v);
+	const auto k = detail::mapv( pt );
+
+	const double n = v.norm();
+
+	if(n < 1e-24) { 
+		return NAN; // highly unlikely
+	}
+	return (k-p).cross(v).norm() / n;
 }
 
 double Line3D::DistanceTo(const Line3D& rhs) const noexcept {
@@ -124,6 +143,14 @@ double Line3D::DistanceTo(const Line3D& rhs) const noexcept {
 	}
 
 	return std::abs( (p1-p2).dot(v1_cross_v2)) / n;
+}
+
+double Line3D::AngleRelativeTo(const Line3D& rhs) const noexcept {
+	auto v1 = detail::mapv(this->v);
+	auto v2 = detail::mapv( rhs.v );
+	double c = v1.dot(v2) / (v1.norm() * v2.norm());
+	c = std::clamp(c, -1.0, 1.0);
+	return std::acos(c);
 }
 
 /* Translate the line by an offset vector (0  0  val). */
@@ -232,3 +259,61 @@ Line3D GetLine3D(const mnd::geom::Point3D& p1, const mnd::geom::Point3D& p2) noe
 	return {a0, a1, b0, b1};
 }
 
+/* Find a point with a minimal distance to a sequence of lines (aka: a vertex). 
+ * If a line is described as: 
+ *   vec{r} = vec{p} + l*vec{v} 
+ * then the distance of a point `k` to this line is:
+ * d^2 = ‖ (k-p) ⨯ v / |v| ‖^2 , or simply projection:
+ * d^2 = ‖ hat{P} * (k-p ‖^2 , where `P` is a projector.
+ * P = 1 - v vᵀ
+ * For N lines, sum them up, take gradient relative to `k`, and equation is:
+ * ( sum_i hat{P_i} ) k = sum_i ( hat{P_i} * p_i )
+ * */
+mnd::geom::Point3D mnd::geom::FindVertex( ::mnd::span<const Line3D> lines) noexcept {
+	constexpr double eps = 1e-20;
+
+	Eigen::Matrix3d A = Eigen::Matrix3d::Zero();
+	Eigen::Vector3d b = Eigen::Vector3d::Zero();
+
+	const Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
+	for(const auto& line : lines) {
+		if(!line.HasValue()) {
+			continue; // no trolling allowed
+		}
+
+		Eigen::Map<const Eigen::Vector3d> p( line.p.data() );
+		Eigen::Map<const Eigen::Vector3d> v( line.v.data() );
+
+		const double norm2 = v.squaredNorm();
+
+		if(norm2 < eps) {
+			continue; // super degenerate case
+		}
+
+		const Eigen::Matrix3d P = I - v * v.transpose() / norm2;
+
+		A += P;
+		b += P * p;
+	}
+
+	// https://libeigen.gitlab.io/eigen/docs-nightly/classEigen_1_1LDLT.html
+	// Recommendation for symmetric (semidefinite) 3x3 linear problem: Ax = b
+	// There's also LLT ... ?
+	Eigen::LDLT<Eigen::Matrix3d> solver(A);
+
+	if(solver.info() != Eigen::Success)
+		return Point3D::null;
+
+	const Eigen::Vector3d k = solver.solve(b);
+
+	return {
+		k.x(),
+		k.y(),
+		k.z()
+	};
+}
+
+mnd::geom::Point3D mnd::geom::FindVertex(const mnd::geom::Line3D& l1, const mnd::geom::Line3D& l2) noexcept {
+	const std::array<Line3D, 2> lines{l1, l2};
+	return FindVertex(mnd::as_span(lines));
+}
