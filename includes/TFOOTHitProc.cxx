@@ -233,7 +233,7 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 	});
 
 	ConstructObviousTracks();
-	//ConstructDAG();
+	ConstructDAG();
 	PostProcess();
 }
 
@@ -439,9 +439,7 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 			}
 		}
 		// After processing the layer, check if cost acquired for this specific {i,j} entry of layer `n`
-		// is understandable.
-		
-
+		// is within the limits.
 		if(best_i and cost.sum() < max_cost) { // operator bool(); checks if the index object is non-null
 			path.node[n] = best_i;
 
@@ -660,7 +658,7 @@ void TFOOTHitProc::PostProcess() noexcept {
 		out.inner().track.end() 
 	);
 	
-	lines.clear();
+	this->lines.clear();
 	for(const auto& t : out.inner().track) {
 		lines.emplace_back( RNTrackToLine3D(t) );
 	}
@@ -669,8 +667,8 @@ void TFOOTHitProc::PostProcess() noexcept {
 	mnd::geom::Point3D vertex = FindVertex( mnd::as_span(lines) );
 	out.inner().vertex = RNFOOTHit::Vertex{ vertex };
 
-	if(lines.size() >= 2) {
-		out.diff_heavy_frag_vs_upstream->Fill (	
+	if(lines.size() >= 2) {	
+		out.diff_heavy_frag_vs_upstream->Fill (	/* Hardly converged, fucked up due to rounding. */
 			lines.front().DistanceTo( g_upstream_track )
 		);
 	}
