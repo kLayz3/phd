@@ -3,19 +3,17 @@
 #include "../monad/monad.hxx"
 
 #include <cmath>
-#include <optional>
 #include <type_traits>
 #include "../Eigen/Dense"
 
 #define MND_HITMATRIX_DO_BOUNDS_CHECK
 
+template<typename FOOTPair> struct HitMatrix;
+
 namespace mnd { namespace hm {
 
 struct Q {
-	double qx = NAN, qy = NAN;
-
-	Q() = default;
-	Q(double qx_, double qy_): qx(qx_), qy(qy_) {}
+	float qx, qy;
 
 	inline double mean() const noexcept { return 0.5*(qx+qy); }
 	inline double var() const noexcept {
@@ -31,24 +29,42 @@ struct Q {
 		return os << rhs.mean() << "±" << rhs.s();
 	}
 };
+static_assert(sizeof(Q) == 2*sizeof(float));
 
+/* Data cannot be packed as just (v,q) into std::optional, as also
+ * the third state is required. So the type is extended a'la optional,
+ * but with the third state present. Also, std::optional<Data> would make it 64-byte wide. */
 struct Data {
 	using q_type = Q;
 	using xy_type = Eigen::Vector2d;
+	
+	enum State { 
+		UNEVALUATED, // ditto
+		READY,       // if the current entry is fully evaluated
+		POISONED     // if the current entry got plucked into a well defined track. 
+	};
 
-	q_type q {}; 
-	xy_type v; 
+	xy_type v;   // 16B
+	q_type q;    //  8B
+	State state; //  4B
 
+	inline void reset() noexcept { state = UNEVALUATED; }
+	inline bool has_value() const noexcept { return state != UNEVALUATED; }
+	inline bool is_poisoned() const noexcept { return state == POISONED; }
+		
 	inline double X() const noexcept { return v(0); }
 	inline double Y() const noexcept { return v(1); }
 };
+static_assert(std::is_aggregate_v<Data> && sizeof(Data) == 32);
+
 inline std::ostream& operator<<(std::ostream& os, const Data& d) {
 	return os << '(' << d.v.transpose() << "; " << d.q << ')';
 }
 
 struct Cached {
+	template<typename FOOTPair> friend struct ::HitMatrix; 
 	using Storage = Eigen::Matrix<
-		std::optional<Data>,
+		Data,
 		Eigen::Dynamic,
 		Eigen::Dynamic
 	>;
@@ -62,14 +78,15 @@ struct Cached {
 	}
 	inline void clear() __attribute__((always_inline)) {
 		for(auto j = 0; j < cache.cols(); ++j)
-			for(auto i = 0; i < cache.rows(); ++i)
-				cache(i,j).reset();
+			for(auto i = 0; i < cache.rows(); ++i) {
+				cache(i,j).reset(); 
+			}
 	}
 	inline void resize_and_clear(size_t nx, size_t ny) { 
 		this->resize(nx, ny);
 		this->clear();
 	}
-
+	
 private:
 	Storage cache;
 };
@@ -141,26 +158,18 @@ public:
 		if(j > static_cast<ActiveIndex>(GetN<Y>()))
 			ERROR("HitMatrix::at(): Requested y-index %u out of bounds (%zu)", static_cast<u32>(j), GetN<Y>());
 #endif
-		const ActiveIndex real_i = active_x[i];
-		const ActiveIndex real_j = active_y[j];
 
-#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
-		if((size_t)real_i > GetNBase<X>())
-			ERROR("HitMatrix::at(): Real x-index %u out of bounds (%zu)", static_cast<u32>(real_i), GetNBase<X>());
-		if((size_t)real_j > GetNBase<Y>())
-			ERROR("HitMatrix::at(): Real y-index %u out of bounds (%zu)", static_cast<u32>(real_j), GetNBase<Y>());
-#endif
-
-		auto& slot = cache(real_i, real_j);
+		auto& slot = cache(i, j);
 		if(! slot.has_value() ) {
-			const hit_type& hx = p->x[real_i];
-			const hit_type& hy = p->y[real_j];
+			const hit_type& hx = p->x[i];
+			const hit_type& hy = p->y[j];
 			slot = Entry {
+				A * ( Eigen::Vector2d(hx.m, hy.m) + dxy ),
 				{hx.Q.q, hy.Q.q}, 
-				A * ( Eigen::Vector2d(hx.m, hy.m) + dxy )
+				Entry::READY
 			}; 
 		}
-		return *slot;
+		return slot;
 	}
 	
 	/* Called at the start of tracking, to initialize the entry. */
@@ -168,41 +177,45 @@ public:
 		p = &cont;
 		size_t const nx = p->x.size(), ny = p->y.size();
 		cache.resize_and_clear(nx, ny);
-
-		active_x.resize(nx); active_y.resize(ny);
-		std::iota(active_x.begin(), active_x.end(), 0);
-		std::iota(active_y.begin(), active_y.end(), 0);
 	}
 
-	/* Remove a row/column from current the hit matrix by removing that entry from the index redirection table. */
-	template<size_t L> void pop(ActiveIndex index) noexcept {
+	bool is_poisoned(ActiveIndex i, ActiveIndex j) const noexcept {
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
-		if(index > static_cast<ActiveIndex>(GetN<L>())) {
-			ERROR("HitMatrix::pop_checked<%zu>(): Requested %s-index %d out of bounds (%zu)", 
-				L, (L == X) ? "X" : "Y", index, GetN<L>() );
+		if(i > static_cast<ActiveIndex>(GetN<X>()) or j > static_cast<ActiveIndex>(GetN<Y>())) {
+			ERROR("HitMatrix::is_poisoned(): Requested %s-index %d/%d out of bounds (%zu/%zu)", 
+					"X/Y", i, j, GetN<X>(), GetN<Y>() );
 		}
 #endif
-		if      constexpr(L == X) active_x.erase(active_x.begin() + index);
-		else if constexpr(L == Y) active_y.erase(active_x.begin() + index);
-		else static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
+		return cache(i,j).is_poisoned();
 	}
-	inline void pop(ActiveIndex i, ActiveIndex j) noexcept { pop<X>(i); pop<Y>(j); }
 
-	/* Remove the last row or column (template parameter) */
-	template<size_t L> void pop_back() noexcept {
+	/* Flag the entire row `i` and column `j` as 'poisoned'. It won't get removed from the index redirection table, but will
+	 * rather just carry the byteflag. */
+	void poison(ActiveIndex i, ActiveIndex j) noexcept {
+		const size_t nx = GetN<X>();
+		const size_t ny = GetN<Y>();
+
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
-		if(0 == GetN<L>()) ERROR("HitMatrix::pop_back<%s>(): Vector is empty.", (L == X) ? "X" : "Y");
+		if(i > static_cast<ActiveIndex>(nx) or j > static_cast<ActiveIndex>(ny)) {
+			ERROR("HitMatrix::poison(): Requested %s-index %d/%d out of bounds (%zu/%zu)", 
+				"X/Y", i, j, nx, ny);
+		}
 #endif
-		if      constexpr(L == X) active_x.pop_back();
-		else if constexpr(L == Y) active_y.pop_back();
-		else static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
-	}
-	inline void pop_back() noexcept { pop_back<X>(); pop_back<Y>(); }
+		auto col = cache.cache.col(j); // Eigen::ColXpr
+		for(size_t i_ = 0; i_ < nx; ++i_) 
+			col(i_).state = Entry::POISONED;
 
+		auto row = cache.cache.row(i); // Eigen::ColXpr
+		for(size_t j_ = 0; j_< ny; ++j_) 
+			row(j_).state = Entry::POISONED;
+
+		// Exact (i,j) entry addressed twice, but its fine.	
+	}
+	
 	/* Eager function, force the computation of the entire matrix. */
 	const Cached& EvalAll() const noexcept {
-		const size_t nx = GetNBase<X>();
-		const size_t ny = GetNBase<Y>();
+		const size_t nx = GetN<X>();
+		const size_t ny = GetN<Y>();
 		cache.resize(nx, ny);
 
 		for(size_t i=0; i<nx; ++i) {
@@ -212,8 +225,9 @@ public:
 
 				const hit_type& hy = p->y[j];
 				cache(i,j) = Entry {
-					{hx.Q.q, hy.Q.q}, 
-					A * (Eigen::Vector2d(hx.m, hy.m) + dxy)
+					A * (Eigen::Vector2d(hx.m, hy.m) + dxy),
+					{ hx.Q.q, hy.Q.q }, 
+					Entry::READY
 				};
 			}
 		}
@@ -222,7 +236,7 @@ public:
 
 	/* Dimension of the full matrix state along the axes. Invariant relative to the prior `pop` invocations. */
 	template<size_t L>
-	inline size_t GetNBase() const noexcept {
+	inline size_t GetN() const noexcept {
 		if constexpr(L == X)
 			return p->x.size(); 
 		else if constexpr(L == Y)
@@ -230,16 +244,6 @@ public:
 		else
 			static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
 	}   
-	/* Dimension of the current state of the matrix along the axis specified as the template parameter. */
-	template<size_t L>
-	inline size_t GetN() const noexcept {
-		if constexpr(L == X)
-			return active_x.size(); 
-		else if constexpr(L == Y)
-			return active_y.size();
-		else
-			static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
-	}
 
 	Eigen::Matrix2d A; // Rotation matrix, each detector might be rotated by an angle θx or θy
 	Eigen::Vector2d dxy; // Translation vector, each detector might be translated by dx/dy
@@ -254,29 +258,34 @@ public:
 		os << KBH_YEL 
 		   << " --- == |Y| ==> " << KNRM;
 		for(size_t j=0; j < ny; ++j) {
-			const auto real_j = static_cast<std::size_t>(hm.active_y[j]);
-			os << hm.p->y[real_j];
+			os << hm.p->y[j] << hm.template GetPoisonLabel<Y>(j);
+			if(nx > 0)
 			if(j != hm.template GetN<Y>()-1)
 				os << ", ";
 		}	
 		os << std::endl << KBH_YEL 
 		   << " --- vv |X| vvv";
 		for(size_t i=0; i < nx; ++i) {
-			const auto real_i = static_cast<std::size_t>(hm.active_x[i]);
-			os << '\n' << hm.p->x[real_i];
+			os << '\n' << hm.p->x[i] << hm.template GetPoisonLabel<X>(i);
 		}
 		os << KBH_YEL << " -----END---- " << KNRM;
 		return os;
 	}
 
 private: 
-	/* Index indirection tables. */
-	std::vector<ActiveIndex> active_x;
-	std::vector<ActiveIndex> active_y;
-
 	const FOOTPair* p; /* Reassigned, event-by-event. */
 	mutable Cached cache;
-
+	
+	template<size_t L>
+	inline const char* GetPoisonLabel(ActiveIndex i) const {
+		if      constexpr(L == X) {
+			return (GetN<!L>() > 0)? (cache(i,0).is_poisoned()? "🐍": (cache(i,0).has_value()? "✅": "❓")): "";
+		}
+		else if constexpr(L == Y) {
+			return (GetN<!L>() > 0)? (cache(0,i).is_poisoned()? "🐍": (cache(0,i).has_value()? "✅": "❓")): "";
+		}
+		else static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");	
+	}
 }; // struct HitMatrix
 
 struct RNFOOTPair;

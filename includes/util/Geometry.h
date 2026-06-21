@@ -4,6 +4,7 @@
 #include <cmath>
 #include <ostream>
 #include "json_struct_def.hh" // std::ostream& operator<<(array<T,N> const&) 
+#include "../Eigen/Core"
 
 #if __cplusplus >= 202000L 
 #	include <span>
@@ -41,11 +42,35 @@ struct Point2D {
 	static const Point2D null;
 	inline bool is_null() const noexcept { return std::isfinite(x); }
 	
+	inline double Distance2(const Point2D& rhs) const noexcept {
+		const double dx = x - rhs.x;
+		const double dy = y - rhs.y;
+		return dx*dx + dy*dy;
+	}
+	inline double Distance(const Point2D& rhs) const noexcept {
+		return std::sqrt( Distance2(rhs) );
+	}
+	Eigen::Map<Eigen::Vector2d> eigen_view() & noexcept { return Eigen::Map<Eigen::Vector2d>{&x}; }
+	Eigen::Map<const Eigen::Vector2d> eigen_view() const& noexcept { return Eigen::Map<const Eigen::Vector2d>{&x}; }
+
 	double x, y; 
 };
+
 struct Point3D { 
 	static const Point3D null;
 	inline bool is_null() const noexcept { return std::isfinite(x); }
+	
+	inline double Distance2(const Point3D& rhs) const noexcept {
+		const double dx = x - rhs.x;
+		const double dy = y - rhs.y;
+		const double dz = z - rhs.z;
+		return dx*dx + dy*dy + dz*dz;
+	}
+	inline double Distance(const Point3D& rhs) const noexcept {
+		return std::sqrt( Distance2(rhs) );
+	}
+	Eigen::Map<Eigen::Vector3d> eigen_view() & noexcept { return Eigen::Map<Eigen::Vector3d>{&x}; }
+	Eigen::Map<const Eigen::Vector3d> eigen_view() const& noexcept { return Eigen::Map<const Eigen::Vector3d>{&x}; }
 
 	double x, y, z; 
 };
@@ -118,6 +143,9 @@ struct Line2D {
  * vec{r} = vec{p} + λ*vec{v}
  */
 struct Line3D {
+	static constexpr double ALMOST_PARALLEL  = 1e-4;
+	static constexpr double ALMOST_PARALLEL2 = ALMOST_PARALLEL*ALMOST_PARALLEL;
+
 	Line3D() = default;
 	Line3D ( 
 		double a0_, /* offset x:z */ 
@@ -160,11 +188,6 @@ struct Line3D {
 	/* Represent the line in a coordinate system by an offset and unary rotation. */ 
 	Line3D& RepresentInShifted(const Vector3D& , const Vector3D&, double ) noexcept;
 
-	inline friend std::ostream& operator<<(std::ostream& os, const Line3D& line) { 
-		return os << "p: (" << line.p 
-			<< "), v: (" 
-			<< line.v << ')'; 
-	}
 	inline Point2D Eval(double z) const noexcept { 
 		if(!HasValue() || std::abs(v[2]) < 1e-20)
 			return {NAN, NAN};
@@ -235,3 +258,8 @@ Point3D FindVertex(const Line3D&, const Line3D& ) noexcept;
  * `GetLine(<brace-enclosed initializer list>, <brace-enclosed initializer list>)` is ambiguous */
 mnd::geom::Line2D GetLine2D(const mnd::geom::Point2D& , const mnd::geom::Point2D& ) noexcept;
 mnd::geom::Line3D GetLine3D(const mnd::geom::Point3D& , const mnd::geom::Point3D& ) noexcept;
+
+std::ostream& operator<<(std::ostream&, const mnd::geom::Point2D& );
+std::ostream& operator<<(std::ostream&, const mnd::geom::Point3D& );
+std::ostream& operator<<(std::ostream&, const mnd::geom::Line2D& );
+std::ostream& operator<<(std::ostream&, const mnd::geom::Line3D& );

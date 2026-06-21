@@ -32,6 +32,7 @@ void foot_track_analysis (
 
 	auto model = RNTupleModel::Create();
 	auto foot = model->MakeField<RNFOOTHit>("FOOT");
+	auto frs = model->MakeField<RNFRSHit>("FRS");
 	auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
 	
 	constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
@@ -58,16 +59,32 @@ void foot_track_analysis (
 		N_PAIRS, -0.5, N_PAIRS-0.5, binning_x[0], binning_x[1], binning_x[2]);
 	TH2P* h2_resy = new TH2P("((h2_fitry))Fit residue:FOOT ID@Y-orientation",
 		N_PAIRS, -0.5, N_PAIRS-0.5, binning_y[0], binning_y[1], binning_y[2]);
-	TH2P* h2_resq = new TH2P("((h2_fitrq))Fit residue:FOOT ID@Y-orientation",
+	TH2P* h2_resq = new TH2P("((h2_fitrq))Fit residue:FOOT ID@Charge (Q)",
 		N_PAIRS, -0.5, N_PAIRS-0.5, dq_binning[0], dq_binning[1], dq_binning[2]);
 
 	TH2P* h2q = new TH2P("((h2q))Q value:FOOT ID",
 		N_PAIRS, -0.5, N_PAIRS-0.5, binning_q[0], binning_q[1], binning_q[2]);
 
-	TH2P* h2_kq = new TH2P("Kq cost [charge^2]:FOOT ID",
+	TH2P* h2_kq = new TH2P("Kq cost [Q^2]:FOOT ID",
 		N_PAIRS, -0.5, N_PAIRS-0.5, 500, 0, 1);
 	TH2P* h2_kr = new TH2P("Kr cost [mm^2]:FOOT ID",
-		N_PAIRS, -0.5, N_PAIRS-0.5, 400, 0, 50);
+		N_PAIRS, -0.5, N_PAIRS-0.5, 400, 0, 10);
+	TH2P* h2_kq_sqrt = new TH2P("sqrt_Kq cost [Q]:FOOT ID",
+		N_PAIRS, -0.5, N_PAIRS-0.5, 500, 0, 1);
+	TH2P* h2_kr_sqrt = new TH2P("sqrt_Kr cost [mm]:FOOT ID",
+		N_PAIRS, -0.5, N_PAIRS-0.5, 400, 0, 3.1628);
+
+	TH2P* h2_ktxy = new TH2P("FOOT - Upstream Y [mm]:FOOT - Upstream x [mm]@target",
+		400,-10,10, 400,-10,10);
+	TH1P* h1_kt = new TH1P("Kt cost [mm^2]", kYellow-3,
+		400, 0, 10);
+	TH1P* h1_kt_sqrt = new TH1P("sqrt_Kt cost [mm]", kYellow-3,
+		400, 0, 3.162);
+	TH1P* h1_diff_upstr_down = new TH1P("Distance Upstream to Downstream track [mm]", kGreen-1,
+		400, 0, 100);
+	TH1P* h1_score = new TH1P("Track score [a.u.]", kGreen-1,
+		500, 0, 100);
+
 	for(const auto& cut : cut_q) {
 		if(cut.first >= N_PAIRS)
 			ERROR("Supplied index: %u >= %u as Q-cut pair index.\n", cut.first, N_PAIRS);
@@ -77,64 +94,81 @@ void foot_track_analysis (
 
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
+		const double x0_upst = frs->xT;
+		const double y0_upst = frs->yT;
+		if(!mnd::isfinite(x0_upst, y0_upst)) continue;
+		
+		const mnd::geom::Line3D lu = RNTrackToLine3D( frs->s2_bt );
 
-		for(const RNFOOTTrack& t : foot->track) {
-			if(t.n != N_PAIRS) continue;
+		const RNFOOTTrack& t = foot->heavy_fragment;
+		if(t.n != N_PAIRS) continue;
 
-			/* Check if veto is passed. */
-			bool is_valid = true;
-			for(const auto& cut : cut_q) {
-				double qv = t._q[ cut.first ];
-				if(!mnd::IsInside(qv, cut.second)) is_valid = false;
-			}
-			if(!is_valid) continue;
-
-			for(size_t i=0; i<N_PAIRS; ++i) {
-				double z = t._z[i];
-				
-				int w=0;
-				/* Populate the arrays for N-1 fit. */
-				for(size_t j=0; j<N_PAIRS; ++j) {
-					if(j == i) continue;
-					xf[w] = t._x[j];
-					yf[w] = t._y[j];
-					zf[w] = t._z[j];
-					qf[w] = t._q[j];
-					++w;
-				}
-				if(w != 3) ERROR("w must be 3, no?");
-
-				auto fx = PolyFit<1>(zf, xf);
-				auto fy = PolyFit<1>(zf, yf);
-				//auto fx = std::array<double, 2> { t.x0, t.ax };	
-				//auto fy = std::array<double, 2> { t.y0, t.ay };
-
-				double x_extr = fx[0] + fx[1]*z;
-				double y_extr = fy[0] + fy[1]*z;
-				auto [q_extr, track_qvar] = mnd::mean_var(qf);
-				
-				double dx = t._x[i] - x_extr;
-				double dy = t._y[i] - y_extr;
-				double dq = t._q[i] - q_extr;
-				double sq = t._sq[i]; // is sigma == sqrt(var);
-
-				h1_footx[i]->Fill( t._x[i] );
-				h1_footy[i]->Fill( t._y[i] );
-				resx[i]->Fill(dx);
-				resy[i]->Fill(dy);
-				resq[i]->Fill(dq);
-				h2_resx->Fill(i, dx);
-				h2_resy->Fill(i, dy);
-				h2_resq->Fill(i, dq);
-
-				h1q[i]->Fill(t._q[i]);
-				h2q->Fill(i, t._q[i]);
-				
-				/* Find the 3-measurement 'test' track charge params.. */
-				h2_kq->Fill( i, sqrt(dq*dq + sq*sq) );
-				h2_kr->Fill( i, sqrt(dx*dx + dy*dy) );
-			}
+		/* Check if charge veto passed. */
+		bool is_valid = true;
+		for(const auto& cut : cut_q) {
+		double qv = t._q[ cut.first ];
+			if(!mnd::IsInside(qv, cut.second)) is_valid = false;
 		}
+		if(!is_valid) continue;
+
+		for(size_t i=0; i<N_PAIRS; ++i) {
+			double z = t._z[i];
+			
+			int w=0;
+			/* Populate the arrays for N-1 fit. */
+			for(size_t j=0; j<N_PAIRS; ++j) {
+				if(j == i) continue;
+				xf[w] = t._x[j];
+				yf[w] = t._y[j];
+				zf[w] = t._z[j];
+				qf[w] = t._q[j];
+				++w;
+			} if(w != 3) ERROR("w must be 3, no?");
+
+			auto fx = PolyFit<1>(zf, xf);
+			auto fy = PolyFit<1>(zf, yf);
+			//auto fx = std::array<double, 2> { t.x0, t.ax };	
+			//auto fy = std::array<double, 2> { t.y0, t.ay };
+
+			double x_extr = fx[0] + fx[1]*z;
+			double y_extr = fy[0] + fy[1]*z;
+			auto [q_extr, track_qvar] = mnd::mean_var(qf);
+			
+			double dx = t._x[i] - x_extr;
+			double dy = t._y[i] - y_extr;
+			double dq = t._q[i] - q_extr;
+			double sq = t._sq[i]; // is sigma == sqrt(var);
+
+			h1_footx[i]->Fill( t._x[i] );
+			h1_footy[i]->Fill( t._y[i] );
+			resx[i]->Fill(dx);
+			resy[i]->Fill(dy);
+			resq[i]->Fill(dq);
+			h2_resx->Fill(i, dx);
+			h2_resy->Fill(i, dy);
+			h2_resq->Fill(i, dq);
+
+			h1q[i]->Fill(t._q[i]);
+			h2q->Fill(i, t._q[i]);
+			
+			/* Find the 3-measurement 'test' track charge params.. */
+			h2_kq->Fill( i, dq*dq + sq*sq );
+			h2_kr->Fill( i, dx*dx + dy*dy );
+			h2_kq_sqrt->Fill( i, sqrt(dq*dq + sq*sq) );
+			h2_kr_sqrt->Fill( i, sqrt(dx*dx + dy*dy) );
+		} // end-of-loop over FOOT layers.
+
+		const mnd::geom::Line3D ld = RNTrackToLine3D( t );
+		const mnd::geom::Point2D r0_down = ld.Eval( TFOOTHitProc::TARGET_Z );
+
+		double dx_dstr_ustr = r0_down.x - x0_upst;
+		double dy_dstr_ustr = r0_down.y - y0_upst;
+		h2_ktxy->Fill(dx_dstr_ustr, dy_dstr_ustr);
+		h1_kt->Fill(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr);
+		h1_kt_sqrt->Fill(sqrt(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr));
+
+		h1_diff_upstr_down-> Fill( ld.DistanceTo(lu) );
+		h1_score->Fill(t.score);
 	}
 
 	/* Around each residue, also fit a teeny-weeny gauss-chan 🥺 👉👈 */
@@ -174,9 +208,19 @@ void foot_track_analysis (
 	h2q->Draw("COLZ");
 	
 	TCanvas* ckv = new TCanvas("CostValues2D", "Cost Values 2D", 2200, 1400);
-	ckv->Divide(2, 1);
+	ckv->Divide(4, 2);
 	ckv->cd(1); h2_kq->Draw("COLZ");
+	ckv->cd(5); h2_kq_sqrt->Draw("COLZ");
 	ckv->cd(2); h2_kr->Draw("COLZ");
+	ckv->cd(6); h2_kr_sqrt->Draw("COLZ");
+	ckv->cd(3); h1_kt->Draw();
+	ckv->cd(7); h1_kt_sqrt->Draw();
+
+	ckv->cd(4); h2_ktxy->Draw("COLZ");
+	ckv->cd(8); h1_diff_upstr_down->Draw();
+
+	TCanvas* cscore = new TCanvas("Score", "Score of the recognized tracks", 1200, 800);
+	h1_score->Draw();
 
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );

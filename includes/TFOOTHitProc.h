@@ -23,10 +23,10 @@
  * CKF algorithm. Real value only comes from the sum, but keeping individual components
  * checked is used to e.g. normalize different coefficients... */
 struct TrackCost {
-	static constexpr double DEFAULT_COST_R = 1.0;  // default cost per mm^2 difference
-	static constexpr double DEFAULT_COST_Q = 5.0;  // default cost per charge^2 difference
-	static constexpr double DEFAULT_COST_T = 1e20; // default cost if target missed
-	static constexpr double DEFAULT_COST_P = 1e2;  // default cost if next layer missed
+	static constexpr double DEFAULT_COST_R = 10.0; // default cost per mm^2 difference
+	static constexpr double DEFAULT_COST_Q =  5.0; // default cost per charge^2 difference
+	static constexpr double DEFAULT_COST_T = 10.0; // default cost per mm^2 of upstream @target difference
+	static constexpr double DEFAULT_COST_P = 1e10; // default cost if next layer missed
 	/* For 12C the average sqrt(kq) cost is ~0.3 or so, so variance is ~0.1 or so.
 	 * sqrt(kr) is anything between 1-5mm (worst case, probably I fucked up alignment. 
 	 * Should be ~1mm on a good day. */
@@ -40,11 +40,10 @@ struct TrackCost {
 	inline double kp() const noexcept { return kp_; }
 	inline double kt() const noexcept { return kt_; }
 
+	/* Set the value of individual cost component, and update the total sum.
+	 * Handles NAN's and is idempotent. */
 	template<enum F o>
 	void set(double v) noexcept {
-#ifdef MND_HITMATRIX_DO_BOUNDS_CHECK
-		assert(std::isfinite(v) && "Must pass a finite value here.");
-#endif
 		if(!sum_) sum_ = 0;
 
 		if constexpr(o == KR) {
@@ -63,10 +62,12 @@ struct TrackCost {
 			if(std::isfinite(kt_)) *sum_ -= kt_;
 			kt_ = v;
 		}
-		*sum_ += v;
+		
+		if(std::isfinite(v))
+			*sum_ += v;
 	}
 
-	double sum() const noexcept { return sum_ ? *sum_ : std::numeric_limits<double>::infinity(); }
+	inline double sum() const noexcept { return sum_ ? *sum_ : std::numeric_limits<double>::infinity(); }
 	friend std::ostream& operator<<(std::ostream&, const TrackCost&);
 
 private:
@@ -85,7 +86,6 @@ struct TFOOTHitProc : TProcessor <
 	using FTrackOnline = Track<N_PAIRS, RNFOOTPair>;
 
 	constexpr static double CLUSTER_SIZE_ONE_Q_CUTOFF = 1.5; // when cluster size == 1 doesn't make sense anymore.
-	constexpr static double DEFAULT_MAX_Q_TOLERANCE = 0.8;
 	constexpr static double DEFAULT_MAX_COST = 100;
 
 	constexpr static double TARGET_Z = 0.0; // by convention. In Kalman coordinates, place target nominally at 0.0
@@ -93,8 +93,9 @@ struct TFOOTHitProc : TProcessor <
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
 	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ), 
-		double = DEFAULT_MAX_Q_TOLERANCE,
 		double = DEFAULT_MAX_COST,
+		const std::array<double,4>& = {NAN, NAN, NAN, NAN}, /* cost coefficients: {Cr, Cq, Ct, Cp} */
+		bool  = false, /* require_valid_upstream_track */
 		Verbosity = Verbosity::SILENT);
 	TFOOTHitProc() = default;
 
@@ -117,11 +118,15 @@ private:
 	void ProcessPair(const std::pair<const TFOOTCalCont&, const TFOOTCalCont&>&, i32) noexcept;
 	void ConstructObviousTracks() noexcept;
 	void ConstructDAG() noexcept;
+	void AnalyseDAG() noexcept;
+	void PreProcess() noexcept;
 	void PostProcess() noexcept;
+
+	bool requires_valid_upstream_track;
 
 	std::array<double, N_PAIRS> pair_z;
 	mnd::geom::Rectangle2D target_xy;
-	mnd::geom::Point3D upstream_hit_loc;
+	mnd::geom::Point2D upstream_hit_loc;
 	std::vector<mnd::geom::Line3D> lines{};
 
 	DAG dag;
@@ -131,6 +136,7 @@ private:
 	std::array<Eigen::Vector2d, N_PAIRS> refl; // +-1 based on the on each of the `orientation` params  
 	void SetConversionMatrices(int , const FOOTParam& , const FOOTParam& );
 
-	FTrackOnline GetPrelimTrackFromPath(const DAG::DAGPath& ) const;
+	FTrackOnline GetPrelimTrackFromPath(const DAG::DAGPath& ) const noexcept;
+	void PoisonEntriesFromHMs(const DAG::DAGPath&) noexcept; 
 };
 

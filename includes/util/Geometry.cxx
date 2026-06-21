@@ -12,13 +12,6 @@ namespace mnd { namespace geom { namespace detail {
 	static Eigen::Map<Eigen::Vector3d> mapv(std::array<double, 3>& a) noexcept {
 		return Eigen::Map<Eigen::Vector3d>{a.data()};
 	}
-	/* Not sure if this is legal, but works so far. */
-	static Eigen::Map<const Eigen::Vector3d> mapv(const Vector3D& a) noexcept {
-		return Eigen::Map<const Eigen::Vector3d>{&a.x};
-	}
-	[[ maybe_unused ]] static Eigen::Map<Eigen::Vector3d> mapv(Vector3D& a) noexcept {
-		return Eigen::Map<Eigen::Vector3d>{&a.x};
-	}
 	static Eigen::Matrix3d rotation_matrix(const Vector3D& axis, double angle) noexcept {
 		Eigen::Vector3d u{axis.x, axis.y, axis.z};
 		return Eigen::AngleAxisd{angle, u.normalized()}.toRotationMatrix();
@@ -42,7 +35,11 @@ namespace mnd { namespace geom { namespace detail {
 
 		return Line2D{a0, a1};
 	}
-}}}
+} // namespace detail
+
+/* Not sure if this is legal, but works so far. */
+
+}} // namespace mnd::geom
 
 using namespace mnd::geom;
 
@@ -118,7 +115,7 @@ Line2D& Line2D::RepresentInShifted (
 double Line3D::DistanceTo(const Point3D& pt) const noexcept {
 	const auto p = detail::mapv(this->p);
 	const auto v = detail::mapv(this->v);
-	const auto k = detail::mapv( pt );
+	const auto k = pt.eigen_view();
 
 	const double n = v.norm();
 
@@ -136,13 +133,18 @@ double Line3D::DistanceTo(const Line3D& rhs) const noexcept {
 
 	const Eigen::Vector3d v1_cross_v2 = v1.cross(v2);
 
-	const double n = v1_cross_v2.norm();
+	const double n2 = v1_cross_v2.squaredNorm();
+	
+    const double v1n2 = v1.squaredNorm();
+    const double v2n2 = v2.squaredNorm();
 
-	if(n < 1e-20) {
+	const double sin2 = n2 / (v1n2 * v2n2);
+	// Protection against near-parallel lines //
+	if(sin2 < ALMOST_PARALLEL2) {
 		return (p1-p2).cross(v1).norm() / v1.norm();
 	}
 
-	return std::abs( (p1-p2).dot(v1_cross_v2)) / n;
+	return std::abs( (p1-p2).dot(v1_cross_v2)) / std::sqrt(n2);
 }
 
 double Line3D::AngleRelativeTo(const Line3D& rhs) const noexcept {
@@ -316,4 +318,18 @@ mnd::geom::Point3D mnd::geom::FindVertex( ::mnd::span<const Line3D> lines) noexc
 mnd::geom::Point3D mnd::geom::FindVertex(const mnd::geom::Line3D& l1, const mnd::geom::Line3D& l2) noexcept {
 	const std::array<Line3D, 2> lines{l1, l2};
 	return FindVertex(mnd::as_span(lines));
+}
+
+
+std::ostream& operator<<(std::ostream& os, const mnd::geom::Point2D& rhs) {
+	return os << '(' << rhs.x << ", " << rhs.y << ')';
+}
+std::ostream& operator<<(std::ostream& os, const mnd::geom::Point3D& rhs) {
+	return os << '(' << rhs.x << ", " << rhs.y << ", " << rhs.z << ')';
+}
+std::ostream& operator<<(std::ostream& os, const mnd::geom::Line2D&  rhs) {
+	return os << rhs.value;
+}
+std::ostream& operator<<(std::ostream& os, const mnd::geom::Line3D&  rhs) {
+	return os << '(' << rhs.xarray() << ", " << rhs.yarray() << ')';
 }

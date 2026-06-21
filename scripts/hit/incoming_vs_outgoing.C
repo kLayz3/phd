@@ -145,13 +145,13 @@ void incoming_vs_outgoing (
 		if(z.size() < 2) continue;
 
 		if(foot->track.size() != 1) continue;
-		const RNFOOTTrack& t = foot->track[0];
+		const RNFOOTTrack& t = foot->heavy_fragment;
 		if(t.n != N_PAIRS) continue; // get only tracks going thru all 4 layers.
 
 		if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(t.Q, foot_q_cut)) continue;
 
 		/* 3D line describing the track inside the box (downstream). */
-const mnd::geom::Line3D ft = RNTrackToLine3D(t);
+		const mnd::geom::Line3D ft = RNTrackToLine3D(t);
 
 		/* 2x 2D lines describing the track upstream. */
 		const std::array<double,2> fx_tpc = PolyFit<1>(z, x);	

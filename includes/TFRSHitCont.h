@@ -118,4 +118,3 @@ struct TFRSHitCont : TContainer<RNFRSHit> {
 };
 
 mnd::geom::Line3D RNTrackToLine3D(const RNFRSHit::Id& );
-extern mnd::geom::Line3D RNTrackToLine3D(const RNFRSHit::Id& ); // CLING is sometimes stupid I swear to God .. :)

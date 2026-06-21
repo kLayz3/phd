@@ -150,7 +150,6 @@ struct Track {
 	using FHitMatrix = HitMatrix<FOOTPair>;
 	using Entry = typename FHitMatrix::Entry;
 	using QEntryType = typename Entry::q_type;	
-	using XYEntryType = typename Entry::xy_type;	
 
 	static constexpr double SP = 0.100 * 0.100; // [ mm^2 ]
 	static constexpr double SQ = 0.7 * 0.7; // [ Q*Q ; 'Q' = one charge unit ]
@@ -192,10 +191,10 @@ struct Track {
 		t.reset();
 	 }
 
-	XYEntryType extrapolate_to(double z) const noexcept {
+	mnd::geom::Point2D extrapolate_to(double z) const noexcept {
 		const FTrack& fit = this->get();
 		mnd::geom::Point2D val = fit.l.Eval(z);
-		return { val.x, val.y }; /* Eigen::Vector2d */
+		return val;
 	}
 
 	double GetScore() const noexcept {
@@ -206,9 +205,9 @@ struct Track {
 		double sp = 0, sq = 0;
 		
 		for(size_t i=0; i < n_current; ++i) {
-			const XYEntryType e = this->extrapolate_to( zs[i] );
-			double dx = xs[i] - e(0);
-			double dy = ys[i] - e(1);
+			const mnd::geom::Point2D e = this->extrapolate_to( zs[i] );
+			double dx = xs[i] - e.x;
+			double dy = ys[i] - e.y;
 			
 			sp += dx*dx + dy*dy;
 

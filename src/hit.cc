@@ -34,9 +34,13 @@ int main(int argc, char* argv[]) {
 	std::string pStr, fileName, outFile, setupFile, footSetupFile;
 	
 	u64 maxEvents = -1;
-	double foot_qt = TFOOTHitProc::DEFAULT_MAX_Q_TOLERANCE;
-	double foot_mc = TFOOTHitProc::DEFAULT_MAX_COST;
+	double kalman_max_cost = TFOOTHitProc::DEFAULT_MAX_COST;
+	double kalman_cost_cr = NAN;
+	double kalman_cost_cq = NAN;
+	double kalman_cost_ct = NAN;
+	double kalman_cost_cp = NAN;
 	Verbosity v = Verbosity::SILENT;
+	bool must_have_upstream_track = false;
 
 	ParseCmdLine("file", fileName, argc, argv, true);
 	{
@@ -73,6 +77,39 @@ int main(int argc, char* argv[]) {
 		auto ov = mnd::itov(val);
 		v = ov ? *ov : Verbosity::CHATTY;
 	}
+	if(ParseCmdLine("u", pStr, argc, argv)) {
+		int val;
+		try {
+			val = std::stoi(pStr);
+		} catch(std::exception& e) {
+			ERROR("Value parsed from `v`: \'%s\' not convertible to int.\n", pStr.c_str());
+		}
+		if(val != 0 and val != 1) {
+			ERROR("Value for -u parameter must be 0 or 1. ");
+			std::cerr << def_msg(); return 0; 
+		}
+		must_have_upstream_track = static_cast<bool>(val);
+	}
+	if(ParseCmdLine("max-cost", pStr, argc, argv)) {
+		try {
+			kalman_max_cost = std::stod(pStr);
+		} catch(std::exception& e) {
+			ERROR("Value parsed from `max-cost`: \'%s\' not convertible to double. Err: %s\n", pStr.c_str(), e.what());
+		}
+	}
+
+#define PARSE_CMD_KCOEF(coeff)  \
+	if(ParseCmdLine(#coeff, pStr, argc, argv)) { \
+		try { \
+			kalman_cost_##coeff = std::stod(pStr); \
+		} catch(std::exception& e) { \
+			ERROR("Value parsed from `%s`: \'%s\' not convertible to double. Err: %s\n", #coeff, pStr.c_str(), e.what()); \
+		} \
+	}
+	PARSE_CMD_KCOEF(cr)
+	PARSE_CMD_KCOEF(cq)
+	PARSE_CMD_KCOEF(ct)
+	PARSE_CMD_KCOEF(cp)
 
 	VerifyNoArgumentsLeft(argc, argv);
 	srand(time(NULL));
@@ -105,7 +142,8 @@ int main(int argc, char* argv[]) {
 		.emplace_process<TFOOTHitProc>(hfoot,
 			cfoot[0], cfoot[1], cfoot[2], cfoot[3], 
 			cfoot[4], cfoot[5], cfoot[6], cfoot[7],
-			foot_qt, foot_mc, v) 
+			kalman_max_cost, std::array{ kalman_cost_cr, kalman_cost_cq, kalman_cost_ct, kalman_cost_cp },
+			must_have_upstream_track, v) 
 		.MakePool<4>( 4092 );
 		//.MakePool<1>( 512 );
 	
@@ -144,6 +182,12 @@ For either single or multiple values.\n\
 -output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_cal' suffix.\n\
 -max-events N               ..Specify total number of events. Default: all events in the input ROOT file.\n\
 -v    [0,1,2]               ..Specify verbosity. Default 0 (silent).\n\
+-u    [0,1]                 ..Predicate if upstream track must be present. Default 0 (not necessary).\n\
+-max-cost COST              ..Maximum cost value supplied to Kalman algorithm. Default 100.\n\
+-cr VALUE                   ..cr coefficient value. Default TFOOTHitProc::DEFAULT_COST_R\n\
+-cq VALUE                   ..cq coefficient value. Default TFOOTHitProc::DEFAULT_COST_Q\n\
+-ct VALUE                   ..ct coefficient value. Default TFOOTHitProc::DEFAULT_COST_T\n\
+-cp VALUE                   ..cp coefficient value. Default TFOOTHitProc::DEFAULT_COST_P\n\
 -help                       ..Print this message to stdout. \n\
 \n\
 This program will do FOOT tracking (and tbd: S2/S3 FRS PID + momentum measurement).\n\

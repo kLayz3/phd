@@ -36,8 +36,7 @@ bool CMDLineParser::IsCmdArg(const char* line, int argc, char** argv) {
 }
 
 template<typename T>
-bool 
-CMDLineParser::ParseCmdLine(const char* line, T& dest, int argc, char** argv, Mandatory mandatory) {
+bool CMDLineParser::ParseCmdLine(const char* line, T& dest, int argc, char** argv, Mandatory mandatory) {
 	using std::string;
 	using Vec = std::vector<string>;
 	static_assert(std::is_same_v<T, string> || std::is_same_v<T, Vec>,
@@ -82,9 +81,9 @@ CMDLineParser::ParseCmdLine(const char* line, T& dest, int argc, char** argv, Ma
 			memset(argv[i], '_', strlen(argv[i]));
 			retval = 1;
 			
-			/* Eat up all the argv's until we reach another '^-' or a '___' regex. */
+			/* Eat up all the argv's until we reach another '^-' or a '__' regex. */
 			while((++i) < argc && argv[i][0] != '-') {
-				if(strlen(argv[i]) >= 3 and !strncmp(argv[i], "___", 3)) 
+				if(strlen(argv[i]) >= 2 and !strncmp(argv[i], "__", 2)) 
 					break;
 				parsed.emplace_back(argv[i]);
 				memset(argv[i], '_', strlen(argv[i]));
