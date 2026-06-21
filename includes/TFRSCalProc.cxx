@@ -1,7 +1,7 @@
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
 #include "TFRSCalProc.h"
-#include "Eigen/Dense"
+#include "Eigen.h"
 
 /* This ostream API is really hacked. Close your eyes. */
 #ifdef TFRSCALPROC_VERBOSE_

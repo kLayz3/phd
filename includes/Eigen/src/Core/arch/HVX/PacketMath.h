@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: The Eigen Authors
+// SPDX-License-Identifier: MPL-2.0
 
 #ifndef EIGEN_HVX_PACKET_MATH_H
 #define EIGEN_HVX_PACKET_MATH_H
@@ -25,7 +27,7 @@ EIGEN_STRONG_INLINE HVX_Vector HVX_vmem(const void* m) {
   HVX_Vector v;
 #if EIGEN_COMP_CLANG
   // Use inlined assembly for aligned vmem load on unaligned memory.
-  // Use type cast to HVX_Vector* may mess up with compiler data alignment.
+  // Using a type cast to HVX_Vector* may mess up the compiler data alignment.
   __asm__("%0 = vmem(%1+#%2)" : "=v"(v) : "r"(m), "i"(D) : "memory");
 #else
   void* aligned_mem =
@@ -57,11 +59,10 @@ EIGEN_STRONG_INLINE HVX_Vector HVX_load_partial(const T* mem) {
   HVX_Vector v0 = HVX_vmem<0>(mem);
   HVX_Vector v1 = v0;
   uintptr_t mem_addr = reinterpret_cast<uintptr_t>(mem);
-  EIGEN_IF_CONSTEXPR(Size * sizeof(T) <= Alignment) {
+  EIGEN_IF_CONSTEXPR (Size * sizeof(T) <= Alignment) {
     // Data size less than alignment will never cross multiple aligned vectors.
     v1 = v0;
-  }
-  else {
+  } else {
     uintptr_t left_off = mem_addr & (__HVX_LENGTH__ - 1);
     if (left_off + Size * sizeof(T) > __HVX_LENGTH__) {
       v1 = HVX_vmem<1>(mem);
@@ -97,7 +98,7 @@ EIGEN_STRONG_INLINE void HVX_store_partial(T* mem, HVX_Vector v) {
   HVX_VectorPred ql_not = Q6_Q_vsetq_R(mem_addr);
   HVX_VectorPred qr = Q6_Q_vsetq2_R(right_off);
 
-  EIGEN_IF_CONSTEXPR(Size * sizeof(T) > Alignment) {
+  EIGEN_IF_CONSTEXPR (Size * sizeof(T) > Alignment) {
     if (right_off > __HVX_LENGTH__) {
       Q6_vmem_QRIV(qr, mem + __HVX_LENGTH__ / sizeof(T), value);
       qr = Q6_Q_vcmp_eq_VbVb(value, value);
@@ -194,7 +195,7 @@ struct unpacket_traits<Packet16f> {
   typedef Packet8f half;
   enum {
     size = 16,
-    // Many code assume alignment on packet size instead of following trait
+    // Much code assumes alignment on packet size instead of following the trait
     // So we do not use Aligned128 to optimize aligned load/store,
     alignment = Aligned64,
     vectorizable = true,
@@ -209,7 +210,7 @@ struct unpacket_traits<Packet8f> {
   typedef Packet8f half;
   enum {
     size = 8,
-    // Many code assume alignment on packet size instead of following trait
+    // Much code assumes alignment on packet size instead of following the trait
     // So we do not use Aligned128 to optimize aligned load/store,
     alignment = Aligned32,
     vectorizable = true,
@@ -764,11 +765,19 @@ EIGEN_STRONG_INLINE void ptranspose(PacketBlock<Packet32f, 32>& kernel) {
 template <HVXPacketSize T>
 EIGEN_STRONG_INLINE float predux_hvx(const HVXPacket<T>& a) {
   const Index packet_size = unpacket_traits<HVXPacket<T>>::size;
+#if __HVX_ARCH__ >= 79
+  HVX_Vector vsum = Q6_Vsf_vadd_VsfVsf(a.Get(), Q6_V_vror_VR(a.Get(), sizeof(float)));
+  for (int i = 2; i < packet_size; i <<= 1) {
+    vsum = Q6_Vsf_vadd_VsfVsf(vsum, Q6_V_vror_VR(vsum, i * sizeof(float)));
+  }
+  return pfirst(HVXPacket<T>::Create(vsum));
+#else
   HVX_Vector vsum = Q6_Vqf32_vadd_VsfVsf(a.Get(), Q6_V_vror_VR(a.Get(), sizeof(float)));
   for (int i = 2; i < packet_size; i <<= 1) {
     vsum = Q6_Vqf32_vadd_Vqf32Vqf32(vsum, Q6_V_vror_VR(vsum, i * sizeof(float)));
   }
   return pfirst(HVXPacket<T>::Create(Q6_Vsf_equals_Vqf32(vsum)));
+#endif
 }
 template <>
 EIGEN_STRONG_INLINE float predux<Packet32f>(const Packet32f& a) {

@@ -6,6 +6,7 @@
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 #ifndef EIGEN_AMBIVECTOR_H
 #define EIGEN_AMBIVECTOR_H
@@ -27,7 +28,6 @@ class AmbiVector {
  public:
   typedef Scalar_ Scalar;
   typedef StorageIndex_ StorageIndex;
-  typedef typename NumTraits<Scalar>::Real RealScalar;
 
   explicit AmbiVector(Index size)
       : m_buffer(0), m_zero(0), m_size(0), m_end(0), m_allocatedSize(0), m_allocatedElements(0), m_mode(-1) {
@@ -101,7 +101,7 @@ class AmbiVector {
     Scalar value;
   };
 
-  // used to store data in both mode
+  // used to store data in both modes
   Scalar* m_buffer;
   Scalar m_zero;
   StorageIndex m_size;
@@ -173,7 +173,7 @@ Scalar_& AmbiVector<Scalar_, StorageIndex_>::coeffRef(Index i) {
     return m_buffer[i];
   else {
     ListEl* EIGEN_RESTRICT llElements = reinterpret_cast<ListEl*>(m_buffer);
-    // TODO factorize the following code to reduce code generation
+    // TODO: factor out the following code to reduce code generation
     eigen_assert(m_mode == IsSparse);
     if (m_llSize == 0) {
       // this is the first element
@@ -238,8 +238,8 @@ Scalar_& AmbiVector<Scalar_, StorageIndex_>::coeff(Index i) {
       Index elid = m_llStart;
       while (elid >= 0 && llElements[elid].index < i) elid = llElements[elid].next;
 
-      if (llElements[elid].index == i)
-        return llElements[m_llCurrent].value;
+      if (elid >= 0 && llElements[elid].index == i)
+        return llElements[elid].value;
       else
         return m_zero;
     }

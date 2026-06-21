@@ -4,7 +4,7 @@
 
 #include <cmath>
 #include <type_traits>
-#include "../Eigen/Dense"
+#include "../Eigen.h"
 
 #define MND_HITMATRIX_DO_BOUNDS_CHECK
 

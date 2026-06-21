@@ -7,6 +7,7 @@
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 #ifndef EIGEN_COMPLEX32_ZVECTOR_H
 #define EIGEN_COMPLEX32_ZVECTOR_H
@@ -18,9 +19,12 @@ namespace Eigen {
 
 namespace internal {
 
+EIGEN_GCC_FAST_MATH_COMPLEX_VECTORIZE_WORKAROUND_PUSH
+
 #if !defined(__ARCH__) || (defined(__ARCH__) && __ARCH__ >= 12)
 inline Packet4ui p4ui_CONJ_XOR() {
-  return Packet4ui {0x00000000, 0x80000000, 0x00000000, 0x80000000};  // vec_mergeh((Packet4ui)p4i_ZERO, (Packet4ui)p4f_MZERO);
+  return Packet4ui{0x00000000, 0x80000000, 0x00000000,
+                   0x80000000};  // vec_mergeh((Packet4ui)p4i_ZERO, (Packet4ui)p4f_MZERO);
 }
 #endif
 
@@ -255,29 +259,8 @@ EIGEN_STRONG_INLINE Packet1cd pdiv<Packet1cd>(const Packet1cd& a, const Packet1c
   return pdiv_complex(a, b);
 }
 
-template <>
-EIGEN_STRONG_INLINE Packet1cd psqrt<Packet1cd>(const Packet1cd& a) {
-  return psqrt_complex<Packet1cd>(a);
-}
-
-template <>
-EIGEN_STRONG_INLINE Packet2cf psqrt<Packet2cf>(const Packet2cf& a) {
-  return psqrt_complex<Packet2cf>(a);
-}
-
-template <>
-EIGEN_STRONG_INLINE Packet1cd plog<Packet1cd>(const Packet1cd& a) {
-  return plog_complex<Packet1cd>(a);
-}
-template <>
-EIGEN_STRONG_INLINE Packet2cf plog<Packet2cf>(const Packet2cf& a) {
-  return plog_complex<Packet2cf>(a);
-}
-
-template <>
-EIGEN_STRONG_INLINE Packet2cf pexp<Packet2cf>(const Packet2cf& a) {
-  return pexp_complex(a);
-}
+EIGEN_INSTANTIATE_COMPLEX_MATH_FUNCS_NO_EXP(Packet1cd)
+EIGEN_INSTANTIATE_COMPLEX_MATH_FUNCS(Packet2cf)
 
 EIGEN_STRONG_INLINE Packet1cd pcplxflip /*<Packet1cd>*/ (const Packet1cd& x) {
   return Packet1cd(preverse(Packet2d(x.v)));
@@ -545,6 +528,8 @@ EIGEN_STRONG_INLINE void ptranspose(PacketBlock<Packet2cf, 2>& kernel) {
 }
 
 #endif
+
+EIGEN_GCC_FAST_MATH_COMPLEX_VECTORIZE_WORKAROUND_POP
 
 }  // end namespace internal
 

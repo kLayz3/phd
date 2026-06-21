@@ -6,6 +6,7 @@
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 #ifndef EIGEN_DOT_H
 #define EIGEN_DOT_H
@@ -20,12 +21,14 @@ namespace internal {
 template <typename Derived, typename Scalar = typename traits<Derived>::Scalar>
 struct squared_norm_impl {
   using Real = typename NumTraits<Scalar>::Real;
-  static EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Real run(const Derived& a) { return a.realView().cwiseAbs2().sum(); }
+  static EIGEN_DEVICE_FUNC constexpr EIGEN_STRONG_INLINE Real run(const Derived& a) {
+    return a.realView().cwiseAbs2().sum();
+  }
 };
 
 template <typename Derived>
 struct squared_norm_impl<Derived, bool> {
-  static EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE bool run(const Derived& a) { return a.any(); }
+  static EIGEN_DEVICE_FUNC constexpr EIGEN_STRONG_INLINE bool run(const Derived& a) { return a.any(); }
 };
 
 }  // end namespace internal
@@ -43,7 +46,7 @@ struct squared_norm_impl<Derived, bool> {
  */
 template <typename Derived>
 template <typename OtherDerived>
-EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
+EIGEN_DEVICE_FUNC constexpr EIGEN_STRONG_INLINE
     typename ScalarBinaryOpTraits<typename internal::traits<Derived>::Scalar,
                                   typename internal::traits<OtherDerived>::Scalar>::ReturnType
     MatrixBase<Derived>::dot(const MatrixBase<OtherDerived>& other) const {
@@ -54,19 +57,19 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
 
 /** \returns, for vectors, the squared \em l2 norm of \c *this, and for matrices the squared Frobenius norm.
  * In both cases, it consists in the sum of the square of all the matrix entries.
- * For vectors, this is also equals to the dot product of \c *this with itself.
+ * For vectors, this is also equal to the dot product of \c *this with itself.
  *
  * \sa dot(), norm(), lpNorm()
  */
 template <typename Derived>
-EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE typename NumTraits<typename internal::traits<Derived>::Scalar>::Real
+EIGEN_DEVICE_FUNC constexpr EIGEN_STRONG_INLINE typename NumTraits<typename internal::traits<Derived>::Scalar>::Real
 MatrixBase<Derived>::squaredNorm() const {
   return internal::squared_norm_impl<Derived>::run(derived());
 }
 
 /** \returns, for vectors, the \em l2 norm of \c *this, and for matrices the Frobenius norm.
  * In both cases, it consists in the square root of the sum of the square of all the matrix entries.
- * For vectors, this is also equals to the square root of the dot product of \c *this with itself.
+ * For vectors, this is also equal to the square root of the dot product of \c *this with itself.
  *
  * \sa lpNorm(), dot(), squaredNorm()
  */

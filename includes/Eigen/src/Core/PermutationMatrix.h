@@ -7,6 +7,7 @@
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 #ifndef EIGEN_PERMUTATIONMATRIX_H
 #define EIGEN_PERMUTATIONMATRIX_H
@@ -248,8 +249,6 @@ class PermutationBase : public EigenBase<Derived> {
     }
     return res;
   }
-
- protected:
 };
 
 namespace internal {
@@ -419,8 +418,6 @@ class Map<PermutationMatrix<SizeAtCompileTime, MaxSizeAtCompileTime, StorageInde
   IndicesType m_indices;
 };
 
-template <typename IndicesType_>
-class TranspositionsWrapper;
 namespace internal {
 template <typename IndicesType_>
 struct traits<PermutationWrapper<IndicesType_> > {
@@ -490,7 +487,7 @@ class InverseImpl<PermutationType, PermutationStorage> : public EigenBase<Invers
   typedef internal::traits<PermutationType> PermTraits;
 
  protected:
-  InverseImpl() {}
+  InverseImpl() = default;
 
  public:
   typedef Inverse<PermutationType> InverseType;

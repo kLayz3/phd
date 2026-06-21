@@ -9,6 +9,8 @@
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// SPDX-FileCopyrightText: The Eigen Authors
+// SPDX-License-Identifier: MPL-2.0
 
 /*****************************************************************
  * InteropHeaders.h
@@ -95,11 +97,9 @@ SYCL_PACKET_TRAITS(cl::sycl::cl_double2, const double, 2)
 // Make sure this is only available when targeting a GPU: we don't want to
 // introduce conflicts between these packet_traits definitions and the ones
 // we'll use on the host side (SSE, AVX, ...)
-#define SYCL_ARITHMETIC(packet_type)  \
-  template <>                         \
-  struct is_arithmetic<packet_type> { \
-    enum { value = true };            \
-  };
+#define SYCL_ARITHMETIC(packet_type) \
+  template <>                        \
+  struct is_arithmetic<packet_type> : std::true_type {};
 SYCL_ARITHMETIC(cl::sycl::cl_half8)
 SYCL_ARITHMETIC(cl::sycl::cl_float4)
 SYCL_ARITHMETIC(cl::sycl::cl_double2)
@@ -163,7 +163,7 @@ struct PacketWrapper<PacketReturnType, 4> {
       case 3:
         return in.w();
       default:
-        // INDEX MUST BE BETWEEN 0 and 3.There is no abort function in SYCL kernel. so we cannot use abort here.
+        // INDEX MUST BE BETWEEN 0 and 3. There is no abort function in SYCL kernel. so we cannot use abort here.
         //  The code will never reach here
         __builtin_unreachable();
     }
@@ -202,7 +202,7 @@ struct PacketWrapper<PacketReturnType, 2> {
       case 1:
         return in.y();
       default:
-        // INDEX MUST BE BETWEEN 0 and 1.There is no abort function in SYCL kernel. so we cannot use abort here.
+        // INDEX MUST BE BETWEEN 0 and 1. There is no abort function in SYCL kernel. so we cannot use abort here.
         // The code will never reach here
         __builtin_unreachable();
     }

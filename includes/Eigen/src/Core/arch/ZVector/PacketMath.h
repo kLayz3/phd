@@ -6,6 +6,7 @@
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 #ifndef EIGEN_PACKET_MATH_ZVECTOR_H
 #define EIGEN_PACKET_MATH_ZVECTOR_H
@@ -129,16 +130,8 @@ static Packet16uc p16uc_PSET32_WODD =
             8);  //{ 0,1,2,3, 0,1,2,3, 8,9,10,11, 8,9,10,11 };
 static Packet16uc p16uc_PSET32_WEVEN = vec_sld(p16uc_DUPLICATE32_HI, (Packet16uc)vec_splat((Packet4ui)p16uc_FORWARD, 3),
                                                8);  //{ 4,5,6,7, 4,5,6,7, 12,13,14,15, 12,13,14,15 };
-/*static Packet16uc p16uc_HALF64_0_16 = vec_sld((Packet16uc)p4i_ZERO, vec_splat((Packet16uc) vec_abs(p4i_MINUS16), 3),
-8);      //{ 0,0,0,0, 0,0,0,0, 16,16,16,16, 16,16,16,16};
-
-static Packet16uc p16uc_PSET64_HI = (Packet16uc) vec_mergeh((Packet4ui)p16uc_PSET32_WODD,
-(Packet4ui)p16uc_PSET32_WEVEN);     //{ 0,1,2,3, 4,5,6,7, 0,1,2,3, 4,5,6,7 };*/
 static Packet16uc p16uc_PSET64_LO = (Packet16uc)vec_mergel(
     (Packet4ui)p16uc_PSET32_WODD, (Packet4ui)p16uc_PSET32_WEVEN);  //{ 8,9,10,11, 12,13,14,15, 8,9,10,11, 12,13,14,15 };
-/*static Packet16uc p16uc_TRANSPOSE64_HI = vec_add(p16uc_PSET64_HI, p16uc_HALF64_0_16); //{ 0,1,2,3, 4,5,6,7,
-16,17,18,19, 20,21,22,23}; static Packet16uc p16uc_TRANSPOSE64_LO = vec_add(p16uc_PSET64_LO, p16uc_HALF64_0_16); //{
-8,9,10,11, 12,13,14,15, 24,25,26,27, 28,29,30,31};*/
 static Packet16uc p16uc_TRANSPOSE64_HI = {0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23};
 static Packet16uc p16uc_TRANSPOSE64_LO = {8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31};
 
@@ -549,6 +542,18 @@ template <>
 EIGEN_STRONG_INLINE Packet2d pfloor<Packet2d>(const Packet2d& a) {
   return vec_floor(a);
 }
+template <>
+EIGEN_STRONG_INLINE Packet2d print<Packet2d>(const Packet2d& a) {
+  return __builtin_s390_vfidb(a, 4, 5);
+}
+template <>
+EIGEN_STRONG_INLINE Packet2d ptrunc<Packet2d>(const Packet2d& a) {
+  return __builtin_s390_vfidb(a, 4, 4);
+}
+template <>
+EIGEN_STRONG_INLINE Packet2d pcmp_lt_or_nan<Packet2d>(const Packet2d& a, const Packet2d& b) {
+  return pnot(pcmp_le(b, a));
+}
 
 template <>
 EIGEN_STRONG_INLINE Packet4i ploadu<Packet4i>(const int* from) {
@@ -939,6 +944,20 @@ EIGEN_STRONG_INLINE Packet4f pfloor<Packet4f>(const Packet4f& a) {
   res.v4f[1] = vec_floor(a.v4f[1]);
   return res;
 }
+template <>
+EIGEN_STRONG_INLINE Packet4f print<Packet4f>(const Packet4f& a) {
+  Packet4f res;
+  res.v4f[0] = print(a.v4f[0]);
+  res.v4f[1] = print(a.v4f[1]);
+  return res;
+}
+template <>
+EIGEN_STRONG_INLINE Packet4f ptrunc<Packet4f>(const Packet4f& a) {
+  Packet4f res;
+  res.v4f[0] = ptrunc(a.v4f[0]);
+  res.v4f[1] = ptrunc(a.v4f[1]);
+  return res;
+}
 
 template <>
 EIGEN_STRONG_INLINE Packet4f ploaddup<Packet4f>(const float* from) {
@@ -1063,6 +1082,13 @@ Packet4f EIGEN_STRONG_INLINE pcmp_eq<Packet4f>(const Packet4f& a, const Packet4f
   res.v4f[1] = pcmp_eq(a.v4f[1], b.v4f[1]);
   return res;
 }
+template <>
+Packet4f EIGEN_STRONG_INLINE pcmp_lt_or_nan<Packet4f>(const Packet4f& a, const Packet4f& b) {
+  Packet4f res;
+  res.v4f[0] = pcmp_lt_or_nan(a.v4f[0], b.v4f[0]);
+  res.v4f[1] = pcmp_lt_or_nan(a.v4f[1], b.v4f[1]);
+  return res;
+}
 
 #else
 template <>
@@ -1175,6 +1201,18 @@ EIGEN_STRONG_INLINE Packet4f pceil<Packet4f>(const Packet4f& a) {
 template <>
 EIGEN_STRONG_INLINE Packet4f pfloor<Packet4f>(const Packet4f& a) {
   return vec_floor(a);
+}
+template <>
+EIGEN_STRONG_INLINE Packet4f print<Packet4f>(const Packet4f& a) {
+  return __builtin_s390_vfisb(a, 4, 5);
+}
+template <>
+EIGEN_STRONG_INLINE Packet4f ptrunc<Packet4f>(const Packet4f& a) {
+  return __builtin_s390_vfisb(a, 4, 4);
+}
+template <>
+EIGEN_STRONG_INLINE Packet4f pcmp_lt_or_nan<Packet4f>(const Packet4f& a, const Packet4f& b) {
+  return pnot(pcmp_le(b, a));
 }
 template <>
 EIGEN_STRONG_INLINE Packet4f pabs<Packet4f>(const Packet4f& a) {

@@ -1,5 +1,5 @@
 #include "Geometry.h"
-#include "../Eigen/Dense"
+#include "../Eigen.h"
 #include <cmath>
 
 namespace mnd { namespace geom { namespace detail {

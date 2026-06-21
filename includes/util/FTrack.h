@@ -12,7 +12,7 @@
 #include "Geometry.h"
 #include "DirectedAGraph.hxx"
 
-#include "../Eigen/Dense"
+#include "../Eigen.h"
 
 namespace mnd {
 namespace track {

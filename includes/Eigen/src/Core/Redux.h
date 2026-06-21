@@ -7,6 +7,7 @@
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 #ifndef EIGEN_REDUX_H
 #define EIGEN_REDUX_H
@@ -101,7 +102,7 @@ struct redux_novec_unroller {
 
   typedef typename Evaluator::Scalar Scalar;
 
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Scalar run(const Evaluator& eval, const Func& func) {
+  EIGEN_DEVICE_FUNC static constexpr EIGEN_STRONG_INLINE Scalar run(const Evaluator& eval, const Func& func) {
     return func(redux_novec_unroller<Func, Evaluator, Start, HalfLength>::run(eval, func),
                 redux_novec_unroller<Func, Evaluator, Start + HalfLength, Length - HalfLength>::run(eval, func));
   }
@@ -114,7 +115,7 @@ struct redux_novec_unroller<Func, Evaluator, Start, 1> {
 
   typedef typename Evaluator::Scalar Scalar;
 
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Scalar run(const Evaluator& eval, const Func&) {
+  EIGEN_DEVICE_FUNC static constexpr EIGEN_STRONG_INLINE Scalar run(const Evaluator& eval, const Func&) {
     return eval.coeffByOuterInner(outer, inner);
   }
 };
@@ -125,7 +126,7 @@ struct redux_novec_unroller<Func, Evaluator, Start, 1> {
 template <typename Func, typename Evaluator, Index Start>
 struct redux_novec_unroller<Func, Evaluator, Start, 0> {
   typedef typename Evaluator::Scalar Scalar;
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Scalar run(const Evaluator&, const Func&) { return Scalar(); }
+  EIGEN_DEVICE_FUNC static constexpr EIGEN_STRONG_INLINE Scalar run(const Evaluator&, const Func&) { return Scalar(); }
 };
 
 template <typename Func, typename Evaluator, Index Start, Index Length>
@@ -134,7 +135,7 @@ struct redux_novec_linear_unroller {
 
   typedef typename Evaluator::Scalar Scalar;
 
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Scalar run(const Evaluator& eval, const Func& func) {
+  EIGEN_DEVICE_FUNC static constexpr EIGEN_STRONG_INLINE Scalar run(const Evaluator& eval, const Func& func) {
     return func(redux_novec_linear_unroller<Func, Evaluator, Start, HalfLength>::run(eval, func),
                 redux_novec_linear_unroller<Func, Evaluator, Start + HalfLength, Length - HalfLength>::run(eval, func));
   }
@@ -144,7 +145,7 @@ template <typename Func, typename Evaluator, Index Start>
 struct redux_novec_linear_unroller<Func, Evaluator, Start, 1> {
   typedef typename Evaluator::Scalar Scalar;
 
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Scalar run(const Evaluator& eval, const Func&) {
+  EIGEN_DEVICE_FUNC static constexpr EIGEN_STRONG_INLINE Scalar run(const Evaluator& eval, const Func&) {
     return eval.coeff(Start);
   }
 };
@@ -155,7 +156,7 @@ struct redux_novec_linear_unroller<Func, Evaluator, Start, 1> {
 template <typename Func, typename Evaluator, Index Start>
 struct redux_novec_linear_unroller<Func, Evaluator, Start, 0> {
   typedef typename Evaluator::Scalar Scalar;
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Scalar run(const Evaluator&, const Func&) { return Scalar(); }
+  EIGEN_DEVICE_FUNC static constexpr EIGEN_STRONG_INLINE Scalar run(const Evaluator&, const Func&) { return Scalar(); }
 };
 
 /*** vectorization ***/
@@ -367,7 +368,7 @@ struct redux_impl<Func, Evaluator, LinearVectorizedTraversal, CompleteUnrolling>
 
   template <typename XprType>
   EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Scalar run(const Evaluator& eval, const Func& func, const XprType& xpr) {
-    EIGEN_ONLY_USED_FOR_DEBUG(xpr)
+    EIGEN_ONLY_USED_FOR_DEBUG(xpr);
     eigen_assert(xpr.rows() > 0 && xpr.cols() > 0 && "you are using an empty matrix");
     if (VectorizedSize > 0) {
       Scalar res = func.predux(
@@ -398,8 +399,8 @@ class redux_evaluator : public internal::evaluator<XprType_> {
   enum {
     MaxRowsAtCompileTime = XprType::MaxRowsAtCompileTime,
     MaxColsAtCompileTime = XprType::MaxColsAtCompileTime,
-    // TODO we should not remove DirectAccessBit and rather find an elegant way to query the alignment offset at runtime
-    // from the evaluator
+    // TODO: we should not remove DirectAccessBit and rather find an elegant way to query the alignment offset at
+    // runtime from the evaluator
     Flags = Base::Flags & ~DirectAccessBit,
     IsRowMajor = XprType::IsRowMajor,
     SizeAtCompileTime = XprType::SizeAtCompileTime,
@@ -432,7 +433,7 @@ class redux_evaluator : public internal::evaluator<XprType_> {
 /** \returns the result of a full redux operation on the whole matrix or vector using \a func
  *
  * The template parameter \a BinaryOp is the type of the functor \a func which must be
- * an associative operator. Both current C++98 and C++11 functor styles are handled.
+ * an associative operator.
  *
  * \warning the matrix must be not empty, otherwise an assertion is triggered.
  *
@@ -448,7 +449,7 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE typename internal::traits<Derived>::Scalar
   ThisEvaluator thisEval(derived());
 
   // The initial expression is passed to the reducer as an additional argument instead of
-  // passing it as a member of redux_evaluator to help
+  // passing it as a member of redux_evaluator.
   return internal::redux_impl<Func, ThisEvaluator>::run(thisEval, func, derived());
 }
 

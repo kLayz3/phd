@@ -10,7 +10,7 @@
  *  A lot of internal dependencies. \,(>_<),/
  */
 
-#include "Eigen/Dense"
+#include "../Eigen.h"
 #include "ceres/ceres.h"
 #include "ceres/covariance.h"
 

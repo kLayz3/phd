@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Eigen/Dense"
+#include "../Eigen.h"
 #include <algorithm>
 #include <array>
 #include <vector>

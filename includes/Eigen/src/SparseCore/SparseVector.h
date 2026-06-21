@@ -6,6 +6,7 @@
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 #ifndef EIGEN_SPARSEVECTOR_H
 #define EIGEN_SPARSEVECTOR_H
@@ -168,7 +169,7 @@ class SparseVector : public SparseCompressedBase<SparseVector<Scalar_, Options_,
 
     Index startId = 0;
     Index p = Index(m_data.size()) - 1;
-    // TODO smart realloc
+    // TODO: implement smart reallocation.
     m_data.resize(p + 2, 1);
 
     while ((p >= startId) && (m_data.index(p) > i)) {
@@ -181,8 +182,6 @@ class SparseVector : public SparseCompressedBase<SparseVector<Scalar_, Options_,
     return m_data.value(p + 1);
   }
 
-  /**
-   */
   inline void reserve(Index reserveSize) { m_data.reserve(reserveSize); }
 
   inline void finalize() {}
@@ -196,7 +195,7 @@ class SparseVector : public SparseCompressedBase<SparseVector<Scalar_, Options_,
    * \brief Prunes the entries of the vector based on a `predicate`
    * \tparam F Type of the predicate.
    * \param keep_predicate The predicate that is used to test whether a value should be kept. A callable that
-   * gets passed om a `Scalar` value and returns a boolean. If the predicate returns true, the value is kept.
+   * gets passed in a `Scalar` value and returns a boolean. If the predicate returns true, the value is kept.
    * \return The new number of structural non-zeros.
    */
   template <class F>
@@ -226,6 +225,12 @@ class SparseVector : public SparseCompressedBase<SparseVector<Scalar_, Options_,
     eigen_assert((IsColVector ? cols : rows) == 1 && "Outer dimension must equal 1");
     resize(IsColVector ? rows : cols);
   }
+
+  /** \sa resize(Index,Index) */
+  void resize(NoChange_t, Index cols) { resize(rows(), cols); }
+
+  /** \sa resize(Index,Index) */
+  void resize(Index rows, NoChange_t) { resize(rows, cols()); }
 
   /** Resizes the sparse vector to \a newSize
    * This method deletes all entries, thus leaving an empty sparse vector
@@ -346,9 +351,6 @@ class SparseVector : public SparseCompressedBase<SparseVector<Scalar_, Options_,
   }
 #endif
 
-  /** Destructor */
-  inline ~SparseVector() {}
-
   /** Overloaded for performance */
   Scalar sum() const;
 
@@ -383,7 +385,7 @@ class SparseVector : public SparseCompressedBase<SparseVector<Scalar_, Options_,
   /** \internal \deprecated use finalize() */
   EIGEN_DEPRECATED_WITH_REASON("Use .finalize() instead.") void endFill() {}
 
-  // These two functions were here in the 3.1 release, so let's keep them in case some code rely on them.
+  // These two functions were here in the 3.1 release, so let's keep them in case some code relies on them.
   /** \internal \deprecated use data() */
   EIGEN_DEPRECATED_WITH_REASON("Use .data() instead.") Storage& _data() { return m_data; }
   /** \internal \deprecated use data() */
@@ -487,12 +489,16 @@ class Serializer<SparseVector<Scalar, Options, StorageIndex>, void> {
 
     // Inner indices.
     std::size_t data_bytes = sizeof(StorageIndex) * header.num_non_zeros;
-    memcpy(dest, value.innerIndexPtr(), data_bytes);
+    if (data_bytes != 0) {
+      memcpy(dest, value.innerIndexPtr(), data_bytes);
+    }
     dest += data_bytes;
 
     // Values.
     data_bytes = sizeof(Scalar) * header.num_non_zeros;
-    memcpy(dest, value.valuePtr(), data_bytes);
+    if (data_bytes != 0) {
+      memcpy(dest, value.valuePtr(), data_bytes);
+    }
     dest += data_bytes;
 
     return dest;
@@ -515,13 +521,17 @@ class Serializer<SparseVector<Scalar, Options, StorageIndex>, void> {
     // Inner indices.
     std::size_t data_bytes = sizeof(StorageIndex) * header.num_non_zeros;
     if (EIGEN_PREDICT_FALSE(src + data_bytes > end)) return nullptr;
-    memcpy(value.innerIndexPtr(), src, data_bytes);
+    if (data_bytes != 0) {
+      memcpy(value.innerIndexPtr(), src, data_bytes);
+    }
     src += data_bytes;
 
     // Values.
     data_bytes = sizeof(Scalar) * header.num_non_zeros;
     if (EIGEN_PREDICT_FALSE(src + data_bytes > end)) return nullptr;
-    memcpy(value.valuePtr(), src, data_bytes);
+    if (data_bytes != 0) {
+      memcpy(value.valuePtr(), src, data_bytes);
+    }
     src += data_bytes;
     return src;
   }
