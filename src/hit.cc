@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
 	std::string pStr, fileName, outFile, setupFile, footSetupFile;
 	
 	u64 maxEvents = -1;
-	double kalman_max_cost = TFOOTHitProc::DEFAULT_MAX_COST;
+	double kalman_max_cost = TrackCost::DEFAULT_MAX_COST;
 	double kalman_cost_cr = NAN;
 	double kalman_cost_cq = NAN;
 	double kalman_cost_ct = NAN;
@@ -144,8 +144,11 @@ int main(int argc, char* argv[]) {
 			cfoot[4], cfoot[5], cfoot[6], cfoot[7],
 			kalman_max_cost, std::array{ kalman_cost_cr, kalman_cost_cq, kalman_cost_ct, kalman_cost_cp },
 			must_have_upstream_track, v) 
-		.MakePool<4>( 4092 );
-		//.MakePool<1>( 512 );
+#ifdef MND_DEBUG_ENABLED
+			.MakePool<1>( 512 );
+#else
+			.MakePool<4>( 4092 );
+#endif
 	
 	ProgressBar bar {
 		option::BarWidth{50},

@@ -36,6 +36,16 @@ void foot_track_analysis (
 	auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
 	
 	constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
+	double Cr, Cq, Ct, Cp, max_cost;
+	{
+		std::array<double, 4>* c;
+		TParameter<double>* m;
+		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
+		get_obj(f, c, "FOOT_cost_coeff");
+		get_obj(f, m, "FOOT_max_cost");
+		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2); Cp = c->at(3);
+		max_cost = m->GetVal();
+	}
 
 	ROOT::EnableImplicitMT();
 
@@ -83,7 +93,7 @@ void foot_track_analysis (
 	TH1P* h1_diff_upstr_down = new TH1P("Distance Upstream to Downstream track [mm]", kGreen-1,
 		400, 0, 100);
 	TH1P* h1_score = new TH1P("Track score [a.u.]", kGreen-1,
-		500, 0, 100);
+		500, 0, 50);
 
 	for(const auto& cut : cut_q) {
 		if(cut.first >= N_PAIRS)
@@ -220,7 +230,17 @@ void foot_track_analysis (
 	ckv->cd(8); h1_diff_upstr_down->Draw();
 
 	TCanvas* cscore = new TCanvas("Score", "Score of the recognized tracks", 1200, 800);
-	h1_score->Draw();
+	cscore->Divide(2,1);
+	cscore->cd(1); h1_score->Draw();
+	cscore->cd(2);
+	PLatex(0.08,
+		"Coefficients: ",
+		Form("Cr = %.1f", Cr),
+		Form("Cq = %.1f", Cq),
+		Form("Ct = %.1f", Ct),
+		Form("Cp = %.1f", Cp),
+		Form("max cost: %.1f", max_cost)
+	);
 
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );

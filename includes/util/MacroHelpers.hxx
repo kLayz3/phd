@@ -9,6 +9,41 @@ MHELPER_RUSTIFY_TYPE(16)
 MHELPER_RUSTIFY_TYPE(32)
 MHELPER_RUSTIFY_TYPE(64)
 
+#include "TFile.h"
+#include "TObject.h"
+#include <iostream>
+#include <variant>
+
+namespace _detail {
+inline TFile* file_ptr(TFile* f) noexcept {
+    return f;
+}
+inline TFile* file_ptr(std::unique_ptr<TFile> const& f) noexcept {
+    return f.get();
+}
+}
+/* Handle can be either unique ptr, or standard pointer. 
+ * `var` must be a raw pointer! */
+template<typename F, typename P>
+void get_obj(F&& fhandle, P& var, const char* label) {
+	static_assert(std::is_pointer_v<P>, "get_obj(): var must be a raw pointer");
+
+	using T = std::remove_pointer_t<P>;
+	
+	TFile* f = _detail::file_ptr(fhandle);
+
+	if constexpr (std::is_base_of_v<TObject, T>) {
+		var = dynamic_cast<T*>(f->Get(label));
+	} else {
+		var = f->Get<T>(label);
+	}
+
+	if (!var) {
+		std::cerr << "get_obj(): cannot extract object: '" << label << "'\n";
+		std::abort();
+	}
+}
+
 #include <filesystem>
 #include <sstream>
 #include <cmath>

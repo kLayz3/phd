@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <tuple>
+#include "TParameter.h"
 
 extern thread_local mnd::geom::Line3D g_upstream_track; // extern'ed from `includes/TFRSHitProc.cxx`
 
@@ -99,6 +100,14 @@ TFOOTHitProc::TFOOTHitProc (
 #endif
 
 	/* Assign the Kalman cost coefficients. */
+	*out.cost_coeff = {
+		TrackCost::DEFAULT_COST_R,
+		TrackCost::DEFAULT_COST_Q,
+		TrackCost::DEFAULT_COST_T,
+		TrackCost::DEFAULT_COST_P
+	};
+	out.max_cost->SetVal(*max_cost);
+
 	for(int i=0; i<4; ++i) {
 		double val = cost[i];
 		if( !std::isfinite(val) or val < 0 ) continue;
@@ -108,15 +117,12 @@ TFOOTHitProc::TFOOTHitProc (
 			case(2): Ct = val; break;
 			case(3): Cp = val; break;
 		}
+		out.cost_coeff->at(i) = val;
 	}
-	if(v > 0) {
-		WARN("Cost coefficients [cr, cq, ct, cp] = [%.2f, %.2f, %.2f, %.2f]. Max allowed cost: %.2f\n",
-			Cr, Cq, Ct, Cp, max_cost);
-	}
+	WARN("Cost coefficients [cr, cq, ct, cp] = [%.2f, %.2f, %.2f, %.2f]. Max allowed cost: %.2f\n",
+		Cr, Cq, Ct, Cp, *max_cost);
 
 	u32 i = 0;
-	/* Do some verification + E-to-Q converter init */
-	enum class Orientation { X, Y };
 
 	std::vector< 
 		std::map<Orientation, double> // orientation vs. z
@@ -132,7 +138,8 @@ TFOOTHitProc::TFOOTHitProc (
 			ERROR("Found FOOT index: %d, and is out of range [0,%d> ?", n, N_FOOT_DETECTORS);
 
 		double z = box->GetFOOTZ(n, s);
-		Orientation o = (s->orientation[1] == 'x') ? Orientation::X : Orientation::Y;
+		Orientation o = s->GetOrientation();
+		if(o == Orientation::UNKNOWN) ERROR("FOOT%u, orientation unknown.\n", i);
 		
 		const u32 ipair = i/2;
 		if(ipair > N_PAIRS) 
@@ -146,7 +153,7 @@ TFOOTHitProc::TFOOTHitProc (
 
 	/* Check that the parameter file has sane input. */
 	bool is_fine = std::is_sorted(test_vec.begin(), test_vec.end(),
-		[](const auto& lhs, const auto& rhs) {
+		[](const std::map<Orientation,double>& lhs, const std::map<Orientation,double>& rhs) {
 			return (
 				lhs.find(Orientation::X) != lhs.end() and // x orientation entry found.
 				lhs.find(Orientation::Y) != lhs.end() and // y orientation entry found.
@@ -205,6 +212,7 @@ TFOOTHitProc::TFOOTHitProc (
 
 void TFOOTHitProc::ProcessEntry() noexcept {
 	out.Clean();
+
 	if(requires_valid_upstream_track && !g_upstream_track.HasValue()) 
 		return;
 
@@ -216,24 +224,34 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 #endif
 
 	PreProcess();
-
+	
 	int ipair = 0;
 	mnd::for_pair_in_tuple(this->in, [this, &ipair](const auto& f1, const auto& f2) {
 		/* Bad code, but can't do much ... */
-		const std::pair<const TFOOTCalCont&, const TFOOTCalCont&> 
-			pair_xy = (f1.setup->orientation == "x" || f1.setup->orientation == "-x") ? std::pair{f1,f2} : std::pair{f2,f1};
-
-		this->ProcessPair(pair_xy, ipair);
+		using PairRef = std::pair<const TFOOTCalCont&, const TFOOTCalCont&>;
+		
+		Orientation e1 = f1.setup->GetOrientation();
+		switch(e1) {
+			case Orientation::X:
+				this->ProcessPair(PairRef{f1,f2}, ipair);
+				break;
+			case Orientation::Y:
+				this->ProcessPair(PairRef{f2,f1}, ipair);
+				break;
+			default:
+				__builtin_unreachable();
+		}
 		++ipair;
 	});
 
 	mnd::static_for<0, N_PAIRS>([this](auto I) {
 		constexpr size_t i = decltype(I)::value;
-		this->hm[i].InitEvent( this->out->pair[i] );
+		this->hm[i].InitEvent( this->out.inner().pair[i] );
 	});
 
 	ConstructObviousTracks();
 	ConstructDAG();
+	AnalyseDAG();
 	PostProcess();
 }
 
@@ -420,15 +438,11 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 			cost = {};
 			
 			cost.set<TrackCost::KQ>( kq(tau, e, n) );
-			//if(cost.sum() > max_cost) continue;
-
 			cost.set<TrackCost::KR>( kr(tau, e, n) );
-			//if(cost.sum() > max_cost) continue;
 
 			auto [kt,kp] = kt_kp(tau, e, n);
 			cost.set<TrackCost::KP>(kp);
 			cost.set<TrackCost::KT>(kt);
-			//if(cost.sum() > max_cost) continue;
 
 #ifdef MND_FOOTTRACK_DEBUG
 			if(v > 3) std::cerr << DAG::Index{i,j} << " : " << e << " :: cost: " << cost << std::endl;
@@ -440,7 +454,7 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 		}
 		// After processing the layer, check if cost acquired for this specific {i,j} entry of layer `n`
 		// is within the limits.
-		if(best_i and cost.sum() < max_cost) { // operator bool(); checks if the index object is non-null
+		if(best_i and cost.sum() < max_cost.at(n)) { // operator bool(); checks if the index object is non-null
 			path.node[n] = best_i;
 
 #ifdef MND_FOOTTRACK_DEBUG
@@ -490,11 +504,16 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 #endif
 }
 
+using CostIndex =  std::pair<double, TFOOTHitProc::DAG::Index>;
+static constexpr auto sort_by_cost = [](const CostIndex& lhs, const CostIndex& rhs) {
+	return lhs.first < rhs.first;
+};
+
 void TFOOTHitProc::ConstructDAG() noexcept {
 	/* Idea is explained in the PhD writeup. 
 	 * If you don't have it, ask Klayze. */
 
-	/* To keep the algorithm invariant between layers, tracks can also be nullable (e.g. containing only 1 point). */	
+	/* To keep the algorithm invariant between layers, tracks can also be nullable (e.g. containing 0 or 1 point). */	
 	dag.Initialize();
 	TrackCost cost{};
 
@@ -506,55 +525,91 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 		if(nx == 0 or ny == 0) continue;
 
 		std::vector<DAG::DAGPath>& current_paths = dag.path;
-		std::vector<DAG::DAGPath>  new_paths( 2*current_paths.size() ); // could be larger.
+		std::vector<DAG::DAGPath>  new_paths;
+		new_paths.reserve( 4*current_paths.size() ); // could be larger.
 		
-		TrackCost cost {};
+#ifdef MND_FOOTTRACK_DEBUG
+		if(v > 0) 
+			WARN("[#%u] ConstructDAG(): new_paths to be reserved at size: %zu (size currently:%zu)\n", n, new_paths.capacity(), new_paths.size());
+#endif
+		
 		/* Each path already draws (an optional) preliminary track. 
-		 * Try to match some of the current layer's hitmatrix elements against that */
+		 * Try to match some of the current layer's hitmatrix elements against that
+		 * specific preliminary test track. */
 		for(const DAG::DAGPath& path : current_paths) {
-
+			
 			// Fetch the preliminary track that the path describes.
 			FTrackOnline tau = this->GetPrelimTrackFromPath(path);
+			u32 ncounted = 0;
 			
 			// FHitMatrix::Cached is column-major (Eigen convention).
 			for(size_t j=0; j<ny; ++j) {
 				for(size_t i=0; i<nx; ++i) {
 					const mnd::hm::Data& e = h(i,j);
 					
-					cost = {};
+					TrackCost cost{};
 			
 					cost.set<TrackCost::KQ>( kq(tau, e, n) );
-					if(cost.sum() > max_cost) continue;
+					if(cost.sum() > max_cost.at(n)) continue;
 
 					cost.set<TrackCost::KR>( kr(tau, e, n) );
-					if(cost.sum() > max_cost) continue;
+					if(cost.sum() > max_cost.at(n)) continue;
 
 					auto [kt,kp] = kt_kp(tau, e, n);
 					cost.set<TrackCost::KP>(kp);
 					cost.set<TrackCost::KT>(kt);
-					if(cost.sum() > max_cost) continue;
+					if(cost.sum() > max_cost.at(n)) continue;
 
 					// If the flow survives til this point means that
-					// the candidate is good. Add it to the list of paths.
+					// the candidate is good. Add it to the `path_specific_candidates_buf` buffer.
+					path_specific_candidates_buf[ncounted++] = { cost.sum(), DAG::Index(i,j) };
+					
+					// If the buffer is filled, sort it and hold on to the remaining `MAX_CANDIDATES` 
+					if( ncounted == (u32)path_specific_candidates_buf.size() ) {
+						std::sort(
+							path_specific_candidates_buf.begin(),	
+							path_specific_candidates_buf.begin() + ncounted,
+							sort_by_cost
+						);
+						ncounted = MAX_CANDIDATES;
+					}
 					new_paths.emplace_back(path); // copy-ctor.
 					new_paths.back().node[n] = DAG::Index(i,j);
 				}
 			}
+			
+			/* Sort the candidates buffer. */
+			std::sort(
+				path_specific_candidates_buf.begin(),	
+				path_specific_candidates_buf.begin() + ncounted,
+				sort_by_cost
+			);
 
-			// Add a null node.
-			new_paths.emplace_back(path);
+			/* Take at most the best `MAX_CANDIDATES` as branching point. */
+			ncounted = std::min( ncounted, MAX_CANDIDATES );
+			for(u32 i=0; i<ncounted; ++i) {
+				new_paths.emplace_back(path);
+				new_paths.back().node[n] = path_specific_candidates_buf[i].second;
+			}
+			if(ncounted < MAX_CANDIDATES) // Add a null node.	
+				new_paths.emplace_back(path);
 		}
 		
 		dag.path = std::move( new_paths );
-	}
+	} // for(u32 n = 0; n < N_PAIRS; ++n)
 }
 
 void TFOOTHitProc::AnalyseDAG() noexcept {
 	/* Allow only one layer to be missing. Must have 3 or more valid measurements. */
 	static_assert(N_PAIRS - 1 >= 3, "Maximal paranoia");
 	dag.TrimRankLessThan((int)N_PAIRS - 1);
-
-	/* Sort the sequence according to the score. 
+	
+#ifdef MND_FOOTTRACK_DEBUG
+		if(v > 0) {
+			WARN(KBH_CYN "~~~> Valid %zu paths thru the tree.\n" KNRM, dag.path.size());
+		}
+#endif
+	/* Sort the sequence of paths through the graph according to their score. 
 	 * Each paths's score anyway has to be evaluated to be robust. There's no way around this. 
 	 * Heavy lifting call. */
 	std::sort (

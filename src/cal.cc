@@ -89,9 +89,11 @@ int main(int argc, char* argv[]) {
 		.emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6])
 		.emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7])
 		.emplace_process<TFRSCalProc >(cfrs    , mfrs)
+#ifdef MND_DEBUG_ENABLED
+		.MakePool<1>( 512 );
+#else
 		.MakePool<8>( 4092 );
-		//.MakePool<1>( 512 );
-		/* Number of subthreads, chunk size. */
+#endif
 
 	ProgressBar bar {
 		option::BarWidth{50},

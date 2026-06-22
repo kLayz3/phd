@@ -10,8 +10,13 @@
 
 class TH2I;
 
-/* Debugging features compiled in. Will tank performance heavily. */
+/* Debugging features compiled in. Can be toggled together automatically */
 #define MND_FOOTTRACK_DEBUG
+
+/* In case the heavy debug build is enabled, also feature it in here. */
+#if defined(MND_DEBUG_ENABLED) && !defined(MND_FOOTTRACK_DEBUG)
+#	define MND_FOOTMND_FOOTTRACK_DEBUG
+#endif
 
 #ifdef MND_FOOTTRACK_DEBUG
 #	ifndef MND_HITMATRIX_DO_BOUNDS_CHECK
@@ -122,8 +127,7 @@ struct RNFOOTHit {
 
 	inline void Clean() noexcept { 
 		heavy_fragment.n = 0;
-		for(auto& p: pair) 
-			p.Clean(); 
+		for(auto& p: pair) { p.Clean(); }
 		vertex.Clean();
 		track.clear(); 
 	}
@@ -137,6 +141,9 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	FOOTBoxParam* box;
 	std::array<FOOTParam, 2>* foot_param[N_PAIRS];
 	std::string* setupName;
+	std::array<double,4>* cost_coeff;
+	TParameter<double>* max_cost;
+
 	TH1I* h1_qtrack;
 	TH1I* h1_track_nsampled;
 

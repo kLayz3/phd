@@ -1,9 +1,11 @@
 #include "TFOOTHitCont.h"
 #include "TFOOTHitProc.h"
+#include "TFOOTMapCont.h"
 #include "TH2I.h"
 #include "TH1I.h"
 #include "util/JSONParser.h"
 #include "util/Geometry.h"
+#include "TParameter.h"
 
 using json = nlohmann::json;
 
@@ -67,7 +69,9 @@ auto it = info.find("Setup");
 }
 
 using FOOTParams = std::array<FOOTParam, 2>;
+using A4 = std::array<double,4>;
 template<> void Add(FOOTParams&, const FOOTParams&) {}
+template<> void Add(A4&, const A4& ) {}
 
 void TFOOTHitCont::Setup() {
 	h1_qtrack = RegisterObject<TH1I>("h1_qtrack", "Charge (Q) of recognized tracks",
@@ -79,6 +83,8 @@ void TFOOTHitCont::Setup() {
 	
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 	box = RegisterObject<FOOTBoxParam>("box", _box);
+	cost_coeff = RegisterObject<A4>("cost_coeff", {}); // filled by Proc ctor
+	max_cost = RegisterObject<TParameter<double>>("max_cost", mnd::noop_fn<TParameter<double>>(), NAN); // filled by Proc ctor
 
 	/* TFOOTHitCont cannot know ahead of time which FOOT will get put into which position,
 	 * for the tracking. It's the Proc which decides that.

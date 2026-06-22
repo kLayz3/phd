@@ -152,7 +152,7 @@ struct Track {
 	using QEntryType = typename Entry::q_type;	
 
 	static constexpr double SP = 0.100 * 0.100; // [ mm^2 ]
-	static constexpr double SQ = 0.7 * 0.7; // [ Q*Q ; 'Q' = one charge unit ]
+	static constexpr double SQ = 0.5 * 0.5; // [ Q*Q ; 'Q' = one charge unit ]
 
 	inline static const auto BareTrack 
 		= FTrack { 

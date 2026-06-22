@@ -15,8 +15,8 @@ CXXFLAGS := $(shell root-config --cflags) \
 
 include includes/monad/common.mk
 
-LDFLAGS := $(shell root-config --ldflags) 
-LIBS := $(shell root-config --libs) \
+LDFLAGS += $(shell root-config --ldflags) 
+LIBS += $(shell root-config --libs) \
 		-lROOTNTuple \
 		-L$(shell pwd -P)/includes/build \
 		-Wl,-rpath,$(shell pwd -P)/includes/build \
