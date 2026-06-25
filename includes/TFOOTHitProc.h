@@ -122,7 +122,7 @@ struct TFOOTHitProc : TProcessor <
 	constexpr static double CLUSTER_SIZE_ONE_Q_CUTOFF = 1.5; // when cluster size == 1 doesn't make sense anymore.
 	constexpr static double TARGET_Z = 0.0; // by convention. In Kalman coordinates, place target nominally at 0.0
 											// Will be shifted back to "real" FRS coordinates later.
-	constexpr static u32 MAX_CANDIDATES = 12; // To how many paths can a node branch to (at most)
+	constexpr static u32 MAX_CANDIDATES = 10; // To how many paths can a node branch to (at most)
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
 	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ), 

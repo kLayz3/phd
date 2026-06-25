@@ -160,6 +160,37 @@ struct InputWrapper<T, Tag, false> {
 	const T& get() const noexcept { return value; }
 };
 
+/* Why is Rust amazing? Well, simple:
+ * enum Option<T> {
+ *   Yes(T),
+ *   No
+ * }
+ A true algebraic sum type! */
+
+template<typename T>
+class Option {
+	struct NoTag {};
+
+public:
+	struct Yes { T value; };
+
+	static constexpr NoTag No{};
+
+	Option(Yes y) : data(std::move(y)) {}
+	Option(NoTag) : data(std::monostate{}) {};
+	
+	bool is_some() const noexcept { return data.index() == 0; }
+	bool is_none() const noexcept { return data.index() == 1; }
+
+	/* May panic (throw). Unlike rust, returns back a reference, not the value. */
+	T const& unwrap() const& { return std::get<0>(data).value; }
+	T& unwrap() & { return std::get<0>(data).value; }
+	T unwrap() && { return std::move(std::get<0>(data).value); }
+
+private:
+	std::variant<Yes, std::monostate> data;
+};
+
 } // namespace mnd
 
 /* Parse a file first thru the GCC preprocessor, and then

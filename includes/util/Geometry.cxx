@@ -73,8 +73,8 @@ Line2D& Line2D::Rotate(double theta) noexcept {
     const double a1 = value[1];
 
 	// Direction vector
-    Eigen::Vector2d d{1.0, value[1]};
-    const double norm2 = d.squaredNorm();
+	Eigen::Vector2d d{1.0, value[1]};
+	const double norm2 = d.squaredNorm();
 	const double norm = std::sqrt(norm2);
 	d /= norm;
 
@@ -89,8 +89,8 @@ Line2D& Line2D::Rotate(double theta) noexcept {
 	R << ct, -st,
 	     st,  ct;
 
-    n = R * n;
-    d = R * d;
+	n = R * n;
+	d = R * d;
 
 	return *this = detail::from_point_direction(n, d);
 }
@@ -101,13 +101,13 @@ Line2D& Line2D::ShiftAndRotate (
 	const Vector2D& off,
 	double theta
 ) noexcept {
-    return (*this += off).Rotate(theta);
+	return (*this += off).Rotate(theta);
 }
 Line2D& Line2D::RepresentInShifted (
 	const Vector2D& off,
 	double theta
 ) noexcept {
-    return (*this %= off).RepresentInRotated(theta);
+	return (*this %= off).RepresentInRotated(theta);
 }
 
 /* ====================== 3D ====================== */
@@ -138,8 +138,8 @@ double Line3D::DistanceTo(const Line3D& rhs) const noexcept {
 
 	const double n2 = v1_cross_v2.squaredNorm();
 	
-    const double v1n2 = v1.squaredNorm();
-    const double v2n2 = v2.squaredNorm();
+	const double v1n2 = v1.squaredNorm();
+	const double v2n2 = v2.squaredNorm();
 
 	const double sin2 = n2 / (v1n2 * v2n2);
 	

@@ -14,7 +14,8 @@ using namespace ROOT;
 using namespace ROOT::Experimental;
 
 enum AtomicNumber { H, He, Li, Be, B, C };
-using AllowOthers = DoSave; // also yes/no
+enum AngleType { all, p };
+using AllowOthers = DoSave; // enum class { yes, no }
 
 using DistanceCut  = mnd::InputWrapper<A2>;
 using FileSequence = mnd::InputWrapper<std::vector<std::string>>;
@@ -31,7 +32,7 @@ using Select = mnd::InputWrapper<
 constexpr A2 elem_to_a2(AtomicNumber e) {
 	switch(e) {
 		case H:  return A2{0.6, 1.5};
-		case He: return A2{1.5, 2.6};
+		case He: return A2{1.8, 2.6};
 		case Li: return A2{2.6, 3.5};
 		case Be: return A2{3.5, 4.5};
 		case B:  return A2{4.5, 5.4};
@@ -43,7 +44,9 @@ void foot_kalman_analysis (
 	std::variant<FileSequence, FromFile> fileNamesA = {},
 	Select selected = {},
 	AllowOthers allow_others = AllowOthers::yes,
+	AngleType angle_type = AngleType::all,
 	DistanceCut distance_cut = {0.0, 1000},
+
 	DoSave do_save = DoSave::no
 ) {
 	std::vector<std::string> fileNames;
@@ -68,7 +71,9 @@ void foot_kalman_analysis (
 		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2); Cp = c->at(3);
 		max_cost = m->GetVal();
 	}
-	/* Sanitize some cmd-line-args. */	
+
+	/* ==============================
+	 * Sanitize some cmd-line-args. */	
 	A2 distance_cut_arr = static_cast<A2>(distance_cut);	
 	u32 sum_n_tracks_required = std::accumulate(
 		selected.begin(), selected.end(), 0, [](u32 sum, const auto& x) {
@@ -78,14 +83,47 @@ void foot_kalman_analysis (
 	if(sum_n_tracks_required == 0) 
 		allow_others = AllowOthers::yes;
 
-	/* Convert the selected enum into the A2. */
+	/* Convert the selected variant exclusively into the A2 = std::array<double, 2>. */
 	for(auto& [key,value] : selected) {
 		if(std::holds_alternative<AtomicNumber>(key)) {
 			key = elem_to_a2( std::get<AtomicNumber>(key) );
 		}
 		if(value == 0) ERROR("Must require 1 or more tracks, cannot be 0. Stop that.");
 	}
-	// All cut entries now hold only A2 range.
+	// All cut entries now hold only A2 range. Sort them out, so that light stuff is first.
+	// Also use this time to do some sanity checks for the ranges. 
+	std::sort(selected.begin(), selected.end(), 
+		[](const auto& lhs, const auto& rhs) {
+			if(std::get<1>(lhs.first)[0] > std::get<1>(lhs.first)[1]) {
+				WARN("Range: "); std::cerr << std::get<1>(lhs.first) << " isn't valid (lhs >= rhs)?";
+				throw std::runtime_error("Err");
+			}
+			if(std::get<1>(rhs.first)[0] > std::get<1>(rhs.first)[1]) {
+				WARN("Range: "); std::cerr << std::get<1>(rhs.first) << " isn't valid (rhs >= rhs)?";
+				throw std::runtime_error("Err");
+			}
+			return std::get<1>(lhs.first)[0] < std::get<1>(rhs.first)[0];
+		}
+	);
+	if( std::adjacent_find( selected.begin(), selected.end(),
+		[](const auto& lhs, const auto& rhs) {
+			return std::get<1>(lhs.first)[1] > std::get<1>(rhs.first)[0];
+			// if lower elem's upper bound is bigger than higher elem's lower bound, means the intervals overlap.
+		}
+	) != selected.end() ) {
+		ERROR("An interval from the 'selected' field is overlapping. Not allowed");
+	}
+
+	/* Sanitize the angle part. If selected isn't given by at least
+	 * two windows, then angle cannot be clearly defined between light and heavy ones. */
+	if(selected.size() < 1 and angle_type == AngleType::p) {
+		WARN("This was not supposed to happen!\n");
+		throw std::runtime_error("err");
+		angle_type = AngleType::all;
+	}
+
+	/* ==== SANITIZATION END ==== */
+
 	std::array<bool, 32> track_used_mask = {};
 
 	TH1P* h1_track_mult = new TH1P("Track multiplicity", kRed-1, 10, -0.5, 9.5);
@@ -95,8 +133,18 @@ void foot_kalman_analysis (
 		10, -0.5, 9.5, 300, 0, 50);
 	TH1P* h1_track_distance = new TH1P("Track distances [mm]", kBlue-1, 600, 0, 30);
 	TH1P* h1_track_angle = new TH1P("Track angles [mrad]", kMagenta+1, 200, 0, 100);
-	TH1P* h1_angle_ex = new TH1P("Track angles, excitation sqrt(t1^2 + t2^2 + t3^2) [mrad]", kCyan-9, 200, 0, 1000);
+	TH1P* h1_angle_ex = new TH1P("Track angles, excitation sqrt(#sum t_i^2) [mrad]", kCyan-9, 300, 0, 300);
+
 	TH2P* h2_vertex_z = new TH2P("RMS angle [mrad]:Vertex z [mm]@Traced by the FOOT", 200, -100, 100, 100,0,100);
+
+	if(angle_type == AngleType::p) {
+		(*h1_angle_ex)->SetTitle( (
+			std::string( (*h1_angle_ex)->GetTitle() ) 
+			+ Form(" (betwn. light particles (%u) and heavy one.", selected.front().second )
+			).c_str()
+		);
+	}
+	if(angle_type != AngleType::p) throw std::runtime_error("Err_in_main");
 
 	for(const auto& fname : fileNames) {
 		WARN("Proceeding with file: \'%s\'\n", fname.c_str());
@@ -122,7 +170,7 @@ void foot_kalman_analysis (
 			 * respective 'quantity' */
 			track_used_mask.fill(false);
 			
-			for(const auto& [cut, n_tracks_required] : selected) {
+			for(const auto& [cut, n_tracks_required] : selected) { // selected windows are sorted in ascending charge.
 				const A2& charge_cut = std::get<A2>( cut ); 
 				/* Go over the tracks, if it's sorted within a cut then 'mask' the correspodning entry for
 				 * next iterations. */
@@ -177,20 +225,35 @@ void foot_kalman_analysis (
 					}
 					distances.push_back(distance);
 				}
-				// If a single track is not within with distance cut, skip event.
+				/* If a single track is not within with distance cut, skip event. */
 				if(!is_valid) continue;
 
 				for(auto d: distances) h1_track_distance->Fill( d );
-
+				
+				/* In this case, look for angles between 
+				 * 'lightweight' particles and the heaviest one. */
 				double sum2 = 0;
 				double sum = 0;
-				for(size_t i=0; i<N_valid; ++i) {
-					for(int j=i+1; j<N_valid; ++j) {
-						double theta = 1000.0 * tracks[i].AngleRelativeTo( tracks[j] );
+				double theta;
+				if(angle_type == AngleType::p) {
+					const mnd::geom::Line3D heavy_track = tracks.back();	
+
+					for(size_t i=0; i < N_valid-1; ++i) {
+						theta = 1000.0 * tracks[i].AngleRelativeTo( heavy_track );
 						sum2 += theta*theta;
 						h1_track_angle->Fill( theta );
 					}
 				}
+				else {
+					for(size_t i=0; i<N_valid; ++i) {
+						for(int j=i+1; j<N_valid; ++j) {
+							theta = 1000.0 * tracks[i].AngleRelativeTo( tracks[j] );
+							sum2 += theta*theta;
+							h1_track_angle->Fill( theta );
+						}
+					}
+				}
+				if(!is_valid) continue;
 				h1_angle_ex->Fill( sqrt(sum2) );
 				h2_vertex_z->Fill( vertex.z, sqrt(sum2) / N_valid );
 			}
@@ -225,9 +288,10 @@ void foot_kalman_analysis (
 		std::stringstream pname;
 		for(const auto& fname : fileNames) {
 			std::filesystem::path p{fname};
-			pname << p.replace_extension().c_str() << "--";
+			pname << p.stem().stem().replace_extension().c_str() << "--";
 		}
 		std::filesystem::path inf( pname.str() );
+
 		save_all(canvas::Extension::png, { inf.stem().c_str() });
 	}
 }

@@ -62,7 +62,7 @@ struct DirectedAGraph {
 		
 		friend std::ostream& operator<<(std::ostream& os, const DAGPath& p) { return os << p.node; }
 		inline int Rank() const noexcept {
-			return mnd::sum<mnd::Unroll::Yes, int>(node);
+			return mnd::sum<mnd::Unroll::Yes, int>(node); // explicit conversion of of `Index` to `int`.
 		}
 	}; 
 

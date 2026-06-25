@@ -85,10 +85,10 @@ bool operator>(const TrackCost& c, double max_cost) {
 	if(c.test_track_size >= 1 and !c.is_set<TrackCost::KT>() and c.is_set<TrackCost::KP>())
 		max_cost *= 0.6666; // reduce by 2/3
 	switch(c.test_track_size) {
-		case 0: return c.sum() > max_cost * 1.0; // Only kq measurement possible (without track contribution)
+		case 0: return c.sum() > max_cost * 0.8; // Only kq measurement possible (without track contribution)
 		case 1: return c.sum() > max_cost * 3.0; // kq             + kt        + kp 
 		case 2: return c.sum() > max_cost * 2.0; // kq + kr        + kt(3 pts) + kp(3 pts)
-		case 3: return c.sum() > max_cost * 1.0; // kq + kr(3 pts) + kt(4 pts) + kp(4 pts)
+		case 3: return c.sum() > max_cost * 1.2; // kq + kr(3 pts) + kt(4 pts) + kp(4 pts)
 		default: __builtin_unreachable();
 	}
 }
