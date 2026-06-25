@@ -24,42 +24,25 @@
  * checked is used to e.g. normalize different coefficients... */
 struct TrackCost {
 	static constexpr double DEFAULT_COST_R = 100.0; // default cost per mm^2 difference
-	static constexpr double DEFAULT_COST_Q = 10.0;  // default cost per charge^2 difference (not sure!)
-	static constexpr double DEFAULT_COST_T =  4.0;  // default cost per mm^2 of upstream @target difference
-	static constexpr double DEFAULT_COST_P = 1e10;  // default cost if next layer missed
+	static constexpr double DEFAULT_COST_Q =  12.0; // default cost per charge^2 difference (TODO: not sure)
+	static constexpr double DEFAULT_COST_T =   5.0; // default cost per mm^2 of upstream @target difference
+	static constexpr double DEFAULT_COST_P = 100.0; // default cost if next layer missed
 	/* For 12C the average sqrt(kq) cost is ~0.3 or so, so variance is ~0.1 or so.
-	 * sqrt(kr) is anything between 1-5mm (worst case, probably I fucked up alignment. 
+	 * sqrt(kr) is anything between 1-5mm (worst case, probably I messed up alignment. 
 	 * Should be ~1mm on a good day. */
 
-	// For k==3 degrees of freedom: Chi^2;
-	constexpr static double DEFAULT_MAX_COST = 15;
-
-	/* Maximum cost to allow a point to branch the Kalman cannot be constant,
-	 * as it depends on the layer number:
-	 * Layer [1] => only `kq` cost
-	 * Layer [2] => `kq` + `kt` cost
-	 * Layer [3] => `kq` + `kt` + `kr` cost
-	 * Layer [4] => `kq` + `kt` + `kr` (3-point-fit) cost */
-	struct MaxCost {
-		MaxCost() = default;
-		MaxCost(double x) : overall_cost(x) {}
-		inline double at(size_t n) const noexcept {
-			switch(n) {
-				case 0: return overall_cost * 4.0;
-				case 1: return overall_cost * 3.0;
-				case 2: return overall_cost * 1.3;
-				case 3: return overall_cost * 1.0;
-				default:
-					__builtin_unreachable();
-
-			};
-		}
-		inline double operator*() const noexcept { return overall_cost; }
-
-	private:
-		double overall_cost = TrackCost::DEFAULT_MAX_COST;
-	};
+	// For k==3 degrees of freedom: total Chi^2 of about 12 is 99% confidence. 
+	// In ideal world... but both `kt` and `kq` can dance like crazy. */
+	constexpr static double DEFAULT_MAX_COST = 50;
+	constexpr static double NIL_VALUE = NAN;
+	
 	enum F { KR, KQ, KP, KT };
+
+	static double Cr;
+	static double Cq;
+	static double Ct;
+	static double Cp;
+	static double max_cost;
 
 	/* Exposing setters and getters because the sideffect is bookkeeping
 	 * the sum on the fly, which raw reference accesses would invalidate :-) */
@@ -94,12 +77,35 @@ struct TrackCost {
 		if(std::isfinite(v))
 			*sum_ += v;
 	}
+	template<enum F o>
+	bool is_set() const noexcept { 
+		if constexpr(o == KR) {
+			return std::isfinite(kr_);
+		}
+		else if constexpr(o == KQ) {
+			return std::isfinite(kq_);
+		}
+		else if constexpr(o == KP) {
+			return std::isfinite(kp_);
+		}
+		else if constexpr(o == KT) {
+			return std::isfinite(kt_);
+		}
+	}
 
 	inline double sum() const noexcept { return sum_ ? *sum_ : std::numeric_limits<double>::infinity(); }
+	inline void reset() noexcept { sum_.reset(); }
+
 	friend std::ostream& operator<<(std::ostream&, const TrackCost&);
+	friend bool operator>(const TrackCost& , double );
+
+	TrackCost() = delete;
+	TrackCost(u32 n) : test_track_size(n) {};
+	
+	u32 test_track_size;
 
 private:
-	double kr_ = NAN, kq_ = NAN, kp_ = NAN, kt_ = NAN;
+	double kr_ = NAN, kq_ = NAN,  kt_ = NAN, kp_ = NAN;
 	std::optional<double> sum_ {};
 };
 
@@ -116,30 +122,28 @@ struct TFOOTHitProc : TProcessor <
 	constexpr static double CLUSTER_SIZE_ONE_Q_CUTOFF = 1.5; // when cluster size == 1 doesn't make sense anymore.
 	constexpr static double TARGET_Z = 0.0; // by convention. In Kalman coordinates, place target nominally at 0.0
 											// Will be shifted back to "real" FRS coordinates later.
-	constexpr static u32 MAX_CANDIDATES = 10;
+	constexpr static u32 MAX_CANDIDATES = 12; // To how many paths can a node branch to (at most)
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
 	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ), 
 		double = TrackCost::DEFAULT_MAX_COST,
-		const std::array<double,4>& = {NAN, NAN, NAN, NAN}, /* cost coefficients: {Cr, Cq, Ct, Cp} */
-		bool  = false, /* require_valid_upstream_track */
+		const std::array<double,4>& = {NAN, NAN, NAN, NAN}, // cost coefficients: {Cr, Cq, Ct, Cp}
+		bool  = false,                                      // requires_valid_upstream_track
 		Verbosity = Verbosity::SILENT);
 	TFOOTHitProc() = default;
 
-	double q_tolerance;
-	TrackCost::MaxCost max_cost;
 	static Verbosity v;	
-
-	double Cr = TrackCost::DEFAULT_COST_R; // cost per mm^2 difference
-	double Cq = TrackCost::DEFAULT_COST_Q; // cost per charge^2 difference
-	double Ct = TrackCost::DEFAULT_COST_T; // cost per mm^2 of upstream @target difference
-	double Cp = TrackCost::DEFAULT_COST_P; // cost if next layer missed
+	static bool requires_valid_upstream_track;
 
 	double kr(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const; 
 	double kq(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const; 
 	std::pair<double, double> kt_kp(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const; 
 
 	void ProcessEntry() noexcept;
+
+	using CandidatesBuffer = std::array <
+		std::pair<double, DAG::Index>, 50
+	>;
 
 private:
 	void ProcessPair(const std::pair<const TFOOTCalCont&, const TFOOTCalCont&>&, i32) noexcept;
@@ -148,8 +152,6 @@ private:
 	void AnalyseDAG() noexcept;
 	void PreProcess() noexcept;
 	void PostProcess() noexcept;
-
-	bool requires_valid_upstream_track;
 
 	std::array<double, N_PAIRS> pair_z;
 	mnd::geom::Rectangle2D target_xy;
@@ -163,9 +165,7 @@ private:
 	std::array<Eigen::Vector2d, N_PAIRS> refl; // +-1 based on the on each of the `orientation` params  
 	void SetConversionMatrices(int , const FOOTParam& , const FOOTParam& );
 
-	std::array <
-		std::pair<double, DAG::Index>, 50
-	> path_specific_candidates_buf;
+	CandidatesBuffer path_specific_candidates_buf;
 
 	FTrackOnline GetPrelimTrackFromPath(const DAG::DAGPath& ) const noexcept;
 	void PoisonEntriesFromHMs(const DAG::DAGPath&) noexcept; 

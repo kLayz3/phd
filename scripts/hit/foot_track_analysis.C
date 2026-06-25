@@ -92,6 +92,8 @@ void foot_track_analysis (
 		400, 0, 3.162);
 	TH1P* h1_diff_upstr_down = new TH1P("Distance Upstream to Downstream track [mm]", kGreen-1,
 		400, 0, 100);
+	TH1P* h1_has_upstream = new TH1P("Upstream track present [0=false, 1=true]", kYellow-3,
+		4, -0.75, 1.25);
 	TH1P* h1_score = new TH1P("Track score [a.u.]", kGreen-1,
 		500, 0, 50);
 
@@ -106,9 +108,9 @@ void foot_track_analysis (
 		ntuple->LoadEntry(entryId);
 		const double x0_upst = frs->xT;
 		const double y0_upst = frs->yT;
-		if(!mnd::isfinite(x0_upst, y0_upst)) continue;
 		
 		const mnd::geom::Line3D lu = RNTrackToLine3D( frs->s2_bt );
+		h1_has_upstream->Fill( static_cast<int>(lu.HasValue()) );
 
 		const RNFOOTTrack& t = foot->heavy_fragment;
 		if(t.n != N_PAIRS) continue;
@@ -230,7 +232,7 @@ void foot_track_analysis (
 	ckv->cd(8); h1_diff_upstr_down->Draw();
 
 	TCanvas* cscore = new TCanvas("Score", "Score of the recognized tracks", 1200, 800);
-	cscore->Divide(2,1);
+	cscore->Divide(2,2);
 	cscore->cd(1); h1_score->Draw();
 	cscore->cd(2);
 	PLatex(0.08,
@@ -241,6 +243,7 @@ void foot_track_analysis (
 		Form("Cp = %.1f", Cp),
 		Form("max cost: %.1f", max_cost)
 	);
+	cscore->cd(3); h1_has_upstream->Draw();
 
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );

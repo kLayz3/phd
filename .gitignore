@@ -29,6 +29,6 @@ quick/*
 !quick/Makefile
 !quick/make_macro.bash
 
-exec/important_commands.txt
+exec/*.txt
 autosave
 randomstuff

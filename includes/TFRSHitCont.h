@@ -9,10 +9,6 @@
 #include "Rtypes.h"
 #include "TH2D.h"
 
-namespace mnd { namespace geom {
-	struct Line3D;
-}}
-
 struct FRSTargetParam {
 	GET_HELP_AUX_IMPL;
 
@@ -117,4 +113,5 @@ struct TFRSHitCont : TContainer<RNFRSHit> {
 	void Setup() override;
 };
 
+namespace mnd { namespace geom { struct Line3D; }}
 mnd::geom::Line3D RNTrackToLine3D(const RNFRSHit::Id& );

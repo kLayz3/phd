@@ -129,7 +129,6 @@ For either single or multiple values.\n\
 -output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_cal' suffix.\n\
 -setup /PATH/TO/FRS.json    ..Specify FRS JSON setup file name.\n\
 -foot-setup /PATH/TO/JSON   ..Specify FOOT JSON setup file name.\n\
--gain-match | -gm           ..Do the FOOT gain-matching based on params in FOOT JSON setup file.\n\
 -max-events N               ..Specify how many events to process in the ROOT file. Default all.\n\
 -help                       ..Print this message to stdout. \n\
 \n\

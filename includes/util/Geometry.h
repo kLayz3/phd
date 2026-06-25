@@ -25,7 +25,8 @@
 #define FORMAT_ANGLES_IN_RADIANS
 
 namespace mnd { 
-	
+
+/* Helper fnc's to convert a contiguous containers to a span. */
 template<typename T>
 span<const T> as_span(const std::vector<T>& v) noexcept {
 	return span<const T>{v.data(), v.size()};
@@ -42,6 +43,7 @@ struct Point2D {
 	static const Point2D null;
 	inline bool is_null() const noexcept { return std::isfinite(x); }
 	
+	/* Returns quiet NAN if either of the points is null. */
 	inline double Distance2(const Point2D& rhs) const noexcept {
 		const double dx = x - rhs.x;
 		const double dy = y - rhs.y;
@@ -60,6 +62,7 @@ struct Point3D {
 	static const Point3D null;
 	inline bool is_null() const noexcept { return std::isfinite(x); }
 	
+	/* Returns quiet NAN if either of the points is null. */
 	inline double Distance2(const Point3D& rhs) const noexcept {
 		const double dx = x - rhs.x;
 		const double dy = y - rhs.y;
@@ -69,8 +72,8 @@ struct Point3D {
 	inline double Distance(const Point3D& rhs) const noexcept {
 		return std::sqrt( Distance2(rhs) );
 	}
-	Eigen::Map<Eigen::Vector3d> eigen_view() & noexcept { return Eigen::Map<Eigen::Vector3d>{&x}; }
-	Eigen::Map<const Eigen::Vector3d> eigen_view() const& noexcept { return Eigen::Map<const Eigen::Vector3d>{&x}; }
+	inline Eigen::Map<Eigen::Vector3d> eigen_view() & noexcept { return Eigen::Map<Eigen::Vector3d>{&x}; }
+	inline Eigen::Map<const Eigen::Vector3d> eigen_view() const& noexcept { return Eigen::Map<const Eigen::Vector3d>{&x}; }
 
 	double x, y, z; 
 };

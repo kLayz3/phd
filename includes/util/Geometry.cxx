@@ -126,6 +126,9 @@ double Line3D::DistanceTo(const Point3D& pt) const noexcept {
 }
 
 double Line3D::DistanceTo(const Line3D& rhs) const noexcept {
+	if(!HasValue() || !rhs.HasValue())
+        return NAN;
+
 	auto p1 = detail::mapv(this->p);
 	auto v1 = detail::mapv(this->v);
 	auto p2 = detail::mapv( rhs.p );
@@ -139,9 +142,12 @@ double Line3D::DistanceTo(const Line3D& rhs) const noexcept {
     const double v2n2 = v2.squaredNorm();
 
 	const double sin2 = n2 / (v1n2 * v2n2);
+	
 	// Protection against near-parallel lines //
 	if(sin2 < ALMOST_PARALLEL2) {
-		return (p1-p2).cross(v1).norm() / v1.norm();
+		const double d12 = (p2-p1).cross(v1).norm() / std::sqrt(v1n2);
+		const double d21 = (p1-p2).cross(v2).norm() / std::sqrt(v2n2);
+		return 0.5 * (d12 + d21);
 	}
 
 	return std::abs( (p1-p2).dot(v1_cross_v2)) / std::sqrt(n2);

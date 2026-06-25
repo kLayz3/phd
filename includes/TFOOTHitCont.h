@@ -5,24 +5,24 @@
 #include "util/json_struct_def.hh"
 #include "TFOOTCalCont.h"
 
-#include "util/HitMatrix.hxx"
-#include "util/FTrack.h"
-
 class TH2I;
 
 /* Debugging features compiled in. Can be toggled together automatically */
-#define MND_FOOTTRACK_DEBUG
+//#define MND_FOOTTRACK_DEBUG
 
 /* In case the heavy debug build is enabled, also feature it in here. */
 #if defined(MND_DEBUG_ENABLED) && !defined(MND_FOOTTRACK_DEBUG)
-#	define MND_FOOTMND_FOOTTRACK_DEBUG
+#	define MND_FOOTTRACK_DEBUG
 #endif
 
 #ifdef MND_FOOTTRACK_DEBUG
 #	ifndef MND_HITMATRIX_DO_BOUNDS_CHECK
-#		define MND_MND_HITMATRIX_DO_BOUNDS_CHECK
+#		define MND_HITMATRIX_DO_BOUNDS_CHECK
 #	endif
 #endif
+
+#include "util/HitMatrix.hxx"
+#include "util/FTrack.h"
 
 /* Represent the 'charge' measurement of each layer. */
 struct FOOTQ {
@@ -141,6 +141,7 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	FOOTBoxParam* box;
 	std::array<FOOTParam, 2>* foot_param[N_PAIRS];
 	std::string* setupName;
+
 	std::array<double,4>* cost_coeff;
 	TParameter<double>* max_cost;
 

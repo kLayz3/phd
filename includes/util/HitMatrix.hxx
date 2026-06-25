@@ -6,7 +6,10 @@
 #include <type_traits>
 #include "../Eigen.h"
 
-#define MND_HITMATRIX_DO_BOUNDS_CHECK
+
+#ifndef MND_HITMATRIX_DO_BOUNDS_CHECK
+//#	define MND_HITMATRIX_DO_BOUNDS_CHECK
+#endif
 
 template<typename FOOTPair> struct HitMatrix;
 
@@ -33,12 +36,12 @@ static_assert(sizeof(Q) == 2*sizeof(float));
 
 /* Data cannot be packed as just (v,q) into std::optional, as also
  * the third state is required. So the type is extended a'la optional,
- * but with the third state present. Also, std::optional<Data> would make it 64-byte wide. */
+ * but with the third state present. Furthermore, std::optional<Data> would be padded to 64-byte wide. */
 struct Data {
 	using q_type = Q;
 	using xy_type = Eigen::Vector2d;
 	
-	enum State { 
+	enum State : u32 {
 		UNEVALUATED, // ditto
 		READY,       // if the current entry is fully evaluated
 		POISONED     // if the current entry got plucked into a well defined track. 
@@ -62,7 +65,7 @@ inline std::ostream& operator<<(std::ostream& os, const Data& d) {
 }
 
 struct Cached {
-	template<typename FOOTPair> friend struct ::HitMatrix; 
+	template<typename> friend struct ::HitMatrix; 
 	using Storage = Eigen::Matrix<
 		Data,
 		Eigen::Dynamic,
@@ -218,12 +221,13 @@ public:
 		const size_t ny = GetN<Y>();
 		cache.resize(nx, ny);
 
-		for(size_t i=0; i<nx; ++i) {
-			const hit_type& hx = p->x[i];
-			for(size_t j=0; j<ny; ++j) {
+		for(size_t j=0; j<ny; ++j) {
+			const hit_type& hy = p->y[j];
+			for(size_t i=0; i<nx; ++i) {
 				if(cache(i,j).has_value()) continue;
+				
+				const hit_type& hx = p->x[i];
 
-				const hit_type& hy = p->y[j];
 				cache(i,j) = Entry {
 					A * (Eigen::Vector2d(hx.m, hy.m) + dxy),
 					{ hx.Q.q, hy.Q.q }, 

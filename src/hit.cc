@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
 #ifdef MND_DEBUG_ENABLED
 			.MakePool<1>( 512 );
 #else
-			.MakePool<4>( 4092 );
+			.MakePool<8>( 4092 );
 #endif
 	
 	ProgressBar bar {
@@ -176,7 +176,7 @@ int main(int argc, char* argv[]) {
 }
 
 
-const char* hit_help =
+const char* hit_help = mnd::msg (
 "\nUsage: ./hit <OPT1> <OPT2> ...\n\
 Options can be passed Windows style (-tag value1 value2 ...) or Unix style (--tag=value1,value2,...)\n\
 For either single or multiple values.\n\
@@ -186,12 +186,18 @@ For either single or multiple values.\n\
 -max-events N               ..Specify total number of events. Default: all events in the input ROOT file.\n\
 -v    [0,1,2]               ..Specify verbosity. Default 0 (silent).\n\
 -u    [0,1]                 ..Predicate if upstream track must be present. Default 0 (not necessary).\n\
--max-cost COST              ..Maximum cost value supplied to Kalman algorithm. Default 100.\n\
--cr VALUE                   ..cr coefficient value. Default TFOOTHitProc::DEFAULT_COST_R\n\
--cq VALUE                   ..cq coefficient value. Default TFOOTHitProc::DEFAULT_COST_Q\n\
--ct VALUE                   ..ct coefficient value. Default TFOOTHitProc::DEFAULT_COST_T\n\
--cp VALUE                   ..cp coefficient value. Default TFOOTHitProc::DEFAULT_COST_P\n\
+-cr VALUE                   ..cr coefficient value. Default %s%.1f%s\n\
+-cq VALUE                   ..cq coefficient value. Default %s%.1f%s\n\
+-ct VALUE                   ..ct coefficient value. Default %s%.1f%s\n\
+-cp VALUE                   ..cp coefficient value. Default %s%.1f%s\n\
+-max-cost COST              ..Maximum cost value supplied to Kalman algorithm. Default %s%.1f%s.\n\
 -help                       ..Print this message to stdout. \n\
 \n\
 This program will do FOOT tracking (and tbd: S2/S3 FRS PID + momentum measurement).\n\
-Always remember: PHYSICS IS FUN <(^.^)>\n\n";
+Always remember: PHYSICS IS FUN <(^.^)>\n\n",
+BOLD, TrackCost::DEFAULT_COST_R, KNRM,
+BOLD, TrackCost::DEFAULT_COST_Q, KNRM,
+BOLD, TrackCost::DEFAULT_COST_T, KNRM,
+BOLD, TrackCost::DEFAULT_COST_P, KNRM,
+BOLD, TrackCost::DEFAULT_MAX_COST, KNRM
+);

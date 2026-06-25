@@ -1,18 +1,18 @@
 #pragma once
-
-#define MHELPER_RUSTIFY_TYPE(N) \
-	using u##N = uint##N##_t; \
-	using i##N = int##N##_t;
-
-MHELPER_RUSTIFY_TYPE( 8)
-MHELPER_RUSTIFY_TYPE(16)
-MHELPER_RUSTIFY_TYPE(32)
-MHELPER_RUSTIFY_TYPE(64)
+#include "../monad/monad.hxx"
 
 #include "TFile.h"
 #include "TObject.h"
 #include <iostream>
 #include <variant>
+#include <filesystem>
+#include <sstream>
+#include <cmath>
+#include <stdexcept>
+
+#include "TROOT.h"
+#include "TCanvas.h"
+#include "TInterpreter.h"
 
 namespace _detail {
 inline TFile* file_ptr(TFile* f) noexcept {
@@ -43,15 +43,6 @@ void get_obj(F&& fhandle, P& var, const char* label) {
 		std::abort();
 	}
 }
-
-#include <filesystem>
-#include <sstream>
-#include <cmath>
-#include <stdexcept>
-
-#include "TROOT.h"
-#include "TCanvas.h"
-#include "TInterpreter.h"
 
 using A2 = std::array<double, 2>;
 using A3 = std::array<double, 3>;
@@ -119,3 +110,60 @@ namespace canvas {
 		cs.back()->Print(Form("%s)", outpdf.c_str()));
 	}
 };
+
+namespace mnd {
+
+/* Nicer API to name different inputs. */
+
+template<typename T, typename Tag = void, bool CanInherit = std::is_class_v<T>>
+struct InputWrapper;
+
+template<typename T, typename Tag>
+struct InputWrapper<T,Tag,true> : T {
+	using T::T;
+	using underlying_type = T;
+	
+	T& get() noexcept { return *this; }
+	const T& get() const noexcept { return *this; }
+};
+
+/* Arrays are aggregates and don't provide any ctors by default. How nice. */
+template<typename U, std::size_t N, typename Tag>
+struct InputWrapper<std::array<U,N>, Tag, true> : std::array<U,N> {
+	using underlying_type = std::array<U,N>;
+
+	InputWrapper() = default;
+	template<typename... Args,
+		 typename = typename std::enable_if_t<sizeof...(Args) == N>
+	>
+    InputWrapper(Args&&... args)
+        : underlying_type{ { static_cast<U>(std::forward<Args>(args))... } }
+    {}
+
+	underlying_type& get() noexcept { return *this; }
+	const underlying_type& get() const noexcept { return *this; }
+};
+
+template<typename T, typename Tag>
+struct InputWrapper<T, Tag, false> {
+	using underlying_type = T;
+	T value;
+
+	InputWrapper() = default;
+
+	InputWrapper(T v) : value(v) {}
+
+	operator T&() noexcept { return value; }
+	operator const T&() const noexcept { return value; }
+
+	T& get() noexcept { return value; }
+	const T& get() const noexcept { return value; }
+};
+
+} // namespace mnd
+
+/* Parse a file first thru the GCC preprocessor, and then
+ * try to parse the output as a sequence of lines. 
+ * Is not thread safe! */
+std::vector<std::string> ParseFile(const std::string& );
+extern std::vector<std::string> ParseFile(const std::string& );

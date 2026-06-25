@@ -36,7 +36,6 @@ inline double Beta(uint32_t Q, uint32_t A, double brho) noexcept {
 	double alpha = Q*brho / A * e_times_tm_over_uc;
 	return alpha / sqrt(1 + alpha*alpha); 
 }
-
 /* Sometimes Q is known. */
 template<uint32_t Q>
 double Beta(uint32_t A, double brho) noexcept {
@@ -60,12 +59,22 @@ inline double EKin(double beta) noexcept {
 	if(frac < 0) frac = 0.;
 	return frac * nuc::u; 
 }
-
 /* Kinetic energy per nucleon, if (Q,A,brho) are known. */
 inline double EKin(uint32_t Q, uint32_t A, double brho) noexcept {
 	double beta = phy::Beta(Q,A,brho);
 	return EKin(beta);
 }
-
+/* Sometimes Q is known. */
+template<uint32_t Q>
+double EKin(uint32_t A, double brho) noexcept {
+	double beta = phy::Beta<Q>(A,brho);
+	return EKin(beta);
+}
+/* Sometimes Q,A is known. */
+template<uint32_t Q, uint32_t A>
+double EKin(double brho) noexcept {
+	double beta = phy::Beta<Q,A>(brho);
+	return EKin(beta);
+}
 }
 

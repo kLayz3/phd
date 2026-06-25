@@ -62,6 +62,8 @@ parse_opts() {
 				;;
 		esac
 	done
+	
+	rest="$@"
 }
 
 # This function will just return a 0 on `no`. Won't promptly exit.
