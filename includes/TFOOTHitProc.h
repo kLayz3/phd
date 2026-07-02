@@ -33,7 +33,9 @@ struct TrackCost {
 
 	// For k==3 degrees of freedom: total Chi^2 of about 12 is 99% confidence. 
 	// In ideal world... but both `kt` and `kq` can dance like crazy. */
-	constexpr static double DEFAULT_MAX_COST = 50;
+	constexpr static double DEFAULT_MAX_CANDIDATE_COST = 60;
+	constexpr static double DEFAULT_MAX_FINAL_COST = 12;
+
 	constexpr static double NIL_VALUE = NAN;
 	
 	enum F { KR, KQ, KP, KT };
@@ -43,6 +45,7 @@ struct TrackCost {
 	static double Ct;
 	static double Cp;
 	static double max_cost;
+	static double max_cost_final_track;
 
 	/* Exposing setters and getters because the sideffect is bookkeeping
 	 * the sum on the fly, which raw reference accesses would invalidate :-) */
@@ -122,11 +125,11 @@ struct TFOOTHitProc : TProcessor <
 	constexpr static double CLUSTER_SIZE_ONE_Q_CUTOFF = 1.5; // when cluster size == 1 doesn't make sense anymore.
 	constexpr static double TARGET_Z = 0.0; // by convention. In Kalman coordinates, place target nominally at 0.0
 											// Will be shifted back to "real" FRS coordinates later.
-	constexpr static u32 MAX_CANDIDATES = 10; // To how many paths can a node branch to (at most)
+	constexpr static u32 MAX_CANDIDATES = 12; // To how many paths can a node branch to (at most)
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
 	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ), 
-		double = TrackCost::DEFAULT_MAX_COST,
+		double = TrackCost::DEFAULT_MAX_CANDIDATE_COST,
 		const std::array<double,4>& = {NAN, NAN, NAN, NAN}, // cost coefficients: {Cr, Cq, Ct, Cp}
 		bool  = false,                                      // requires_valid_upstream_track
 		Verbosity = Verbosity::SILENT);

@@ -76,7 +76,7 @@ struct DirectedAGraph {
 
 	DirectedAGraph(std::size_t N) { path.reserve(N); };
 
-	void TrimRankLessThan(int N) {
+	void TrimRankLessThan(int N) noexcept {
 		/* [1] Partition the paths container, and put the "valid" paths as preceeding. */ 
 		auto it = std::partition(path.begin(), path.end(),
 			[N](const DAGPath& singular_path) {
@@ -87,6 +87,21 @@ struct DirectedAGraph {
 		/* [2] Trim the container. */
 		path.erase(it, path.end());
 	}
+	/* Trim the graph, keeping only the elements which evaluate to 'true' based 
+	 * on the predicate `fnc`.  Function invocation must not throw. */
+	template<typename Pred>
+	void KeepIf(Pred&& pred) noexcept (
+		std::is_nothrow_invocable_r_v<bool, Pred&, const DAGPath&> &&
+		std::is_nothrow_swappable_v<DAGPath>
+	) {
+		static_assert(std::is_invocable_r_v<bool, Pred, const DAGPath&>,
+			"Predicate type must be a callable bool(const DAGPath&)"); 
+
+		/* [1] Partition the paths container, and put the "valid" paths as preceeding. */ 
+		auto it = std::partition(path.begin(), path.end(), std::ref(pred));
+		path.erase(it, path.end());
+	}
+
 	friend std::ostream& operator<<(std::ostream& os, const DirectedAGraph& g) { 
 		return os << g.path;
 	}

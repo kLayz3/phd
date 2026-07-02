@@ -5,6 +5,7 @@
  * A simple variant defined here to be exposed further. 
  * Chatty variant tributed to a good friend Dr. L. Rose */
 
+#include <ostream>
 #include <optional>
 
 enum class Verbosity : int { 
@@ -34,4 +35,18 @@ inline std::optional<Verbosity> itov(int value) noexcept {
 		default: return std::nullopt;
 	}
 }
+
+constexpr const char* vtoa(Verbosity v) noexcept {
+	switch(v) {
+		case Verbosity::SILENT:   return "silent";
+		case Verbosity::INFO:     return "info";
+		case Verbosity::CHATTY:   return "chatty";
+		case Verbosity::SPAM:     return "spam";
+		case Verbosity::INFINITE: return "infinite";
+	}
+}
+}
+
+inline std::ostream& operator<<(std::ostream& os, Verbosity v) {
+	return os << mnd::vtoa(v);
 }

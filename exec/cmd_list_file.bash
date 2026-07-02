@@ -66,14 +66,14 @@ elif (( do_create )); then
 	for fname in $(ls $dir/$ext); do
 		fname=$(basename "$fname")
 		[ -f mapdir/$fname ] && { has_output=✅; } || { has_output=❌; }
-		echo "./map.exe -file merged/$fname -output mapdir/$fname$has_output -foot-dt 300" | tee -a $cmd_file
+		echo "./map.exe -f merged/$fname -o mapdir/$fname$has_output -d 300" | tee -a $cmd_file
 	done
 	echo | tee -a $cmd_file	
 	for fname in $(ls $dir/$ext); do
 		fname=$(basename "$fname")
 		[ -f mapdir/$fname ] && { has_input=✅; } || { has_input=❌; }
 		[ -f caldir/$fname ] && { has_output=✅; } || { has_output=❌; }
-		echo "./cal.exe -file mapdir/$fname$has_input -output caldir/$fname$has_output" | tee -a $cmd_file
+		echo "./cal.exe -f mapdir/$fname$has_input -o caldir/$fname$has_output" | tee -a $cmd_file
 	done
 	echo | tee -a $cmd_file	
 	
@@ -81,7 +81,7 @@ elif (( do_create )); then
 		fname=$(basename "$fname")
 		[ -f caldir/$fname ] && { has_input=✅; } || { has_input=❌; }
 		[ -f hitdir/$fname ] && { has_output=✅; } || { has_output=❌; }
-		echo "./hit.exe -file caldir/$fname$has_input -output hitdir/$fname$has_output" | tee -a $cmd_file
+		echo "./hit.exe -f caldir/$fname$has_input -o hitdir/$fname$has_output" | tee -a $cmd_file
 	done
 else
 	echo "Neither -c, -m, -e flag passed. Choose one."

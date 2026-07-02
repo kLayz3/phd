@@ -25,7 +25,7 @@
 		"dz": 0.0,          // Small offset in nominally stated position in "box" entry, along the z-axis. Positive `dz` means farther away from Be target
 		"orientation": "y", // Orientation, defined by TPCs' y-axis
 		"mirrored": false,  // can be rotated and mirrored
-		"c_threshold": 4.0, //      Central Threshold (sigma units)
+		"c_threshold": 3.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
 		"delta_p": -1.9032, // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
 		"delta_a": 0.0,     // Offset in angle [degrees], around the z-axis. 
@@ -360,7 +360,7 @@
 		"N": 1,
 		"orientation": "-x",
 		"mirrored": false,
-		"c_threshold": 4.0,
+		"c_threshold": 3.0,
 		"n_threshold": 1.5,
 		"delta_p": 1.1058, 
 		"delta_a": 0.0, // by definition 
@@ -703,7 +703,7 @@
 		"N": 2,
 		"orientation": "y",
 		"mirrored": false,
-		"c_threshold": 4.0,
+		"c_threshold": 3.0,
 		"n_threshold": 1.5,
 		"delta_p": -2.0874,
 		"delta_a": 0.0, // by definition
@@ -1034,7 +1034,7 @@
 		"N": 3,
 		"orientation": "-x",
 		"mirrored": false,
-		"c_threshold": 4.0,
+		"c_threshold": 3.0,
 		"n_threshold": 1.5,
 		"delta_p": 2.14864,
 		"delta_a": 0.0, // by definition
@@ -1377,8 +1377,8 @@
 		"N": 4,
 		"orientation": "y", /* One rotated by about ~10 deg */
 		"mirrored": false,
-		"c_threshold": 4.0,
-		"n_threshold": 2.5,
+		"c_threshold": 3.0,
+		"n_threshold": 1.5,
 		"delta_p": -1.703,
 		"delta_a": -11.0845,
 		"gain": {
@@ -1708,7 +1708,7 @@
 		"N": 5,
 		"orientation": "-x", /* One rotated by about ~10 deg */
 		"mirrored": false,
-		"c_threshold": 4.0,
+		"c_threshold": 3.0,
 		"n_threshold": 1.5,
 		"delta_p": 2.9603,
 		"delta_a": -10.9936,
@@ -2067,7 +2067,7 @@
 		"N": 6,
 		"orientation": "y",
 		"mirrored": false,
-		"c_threshold": 4.0,
+		"c_threshold": 3.0,
 		"n_threshold": 1.5,
 		"delta_p": -2.3051,
 		"delta_a": -0.287,
@@ -2406,7 +2406,7 @@
 		"N": 7,
 		"orientation": "-x",
 		"mirrored": false,
-		"c_threshold": 4.0,
+		"c_threshold": 3.0,
 		"n_threshold": 1.5,
 		"delta_p": 3.8623,
 		"delta_a": 0.148,

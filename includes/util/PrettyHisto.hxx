@@ -105,6 +105,7 @@ struct __ARGB {
 			case Mode::root_col:
 				return id;
 		}
+		return 0;
 	}
 	void ApplyFill(TH1* h) {
 		Int_t idx = GetColorCode();
@@ -412,7 +413,7 @@ struct PLatex {
 			{"\e[0;35m", Form("#color[%d]{", kMagenta+ 2)},
 			{"\e[0;36m", Form("#color[%d]{", kCyan   + 2)}
 		};
-		for(const auto [raw, rep] : rules)
+		for(const auto& [raw, rep] : rules)
 			PLatex::replace_all(__temporary, raw, rep);
 	}
 	inline static void replace_all(std::string& s, const char* sub, const char* rep) {

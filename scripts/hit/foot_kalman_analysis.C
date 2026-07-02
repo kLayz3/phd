@@ -14,7 +14,7 @@ using namespace ROOT;
 using namespace ROOT::Experimental;
 
 enum AtomicNumber { H, He, Li, Be, B, C };
-enum AngleType { all, p };
+enum AngleType { all, p, he };
 using AllowOthers = DoSave; // enum class { yes, no }
 
 using DistanceCut  = mnd::InputWrapper<A2>;
@@ -29,9 +29,11 @@ using Select = mnd::InputWrapper<
 	>
 >;
 
+using Save = mnd::Option<std::string>;
+	
 constexpr A2 elem_to_a2(AtomicNumber e) {
 	switch(e) {
-		case H:  return A2{0.6, 1.5};
+		case H:  return A2{0.6, 1.3};
 		case He: return A2{1.8, 2.6};
 		case Li: return A2{2.6, 3.5};
 		case Be: return A2{3.5, 4.5};
@@ -45,6 +47,7 @@ void foot_kalman_analysis (
 	Select selected = {},
 	AllowOthers allow_others = AllowOthers::yes,
 	AngleType angle_type = AngleType::all,
+	A2 sci31_cut = {NAN, NAN},
 	DistanceCut distance_cut = {0.0, 1000},
 
 	DoSave do_save = DoSave::no
@@ -116,7 +119,7 @@ void foot_kalman_analysis (
 
 	/* Sanitize the angle part. If selected isn't given by at least
 	 * two windows, then angle cannot be clearly defined between light and heavy ones. */
-	if(selected.size() < 1 and angle_type == AngleType::p) {
+	if(selected.size() < 1 and (angle_type == AngleType::p || angle_type == AngleType::he)) {
 		WARN("This was not supposed to happen!\n");
 		throw std::runtime_error("err");
 		angle_type = AngleType::all;
@@ -136,6 +139,9 @@ void foot_kalman_analysis (
 	TH1P* h1_angle_ex = new TH1P("Track angles, excitation sqrt(#sum t_i^2) [mrad]", kCyan-9, 300, 0, 300);
 
 	TH2P* h2_vertex_z = new TH2P("RMS angle [mrad]:Vertex z [mm]@Traced by the FOOT", 200, -100, 100, 100,0,100);
+	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", ORGB{0x009B2F}, 500, 300, 4000);
+	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
+	auto* h1_sci31_cut2= new TH1P("((h1_cut2)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
 
 	if(angle_type == AngleType::p) {
 		(*h1_angle_ex)->SetTitle( (
@@ -144,7 +150,6 @@ void foot_kalman_analysis (
 			).c_str()
 		);
 	}
-	if(angle_type != AngleType::p) throw std::runtime_error("Err_in_main");
 
 	for(const auto& fname : fileNames) {
 		WARN("Proceeding with file: \'%s\'\n", fname.c_str());
@@ -158,10 +163,17 @@ void foot_kalman_analysis (
 		for(auto entryId : *ntuple) {
 			ntuple->LoadEntry(entryId);
 			bool is_valid = true;
+			const auto& sci31 = frs->cal.sci[2];
+			const double sci31e = sci31.E;
 			
+			h1_sci31->Fill(sci31e);
+			//if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
+			if(mnd::IsValid(sci31_cut) and sci31.hits.size()>0 and mnd::IsInside(sci31.E, sci31_cut)) continue;
+			h1_sci31_cut->Fill(sci31e);
+
 			const size_t N = foot->track.size();
 			if(N > track_used_mask.size()) continue; // abnormally large event?
-			
+
 			/* In case we don't allow rogue tracks, then the number of validated tracks 
 			 * must be the total number. */
 			if(allow_others == AllowOthers::no && N != sum_n_tracks_required) continue;
@@ -244,6 +256,18 @@ void foot_kalman_analysis (
 						h1_track_angle->Fill( theta );
 					}
 				}
+				else if(angle_type == AngleType::he) {
+					const mnd::geom::Line3D light_track = tracks.front();	
+
+					for(size_t i=1; i < N_valid; ++i) {
+						theta = 1000.0 * tracks[i].AngleRelativeTo( light_track );
+						sum2 += theta*theta;
+					}
+					if(N_valid > 2) {
+						theta = 1000.0 * tracks[1].AngleRelativeTo( tracks[2] );
+						h1_track_angle->Fill( theta );
+					}
+				}
 				else {
 					for(size_t i=0; i<N_valid; ++i) {
 						for(int j=i+1; j<N_valid; ++j) {
@@ -256,6 +280,8 @@ void foot_kalman_analysis (
 				if(!is_valid) continue;
 				h1_angle_ex->Fill( sqrt(sum2) );
 				h2_vertex_z->Fill( vertex.z, sqrt(sum2) / N_valid );
+
+				h1_sci31_cut2->Fill(sci31e);
 			}
 		}
 
@@ -283,6 +309,12 @@ void foot_kalman_analysis (
 	ct->cd(2); h1_track_angle->Draw();
 	ct->cd(3); h1_angle_ex->Draw();
 	ct->cd(4); h2_vertex_z->Draw("COLZ");
+
+	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2200, 1200);
+	cs->Divide(1,3);
+	cs->cd(1); h1_sci31->Draw();
+	cs->cd(2); h1_sci31_cut->Draw();
+	cs->cd(3); h1_sci31_cut2->Draw();
 
 	if(do_save == DoSave::yes) {
 		std::stringstream pname;

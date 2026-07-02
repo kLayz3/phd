@@ -4,53 +4,55 @@
 #include <iostream>
 #include <csignal>
 
-#include "util/CMDLineParser.h"
 #include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"
 #include "TFOOTCalProc.h"
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
 #include "TFRSCalProc.h"
+#include "util/CLI.h"
 
-using namespace CMDLineParser;
 using namespace std::literals;
 using namespace mnd;
-
-extern const char* calibrate_help;
 
 int main(int argc, char* argv[]) {
 	using namespace indicators;
 	signal(SIGINT , sig_callback_handler);
 	signal(SIGSEGV, sig_callback_handler);
-	auto& def_msg = CMDLineParser::Mandatory::DefMessage;
-	CMDLineParser::Mandatory::SetDefMessage(calibrate_help);
+
+	CLI::App app{"This program will analyse the mapped ROOT file and perform the clustering of the FOOT data + calibrating FRS data.\n\
+Always remember: PHYSICS IS FUN <(^.^)>"};
+
+	std::string fileName, outFile;
+	std::string setupFile = PROG_PATH "/params/frs_setup.json"; 
+	std::string footSetupFile = PROG_PATH "/params/foot_setup.json";
+	u64 maxEvents = -1;
+	
+	add_logged_option<DisplayDefault::No>(app, "-f,--file", fileName, "Input ROOT file")
+		->required()
+		->expected(1)
+		->check(CLI::ExistingFile);
+	
+	add_logged_option<DisplayDefault::No>(app, "-o,--output", outFile, 
+		"Specify output file name. Default same as the input file with \'_cal\' suffix.")
+		->expected(0,1);
+
+	add_logged_option<DisplayDefault::No>(app, "-m,--max-events", maxEvents, 
+		"Specify total number of events. Default: all events in the input ROOT file.")
+		->check(CLI::PositiveNumber);
+
+	add_logged_option(app, "-s,--setup", setupFile, 
+		"Specify FRS JSON setup file name.")
+		->check(CLI::ExistingFile);
+
+	add_logged_option(app, "-p,--foot-setup", footSetupFile, 
+		"Specify FOOT JSON setup file name.")
+		->check(CLI::ExistingFile);
+		
+	CLI11_PARSE(app, argc, argv);
+	if(outFile.empty()) outFile = fileName.substr(0, fileName.find('.')) + "_cal.root"; 
 
 	srand(time(NULL));	
-
-	std::string pStr, fileName, outFile, setupFile, footSetupFile;
-	u64 maxEvents = -1;
-
-	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
-	
-	ParseCmdLine("file", fileName, argc, argv, true);
-	if(!ParseCmdLine("output", outFile, argc, argv)) {
-		outFile = fileName.substr(0, fileName.find('.')) + "_cal.root"; 
-		WARN("No output file specified. Writing to file: %s\n", outFile.c_str());
-	}
-	if(ParseCmdLine("max-events", pStr, argc, argv)) {
-		try { maxEvents = stoi(pStr); }
-		catch(std::exception& e) { WARN("Unparsable " EMPH(max-events) " argument to u64"); std::cout << e.what() << std::endl; }
-	}
-	if(!ParseCmdLine("setup", setupFile, argc, argv)) {
-		setupFile = PROG_PATH "/params/frs_setup.json";
-		WARN("FRS setup file not specified. Defaulting to: " EMPH(%s\n), setupFile.c_str());
-	}
-	if(!ParseCmdLine("foot-setup", footSetupFile, argc, argv)) {
-		footSetupFile = PROG_PATH "/params/foot_setup.json";
-		WARN("FOOT setup file not specified. Defaulting to: " EMPH(%s\n), footSetupFile.c_str());
-	}
-
-	VerifyNoArgumentsLeft(argc, argv);
 	std::vector<TimePoint> tv;
 
 	/* Set up the containers. */
@@ -119,18 +121,3 @@ int main(int argc, char* argv[]) {
 
 	PrintElapsed<kSECOND>(std::move(tv));
 }
-
-const char* calibrate_help =
-"\nUsage: ./cal <OPT1> <OPT2> ...\n\
-Options can be passed Windows style (-tag value1 value2 ...) or Unix style (--tag=value1,value2,...)\n\
-For either single or multiple values.\n\
-\n\
--file input.root            ..Input file(s).\n\
--output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_cal' suffix.\n\
--setup /PATH/TO/FRS.json    ..Specify FRS JSON setup file name.\n\
--foot-setup /PATH/TO/JSON   ..Specify FOOT JSON setup file name.\n\
--max-events N               ..Specify how many events to process in the ROOT file. Default all.\n\
--help                       ..Print this message to stdout. \n\
-\n\
-This program will analyse the mapped ROOT file and perform the clustering of the FOOT data + calibrating FRS data.\n\
-Always remember: PHYSICS IS FUN <(^.^)>\n\n";

@@ -55,7 +55,8 @@ double TrackCost::Cr = TrackCost::DEFAULT_COST_R; // cost per mm^2 difference
 double TrackCost::Cq = TrackCost::DEFAULT_COST_Q; // cost per charge^2 difference
 double TrackCost::Ct = TrackCost::DEFAULT_COST_T; // cost per mm^2 of upstream @target difference
 double TrackCost::Cp = TrackCost::DEFAULT_COST_P; // cost if next layer missed
-double TrackCost::max_cost = TrackCost::DEFAULT_MAX_COST;
+double TrackCost::max_cost = TrackCost::DEFAULT_MAX_CANDIDATE_COST; // max amount that a candidate point can accumulate
+double TrackCost::max_cost_final_track = TrackCost::DEFAULT_MAX_FINAL_COST; // max amount that a final track can accumulate
 
 /* Bind references for easier access... */
 double& Cr = TrackCost::Cr;
@@ -63,6 +64,7 @@ double& Cq = TrackCost::Cq;
 double& Ct = TrackCost::Ct;
 double& Cp = TrackCost::Cp;
 double& max_cost = TrackCost::max_cost;
+double& max_cost_final_track = TrackCost::max_cost_final_track;
 
 Verbosity TFOOTHitProc::v = Verbosity::SILENT;
 bool TFOOTHitProc::requires_valid_upstream_track;
@@ -157,8 +159,9 @@ TFOOTHitProc::TFOOTHitProc (
 		out.cost_coeff->at(i) = val;
 	}
 	
-	WARN("Cost coefficients [cr, cq, ct, cp] = [%.2f, %.2f, %.2f, %.2f]. Max allowed cost: %.2f\n",
-		Cr, Cq, Ct, Cp, max_cost);
+	WARN("Cost coefficients [cr, cq, ct, cp] = [%.2f, %.2f, %.2f, %.2f]\n", Cr, Cq, Ct, Cp);
+	WARN("Max candidate allowed cost: %s%.2f%s , max complete track allowed cost %s%.2f%s\n",
+		BOLD, max_cost, KNRM, BOLD, max_cost_final_track, KRNM);
 
 	u32 i = 0;
 
@@ -624,7 +627,9 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 				new_paths.emplace_back(path);
 				new_paths.back().node[n] = path_specific_candidates_buf[i].second;
 			}
-			if(ncounted < MAX_CANDIDATES) // Add a null node.	
+			/* Add a null node only if current candidate path has no pre-existing "layer holes" and 
+			 * the null slot is available. */
+			if(ncounted < MAX_CANDIDATES and path.Rank() >= static_cast<int>(n))
 				new_paths.emplace_back(path);
 		}
 		
@@ -633,10 +638,17 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 }
 
 void TFOOTHitProc::AnalyseDAG() noexcept {
-	/* Allow only one layer to be missing. Must have 3 or more valid measurements. */
 	static_assert(N_PAIRS - 1 >= 3, "Maximal paranoia");
-	dag.TrimRankLessThan((int)N_PAIRS - 1);
-	
+
+	/* Allow only one layer to be missing. Must have 3 or more 
+	 * valid measurements and be below total allowed cost. */
+	dag.KeepIf( [this](const DAG::DAGPath& p) -> bool {
+		return (
+			(p.Rank() > (int)N_PAIRS - 1) and
+			this->GetPrelimTrackFromPath(p).GetScore() < max_cost_final_track 
+		);
+	});	
+
 #ifdef MND_FOOTTRACK_DEBUG
 		if(v > 0) {
 			WARN(KBH_CYN "~~~> Valid %zu paths thru the tree.\n" KNRM, dag.path.size());

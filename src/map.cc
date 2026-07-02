@@ -6,13 +6,12 @@
 #include <csignal>
 #include <unistd.h>
 
-#include "util/CMDLineParser.h"
 #include "TFOOTMapProc.h"
 #include "TFOOTMapCont.h"
 #include "TFRSMapProc.h"
 #include "TFRSMapCont.h"
+#include "util/CLI.h"
 
-using namespace CMDLineParser;
 using namespace mnd;
 
 extern const char* map_help;
@@ -28,37 +27,36 @@ int main(i32 argc, char* argv[]) {
 	using namespace indicators;
 	signal(SIGINT , sig_callback_handler);
 	signal(SIGSEGV, sig_callback_handler);
-	auto& def_msg = CMDLineParser::Mandatory::DefMessage;
-	CMDLineParser::Mandatory::SetDefMessage(map_help);
 
-	srand(time(NULL));
 
-	std::string pStr, outFile, inFile;
+	std::string fileName, outFile;
 	u64 maxEvents = -1;
 	double dt_veto = NAN;
 
-	if(IsCmdArg("help", argc, argv)) { std::cout << def_msg(); return 0; }
-	
-	ParseCmdLine("file", inFile, argc, argv, true /* Necessary arg. */);
-	
-	if(!ParseCmdLine("output", outFile, argc, argv)) {
-		outFile = inFile.substr(0, inFile.find('.')) + "_map.root"; 
-		WARN("No output file specified. Writing to file: %s\n", outFile.c_str());
-	}
-	if(ParseCmdLine("max-events", pStr, argc, argv)) {
-		try { maxEvents = stoi(pStr); }
-		catch(std::exception const& e) { 
-			WARN("Unparsable " EMPH(max-events) " argument to `u64`. Err: %s\n", e.what()); 
-		}
-	}
-	if(ParseCmdLine("foot-dt", pStr, argc, argv)) {
-		try { dt_veto = stod(pStr); }
-		catch(std::exception const& e) {
-			WARN("Unparsable " EMPH(foot-dt) " argument to `double`. Err: %s\n", e.what()); 
-		}
-	}
+	CLI::App app{"This program will go through the raw (sorted) ROOT file and do the full pedestal analysis of the FOOT data "
+		"+ perform mapping of the FRS data.\nAlways remember: PHYSICS IS FUN <(^.^)>"};
 
-	VerifyNoArgumentsLeft(argc, argv);
+	add_logged_option<DisplayDefault::No>(app, "-f,--file", fileName, "Input ROOT file from Go4/UCESB")
+		->required()
+		->expected(1)
+		->check(CLI::ExistingFile);
+	
+	add_logged_option<DisplayDefault::No>(app, "-o,--output", outFile, 
+		"Specify output file name. Default same as the input file with \'_map\' suffix.")
+		->expected(0,1);
+
+	add_logged_option<DisplayDefault::No>(app, "-m,--max-events", maxEvents, 
+		"Specify total number of events. Default: all events in the input ROOT file.")
+		->check(CLI::PositiveNumber);
+
+	add_logged_option<DisplayDefault::No>(app, "-d,--foot-dt", dt_veto, 
+		"Specify in microseconds FOOT deadtime veto. Consecutive entries with stamp difference <T will be discarded. Default 0")
+		->check(CLI::PositiveNumber);
+
+	CLI11_PARSE(app, argc, argv);
+	if(outFile.empty()) outFile = fileName.substr(0, fileName.find('.')) + "_map.root"; 
+	
+	srand(time(NULL));
 	std::vector<TimePoint> tv;
 
 #ifdef FRS_GO4
@@ -99,7 +97,7 @@ int main(i32 argc, char* argv[]) {
 	trig.Setup();
 
 	u32 n_batch = 16'384;
-	auto pool = TAnalysisProcess<>(inFile, outFile, "h102")
+	auto pool = TAnalysisProcess<>(fileName, outFile, "h102")
 		.emplace_process<TFOOTMapProc>( foot[0], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::YES, dt_veto)
 		.emplace_process<TFOOTMapProc>( foot[1], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO , dt_veto)
 		.emplace_process<TFOOTMapProc>( foot[2], sort, TFOOTMapProc::NBatchPedestal{n_batch}, TFOOTMapProc::CableSwapped::NO , dt_veto)
@@ -169,19 +167,4 @@ int main(i32 argc, char* argv[]) {
 
 	tv.emplace_back(TimePoint("end"));
 	PrintElapsed<kSECOND>(tv);
-
 }
-
-const char* map_help =
-"\nUsage: ./map <OPT1> <OPT2> ...\n\
-Key-value options can be passed Windows style (-tag value1 value2 ...) or Unix style (--tag=value1,value2,...)\n\
-For either single or multiple values.\n\
-\n\
--file input1.root           ..Input file from Go4/UCESB.\n\
--output /PATH/TO/OUT.root   ..Specify output file name. Default same as first input file with '_map' suffix.\n\
--help                       ..Print this message to stdout. \n\
--max-events N               ..Specify how many events to process in the ROOT file. Default all.\n\
--foot-dt T                  ..Specify in microseconds FOOT deadtime veto. Consecutive entries with stamp difference <T will be discarded.\n\
-\n\
-This program will go through the raw (sorted) ROOT file and do the full pedestal analysis of the FOOT data + perform mapping of the FRS data.\n\
-Always remember: PHYSICS IS FUN <(^.^)>\n\n";

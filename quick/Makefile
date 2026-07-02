@@ -1,43 +1,35 @@
-include common.mk
+BASE := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+BASE := $(patsubst %/,%,$(BASE))
 
-SRC := $(BASE)/main.cc
-OBJ := $(patsubst $(BASE)/%.cc, $(BASE)/$(BUILD)/%.o, $(SRC_N))
-EXE := $(BASE)/run
+include $(BASE)/../includes/monad/common.mk
+include $(BASE)/../includes/q.mk
+
+CXXFLAGS += $(shell root-config --cflags) \
+	-Wall -Wextra -I$(MONAD_DIR)../ \
+
+LIBS += $(shell root-config --libs)
+LDFLAGS += $(shell root-config --ldflags) 
 
 STEP := map cal hit
 
-LIBS = $(shell root-config --ldflags --libs) \
-	   -lROOTNTuple \
-	   -L../ \
-	   -Wl,-rpath,../ \
-	   -lStructures
+SRC := $(BASE)/run.cc
+SRC += $(wildcard $(addsuffix /*.cc, $(STEP)))
 
-ALIB = $(patsubst %, $(BASE)/%/$(BUILD)/%.a, $(STEP))
+EXE := $(patsubst %.cc, %, $(SRC))
 
-.PHONY: all
+LIBS += -lROOTNTuple \
+		-L../ \
+		-Wl,-rpath,../ \
+		-lStructures
+
+.PHONY: all clean
 all: $(EXE)
 
-$(EXE): $(OBJ) $(ALIB)
-	$(Q)echo "  LD $(notdir $@) "
-	$(Q)g++ -o $@ $^ $(CXXFLAGS) $(LIBS)
+% : %.cc
+	$(Q)$(call log,CXX,$(notdir $@))
+	$(Q)g++ -o $@ $< $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
-$(OBJ): $(BASE)/$(BUILD)/%.o : $(BASE)/%.cc
-	$(Q)echo "  CXX $(notdir $@)  "
-	$(Q)g++ -c -o $@ $< $(CXXFLAGS)
-
-$(ALIB):
-	$(Q)echo "  MAKE $(notdir $@)  "
-	$(Q)$(MAKE) -C $(dir $@)..
-
-.PHONY: clean
 clean:
-	$(Q)rm -rf $(BASE)/$(BUILD) $(BASE)/$(EXE) 2>/dev/null
-
-.PHONY: clean-all $(addprefix clean-, $(STEP))
-
-clean-all: $(addprefix clean-,$(STEP))
-
-clean-%:
-	$(Q)echo "  MAKE CLEAN $*  "
-	$(Q)$(MAKE) -C $(BASE)/$* clean
+	$(Q)$(call log,RM,$(notdir $@))
+	$(Q)rm -rf $(EXE) 2>/dev/null
 
