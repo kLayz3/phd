@@ -24,10 +24,14 @@ info.yaml
 exec/*.cmd
 log.txt
 
-quick/*
-!quick/*.cc
-!quick/Makefile
-!quick/make_macro.bash
+quick/run
+quick/autosave
+quick/map/*
+!quick/map/*.cc
+quick/cal/*
+!quick/cal/*.cc
+quick/hit/*
+!quick/hit/*.cc
 
 exec/*.txt
 autosave
