@@ -20,9 +20,9 @@ enum class AngleType { all, p, he };
 
 constexpr A2 elem_to_a2(AtomicNumber e) {
 	switch(e) {
-		case AtomicNumber::H:  return A2{0.6, 1.4};
-		case AtomicNumber::He: return A2{1.6, 2.6};
-		case AtomicNumber::Li: return A2{2.6, 3.5};
+		case AtomicNumber::H:  return A2{0.6, 1.5};
+		case AtomicNumber::He: return A2{1.5, 2.5};
+		case AtomicNumber::Li: return A2{2.5, 3.5};
 		case AtomicNumber::Be: return A2{3.5, 4.5};
 		case AtomicNumber::B:  return A2{4.5, 5.4};
 		case AtomicNumber::C:  return A2{5.4, 6.8};
@@ -97,7 +97,7 @@ int main(int argc, char* argv[]) {
 
 	TApplication rootApp("app", 0, 0);
 
-	double Cr, Cq, Ct, Cp, max_cost;
+	double Cr, Cq, Ct, Cp, max_cost, max_cost_f;
 	{
 		const auto& fname = fileName.front();
 		std::array<double, 4>* c;
@@ -107,6 +107,8 @@ int main(int argc, char* argv[]) {
 		get_obj(f, m, "FOOT_max_cost");
 		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2); Cp = c->at(3);
 		max_cost = m->GetVal();
+		get_obj(f, m, "FOOT_max_cost_f");
+		max_cost_f = m->GetVal();
 	}
 	/* Sanitize some CLI passed in arguments... */
 	u32 sum_n_tracks_required = std::accumulate(
@@ -202,9 +204,9 @@ int main(int argc, char* argv[]) {
 			option::ShowRemainingTime{true},
 			option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 		};
-		WARN("Proceeding with file [%zu/%zu]: \'%s\'. Entries: [%'zu]\n", i, fileName.size(), fname.c_str(), nentries);
+		WARN("Proceeding with file [%zu/%zu]: \'%s\'. Entries: [%'zu]\n", i+1, fileName.size(), fname.c_str(), nentries);
 		for(size_t entryId{0}; entryId < nentries; ++entryId ) {
-			mnd::PrintProgress(bar, entryId, nentries, 500);
+			mnd::PrintProgress(bar, entryId, nentries, 1000);
 
 			ntuple->LoadEntry(entryId);
 			bool is_valid = true;
@@ -285,7 +287,7 @@ int main(int argc, char* argv[]) {
 
 				for(const mnd::geom::Line3D& track : tracks) {
 					double distance = track.DistanceTo( vertex );
-					if(std::isfinite(distance_cut) and distance < distance_cut) {
+					if(std::isfinite(distance_cut) and distance > distance_cut) {
 						is_valid = false;
 						break;
 					}
@@ -354,7 +356,8 @@ int main(int argc, char* argv[]) {
 		Form("Cq = %.1f Q^-2", Cq),
 		Form("Ct = %.1f mm^-2", Ct),
 		Form("Cp = %.1f", Cp),
-		Form("max cost [@4th]: %.1f", max_cost)
+		Form("max cost for candidate: %.1f", max_cost),
+		Form("max cost for whole track: %.1f", max_cost_f)
 	);
 
 	TCanvas* ct = new TCanvas("TrackDistance", "Recognized tracks distances between eachother", 2150, 1400);

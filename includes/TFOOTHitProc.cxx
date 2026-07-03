@@ -85,12 +85,12 @@ std::ostream& operator<<(std::ostream& os, const TrackCost& rhs) {
 bool operator>(const TrackCost& c, double max_cost) {
 	// Sometimes `kt` measurement missing because the upstream has no track. Adjust the `max_cost` in this case.
 	if(c.test_track_size >= 1 and !c.is_set<TrackCost::KT>() and c.is_set<TrackCost::KP>())
-		max_cost *= 0.6666; // reduce by 2/3
+		max_cost *= 0.666667; // reduce by 2/3
 	switch(c.test_track_size) {
-		case 0: return c.sum() > max_cost * 0.8; // Only kq measurement possible (without track contribution)
-		case 1: return c.sum() > max_cost * 3.0; // kq             + kt        + kp 
-		case 2: return c.sum() > max_cost * 2.0; // kq + kr        + kt(3 pts) + kp(3 pts)
-		case 3: return c.sum() > max_cost * 1.2; // kq + kr(3 pts) + kt(4 pts) + kp(4 pts)
+		case 0: return c.sum() > max_cost * 0.5; // Only kq measurement possible (without track contribution)
+		case 1: return c.sum() > max_cost * 1.4; // kq             + kt        + kp 
+		case 2: return c.sum() > max_cost * 1.2; // kq + kr        + kt(3 pts) + kp(3 pts)
+		case 3: return c.sum() > max_cost * 1.0; // kq + kr(3 pts) + kt(4 pts) + kp(4 pts)
 		default: __builtin_unreachable();
 	}
 }
@@ -121,6 +121,7 @@ TFOOTHitProc::TFOOTHitProc (
 	TFOOTHitCont& out, 
 	BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_INSTANCE_FOOT, ~),
 	double max_cost_,
+	double max_cost_final_track_,
 	const std::array<double, 4>& cost,
 	bool req_,
 	Verbosity v_
@@ -131,7 +132,8 @@ TFOOTHitProc::TFOOTHitProc (
 {
 	TFOOTHitProc::v = v_;
 	TFOOTHitProc::requires_valid_upstream_track = req_;
-	TrackCost::max_cost = max_cost_; // ref to TrackCost::max_cost
+	TrackCost::max_cost = max_cost_; 
+	TrackCost::max_cost_final_track = max_cost_final_track_; 
 
 #ifndef MND_FOOTTRACK_DEBUG
 	if(v > 0) 
@@ -146,6 +148,7 @@ TFOOTHitProc::TFOOTHitProc (
 		TrackCost::DEFAULT_COST_P
 	};
 	out.max_cost->SetVal(max_cost);
+	out.max_cost_f->SetVal(max_cost_final_track);
 
 	for(int i=0; i<4; ++i) {
 		double val = cost[i];
@@ -288,7 +291,9 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 		this->hm[i].InitEvent( this->out.inner().pair[i] );
 	});
 
+#ifdef MND_FOOTTRACK_DEBUG
 	ConstructObviousTracks();
+#endif
 	ConstructDAG();
 	AnalyseDAG();
 	PostProcess();
@@ -424,7 +429,8 @@ void TFOOTHitProc::PoisonEntriesFromHMs(const DAG::DAGPath& path) noexcept {
 
 /* Some heavy particle tracks can be obviously taken out of the full glory
  * CKF algorithm. E.g. if each FOOT in-order measures Z=4,5,6 is fine. 
- * NOTE: the only obvious particle we can find at this point, is the largest Q one. */
+ * NOTE: the only obvious particle we can find at this point, is the largest Q one. 
+ * Isn't very efficient, so its called only in debug mode. */
 void TFOOTHitProc::ConstructObviousTracks() noexcept {
 	static_assert(DAG::depth == N_PAIRS, "Paranoia V4");
 
@@ -504,7 +510,7 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 	const size_t N = tau.N();
 	
 	// Demand all layers
-	if(N != N_PAIRS) return;
+	if(N != N_PAIRS or tau.GetScore() > max_cost_final_track) return;
 
 	/* This is only a single track, and should be matched as well in the main Kalman.
 	 * So don't kick its entries out of the hit matrices. */	
@@ -563,7 +569,11 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 
 		std::vector<DAG::DAGPath>& current_paths = dag.path;
 		std::vector<DAG::DAGPath>  new_paths;
-		new_paths.reserve( 4*current_paths.size() ); // could be larger.
+
+		/* If every single combination, for every single existing path is good,
+		 * could have at most 1 path branching out to nx*ny paths extra. */
+		size_t graph_branch_factor = std::min(nx*ny, (size_t)MAX_CANDIDATES); 
+		new_paths.reserve( graph_branch_factor * current_paths.size() ); // could be larger.
 		
 #ifdef MND_FOOTTRACK_DEBUG
 		if(v > 0) 
@@ -627,11 +637,11 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 				new_paths.emplace_back(path);
 				new_paths.back().node[n] = path_specific_candidates_buf[i].second;
 			}
-			/* Add a null node only if current candidate path has no pre-existing "layer holes" and 
-			 * the null slot is available. */
-			if(ncounted < MAX_CANDIDATES and path.Rank() >= static_cast<int>(n))
+			/* Add a null node only if current candidate path has no pre-existing "layer holes" */ 
+			if(path.Rank() >= static_cast<int>(n))
 				new_paths.emplace_back(path);
-		}
+
+		} // loop over existing paths
 		
 		dag.path = std::move( new_paths );
 	} // for(u32 n = 0; n < N_PAIRS; ++n)

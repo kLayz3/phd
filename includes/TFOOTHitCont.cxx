@@ -85,6 +85,7 @@ void TFOOTHitCont::Setup() {
 	box = RegisterObject<FOOTBoxParam>("box", _box);
 	cost_coeff = RegisterObject<A4>("cost_coeff", {}); // filled by Proc ctor
 	max_cost = RegisterObject<TParameter<double>>("max_cost", mnd::noop_fn<TParameter<double>>(), NAN); // filled by Proc ctor
+	max_cost_f = RegisterObject<TParameter<double>>("max_cost_f", mnd::noop_fn<TParameter<double>>(), NAN); // filled by Proc ctor
 
 	/* TFOOTHitCont cannot know ahead of time which FOOT will get put into which position,
 	 * for the tracking. It's the Proc which decides that.

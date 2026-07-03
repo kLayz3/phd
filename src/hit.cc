@@ -29,7 +29,8 @@ int main(int argc, char* argv[]) {
 	int verbosity_raw = 0; 
 	std::string fileName, outFile, setupFile, footSetupFile;
 	u64 maxEvents = -1;
-	double kalman_max_cost = TrackCost::DEFAULT_MAX_CANDIDATE_COST;
+	double kalman_max_cost   = TrackCost::DEFAULT_MAX_CANDIDATE_COST;
+	double kalman_max_cost_f = TrackCost::DEFAULT_MAX_FINAL_COST;
 	double kalman_cost_cr = TrackCost::DEFAULT_COST_R;
 	double kalman_cost_cq = TrackCost::DEFAULT_COST_Q;
 	double kalman_cost_ct = TrackCost::DEFAULT_COST_T; 
@@ -76,10 +77,13 @@ int main(int argc, char* argv[]) {
 		->check(CLI::PositiveNumber);
 	add_logged_option(app, "-c,--max-cost", kalman_max_cost, "Maximum cost value supplied to Kalman algorithm. Use 0 for infinite cost.")
 		->check(CLI::NonNegativeNumber); 
+	add_logged_option(app, "-r,--max-cost-final", kalman_max_cost_f, "Maximum cost that the final track can have. Use 0 for infinite cost.")
+		->check(CLI::NonNegativeNumber); 
 
 	CLI11_PARSE(app, argc, argv);
 
-	if(kalman_max_cost == 0.0) kalman_max_cost=HUGE_VAL;
+	if(kalman_max_cost == 0.0)   kalman_max_cost = HUGE_VAL;
+	if(kalman_max_cost_f == 0.0) kalman_max_cost_f = HUGE_VAL;
 	if(outFile.empty()) outFile = fileName.substr(0, fileName.find('.')) + "_hit.root"; 
 	Verbosity v = *mnd::itov(verbosity_raw);
 
@@ -113,12 +117,15 @@ int main(int argc, char* argv[]) {
 		.emplace_process<TFOOTHitProc>(hfoot,
 			cfoot[0], cfoot[1], cfoot[2], cfoot[3], 
 			cfoot[4], cfoot[5], cfoot[6], cfoot[7],
-			kalman_max_cost, std::array{ kalman_cost_cr, kalman_cost_cq, kalman_cost_ct, kalman_cost_cp },
+			kalman_max_cost, kalman_max_cost_f,
+			std::array{ kalman_cost_cr, kalman_cost_cq, kalman_cost_ct, kalman_cost_cp },
 			must_have_upstream_track, v) 
-#ifdef MND_DEBUG_ENABLED
+#ifdef MND_DEBUG_ENABLED 
 			.MakePool<1>( 512 );
-#else
+#elif defined(MND_FOOTTRACK_DEBUG)
 			.MakePool<8>( 4092 );
+#else
+			.MakePool<16>( 4092 );
 #endif
 	
 	ProgressBar bar {

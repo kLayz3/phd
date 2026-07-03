@@ -25,7 +25,7 @@
 struct TrackCost {
 	static constexpr double DEFAULT_COST_R = 100.0; // default cost per mm^2 difference
 	static constexpr double DEFAULT_COST_Q =  12.0; // default cost per charge^2 difference (TODO: not sure)
-	static constexpr double DEFAULT_COST_T =   5.0; // default cost per mm^2 of upstream @target difference
+	static constexpr double DEFAULT_COST_T =   6.0; // default cost per mm^2 of upstream @target difference
 	static constexpr double DEFAULT_COST_P = 100.0; // default cost if next layer missed
 	/* For 12C the average sqrt(kq) cost is ~0.3 or so, so variance is ~0.1 or so.
 	 * sqrt(kr) is anything between 1-5mm (worst case, probably I messed up alignment. 
@@ -33,8 +33,8 @@ struct TrackCost {
 
 	// For k==3 degrees of freedom: total Chi^2 of about 12 is 99% confidence. 
 	// In ideal world... but both `kt` and `kq` can dance like crazy. */
-	constexpr static double DEFAULT_MAX_CANDIDATE_COST = 60;
-	constexpr static double DEFAULT_MAX_FINAL_COST = 12;
+	constexpr static double DEFAULT_MAX_CANDIDATE_COST = 1'000;
+	constexpr static double DEFAULT_MAX_FINAL_COST = 22;
 
 	constexpr static double NIL_VALUE = NAN;
 	
@@ -122,14 +122,15 @@ struct TFOOTHitProc : TProcessor <
 	using FHitMatrix = HitMatrix<RNFOOTPair>;
 	using FTrackOnline = Track<N_PAIRS, RNFOOTPair>;
 
-	constexpr static double CLUSTER_SIZE_ONE_Q_CUTOFF = 1.5; // when cluster size == 1 doesn't make sense anymore.
+	constexpr static float CLUSTER_SIZE_ONE_Q_CUTOFF = 1.7; // when cluster size == 1 doesn't make sense anymore.
 	constexpr static double TARGET_Z = 0.0; // by convention. In Kalman coordinates, place target nominally at 0.0
 											// Will be shifted back to "real" FRS coordinates later.
-	constexpr static u32 MAX_CANDIDATES = 12; // To how many paths can a node branch to (at most)
+	constexpr static u32 MAX_CANDIDATES = 10; // To how many paths can a node branch to (at most)
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
 	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ), 
 		double = TrackCost::DEFAULT_MAX_CANDIDATE_COST,
+		double = TrackCost::DEFAULT_MAX_FINAL_COST,
 		const std::array<double,4>& = {NAN, NAN, NAN, NAN}, // cost coefficients: {Cr, Cq, Ct, Cp}
 		bool  = false,                                      // requires_valid_upstream_track
 		Verbosity = Verbosity::SILENT);

@@ -8,7 +8,7 @@
 #include "../../includes/util/Geometry.h"
 #include "../../includes/util/PrettyHisto.hxx"
 #include "../../includes/util/Tracking.h"
-#include "../../includes/util/MacroHelpers.hxx"
+#include "../../includes/util/MacroHelpers.h"
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
@@ -19,9 +19,11 @@ void foot_track_analysis (
 	std::vector <
 		std::pair<uint32_t, std::array<double, 2>>
 	> cut_q = {},
-	std::array<double, 3> binning_x = {100,-5,5},
-	std::array<double, 3> binning_y = {100,-5,5},
-	std::array<double, 3> binning_q = {120, 0.0, 7.5},
+	A3 binning_x = {100,-5,5},
+	A3 binning_y = {100,-5,5},
+	A3 binning_q = {120, 0.0, 7.5},
+	A2 sci21_cut = {NAN,NAN},
+	A2 sci22_cut = {NAN,NAN},
 	DoSave do_save = DoSave::no
 ) {
 	ROOT::EnableImplicitMT();
@@ -36,7 +38,7 @@ void foot_track_analysis (
 	auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
 	
 	constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
-	double Cr, Cq, Ct, Cp, max_cost;
+	double Cr, Cq, Ct, Cp, max_cost, max_cost_f;
 	{
 		std::array<double, 4>* c;
 		TParameter<double>* m;
@@ -45,6 +47,8 @@ void foot_track_analysis (
 		get_obj(f, m, "FOOT_max_cost");
 		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2); Cp = c->at(3);
 		max_cost = m->GetVal();
+		get_obj(f, m, "FOOT_max_cost_f");
+		max_cost_f = m->GetVal();
 	}
 
 	ROOT::EnableImplicitMT();
@@ -96,6 +100,12 @@ void foot_track_analysis (
 		4, -0.75, 1.25);
 	TH1P* h1_score = new TH1P("Track score [a.u.]", kGreen-1,
 		500, 0, 50);
+	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
+	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
+	auto* h1_sci21_cut  = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
+	auto* h1_sci22_cut  = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
+	auto* h1_sci21_cut2 = new TH1P("((h1_cut2)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
+	auto* h1_sci22_cut2 = new TH1P("((h1_cut2)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
 
 	for(const auto& cut : cut_q) {
 		if(cut.first >= N_PAIRS)
@@ -106,6 +116,16 @@ void foot_track_analysis (
 
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
+
+		const auto& sci21 = frs->cal.sci[0];
+		const auto& sci22 = frs->cal.sci[1];
+		h1_sci21->Fill(sci21.E);
+		h1_sci22->Fill(sci22.E);
+		if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+		if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+		h1_sci21_cut->Fill(sci21.E);
+		h1_sci22_cut->Fill(sci22.E);
+
 		const double x0_upst = frs->xT;
 		const double y0_upst = frs->yT;
 		
@@ -181,6 +201,9 @@ void foot_track_analysis (
 
 		h1_diff_upstr_down-> Fill( ld.DistanceTo(lu) );
 		h1_score->Fill(t.score);
+
+		h1_sci21_cut2->Fill(sci21.E);
+		h1_sci22_cut2->Fill(sci22.E);
 	}
 
 	/* Around each residue, also fit a teeny-weeny gauss-chan 🥺 👉👈 */
@@ -241,12 +264,22 @@ void foot_track_analysis (
 		Form("Cq = %.1f", Cq),
 		Form("Ct = %.1f", Ct),
 		Form("Cp = %.1f", Cp),
-		Form("max cost: %.1f", max_cost)
+		Form("max cost: %.1f", max_cost),
+		Form("max cost_f: %.1f", max_cost_f)
 	);
 	cscore->cd(3); h1_has_upstream->Draw();
 
+	TCanvas* cs = new TCanvas("SCIs", "SCI21,22", 1850, 1200);
+	cs->Divide(2,3);
+	cs->cd(1); h1_sci21->Draw();
+	cs->cd(2); h1_sci22->Draw();
+	cs->cd(3); h1_sci21_cut->Draw();
+	cs->cd(4); h1_sci22_cut->Draw();
+	cs->cd(5); h1_sci21_cut2->Draw();
+	cs->cd(6); h1_sci22_cut2->Draw();
+
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
-		save_all(canvas::Extension::png, { inf.stem().c_str() });
+		canvas::save_all<canvas::Macro>(canvas::Extension::png, { inf.stem().c_str() });
 	}
 }

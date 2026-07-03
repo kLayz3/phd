@@ -14,7 +14,7 @@
 #include "TFile.h"
 
 #include "../monad/monad.hxx"
-#include "magic_enum/magic_enum.hpp"
+#include "../magic_enum/magic_enum.hpp"
 #include "CLI.h"
 
 namespace _detail {

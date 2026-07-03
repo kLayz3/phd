@@ -143,7 +143,7 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	std::string* setupName;
 
 	std::array<double,4>* cost_coeff;
-	TParameter<double>* max_cost;
+	TParameter<double> *max_cost, *max_cost_f;
 
 	TH1I* h1_qtrack;
 	TH1I* h1_track_nsampled;
