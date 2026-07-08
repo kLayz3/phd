@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
 		"Distance from vertex cut (all tracks must be below this threshold). Default no cut.");
 	add_logged_option<DisplayDefault::No>(app, "--sci21",sci21_cut, "SCI21 QDC cut (also implying multiplicity 1). Default no cut.")
 		->delimiter(','); 
-	add_logged_option<DisplayDefault::No>(app, "--sci22",sci22_cut, "SCI22 QDC cut (also implying multiplicity 1). Default no cut.") 
+	add_logged_option<DisplayDefault::No>(app, "--sci22",sci22_cut, "SCI22 QDC cut (also implying multiplicity 1). Default no cut.")
 		->delimiter(','); 
 	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
 		->delimiter(','); 
@@ -214,17 +214,17 @@ int main(int argc, char* argv[]) {
 			const auto& sci22 = frs->cal.sci[1];
 			const auto& sci31 = frs->cal.sci[2];
 			
-			h1_sci21->Fill(sci21.E);
-			h1_sci22->Fill(sci22.E);
-			h1_sci31->Fill(sci31.E);
+			if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
+			if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
+			if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
 
 			if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
 			if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
 			if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
 
-			h1_sci21_cut->Fill(sci21.E);
-			h1_sci22_cut->Fill(sci22.E);
-			h1_sci31_cut->Fill(sci31.E);
+			if(sci21.hits.size() >= 1) h1_sci21_cut->Fill(sci21.E);
+			if(sci22.hits.size() >= 1) h1_sci22_cut->Fill(sci22.E);
+			if(sci31.hits.size() >= 1) h1_sci31_cut->Fill(sci31.E);
 
 			const size_t N = foot->track.size();
 			if(N > track_used_mask.size()) continue; // abnormally large event?

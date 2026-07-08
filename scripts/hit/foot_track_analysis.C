@@ -26,8 +26,6 @@ void foot_track_analysis (
 	A2 sci22_cut = {NAN,NAN},
 	DoSave do_save = DoSave::no
 ) {
-	ROOT::EnableImplicitMT();
-
 	TClass* cl = TClass::GetClass(typeid(RNFOOTTrack));
 	if(!cl or !cl->GetDataMember("_x")) 
 		ERROR("MND_FOOTTRACK_DEBUG not compiled in, when the ROOT file got generated. Can't proceed\n");
@@ -38,19 +36,32 @@ void foot_track_analysis (
 	auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
 	
 	constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
-	double Cr, Cq, Ct, Cp, max_cost, max_cost_f;
+	double Cr, Cq, Ct, max_cost, max_cost_f;
+	std::array<TH1I*, N_PAIRS> h1_diff_q;
+	std::array<TH1I*, N_PAIRS> h1_diff_r;
+	std::array<TH1I*, N_PAIRS> h1_diff_t;
+	std::array<TH1I*, N_PAIRS> h1_acc_q;
+	std::array<TH1I*, N_PAIRS> h1_acc_r;
+	std::array<TH1I*, N_PAIRS> h1_acc_t;
 	{
-		std::array<double, 4>* c;
+		A3* c;
 		TParameter<double>* m;
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
 		get_obj(f, c, "FOOT_cost_coeff");
 		get_obj(f, m, "FOOT_max_cost");
-		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2); Cp = c->at(3);
+		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2);
 		max_cost = m->GetVal();
 		get_obj(f, m, "FOOT_max_cost_f");
 		max_cost_f = m->GetVal();
+		for(u32 n=0; n<N_PAIRS; ++n) {
+            get_obj(f, h1_diff_r.at(n), Form("FOOT_diff_r_%u", n));
+			get_obj(f, h1_diff_q.at(n), Form("FOOT_diff_q_%u", n)); 
+            get_obj(f, h1_diff_t.at(n), Form("FOOT_diff_t_%u", n));
+            get_obj(f, h1_acc_r.at( n), Form("FOOT_acc_r_%u", n));
+            get_obj(f, h1_acc_q.at( n), Form("FOOT_acc_q_%u", n));
+            get_obj(f, h1_acc_t.at( n), Form("FOOT_acc_t_%u", n));
+		}
 	}
-
 	ROOT::EnableImplicitMT();
 
 	TH1P *resx[N_PAIRS], *resy[N_PAIRS], *resq[N_PAIRS], *h1q[N_PAIRS], *h1_footx[N_PAIRS], *h1_footy[N_PAIRS];
@@ -205,6 +216,7 @@ void foot_track_analysis (
 		h1_sci21_cut2->Fill(sci21.E);
 		h1_sci22_cut2->Fill(sci22.E);
 	}
+	ROOT::DisableImplicitMT();
 
 	/* Around each residue, also fit a teeny-weeny gauss-chan 🥺 👉👈 */
 	TCanvas* c1d = new TCanvas("FitResidue1D", "Fit residues 1D", 2150, 1650);
@@ -263,11 +275,36 @@ void foot_track_analysis (
 		Form("Cr = %.1f", Cr),
 		Form("Cq = %.1f", Cq),
 		Form("Ct = %.1f", Ct),
-		Form("Cp = %.1f", Cp),
 		Form("max cost: %.1f", max_cost),
 		Form("max cost_f: %.1f", max_cost_f)
 	);
 	cscore->cd(3); h1_has_upstream->Draw();
+
+	TCanvas* cR = new TCanvas("RScore", "Individual R-score component", 2150, 1400);
+	TCanvas* cQ = new TCanvas("QScore", "Individual Q-score component", 2150, 1400);
+	TCanvas* cT = new TCanvas("TScore", "Individual T-score component", 2150, 1400);
+#define DECORATE_HISTO(hshort, col) \
+	for(u32 n=0; n<N_PAIRS; ++n) { \
+		TH1I* h = h1_diff_##hshort.at(n); \
+		h->SetFillColor(col); h->SetLineColor(kBlack); h->SetLineWidth(1);  \
+		h = h1_acc_##hshort.at(n); \
+		h->SetFillColor(col); h->SetLineColor(kBlack); h->SetLineWidth(1);  \
+	}
+	DECORATE_HISTO(r, kRed-7);
+	DECORATE_HISTO(q, kCyan-4); 
+	DECORATE_HISTO(t, kYellow-7);
+	cR->Divide(4,2);
+	cQ->Divide(4,2);
+	cT->Divide(4,2);
+	static_assert(N_PAIRS == 4);
+	for(u32 n=0; n<N_PAIRS; ++n) {
+		cR->cd(1 + n); h1_diff_r.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();	
+        cR->cd(5 + n); h1_acc_r.at( n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+		cQ->cd(1 + n); h1_diff_q.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+        cQ->cd(5 + n); h1_acc_q.at( n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+		cT->cd(1 + n); h1_diff_t.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();	
+        cT->cd(5 + n); h1_acc_t.at( n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+	}
 
 	TCanvas* cs = new TCanvas("SCIs", "SCI21,22", 1850, 1200);
 	cs->Divide(2,3);

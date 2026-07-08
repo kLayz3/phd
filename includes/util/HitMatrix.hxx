@@ -7,8 +7,7 @@
 #include "../Eigen.h"
 
 
-#ifndef MND_HITMATRIX_DO_BOUNDS_CHECK
-//#	define MND_HITMATRIX_DO_BOUNDS_CHECK
+#ifndef MND_HITMATRIX_DO_BOUNDS_CHECKmessed //#	define MND_HITMATRIX_DO_BOUNDS_CHECK
 #endif
 
 template<typename FOOTPair> struct HitMatrix;
@@ -157,12 +156,12 @@ public:
 	Entry const& operator()(ActiveIndex i, ActiveIndex j) const noexcept {
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
 		if(i > static_cast<ActiveIndex>(GetN<X>()))
-			ERROR("HitMatrix::at(): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<X>());
+			ERROR("HitMatrix::operator(i,j): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<X>());
 		if(j > static_cast<ActiveIndex>(GetN<Y>()))
-			ERROR("HitMatrix::at(): Requested y-index %u out of bounds (%zu)", static_cast<u32>(j), GetN<Y>());
+			ERROR("HitMatrix::operator(i,j): Requested y-index %u out of bounds (%zu)", static_cast<u32>(j), GetN<Y>());
 #endif
 
-		auto& slot = cache(i, j);
+		auto& slot = cache(i,j);
 		if(! slot.has_value() ) {
 			const hit_type& hx = p->x[i];
 			const hit_type& hy = p->y[j];

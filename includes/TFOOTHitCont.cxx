@@ -69,9 +69,9 @@ auto it = info.find("Setup");
 }
 
 using FOOTParams = std::array<FOOTParam, 2>;
-using A4 = std::array<double,4>;
+using A3 = std::array<double,3>;
 template<> void Add(FOOTParams&, const FOOTParams&) {}
-template<> void Add(A4&, const A4& ) {}
+template<> void Add(A3&, const A3& ) {}
 
 void TFOOTHitCont::Setup() {
 	h1_qtrack = RegisterObject<TH1I>("h1_qtrack", "Charge (Q) of recognized tracks",
@@ -83,7 +83,7 @@ void TFOOTHitCont::Setup() {
 	
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 	box = RegisterObject<FOOTBoxParam>("box", _box);
-	cost_coeff = RegisterObject<A4>("cost_coeff", {}); // filled by Proc ctor
+	cost_coeff = RegisterObject<A3>("cost_coeff", {}); // filled by Proc ctor
 	max_cost = RegisterObject<TParameter<double>>("max_cost", mnd::noop_fn<TParameter<double>>(), NAN); // filled by Proc ctor
 	max_cost_f = RegisterObject<TParameter<double>>("max_cost_f", mnd::noop_fn<TParameter<double>>(), NAN); // filled by Proc ctor
 
@@ -94,6 +94,22 @@ void TFOOTHitCont::Setup() {
 
 	for(u32 i=0; i<N_PAIRS; ++i) {
 		foot_param[i] = RegisterObject<FOOTParams>(Form("%u_setup", i), {});
+#ifdef MND_FOOTTRACK_DEBUG
+		h1_diff_q[i] = RegisterObject<TH1I>(Form("diff_q_%u", i), Form("Difference in kQ [Q^2] of candidates after layer %u", i),
+			400, 0, 16);
+		h1_diff_r[i] = RegisterObject<TH1I>(Form("diff_r_%u", i), Form("Difference in kr / [mm^2] of candidates after layer %u", i),
+			1000, 0, 200);
+		h1_diff_t[i] = RegisterObject<TH1I>(Form("diff_t_%u", i), Form("Difference in kt [mm^2] of candidates after layer %u", i),
+			1000,-0, 200);
+
+		h1_acc_q[i] = RegisterObject<TH1I>(Form("acc_q_%u", i), Form("Difference in kQ [Q^2] of candidates after layer %u, for acc tracks", i),
+			400, 0, 16);
+		h1_acc_r[i] = RegisterObject<TH1I>(Form("acc_r_%u", i), Form("Difference in kr [mm^2] of candidates after layer %u, for acc tracks", i),
+			1000, 0, 200);
+		h1_acc_t[i] = RegisterObject<TH1I>(Form("acc_t_%u", i), Form("Difference in kt [mm^m] of candidates after layer %u, for acc tracks", i),
+			1000, 0, 200);
+
+#endif
 	}
 }
 

@@ -8,7 +8,7 @@
 class TH2I;
 
 /* Debugging features compiled in. Can be toggled together automatically */
-//#define MND_FOOTTRACK_DEBUG
+#define MND_FOOTTRACK_DEBUG
 
 /* In case the heavy debug build is enabled, also feature it in here. */
 #if defined(MND_DEBUG_ENABLED) && !defined(MND_FOOTTRACK_DEBUG)
@@ -142,13 +142,22 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	std::array<FOOTParam, 2>* foot_param[N_PAIRS];
 	std::string* setupName;
 
-	std::array<double,4>* cost_coeff;
+	std::array<double,3>* cost_coeff;
 	TParameter<double> *max_cost, *max_cost_f;
 
 	TH1I* h1_qtrack;
 	TH1I* h1_track_nsampled;
 
 	TH1I* diff_heavy_frag_vs_upstream;
+
+#ifdef MND_FOOTTRACK_DEBUG
+	TH1I *h1_diff_q[N_PAIRS];
+	TH1I *h1_diff_r[N_PAIRS];
+	TH1I *h1_diff_t[N_PAIRS];
+	TH1I *h1_acc_q[N_PAIRS];
+	TH1I *h1_acc_r[N_PAIRS];
+	TH1I *h1_acc_t[N_PAIRS];
+#endif
 
 	TFOOTHitCont();
 

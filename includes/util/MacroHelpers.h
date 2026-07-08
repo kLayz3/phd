@@ -26,7 +26,7 @@ inline TFile* file_ptr(std::unique_ptr<TFile> const& f) noexcept {
 }
 }
 /* Handle can be either unique ptr, or standard pointer. 
- * `var` must be a raw pointer! */
+ * `var` must be a raw pointer! You own the object, never the ROOT. */
 template<typename F, typename P>
 void get_obj(F&& fhandle, P& var, const char* label) {
 	static_assert(std::is_pointer_v<P>, "get_obj(): var must be a raw pointer");
@@ -35,13 +35,16 @@ void get_obj(F&& fhandle, P& var, const char* label) {
 	
 	TFile* f = _detail::file_ptr(fhandle);
 
-	if constexpr (std::is_base_of_v<TObject, T>) {
+	if constexpr(std::is_base_of_v<TObject, T>) {
 		var = dynamic_cast<T*>(f->Get(label));
+		if constexpr(std::is_base_of_v<TH1, T>) {
+			var->SetDirectory(nullptr);
+		}
 	} else {
 		var = f->Get<T>(label);
 	}
 
-	if (!var) {
+	if(!var) {
 		std::cerr << "get_obj(): cannot extract object: '" << label << "'\n";
 		std::abort();
 	}
@@ -215,6 +218,9 @@ public:
 	T& unwrap() & { return std::get<0>(data).value; }
 	T unwrap() && { return std::move(std::get<0>(data).value); }
 
+	decltype(auto) get() const noexcept { return (data); }
+	decltype(auto) get() noexcept { return (data); }
+
 private:
 	std::variant<Yes, std::monostate> data;
 };
@@ -229,3 +235,31 @@ extern std::vector<std::string> ParseFile(const std::string& );
 
 std::string ParseFileToString(const std::string& );
 extern std::string ParseFileToString(const std::string& );
+
+/* For the Option<T> wrapper, also expose a CLI tool to parse it properly,
+ * otherwise boilerplate reeks through the code. */
+template <
+	typename T
+> CLI::Option* add_logged_option (
+	CLI::App& app,
+	const std::string& name,
+	mnd::Option<T>& variable,
+	const std::string& description
+) {
+	auto* opt = app.add_option_function<T>(
+			name, 
+			[&variable](const T& value) {
+				variable = typename mnd::Option<T>::Yes{ .value = std::move(value) };
+			}, 
+			description
+		)->default_str("none")
+		->each ( 
+			[name](const std::string& match) {
+				WARN("Parsed sum-type option "); 
+				std::cerr << KBH_YEL << name << KNRM << " as " 
+					<< KBH_YEL << match << KNRM << '\n';
+			}
+		);
+
+	return opt;
+}

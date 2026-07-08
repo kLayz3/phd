@@ -26,7 +26,6 @@ struct TrackCost {
 	static constexpr double DEFAULT_COST_R = 100.0; // default cost per mm^2 difference
 	static constexpr double DEFAULT_COST_Q =  12.0; // default cost per charge^2 difference (TODO: not sure)
 	static constexpr double DEFAULT_COST_T =   6.0; // default cost per mm^2 of upstream @target difference
-	static constexpr double DEFAULT_COST_P = 100.0; // default cost if next layer missed
 	/* For 12C the average sqrt(kq) cost is ~0.3 or so, so variance is ~0.1 or so.
 	 * sqrt(kr) is anything between 1-5mm (worst case, probably I messed up alignment. 
 	 * Should be ~1mm on a good day. */
@@ -38,12 +37,11 @@ struct TrackCost {
 
 	constexpr static double NIL_VALUE = NAN;
 	
-	enum F { KR, KQ, KP, KT };
+	enum F { KR, KQ, KT };
 
 	static double Cr;
 	static double Cq;
 	static double Ct;
-	static double Cp;
 	static double max_cost;
 	static double max_cost_final_track;
 
@@ -51,7 +49,6 @@ struct TrackCost {
 	 * the sum on the fly, which raw reference accesses would invalidate :-) */
 	inline double kr() const noexcept { return kr_; }
 	inline double kq() const noexcept { return kq_; }
-	inline double kp() const noexcept { return kp_; }
 	inline double kt() const noexcept { return kt_; }
 
 	/* Set the value of individual cost component, and update the total sum.
@@ -68,10 +65,6 @@ struct TrackCost {
 			if(std::isfinite(kq_)) *sum_ -= kq_;
 			kq_ = v;
 		}
-		if constexpr(o == KP) {
-			if(std::isfinite(kp_)) *sum_ -= kp_;
-			kp_ = v;
-		}
 		if constexpr(o == KT) {
 			if(std::isfinite(kt_)) *sum_ -= kt_;
 			kt_ = v;
@@ -87,9 +80,6 @@ struct TrackCost {
 		}
 		else if constexpr(o == KQ) {
 			return std::isfinite(kq_);
-		}
-		else if constexpr(o == KP) {
-			return std::isfinite(kp_);
 		}
 		else if constexpr(o == KT) {
 			return std::isfinite(kt_);
@@ -108,7 +98,7 @@ struct TrackCost {
 	u32 test_track_size;
 
 private:
-	double kr_ = NAN, kq_ = NAN,  kt_ = NAN, kp_ = NAN;
+	double kr_ = NAN, kq_ = NAN,  kt_ = NAN;
 	std::optional<double> sum_ {};
 };
 
@@ -131,7 +121,7 @@ struct TFOOTHitProc : TProcessor <
 	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ), 
 		double = TrackCost::DEFAULT_MAX_CANDIDATE_COST,
 		double = TrackCost::DEFAULT_MAX_FINAL_COST,
-		const std::array<double,4>& = {NAN, NAN, NAN, NAN}, // cost coefficients: {Cr, Cq, Ct, Cp}
+		const std::array<double,3>& = {NAN, NAN, NAN}, // cost coefficients: {Cr, Cq, Ct}
 		bool  = false,                                      // requires_valid_upstream_track
 		Verbosity = Verbosity::SILENT);
 	TFOOTHitProc() = default;
@@ -139,9 +129,9 @@ struct TFOOTHitProc : TProcessor <
 	static Verbosity v;	
 	static bool requires_valid_upstream_track;
 
-	double kr(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const; 
-	double kq(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const; 
-	std::pair<double, double> kt_kp(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const; 
+	double kr(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept; 
+	double kq(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept; 
+	double kt(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept; 
 
 	void ProcessEntry() noexcept;
 
@@ -157,6 +147,9 @@ private:
 	void PreProcess() noexcept;
 	void PostProcess() noexcept;
 
+#ifdef MND_FOOTTRACK_DEBUG
+	void ReplayCostCalculation(const DAG::DAGPath& ) noexcept;
+#endif
 	std::array<double, N_PAIRS> pair_z;
 	mnd::geom::Rectangle2D target_xy;
 	mnd::geom::Point2D upstream_hit_loc;
@@ -165,7 +158,6 @@ private:
 	DAG dag;
 	
 	std::array<FHitMatrix, N_PAIRS> hm; // hit matrices
-	std::array<Eigen::Matrix2d, N_PAIRS> A_inv; // A_inv[i] == hm[i]::A inverted
 	std::array<Eigen::Vector2d, N_PAIRS> refl; // +-1 based on the on each of the `orientation` params  
 	void SetConversionMatrices(int , const FOOTParam& , const FOOTParam& );
 

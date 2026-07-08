@@ -10,6 +10,7 @@
 #include <tuple>
 #include <utility>
 #include "TParameter.h"
+#include "util/HitMatrix.hxx"
 
 extern thread_local mnd::geom::Line3D g_upstream_track; // extern'ed from `includes/TFRSHitProc.cxx`
 
@@ -54,7 +55,6 @@ void for_pair_in_tuple(Tuple&& t, BinaryOp&& f) {
 double TrackCost::Cr = TrackCost::DEFAULT_COST_R; // cost per mm^2 difference
 double TrackCost::Cq = TrackCost::DEFAULT_COST_Q; // cost per charge^2 difference
 double TrackCost::Ct = TrackCost::DEFAULT_COST_T; // cost per mm^2 of upstream @target difference
-double TrackCost::Cp = TrackCost::DEFAULT_COST_P; // cost if next layer missed
 double TrackCost::max_cost = TrackCost::DEFAULT_MAX_CANDIDATE_COST; // max amount that a candidate point can accumulate
 double TrackCost::max_cost_final_track = TrackCost::DEFAULT_MAX_FINAL_COST; // max amount that a final track can accumulate
 
@@ -62,7 +62,6 @@ double TrackCost::max_cost_final_track = TrackCost::DEFAULT_MAX_FINAL_COST; // m
 double& Cr = TrackCost::Cr;
 double& Cq = TrackCost::Cq;
 double& Ct = TrackCost::Ct;
-double& Cp = TrackCost::Cp;
 double& max_cost = TrackCost::max_cost;
 double& max_cost_final_track = TrackCost::max_cost_final_track;
 
@@ -72,7 +71,6 @@ bool TFOOTHitProc::requires_valid_upstream_track;
 std::ostream& operator<<(std::ostream& os, const TrackCost& rhs) {
 	return os << "(kr: " << rhs.kr_ << ','
 	          << " kq: " << rhs.kq_ << ','
-	          << " kp: " << rhs.kp_ << ','
 	          << " kt: " << rhs.kt_ << ')';
 }
 
@@ -84,13 +82,13 @@ std::ostream& operator<<(std::ostream& os, const TrackCost& rhs) {
  * Layer [4] => `kq` + `kt` + `kr` (3-point-fit) cost. */
 bool operator>(const TrackCost& c, double max_cost) {
 	// Sometimes `kt` measurement missing because the upstream has no track. Adjust the `max_cost` in this case.
-	if(c.test_track_size >= 1 and !c.is_set<TrackCost::KT>() and c.is_set<TrackCost::KP>())
+	if(c.test_track_size >= 1 and !c.is_set<TrackCost::KT>())
 		max_cost *= 0.666667; // reduce by 2/3
 	switch(c.test_track_size) {
 		case 0: return c.sum() > max_cost * 0.5; // Only kq measurement possible (without track contribution)
-		case 1: return c.sum() > max_cost * 1.4; // kq             + kt        + kp 
-		case 2: return c.sum() > max_cost * 1.2; // kq + kr        + kt(3 pts) + kp(3 pts)
-		case 3: return c.sum() > max_cost * 1.0; // kq + kr(3 pts) + kt(4 pts) + kp(4 pts)
+		case 1: return c.sum() > max_cost * 1.4; // kq             + kt       
+		case 2: return c.sum() > max_cost * 1.2; // kq + kr        + kt(3 pts)
+		case 3: return c.sum() > max_cost * 1.0; // kq + kr(3 pts) + kt(4 pts)
 		default: __builtin_unreachable();
 	}
 }
@@ -107,9 +105,6 @@ void TFOOTHitProc::SetConversionMatrices(int ipair, const FOOTParam& px, const F
 	               sin(ty),  cos(tx);
 	hm[ipair].A *= 1.0/cos(tx-ty);
 
-	A_inv[ipair] << cos(tx), sin(tx),
-	               -sin(ty), cos(ty);
-
 	hm[ipair].dxy << px.delta_p, // already in [mm] scale, don't need to convert.
 	                 py.delta_p;
 	
@@ -122,7 +117,7 @@ TFOOTHitProc::TFOOTHitProc (
 	BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_INSTANCE_FOOT, ~),
 	double max_cost_,
 	double max_cost_final_track_,
-	const std::array<double, 4>& cost,
+	const std::array<double, 3>& cost,
 	bool req_,
 	Verbosity v_
 ) : TFOOTHitProc::Base (
@@ -144,25 +139,23 @@ TFOOTHitProc::TFOOTHitProc (
 	*out.cost_coeff = {
 		TrackCost::DEFAULT_COST_R,
 		TrackCost::DEFAULT_COST_Q,
-		TrackCost::DEFAULT_COST_T,
-		TrackCost::DEFAULT_COST_P
+		TrackCost::DEFAULT_COST_T
 	};
 	out.max_cost->SetVal(max_cost);
 	out.max_cost_f->SetVal(max_cost_final_track);
 
-	for(int i=0; i<4; ++i) {
+	for(int i=0; i<3; ++i) {
 		double val = cost[i];
 		if( !std::isfinite(val) or val < 0 ) continue;
 		switch(i) {
 			case(0): ::Cr = val; break;
 			case(1): ::Cq = val; break;
 			case(2): ::Ct = val; break;
-			case(3): ::Cp = val; break;
 		}
 		out.cost_coeff->at(i) = val;
 	}
 	
-	WARN("Cost coefficients [cr, cq, ct, cp] = [%.2f, %.2f, %.2f, %.2f]\n", Cr, Cq, Ct, Cp);
+	WARN("Cost coefficients [cr, cq, ct] = [%.2f, %.2f, %.2f]\n", Cr, Cq, Ct);
 	WARN("Max candidate allowed cost: %s%.2f%s , max complete track allowed cost %s%.2f%s\n",
 		BOLD, max_cost, KNRM, BOLD, max_cost_final_track, KRNM);
 
@@ -293,9 +286,10 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 
 #ifdef MND_FOOTTRACK_DEBUG
 	ConstructObviousTracks();
-#endif
+#else
 	ConstructDAG();
 	AnalyseDAG();
+#endif
 	PostProcess();
 }
 
@@ -342,7 +336,7 @@ constexpr auto X = FHitMatrix::X;
 constexpr auto Y = FHitMatrix::Y;
 using Entry = FHitMatrix::Entry;
 
-double TFOOTHitProc::kr(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const {
+double TFOOTHitProc::kr(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const noexcept {
 	const Eigen::Vector2d& measured = candidate.v;
 	mnd::geom::Point2D extrapolated = ft.extrapolate_to( pair_z[k] );
 
@@ -355,7 +349,7 @@ double TFOOTHitProc::kr(const FTrackOnline& ft, const FHitMatrix::Entry& candida
 /* kQ = Cq || Qij - Qn ||^2 
  * ==== Cq( [ mean(Qij) - mean(Qtrack) ]^2 + variance_ij )  
  * Can *never* return a nil value. */
-double TFOOTHitProc::kq(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const {
+double TFOOTHitProc::kq(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const noexcept {
 	(void)k;
 
 	double mean_track_q = ft.q.mean();
@@ -370,13 +364,11 @@ double TFOOTHitProc::kq(const FTrackOnline& ft, const FHitMatrix::Entry& candida
 	return cost;
 }
 
-/* Bundle these two cost fncs together since both need to calculate the track update. */
-std::pair<double,double> TFOOTHitProc::kt_kp(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const {
+double TFOOTHitProc::kt(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const noexcept {
 	FTrackOnline& mft = const_cast<FTrackOnline&>(ft);
 	mft.Add(candidate, pair_z[k]);
 	const FTrack& tt = mft.get();
 
-	double cost_p = TrackCost::NIL_VALUE;
 	double cost_t = TrackCost::NIL_VALUE;
 
 	/* In case the current online track has only 1 point, then we can't squeeze out a value. */
@@ -385,33 +377,16 @@ std::pair<double,double> TFOOTHitProc::kt_kp(const FTrackOnline& ft, const FHitM
 
 #ifdef MND_FOOTTRACK_DEBUG
 		if(v > 3) {
-			fprintf(stderr, "TFOOTHitProc::kt_kp: Test track: ");
+			fprintf(stderr, "TFOOTHitProc::kt: Test track: ");
 			std::cerr << mft << " :: value at target: " << extrapolate_to_target << std::endl;
 		}
 #endif
-		cost_t = extrapolate_to_target.Distance2( upstream_hit_loc );
-
-		// Check that track goes through next layer `k+1`. If we are in last layer, it's a no-op.
-		if(k < static_cast<u32>(pair_z.size() - 1)) {
-			mnd::geom::Point2D extrapolate_to_next_layer = mft.extrapolate_to( pair_z[k+1] );
-			// Convert the [mm x mm] measurement from next layer, the hitmatrix entry,
-			// back into strip units.
-			Eigen::Array2d pair_coords = FOOTParam::MM_TO_STRIP * refl[k+1].cwiseProduct( 
-					A_inv[k+1] * (extrapolate_to_next_layer.eigen_view()) - hm[k+1].dxy
-				).array() + FOOTParam::DETECTOR_MIDPOINT;
-			
-			double cx = pair_coords.x();
-			double cy = pair_coords.y();
-			
-			if(cx < 0 || cx > FOOTParam::N_STRIPS || cy < 0 || cy > FOOTParam::N_STRIPS)
-				cost_p = Cp;
-			else 
-				cost_p = 0;
-		}
+		cost_t = Ct * extrapolate_to_target.Distance2( upstream_hit_loc );
+		
 	}
 
 	mft.pop_back();
-	return { cost_t, cost_p };
+	return cost_t;
 }
 
 /* Once identified a valid track, remove the corresponding col/row from the 
@@ -480,12 +455,13 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 			if(e.q.mean() < 2.5) continue; 
 			
 			cost.reset();
-			cost.set<TrackCost::KQ>( kq(tau, e, n) );
-			cost.set<TrackCost::KR>( kr(tau, e, n) );
+			const double kq = this->kq(tau, e, n);
+			const double kr = this->kr(tau, e, n);
+			const double kt = this->kt(tau, e, n);
 
-			auto [kt,kp] = kt_kp(tau, e, n);
+			cost.set<TrackCost::KQ>(kq);
+			cost.set<TrackCost::KR>(kr);
 			cost.set<TrackCost::KT>(kt);
-			cost.set<TrackCost::KP>(kp);
 
 #ifdef MND_FOOTTRACK_DEBUG
 			if(v > 3) std::cerr << DAG::Index{i,j} << " : " << e << " :: cost: " << cost << std::endl;
@@ -494,6 +470,10 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 				cost_min_current = cost.sum();
 				best_i = {i,j};
 			}
+
+			out.h1_diff_q[n]->Fill( kq / Cq ); 
+			out.h1_diff_r[n]->Fill( kr / Cr );	 
+			out.h1_diff_t[n]->Fill( kt / Ct );
 		}
 		// After processing the layer, check if total cost acquired 
 		// for this specific {i,j} entry of layer `n` is within the limits of `max_cost`.
@@ -515,6 +495,9 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 	/* This is only a single track, and should be matched as well in the main Kalman.
 	 * So don't kick its entries out of the hit matrices. */	
 	// PoisonEntriesFromHMs(path);
+#ifdef MND_FOOTTRACK_DEBUG
+	ReplayCostCalculation( path );
+#endif
 
 	const double score = tau.GetScore();
 	const FTrack& t = tau.get(); // evaluate the actual track fit.
@@ -601,9 +584,8 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 					/* Even though other 2 costs aren't yet evaluated, `kr` is the stictest.
 					 * If that one already fails here, no need evaluate it. */
 
-					auto [kt,kp] = kt_kp(tau, e, n);
+					const double kt  = this->kt(tau, e, n);
 					cost.set<TrackCost::KT>(kt);
-					cost.set<TrackCost::KP>(kp);
 					if(cost > max_cost) continue;
 
 					// If the flow survives til this point means that
@@ -782,3 +764,25 @@ void TFOOTHitProc::PostProcess() noexcept {
 	}
 };
 
+#ifdef MND_FOOTTRACK_DEBUG
+void TFOOTHitProc::ReplayCostCalculation(const DAG::DAGPath& path) noexcept {
+	DAG::DAGPath p{};
+	for(u32 n = 0; n < N_PAIRS; ++n) {
+		const DAG::Index& i = path.node[n];
+		if(!i) continue; // possible that it is null?
+		
+		const mnd::hm::Data& e = hm[n]( i[0], i[1] );
+		const FTrackOnline tau = this->GetPrelimTrackFromPath(p);
+
+		/* Calculate cost of the current path `p`, if I add the node `index` from i'th layer. */
+		const double kq = this->kr(tau, e, n);
+		const double kr = this->kr(tau, e, n);
+		const double kt = this->kt(tau, e, n);
+		out.h1_acc_q[n]->Fill( kq / Cq ); 
+		out.h1_acc_r[n]->Fill( kr / Cr );	 
+		out.h1_acc_t[n]->Fill( kt / Ct );
+
+		p.node[n] = path.node[n];
+	}
+}
+#endif

@@ -48,7 +48,6 @@ int main(int argc, char* argv[]) {
 	} else {
 		sec_contents = cfg_contents;
 	}
-
 	
 	mnd::Argv fwd_argv = mnd::parse_argv(sec_contents, prog);
 	if(help_underlying)

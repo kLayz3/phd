@@ -1,5 +1,4 @@
 #include "CLI.h"
-#include "MacroHelpers.h"
 #include <fstream>
 #include <string>
 #include <type_traits>

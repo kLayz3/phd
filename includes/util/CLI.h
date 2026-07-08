@@ -154,5 +154,24 @@ Argv parse_argv(std::string_view, std::string );
 	std::filesystem::path current_executable_path(); 
 #endif
 
+/* Parse an array range from a text input by a separator 'c' */
+template<unsigned char c, typename T, std::size_t N>
+std::istream& operator>>(std::istream& in, std::array<T, N>& out) {
+	for(size_t i=0; i<N; ++i) {
+		if(i != 0) {
+			char sep{};
+			if(!(in >> sep) || sep != c) {
+				in.setstate(std::ios::failbit);
+				return in;
+			}
+		}
+		if(!(in >> out[i])) {
+			return in;
+		}
+	}
+	return in;	
+}
+/* ^^^^^^ We don't put this in global namespace as it would wreak havoc on the 
+ * ADL and overload resolver. */
 } // namespace mnd
 

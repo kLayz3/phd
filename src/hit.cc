@@ -34,7 +34,6 @@ int main(int argc, char* argv[]) {
 	double kalman_cost_cr = TrackCost::DEFAULT_COST_R;
 	double kalman_cost_cq = TrackCost::DEFAULT_COST_Q;
 	double kalman_cost_ct = TrackCost::DEFAULT_COST_T; 
-	double kalman_cost_cp = TrackCost::DEFAULT_COST_P;
 	bool must_have_upstream_track = false;
 
 	add_logged_option<DisplayDefault::No>(app, "-f,--file", fileName, "Input ROOT file")
@@ -72,8 +71,6 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "--cq", kalman_cost_cq, "cq coefficient value.")
 		->check(CLI::PositiveNumber);
 	add_logged_option(app, "--ct", kalman_cost_ct, "ct coefficient value.")
-		->check(CLI::PositiveNumber);
-	add_logged_option(app, "--cp", kalman_cost_cp, "cp coefficient value.")
 		->check(CLI::PositiveNumber);
 	add_logged_option(app, "-c,--max-cost", kalman_max_cost, "Maximum cost value supplied to Kalman algorithm. Use 0 for infinite cost.")
 		->check(CLI::NonNegativeNumber); 
@@ -118,7 +115,7 @@ int main(int argc, char* argv[]) {
 			cfoot[0], cfoot[1], cfoot[2], cfoot[3], 
 			cfoot[4], cfoot[5], cfoot[6], cfoot[7],
 			kalman_max_cost, kalman_max_cost_f,
-			std::array{ kalman_cost_cr, kalman_cost_cq, kalman_cost_ct, kalman_cost_cp },
+			std::array{ kalman_cost_cr, kalman_cost_cq, kalman_cost_ct },
 			must_have_upstream_track, v) 
 #ifdef MND_DEBUG_ENABLED 
 			.MakePool<1>( 512 );
