@@ -28,6 +28,7 @@ do { \
 #endif
 
 using json = nlohmann::json;
+using PipeDeleter = int (*)(FILE*);
 
 json ParseJSON(const std::string& fileName) {
 #ifndef _POSIX_VERSION
@@ -43,7 +44,7 @@ json ParseJSON(const std::string& fileName) {
 		"\"" + fileName + "\" " 
 		"-o - 2>&1";
 
-	std::unique_ptr<FILE, decltype(&pclose)> pipe {popen(cmd.c_str(), "r"), pclose};
+	std::unique_ptr<FILE, PipeDeleter> pipe {popen(cmd.c_str(), "r"), pclose};
 	if(!pipe) ERROR("popen failed for file: '\%s\'\n", fileName.c_str());
 
 	std::string text;

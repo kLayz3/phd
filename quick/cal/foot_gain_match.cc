@@ -2,7 +2,7 @@
 
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.hxx"
-#include "util/FitSpline.hxx"
+#include "util/FitSpline.h"
 #include "magic_enum/magic_enum.hpp"
 
 #include "TStyle.h"
@@ -30,11 +30,12 @@ int main(int argc, char* argv[]) {
 	double delta_cut = 0.05;
 	uint32_t mult_cut = 1; // any multiplicity below that is disallowed 
 	int Q_target = 6;
+	size_t poly_deg = 4;
 	A2 sci21_cut = {NAN, NAN};
 	A2 sci22_cut = {NAN, NAN};
 	A2 sci31_cut = {NAN, NAN};
 	auto save = canvas::Extension::nil;
-	Take take = Take::gauss;
+	Take take = Take::gauss_fit_only;
 	ShowOld show_old = ShowOld::No;
 
 	add_logged_option(app, "-f,--file", fileName, "Pass a file name.")
@@ -45,6 +46,9 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-q,--charge", Q_target,
 		"Select which target charge we're roughly gating upon.")
 		->check(CLI::Range(1,6));
+	add_logged_option(app, "-p,--poly", poly_deg,
+		"Select polynomial degree to fit the specified ASIC's.")
+		->check(CLI::PositiveNumber);
 	add_logged_option(app, "-d,--delta", delta_cut,
 		"Select the delta cut which will be applied to gate on very central hits.")
 		->check(CLI::Range(0.01, 0.2));
@@ -69,7 +73,8 @@ int main(int argc, char* argv[]) {
 		->delimiter(','); 
 	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
 		->delimiter(','); 
-	add_enum_option(app, "-t,--take", take, "Which type of projection fit to take.");
+	add_enum_option(app, "-t,--take", take, 
+		"Which type of projection fit to take. `gauss_fit_only` will only use gaussian spline for well sampled data.");
 	add_enum_option(app, "-s,--show-old", show_old, "Overlay on the canvas the current gain match curve.");
 	add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 	
@@ -111,9 +116,25 @@ int main(int argc, char* argv[]) {
 
 	auto* hit_energy_mid = new TH2P(Form("((h2_mid))Cluster energy [ADC]:Strip number [0..640]@FOOT%d Raw, Requested Q=%d", ifoot, Q_target), 
 		bins_per_asic*10, 0,640, foot_binning[0], foot_binning[1], foot_binning[2]);
-
+	
+	const size_t nentries = ntuple->GetNEntries();
+	ProgressBar bar {
+		option::BarWidth{50},
+			option::Start{"["},
+			option::Fill{"="},
+			option::Lead{"~"},
+			option::Remainder{" "},
+			option::End{"]"},
+			option::PostfixText{mnd::msg("Analysis (per event: %s)", fileName.c_str())},
+			option::ForegroundColor{Color::green},
+			option::ShowPercentage{true},
+			option::ShowElapsedTime{true},
+			option::ShowRemainingTime{true},
+			option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
+	};
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
+		mnd::PrintProgress(bar, entryId, nentries, 1000);
 
 		const auto& sci21 = frs->sci[0];
 		const auto& sci22 = frs->sci[1];
@@ -147,6 +168,8 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
+	bar.mark_as_completed();
+	show_console_cursor(true);
 
 	/* Idea is the following. Gain isn't always the same,.. some strips require higher gain for
 	 * lower values. Simply to line up the total cluster energy values to the average ADC, across the detector. */
@@ -170,7 +193,6 @@ int main(int argc, char* argv[]) {
 		return std::find(v.begin(), v.end(), val) != v.end();
 	};
 
-	constexpr static size_t POLY_DEG = 4;
 	constexpr static int N_NEEDED_ENTRIES = 400;
 	constexpr static int N_LOWEST_ENTRIES = 10;
 
@@ -194,11 +216,11 @@ int main(int argc, char* argv[]) {
 			double x_hi = (a+1) * 64 - 0.00001;
 			
 			if( contains(v, a) ) {
-				auto [rg, graw, gfit] = FitSplineAndGraph<POLY_DEG, fit_info::GAUSS_MAX> ( 
-					*hit_energy_mid, x_lo, x_hi, 40, sratio /*, Verbosity::CHATTY */
+				auto [rg, graw, gfit] = FitSpline<fit_info::GAUSS_MAX> ( 
+					poly_deg, *hit_energy_mid, x_lo, x_hi, 40, sratio /*, Verbosity::CHATTY */
 				); 
-				auto [rp, praw, pfit] = FitSplineAndGraph<POLY_DEG, fit_info::PROFILE_MAX> ( 
-					*hit_energy_mid, x_lo, x_hi, 40 /*, 1.1, Verbosity::CHATTY */ 
+				auto [rp, praw, pfit] = FitSpline<fit_info::PROFILE_MAX> ( 
+					poly_deg, *hit_energy_mid, x_lo, x_hi, 40 /*, 1.1, Verbosity::CHATTY */ 
 				); 
 				gauss_fit.push_back(gfit); 
 				gauss_raw.push_back(graw); 
@@ -324,6 +346,7 @@ int main(int argc, char* argv[]) {
 			: "Fit taken from profile (violet curve)"
 	);
 
+	canvas::save_all<canvas::Exe>(save, { Form("FOOT%d", ifoot), Form("Z_%d",  Q_target) });
 	WARN("End-of-main");
 	rootApp.Run(); return 0;
 }

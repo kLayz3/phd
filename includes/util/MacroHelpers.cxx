@@ -1,5 +1,7 @@
 #include "MacroHelpers.h"
 
+using PipeDeleter = int (*)(FILE*);
+
 template void canvas::save_all<canvas::Macro>(canvas::Extension , std::vector<std::string_view> );
 template void canvas::save_all<canvas::Exe  >(canvas::Extension , std::vector<std::string_view> );
 
@@ -17,7 +19,7 @@ std::vector<std::string> ParseFile(const std::string& fileName) {
 		"\"" + fileName + "\" " 
 		"-o - 2>&1";
 	
-	std::unique_ptr<FILE, decltype(&pclose)> pipe {popen(cmd.c_str(), "r"), pclose};
+	std::unique_ptr<FILE, PipeDeleter> pipe {popen(cmd.c_str(), "r"), pclose};
 	if(!pipe) ERROR("popen failed for file: '\%s\' (%m)\n", fileName.c_str());
 
 	std::string text; text.reserve(1024);
@@ -63,7 +65,7 @@ std::string ParseFileToString(const std::string& fileName) {
 		"\"" + fileName + "\" " 
 		"-o - 2>&1";
 	
-	std::unique_ptr<FILE, decltype(&pclose)> pipe {popen(cmd.c_str(), "r"), pclose};
+	std::unique_ptr<FILE, PipeDeleter> pipe {popen(cmd.c_str(), "r"), pclose};
 	if(!pipe) ERROR("popen failed for file: '\%s\' (%m)\n", fileName.c_str());
 
 	std::string text; text.reserve(1024);

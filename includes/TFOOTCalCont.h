@@ -8,7 +8,7 @@
 
 #include "TFOOTMapCont.h"
 #include "util/json_struct_def.hh"
-#include "util/PolyFitter.hxx"
+#include "util/PolyFitter.h"
 #include "util/Tracking.h"
 
 #include "TGraph.h"

@@ -60,7 +60,7 @@ int mnd::Argv::push_back(std::string s) {
 }
 
 mnd::Argv mnd::parse_argv(std::string_view text, std::string program_name) {
-	static constexpr size_t N_MAX_ARGS = 30;
+	static constexpr size_t N_MAX_ARGS = 50;
 	Argv out(N_MAX_ARGS);
 	out.push_back( std::move(program_name) );
 

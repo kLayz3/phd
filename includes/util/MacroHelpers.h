@@ -215,8 +215,8 @@ public:
 
 	/* May panic (throw). Unlike rust, returns back a reference, not the value. */
 	T const& unwrap() const& { return std::get<0>(data).value; }
-	T& unwrap() & { return std::get<0>(data).value; }
-	T unwrap() && { return std::move(std::get<0>(data).value); }
+	T&       unwrap() &      { return std::get<0>(data).value; }
+	T        unwrap() &&     { return std::get<0>(data).value; } 
 
 	decltype(auto) get() const noexcept { return (data); }
 	decltype(auto) get() noexcept { return (data); }

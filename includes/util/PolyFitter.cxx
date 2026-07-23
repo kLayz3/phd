@@ -1,4 +1,5 @@
 #include "PolyFitter.h"
+#include "Eigen/Core"
 
 /* This hack is used to instantiate the template for small-ish N's.
  * This has the advantage that then these calls can then be used in ROOT macros.
@@ -52,6 +53,83 @@ template std::array<double, 13> PolyFit<12>(const std::vector<double>& , const s
 template std::array<double, 2> PolyFit<1,2>(const std::array<double, 2>&, const std::array<double, 2>&, size_t );
 template std::array<double, 2> PolyFit<1,3>(const std::array<double, 3>&, const std::array<double, 3>&, size_t );
 template std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>&, const std::array<double, 4>&, size_t );
+
+void PolyFit (
+	size_t R, 
+	const std::vector<double>& x, 
+	const std::vector<double>& y,
+	std::vector<double>& result
+) {
+	assert(R >= 1 && "Runtime polynomial fit: rank passed must be >= 1."); 
+	assert(((void)("Vectors must be equally sized"), x.size() == y.size()));
+	
+	const size_t Npts = x.size();
+	assert(Npts >= R + 1 && "Runtime polynomial fit: need at least R+1 points.");
+
+	Eigen::Map<const Eigen::VectorXd> xv(x.data(), Npts);
+	Eigen::Map<const Eigen::VectorXd> yv(y.data(), Npts);
+	Eigen::MatrixXd A(Npts, R+1);
+	A.col(0).setOnes();
+	for(size_t i = 1; i <= R; ++i)
+		A.col(i) = A.col(i-1).cwiseProduct(xv);
+
+	const Eigen::VectorXd fit = A.colPivHouseholderQr().solve(yv); 
+	result.assign(fit.data(), fit.data() + fit.size());
+}
+[[ nodiscard ]]
+std::vector<double> PolyFit (
+	size_t N, 
+	const std::vector<double>& x, 
+	const std::vector<double>& y
+) {
+	std::vector<double> res;
+	PolyFit(N, x, y, res);
+	return res;
+}
+
+void PolyFit (
+	size_t R, 
+	const std::vector<double>& x, 
+	const std::vector<double>& y,
+	const std::vector<double>& w,
+	std::vector<double>& result
+) {
+	assert(R >= 1 && "Runtime polynomial fit: rank passed must be >= 1."); 
+	assert(((void)("Vectors must be equally sized"), x.size() == y.size()));
+	assert(((void)("Vectors `x` and `w` must be equally sized"), x.size() == w.size()));
+	
+	const size_t Npts = x.size();
+	assert(Npts >= R + 1 && "Runtime polynomial fit: need at least R+1 points.");
+
+	Eigen::Map<const Eigen::VectorXd> xv(x.data(), Npts);
+	Eigen::Map<const Eigen::VectorXd> yv(y.data(), Npts);
+	Eigen::Map<const Eigen::VectorXd> wv(w.data(), Npts);
+	
+	assert((wv.array() >= 0.0).all() && "Weights must be non-negative");
+	assert(wv.array().isFinite().all() && "Weights must be finite");
+	const Eigen::VectorXd sqrtw = wv.array().sqrt();
+
+	Eigen::MatrixXd A(Npts, R+1);
+	A.col(0) = sqrtw;
+	for(size_t i = 1; i <= R; ++i)
+		A.col(i) = A.col(i-1).cwiseProduct(xv);
+	
+	const Eigen::VectorXd b = yv.cwiseProduct(sqrtw);
+
+	Eigen::VectorXd fit = A.colPivHouseholderQr().solve(b); 
+	result.assign(fit.data(), fit.data() + fit.size());
+}
+[[ nodiscard ]]
+std::vector<double> PolyFit (
+	size_t R, 
+	const std::vector<double>& x, 
+	const std::vector<double>& y,
+	const std::vector<double>& w
+) {
+	std::vector<double> res;
+	PolyFit(R, x, y, w, res);
+	return res;
+}
 
 double AngleFitResult::Angle(AngleFitResult::Direction d) const noexcept {
 	switch(d) {

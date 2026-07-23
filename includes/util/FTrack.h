@@ -2,7 +2,7 @@
 
 #include "../monad/monad.hxx" // only used for assert stuff
 
-#include "PolyFitter.hxx"
+#include "PolyFitter.h"
 #include <cmath>
 #include <limits>
 #include <type_traits>
