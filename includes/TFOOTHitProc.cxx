@@ -31,6 +31,7 @@ extern thread_local mnd::geom::Line3D g_upstream_track; // extern'ed from `inclu
 template struct HitMatrix<RNFOOTPair>;
 template struct Track<TFOOTHitCont::N_PAIRS, RNFOOTPair>;
 
+using mnd::Maybe;
 using FHitMatrix = TFOOTHitProc::FHitMatrix;
 using FTrackOnline = TFOOTHitProc::FTrackOnline; 
 
@@ -303,7 +304,7 @@ void TFOOTHitProc::ProcessPair (
 	RNFOOTPair& output = out.inner().pair[ipair];
 
 	for(const RNFOOTCluster& hit : fx.fCl) {
-		auto [cx, _, mult, ctype] = hit;
+		auto [cx, ce, mult, ctype] = hit;
 
 		float q = static_cast<float>( px.Q(hit) );
 		
@@ -311,17 +312,25 @@ void TFOOTHitProc::ProcessPair (
 		// Cluster size 1 fucks with everything above Z >~ 1,
 		// so only care about it if its sitting at low energies.. 
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
-			output.x.emplace_back(q, mult, ctype, xprime);
+			output.x.emplace_back(q, mult 
+#ifdef MND_FOOTTRACK_DEBUG
+				, ctype, ce, hit.Delta() 
+#endif
+				, xprime);
 	}
 
 	for(const RNFOOTCluster& hit : fy.fCl) {
-		auto [cy, _, mult, ctype] = hit;
+		auto [cy, ce, mult, ctype] = hit;
 
 		float q = static_cast<float>( py.Q(hit) );
 
 		double yprime = refl[ipair].y() * (cy - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM; 
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
-			output.y.emplace_back(q, mult, ctype, yprime);
+			output.y.emplace_back(q, mult 
+#ifdef MND_FOOTTRACK_DEBUG
+				, ctype, ce, hit.Delta() 
+#endif
+				, yprime);
 	}
 
 	/* Sort these vectors, in ascending values of average charge (Q) */
@@ -503,10 +512,22 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 	const FTrack& t = tau.get(); // evaluate the actual track fit.
 	
 #ifdef MND_FOOTTRACK_DEBUG
-	std::array<double, N_PAIRS> qm, sqm;
-	for(size_t i=0; i<N; ++i) {
-		qm[i] = tau.q[i].mean();
-		sqm[i] = tau.q[i].s();
+	std::array<double, N_PAIRS> qm, sqm; 
+	auto e0_x    = mnd::make_filled_array<double, N_PAIRS>(NAN);
+	auto e0_y    = mnd::make_filled_array<double, N_PAIRS>(NAN);
+	auto delta_x = mnd::make_filled_array<double, N_PAIRS>(NAN);
+	auto delta_y = mnd::make_filled_array<double, N_PAIRS>(NAN);
+	for(size_t layer=0; layer<N; ++layer) {
+		qm[layer] = tau.q[layer].mean();
+		sqm[layer] = tau.q[layer].s();
+		Maybe<FHitMatrix::RawHitPairRef> p = GetHitFromPath(layer, path);
+		if(p) {
+			FHitMatrix::RawHitPairRef& val = p.value();
+			e0_x[layer]    = val[0]->Q.e0;
+			delta_x[layer] = val[0]->Q.delta;
+			e0_y[layer]    = val[1]->Q.e0;
+			delta_y[layer] = val[1]->Q.delta;
+		}
 	}
 #endif
 
@@ -518,7 +539,8 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 		tau.ys,
 		tau.zs,
 		qm,
-		sqm
+		sqm,
+		e0_x, delta_x, e0_y, delta_y
 #endif
 	);
  
@@ -683,13 +705,16 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		const FTrack& t = tau.get(); // Evaluate the actual track fit.
 
 #ifdef MND_FOOTTRACK_DEBUG
-		auto xs  = mnd::make_filled_array<double, N_PAIRS>(NAN); 
-		auto ys  = mnd::make_filled_array<double, N_PAIRS>(NAN); 
-		auto zs  = mnd::make_filled_array<double, N_PAIRS>(NAN); 
-		auto qm  = mnd::make_filled_array<double, N_PAIRS>(NAN); 
-		auto sqm = mnd::make_filled_array<double, N_PAIRS>(NAN); 
+		auto xs      = mnd::make_filled_array<double, N_PAIRS>(NAN); 
+		auto ys      = mnd::make_filled_array<double, N_PAIRS>(NAN); 
+		auto zs      = mnd::make_filled_array<double, N_PAIRS>(NAN); 
+		auto qm      = mnd::make_filled_array<double, N_PAIRS>(NAN); 
+		auto sqm     = mnd::make_filled_array<double, N_PAIRS>(NAN); 
+		auto e0_x    = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto e0_y    = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto delta_x = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto delta_y = mnd::make_filled_array<double, N_PAIRS>(NAN);
 
-		xs.fill(NAN); ys.fill(NAN); zs.fill(NAN); qm.fill(NAN); sqm.fill(NAN);
 		for(size_t layer = 0, valid=0; layer < N; ++layer) {
 			if( path.node[layer] ) {
 				xs[layer] = tau.xs[valid];
@@ -697,6 +722,16 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 				zs[layer] = tau.zs[valid];
 				qm[layer] = tau.q[valid].mean();
 				sqm[layer] = tau.q[valid].s();
+				
+				// Is asserted to return a value based on the `if` block, but CBA changing the API.
+				Maybe<FHitMatrix::RawHitPairRef> p = GetHitFromPath(layer, path);
+				if(!p) ERROR("huh?");
+				FHitMatrix::RawHitPairRef& val = p.value();
+				e0_x[layer]    = val[0]->Q.e0;
+				delta_x[layer] = val[0]->Q.delta;
+				e0_y[layer]    = val[1]->Q.e0;
+				delta_y[layer] = val[1]->Q.delta;
+
 				++valid;
 			}
 		}
@@ -705,7 +740,7 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		out.inner().track.emplace_back (
 			t.l.xarray(), t.l.yarray(), t.q.mean(), score, N
 #ifdef MND_FOOTTRACK_DEBUG
-				, xs, ys, zs, qm, sqm
+				, xs, ys, zs, qm, sqm, e0_x, delta_x, e0_y, delta_y
 #endif
 		);
 		
@@ -731,6 +766,21 @@ FTrackOnline TFOOTHitProc::GetPrelimTrackFromPath(const DAG::DAGPath& p) const n
 
 	return t;
 }
+
+#ifdef MND_FOOTTRACK_DEBUG
+Maybe<FHitMatrix::RawHitPairRef> TFOOTHitProc::GetHitFromPath(size_t layer, const DAG::DAGPath& p) const {
+	const DAG::Index& i = p.node.at(layer);
+	const FHitMatrix& h = hm[layer];
+
+	if(i) { // explicit operator bool()
+		u16 xi = i[0];
+		u16 yi = i[1];
+		return h.GetRaw(xi, yi);
+	} else {
+		return {};
+	}
+}
+#endif
 
 void TFOOTHitProc::PreProcess() noexcept {
 	/* Upstream track is in FRS coordinates, and must be represented in FOOT array coordinates. */

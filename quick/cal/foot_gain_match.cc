@@ -3,7 +3,6 @@
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.hxx"
 #include "util/FitSpline.h"
-#include "magic_enum/magic_enum.hpp"
 
 #include "TStyle.h"
 #include "TApplication.h"
@@ -12,9 +11,11 @@
 #include "TFRSCalCont.h"
 
 enum class Take { gauss, profile, gauss_fit_only };
-using ShowOld = mnd::BinaryOpt;
+enum class HitType { central, side };
 
-using DoFit = mnd::Option<std::vector<int>>;
+using ShowOld = mnd::Option<std::vector<i32>>;
+using DoFit   = mnd::Option<std::vector<i32>>;
+
 using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
@@ -27,6 +28,7 @@ int main(int argc, char* argv[]) {
 	int bins_per_asic = 64;
 	DoFit do_fit {DoFit::No};
 	A3 foot_binning = {1000, 4, 4000};
+	HitType hit_type = HitType::central;
 	double delta_cut = 0.05;
 	uint32_t mult_cut = 1; // any multiplicity below that is disallowed 
 	int Q_target = 6;
@@ -36,7 +38,7 @@ int main(int argc, char* argv[]) {
 	A2 sci31_cut = {NAN, NAN};
 	auto save = canvas::Extension::nil;
 	Take take = Take::gauss_fit_only;
-	ShowOld show_old = ShowOld::No;
+	ShowOld show_old { ShowOld::No };
 
 	add_logged_option(app, "-f,--file", fileName, "Pass a file name.")
 		->check(CLI::ReadPermissions);
@@ -52,6 +54,8 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-d,--delta", delta_cut,
 		"Select the delta cut which will be applied to gate on very central hits.")
 		->check(CLI::Range(0.01, 0.2));
+	add_enum_option(app, "-c,--hit-type", hit_type,
+		"Select to gate either on very central hit or very lateral (side) one.");
 	add_logged_option(app, "-n,--foot-binning",foot_binning, "FOOT ADC binning")
 		->delimiter(',');
 	add_logged_option(app, "-b,--bins",bins_per_asic, "Binning Per ASIC")
@@ -61,9 +65,10 @@ int main(int argc, char* argv[]) {
 				return mnd::msg("Must be integer parsable and evenly divisible by %d", TFOOTCalCont::N_STRIPS);
 			return "";
 		});
-	add_logged_option(app, "-l,--fit", do_fit, "Select which ASIC's to fit.")
+	add_logged_option(app, "-l,--fit", do_fit, "Select which ASICs to fit.")
 		->delimiter(',')
-		->check(CLI::Range(0,10));
+		->type_name("INT[,INT...]")
+		->check(CLI::RangeOrEmpty(0,10));
 	add_logged_option(app, "-m,--mult-cut", mult_cut, 
 		"Multiplicity cut. Any clusters with multiplicity below selected one will be discarded.")
 		->check(CLI::PositiveNumber);
@@ -75,7 +80,10 @@ int main(int argc, char* argv[]) {
 		->delimiter(','); 
 	add_enum_option(app, "-t,--take", take, 
 		"Which type of projection fit to take. `gauss_fit_only` will only use gaussian spline for well sampled data.");
-	add_enum_option(app, "-s,--show-old", show_old, "Overlay on the canvas the current gain match curve.");
+	add_logged_option(app, "-s,--show-old", show_old, 
+		"Sequence of Z charges (, sep) to overlay their current gain match curve on the canvas.")
+		->delimiter(',')
+		->type_name("INT[,INT...]");
 	add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 	
 	bool test = false;
@@ -89,7 +97,6 @@ int main(int argc, char* argv[]) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
 
-	const A2 delta_cut_mid = { -delta_cut, delta_cut };
 	FOOTParam *foot_param; 
 	{
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
@@ -118,6 +125,39 @@ int main(int argc, char* argv[]) {
 		bins_per_asic*10, 0,640, foot_binning[0], foot_binning[1], foot_binning[2]);
 	
 	const size_t nentries = ntuple->GetNEntries();
+	A2 delta_interval_1 { -delta_cut, delta_cut };
+	A2 delta_interval_2 { -delta_cut, delta_cut };
+	
+	if(hit_type == HitType::side) {
+		WARN("Requesting side hit. Fetching the delta information part first...\n");
+		for(auto entryId : *ntuple) {
+			ntuple->LoadEntry(entryId);
+			const auto& sci21 = frs->sci[0];
+			const auto& sci22 = frs->sci[1];
+			const auto& sci31 = frs->sci[2];
+			if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+			if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+			if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
+			
+			for(const auto& cl : foot->fCl) {
+				if(cl.fCM < mult_cut) continue;
+				double delta = cl.Delta();
+				h1_delta->Fill(delta);
+			}
+		}
+		TAxis* ax = (*h1_delta)->GetXaxis();
+		ax->SetRangeUser(0.2, 0.45);
+		const double dhi = ax->GetBinCenter( (*h1_delta)->GetMaximumBin() );
+		ax->SetRange(0,0); // unzoom
+						   //
+		ax->SetRangeUser(-0.45, -0.2);
+		const double dlo = ax->GetBinCenter( (*h1_delta)->GetMaximumBin() );
+		ax->SetRange(0,0); // unzoom
+		delta_interval_1 = { dhi-delta_cut, dhi+delta_cut };
+		delta_interval_2 = { dlo-delta_cut, dlo+delta_cut };
+		(*h1_delta)->Reset("ICESM");
+	}
+
 	ProgressBar bar {
 		option::BarWidth{50},
 			option::Start{"["},
@@ -161,7 +201,7 @@ int main(int argc, char* argv[]) {
 			int i = static_cast<int>( cl.fCX );
 			double e = cl.fCE;
 				
-			if(mnd::IsInside(delta, delta_cut_mid)) {
+			if(mnd::IsInside(delta, delta_interval_1) or mnd::IsInside(delta, delta_interval_2)) {
 				h1_delta_cut_mid->Fill(delta);
 				hit_energy_mid->FillInside(i, e);
 				h1_foot_e_mid->FillInside(e); 
@@ -196,7 +236,7 @@ int main(int argc, char* argv[]) {
 	constexpr static int N_NEEDED_ENTRIES = 400;
 	constexpr static int N_LOWEST_ENTRIES = 10;
 
-	/* Try to fit a spline(s) for middle few ASICs. */
+	/* Try to fit a spline(s) for some given ASICs. */
 	if(do_fit.is_some()) { 
 		FOOTGainParam pp = foot_param->gain;
 
@@ -313,12 +353,23 @@ int main(int argc, char* argv[]) {
 	l->AddEntry(*hit_energy_mid, "Non-gain matched cluster energy (central hits)");
 	l->AddEntry(gauss_fit[0], Form("Gaussian fit +-%.1f sigma around peak", sratio));
 	l->AddEntry(profile_fit[0], "TProfile fit");
-	if(show_old == ShowOld::Yes) {
+	if(show_old.is_some()) {
 		const auto& gain = foot_param->gain;
-		auto [g, _] = gain.GetRefZGraph(Q_target);
-		g->SetLineColor(kPink - 2);
-		g->Draw("L SAME");
-		l->AddEntry(g, "Current gain curve from the setup file");
+		const std::vector<i32>& Zs = show_old.unwrap();
+		srand(time(NULL));
+		const u32 v0 = (u32)rand();
+		for(i32 Z : Zs) {
+			try {
+				auto [g,_] = gain.GetRefZGraph(Z);
+				g->Draw("L SAME");
+				g->SetLineColor( mnd::col::Col(v0 + Z) );
+				g->SetLineStyle(kDashed);
+				g->SetLineWidth(8);
+				l->AddEntry(g, Form("Current gain curve (Z=%d) from the setup file", Z));
+			} catch(std::exception const& e) {
+				WARN("%s\n", e.what());
+			}
+		}
 	}
 	gStyle->SetLegendTextSize(0.021); l->Draw();
 
@@ -330,7 +381,7 @@ int main(int argc, char* argv[]) {
 	cs->cd(4); h1_sci21_cut->Draw();
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
-
+	const char* ht_info = (hit_type == HitType::central)? "central": "side";
 	TCanvas* cd = new TCanvas("delta_energy", "Delta & 1D energy", 1400, 800);
 	cd->Divide(2,2);
 	cd->cd(1); h1_delta->Draw();
@@ -341,12 +392,19 @@ int main(int argc, char* argv[]) {
 		Form("Requested charge: Q=%d", Q_target),
 		Form("Detector ID: FOOT%d", ifoot),
 		Form("Delta cut: #pm%.3f", delta_cut),
+		Form("Hit type: %s", ht_info),
 		Form("Cluster size >= %d", mult_cut),
 		(take == Take::gauss) ? Form("Gauss fits size ratio: %.2f sigma", sratio)
 			: "Fit taken from profile (violet curve)"
 	);
 
-	canvas::save_all<canvas::Exe>(save, { Form("FOOT%d", ifoot), Form("Z_%d",  Q_target) });
+	canvas::save_all<canvas::Exe>(save, { 
+		Form("FOOT%d", ifoot), 
+		Form("Z_%d",  Q_target), 
+		std::filesystem::path(fileName).stem().string(),
+		ht_info
+	});
+
 	WARN("End-of-main");
 	rootApp.Run(); return 0;
 }

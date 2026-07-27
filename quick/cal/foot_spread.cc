@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
 	CLI::App app{"Calibrate referent FOOT detectors' offset, based on the primary beam cal run."};
 	
 	std::vector<std::string> fileName;
-	uint32_t ifoot = 0;
+	uint32_t ifoot = -1;
 	std::array<double,3> binning_x = {200,-30,30};
 	std::array<double,2> foot_q_cut = {5.4, 6.6};
 	std::vector<Dead> dead_regions = {};
@@ -41,7 +41,8 @@ int main(int argc, char* argv[]) {
 			u32 id = -1;
 			mnd::parse(match, id);
 			return (id > 7 or (id == 4) or (id == 5))? "Must be {0,1,2,3, 6,7}": "";
-		});
+		})
+		->mandatory();
 	add_logged_option<DisplayDefault::No>(app, "-m,--max-events", max_events, 
 		"Max events (at most) taken from each ROOT file. Default: all entries.");
 

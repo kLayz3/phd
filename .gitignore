@@ -27,11 +27,17 @@ log.txt
 quick/run
 quick/autosave
 quick/map/*
+!quick/map/*/
 !quick/map/*.cc
+!quick/map/cfg/**/*.cfg
 quick/cal/*
+!quick/cal/*/
 !quick/cal/*.cc
+!quick/cal/cfg/**/*.cfg
 quick/hit/*
+!quick/hit/*/
 !quick/hit/*.cc
+!quick/hit/cfg/**/*.cfg
 
 exec/*.txt
 autosave

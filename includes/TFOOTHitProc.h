@@ -125,7 +125,7 @@ struct TFOOTHitProc : TProcessor <
 		bool  = false,                                      // requires_valid_upstream_track
 		Verbosity = Verbosity::SILENT);
 	TFOOTHitProc() = default;
-
+	
 	static Verbosity v;	
 	static bool requires_valid_upstream_track;
 
@@ -139,7 +139,6 @@ struct TFOOTHitProc : TProcessor <
 		std::pair<double, DAG::Index>, 50
 	>;
 
-private:
 	void ProcessPair(const std::pair<const TFOOTCalCont&, const TFOOTCalCont&>&, i32) noexcept;
 	void ConstructObviousTracks() noexcept;
 	void ConstructDAG() noexcept;
@@ -149,7 +148,9 @@ private:
 
 #ifdef MND_FOOTTRACK_DEBUG
 	void ReplayCostCalculation(const DAG::DAGPath& ) noexcept;
+	mnd::Maybe<FHitMatrix::RawHitPairRef> GetHitFromPath(size_t, const DAG::DAGPath& ) const;
 #endif
+
 	std::array<double, N_PAIRS> pair_z;
 	mnd::geom::Rectangle2D target_xy;
 	mnd::geom::Point2D upstream_hit_loc;

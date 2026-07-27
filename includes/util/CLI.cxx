@@ -1,12 +1,17 @@
 #include "CLI.h"
-#include <fstream>
+#include <cstring>
 #include <string>
 #include <type_traits>
 
-mnd::Maybe<std::string_view> mnd::extract_section_body(std::string_view text, std::string_view label) {
+mnd::Maybe<std::string_view> mnd::extract_text_body (
+		std::string_view block_name,
+		std::string_view text, 
+		std::string_view label
+) {
 	std::string needle;
-	needle.reserve(9 + label.size());
-	needle += "SECTION(";
+	needle.reserve(block_name.size() + label.size() + 2);
+	needle += block_name;
+	needle += "(";
 	needle += label;
 	needle += ")";
 
@@ -36,7 +41,7 @@ mnd::Maybe<std::string_view> mnd::extract_section_body(std::string_view text, st
 			}
 		}
 
-		ERROR("unterminated \'SECTION(%s)\'\n", std::string(label).c_str());
+		ERROR("unterminated section \'%s(%s)\'\n", std::string(block_name).c_str(), std::string(label).c_str());
 	}
 }
 

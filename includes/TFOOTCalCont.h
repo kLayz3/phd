@@ -255,11 +255,12 @@ struct FOOTGainParam {
 		int Z, 
 		int Npts = 640
 	) const {
-		TGraph* g = new TGraph(Npts);
-		double nm = this->GetNominalValue(Z);
-		if(!std::isfinite(nm)) 
+		const double nm = this->GetNominalValue(Z);
+		if(!std::isfinite(nm))
 			throw std::invalid_argument(Form("FOOTGainParam::GetRefZGraph, Passed Z=%d, which isn't found in the config.", Z));
+
 		double xlo = 0, xhi = 640;
+		TGraph* g = new TGraph(Npts);
 		TLine *lref = new TLine(xlo, nm, xhi, nm);
 		for(int i=0; i<Npts; ++i) {
 			double x = xlo + (i+0.5)*(xhi - xlo) / Npts;
@@ -276,13 +277,16 @@ struct FOOTGainParam {
 
 		return {g, lref};
 	}
-	[[ nodiscard ]] inline std::vector<std::pair<TGraph*, TLine*>> GetAllRefZGraph(
-		int Npts = 640
-	) const {
-		std::vector<std::pair<TGraph*, TLine*>> r;
+	[[ nodiscard ]] 
+	inline std::vector <
+		std::tuple<i32, TGraph*, TLine*>
+	> GetAllRefZGraph(int Npts = 640) const {
+		std::vector<std::tuple<i32, TGraph*, TLine*>> r;
 		const auto nominalZ = GetNominalZ();
-		for(const i32 Z : nominalZ) 
-			r.emplace_back( GetRefZGraph(Z, Npts) );
+		for(const i32 Z : nominalZ) { 
+			auto [g,l] = GetRefZGraph(Z, Npts);
+			r.emplace_back(Z,g,l);
+		}
 		return r;
 	}
 
@@ -597,11 +601,11 @@ private:
 
 /* Make it structured-binding decomposable. */
 namespace std {
-	template<> struct tuple_size<::RNFOOTCluster> : integral_constant<size_t, 4> {};
-	template<> struct tuple_element<0, ::RNFOOTCluster> { using type = double; };
-	template<> struct tuple_element<1, ::RNFOOTCluster> { using type = double; };
-    template<> struct tuple_element<2, ::RNFOOTCluster> { using type = u32; };
-    template<> struct tuple_element<3, ::RNFOOTCluster> { using type = RNFOOTCluster::ClusterType; };
+	template<> struct tuple_size<RNFOOTCluster> : integral_constant<size_t, 4> {};
+	template<> struct tuple_element<0, RNFOOTCluster> { using type = double; };
+	template<> struct tuple_element<1, RNFOOTCluster> { using type = double; };
+    template<> struct tuple_element<2, RNFOOTCluster> { using type = u32; };
+    template<> struct tuple_element<3, RNFOOTCluster> { using type = RNFOOTCluster::ClusterType; };
 }
 
 struct RNFOOTCal {

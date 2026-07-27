@@ -116,9 +116,9 @@ struct HitMatrix {
 private:
 	static_assert(mnd::has_x_field<FOOTPair>::value,
 		"Underlying type `T` must have `x` field.");
-	static_assert(mnd::has_x_field<FOOTPair>::value,
+	static_assert(mnd::has_y_field<FOOTPair>::value,
 		"Underlying type `T` must have `y` field.");
-	static_assert(mnd::has_x_field<FOOTPair>::value,
+	static_assert(mnd::has_z_field<FOOTPair>::value,
 		"Underlying type `T` must have `z` field.");
 	using hit_type_x = typename mnd::is_indexable_range <
 		std::decay_t<decltype( std::declval<FOOTPair&>().x )>
@@ -146,6 +146,8 @@ public:
 	using Entry = mnd::hm::Data;
 	using Cached  = mnd::hm::Cached;
 	using ActiveIndex = uint32_t;
+	using RawHitPairRef = std::array<hit_type const*, 2>;
+
 	static constexpr size_t X = 0;
 	static constexpr size_t Y = 1;
 	
@@ -247,6 +249,18 @@ public:
 		else
 			static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
 	}   
+
+	/* Extract a pointer pair to the requested underlying raw hit. 
+	 * Does not evaluate and cache the element. Returns always valid pointers for the lifetime. */
+	RawHitPairRef GetRaw(ActiveIndex i, ActiveIndex j) const noexcept {
+#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
+		if(i > static_cast<ActiveIndex>(GetN<X>()))
+			ERROR("HitMatrix::GetRaw(i,j): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<X>());
+		if(j > static_cast<ActiveIndex>(GetN<Y>()))
+			ERROR("HitMatrix::GetRaw(i,j): Requested y-index %u out of bounds (%zu)", static_cast<u32>(j), GetN<Y>());
+#endif
+		return { &p->x[i], &p->y[j] };
+	}
 
 	Eigen::Matrix2d A; // Rotation matrix, each detector might be rotated by an angle θx or θy
 	Eigen::Vector2d dxy; // Translation vector, each detector might be translated by dx/dy

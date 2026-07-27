@@ -16,6 +16,7 @@
 #include "../monad/monad.hxx"
 #include "../magic_enum/magic_enum.hpp"
 #include "CLI.h"
+#include "cli/CLI11.hpp"
 
 namespace _detail {
 inline TFile* file_ptr(TFile* f) noexcept {
@@ -203,6 +204,8 @@ class Option {
 	struct NoTag {};
 
 public:
+	using value_type = T; // needed for CLI11
+
 	struct Yes { T value; };
 
 	static constexpr NoTag No{};
@@ -213,7 +216,7 @@ public:
 	bool is_some() const noexcept { return data.index() == 0; }
 	bool is_none() const noexcept { return data.index() == 1; }
 
-	/* May panic (throw). Unlike rust, returns back a reference, not the value. */
+	/* May panic (throw). Unlike rust, returns back a reference when called on lvalue. */
 	T const& unwrap() const& { return std::get<0>(data).value; }
 	T&       unwrap() &      { return std::get<0>(data).value; }
 	T        unwrap() &&     { return std::get<0>(data).value; } 
@@ -236,8 +239,8 @@ extern std::vector<std::string> ParseFile(const std::string& );
 std::string ParseFileToString(const std::string& );
 extern std::string ParseFileToString(const std::string& );
 
-/* For the Option<T> wrapper, also expose a CLI tool to parse it properly,
- * otherwise boilerplate reeks through the code. */
+/* For the Option<T> wrapper, also expose a CLI tool template specialization 
+ * to parse it properly, otherwise boilerplate reeks through the code. */
 template <
 	typename T
 > CLI::Option* add_logged_option (
@@ -246,20 +249,37 @@ template <
 	mnd::Option<T>& variable,
 	const std::string& description
 ) {
+	auto state = std::make_shared<mnd::cli::detail::State>(); 
 	auto* opt = app.add_option_function<T>(
 			name, 
-			[&variable](const T& value) {
-				variable = typename mnd::Option<T>::Yes{ .value = std::move(value) };
+			[&variable, name, state](const T& match) {
+				if(state->current_is_authoritative) { // Respect my authoritah. 
+					variable = typename mnd::Option<T>::Yes{ .value = match };
+					state->authoritative_seen = true;
+					WARN("Parsed %sauthoritative%s sum-type option ", BOLD, KNRM); 
+					std::cerr << KBH_YEL << name << KNRM << " as " 
+						<< KBH_CYN << match << KNRM << '\n';
+				} else if(!state->authoritative_seen) {
+					variable = typename mnd::Option<T>::Yes{ .value = match };
+					WARN("Parsed sum-type option "); 
+					std::cerr << KBH_YEL << name << KNRM << " as " 
+						<< KBH_CYN << match << KNRM << '\n';
+				}
+				state->current_is_authoritative = false;
 			}, 
 			description
-		)->default_str("none")
-		->each ( 
-			[name](const std::string& match) {
-				WARN("Parsed sum-type option "); 
-				std::cerr << KBH_YEL << name << KNRM << " as " 
-					<< KBH_YEL << match << KNRM << '\n';
+		)
+		->transform([state](std::string input) -> std::string {
+			if(input == "@") return "{}";
+			if(!input.empty() && input.front() == mnd::cli::detail::auth_sym) {
+				state->current_is_authoritative = true;
+				input.erase(input.begin());	
 			}
-		);
+			return input;
+        }, "@ means an explicitly empty (but in the value variant)")
+		->expected(0,-1)
+		->trigger_on_parse()
+		->default_str("none");
 
 	return opt;
 }

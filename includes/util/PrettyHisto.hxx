@@ -120,7 +120,28 @@ struct __ARGB {
 	enum class Mode { empty, argb, root_col } mode_ = Mode::empty;
 };
 
+} // namespace ph_detail
+
+namespace mnd { namespace col {
+static Int_t hex_to_col(uint32_t val) {
+	Float_t b = (val & 0xff) / 255.0; val >>= 8;
+	Float_t g = (val & 0xff) / 255.0; val >>= 8;
+	Float_t r = (val & 0xff) / 255.0; val >>= 8;
+	return TColor::GetColor(r,g,b);
 }
+
+inline Int_t Col(uint32_t i) {
+	static uint32_t cols[] = {
+		0xC41E3A, 0xA330C9, 0xFF7C0A, 0x33937F, 
+		0xAAD372, 0x3FC7EB, 0x00FF98, 0xF48CBA,
+		0xFFF468, 0x0070DD, 0x8788EE, 0xC69B6D
+	};
+	constexpr static size_t Ncols = sizeof cols / sizeof *cols;
+	
+	return hex_to_col( cols[i % Ncols] );
+}
+
+}} // namespace mnd::col
 #define FWD_DRAW(inner) \
 	template<typename... Ts> \
 	auto Draw(Ts&&... args) { \

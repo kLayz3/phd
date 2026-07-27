@@ -28,15 +28,27 @@ class TH2I;
 struct FOOTQ {
 	using ClusterType = RNFOOTCluster::ClusterType;
 
-	float q; // nominal 'value'
+	float q; // nominal charge 'value'
+	u32 fCM = 0; /* Cluster multiplicity. */ 
 
 	/* Few fields taken from RNFOOTCluster.. */
-	u32 fCM = 0; /* Cluster multiplicity. */ 
+#ifdef MND_FOOTTRACK_DEBUG
 	ClusterType fCT{}; /* Cluster type. */
+	float delta; /* Delta coefficient of the cluster. */
+	float e0; /* Uncorrected cluster energy. */
+#endif
 	
 	FOOTQ() = default;
-	FOOTQ(float q_, u32 fCM_, ClusterType fCT_) :
-		q(q_), fCM(fCM_), fCT(fCT_) {}
+	FOOTQ(float q_, u32 fCM_ 
+#ifdef MND_FOOTTRACK_DEBUG
+		, ClusterType fCT_, float d_, float e0_
+#endif
+	) :
+		q(q_), fCM(fCM_)
+#ifdef MND_FOOTTRACK_DEBUG
+		, fCT(fCT_), delta(d_), e0(e0_) 
+#endif
+	{}
 
 	virtual ~FOOTQ() = default;
 	ClassDef(FOOTQ, 1);
@@ -49,8 +61,16 @@ struct FOOTHit {
 	double m; // measurement [ mm ]
 	
 	FOOTHit() = default;
-	FOOTHit(double q_, u32 fCM_, ClusterType fCT_, double m_) :
-		Q(q_, fCM_, fCT_), m(m_) {}
+	FOOTHit(double q_, u32 fCM_
+#ifdef MND_FOOTTRACK_DEBUG
+		, ClusterType fCT_, float d_, float e0_
+#endif
+		, double m_) :
+		Q(q_, fCM_ 
+#ifdef MND_FOOTTRACK_DEBUG
+			, fCT_, d_, e0_
+#endif
+		), m(m_) {}
 
 	virtual ~FOOTHit() = default;
 	ClassDef(FOOTHit, 1);
@@ -82,11 +102,16 @@ struct RNFOOTTrack {
 #ifdef MND_FOOTTRACK_DEBUG
 	static constexpr u32 N_PAIRS = N_FOOT_DETECTORS / 2;
 	
-	std::array<double, N_PAIRS> _x; 
-	std::array<double, N_PAIRS> _y; 
+	std::array<double, N_PAIRS> _x;
+	std::array<double, N_PAIRS> _y;
 	std::array<double, N_PAIRS> _z;
 	std::array<double, N_PAIRS> _q;
 	std::array<double, N_PAIRS> _sq;
+
+	std::array<double, N_PAIRS> _e0_x;
+	std::array<double, N_PAIRS> _delta_x;
+	std::array<double, N_PAIRS> _e0_y;
+	std::array<double, N_PAIRS> _delta_y;
 #endif
 
 	RNFOOTTrack() = default;
@@ -95,6 +120,10 @@ struct RNFOOTTrack {
 		,
 		const std::array<double, N_PAIRS>& , 
 		const std::array<double, N_PAIRS>& , 
+		const std::array<double, N_PAIRS>& ,
+		const std::array<double, N_PAIRS>& ,
+		const std::array<double, N_PAIRS>& ,
+		const std::array<double, N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& 

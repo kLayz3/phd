@@ -36,7 +36,11 @@ RNFOOTTrack::RNFOOTTrack (
 		const std::array<double, N_PAIRS>& _oy, 
 		const std::array<double, N_PAIRS>& _oz,
 		const std::array<double, N_PAIRS>& _oq,
-		const std::array<double, N_PAIRS>& _osq
+		const std::array<double, N_PAIRS>& _osq,
+		const std::array<double, N_PAIRS>& _oe0_x,
+		const std::array<double, N_PAIRS>& _odelta_x,
+		const std::array<double, N_PAIRS>& _oe0_y,
+		const std::array<double, N_PAIRS>& _odelta_y
 #endif
 ) : x0(xline[0]), y0(yline[0]), ax(xline[1]), ay(yline[1]),
 	Q(Q_), score(score_), n(n_) 
@@ -46,9 +50,12 @@ RNFOOTTrack::RNFOOTTrack (
 		_y(_oy), 
 		_z(_oz),
 		_q(_oq),
-		_sq(_osq)
+		_sq(_osq),
+		_e0_x(_oe0_x),
+		_delta_x(_odelta_x),
+		_e0_y(_oe0_y),
+		_delta_y(_odelta_y)
 #endif
-
 {}
 
 void TFOOTHitCont::Init(TDictInfo info) {

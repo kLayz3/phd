@@ -11,6 +11,13 @@
 #include "../cli/CLI11.hpp"
 
 using DisplayDefault = mnd::BinaryOpt;
+namespace mnd::cli::detail {
+	struct State {
+		bool authoritative_seen = false;
+        bool current_is_authoritative = false;
+    };
+	static constexpr char auth_sym = '!';
+}
 
 template <
 	DisplayDefault d = DisplayDefault::Yes,
@@ -20,17 +27,38 @@ template <
 	const std::string& name,
 	T& variable,
 	const std::string& description
-) {
-	auto* opt = app.add_option(name, variable, description)
-		->each ( 
-			[name](const std::string& match) {
+) {	
+	auto state = std::make_shared<mnd::cli::detail::State>();
+	const std::string default_value = CLI::detail::to_string(variable);
+	auto* opt = app.add_option_function<T>(
+		name, 
+		[&variable, name, state](const T& match) {
+			if(state->current_is_authoritative) {
+				// The ! occurrence overrides everything.
+				variable = match;
+				state->authoritative_seen = true;
+				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM); 
+				std::cerr << KBH_YEL << name << KNRM << " as " 
+					<< KBH_CYN << match << KNRM << '\n';
+			} else if(!state->authoritative_seen) {
+				variable = match;
 				WARN("Parsed option "); 
 				std::cerr << KBH_YEL << name << KNRM << " as " 
-					<< KBH_YEL << match << KNRM << '\n';
+					<< KBH_CYN << match << KNRM << '\n';
 			}
-		);
+			state->current_is_authoritative = false;
+		}, description)
+		->transform( [state](std::string input) -> std::string {
+			if(!input.empty() && input.front() == mnd::cli::detail::auth_sym) {
+				state->current_is_authoritative = true;
+				input.erase(input.begin());
+			}
+			return input; // RVO
+		})
+		->trigger_on_parse();
+
 	if constexpr(d == DisplayDefault::Yes)	
-		opt->capture_default_str();
+		opt->default_str(default_value);
 	return opt;
 }
 
@@ -45,7 +73,7 @@ inline CLI::Option* add_logged_flag (
 			[name](const std::string& match) {
 				WARN("Parsed flag "); 
 				std::cerr << KBH_YEL << name << KNRM << " as " 
-					<< KBH_YEL << match << KNRM << '\n';
+					<< KBH_CYN << match << KNRM << '\n';
 			}
 		);
 }
@@ -61,27 +89,43 @@ template <
 ) {
 	static_assert(std::is_enum_v<E>);
 
+	auto state = std::make_shared<mnd::cli::detail::State>();
+	const std::string default_value = std::string{magic_enum::enum_name(variable)};
 	auto* opt = app.add_option_function<std::string>(
 		name, 
-		[&variable, &name](const std::string& s) {
+		[&variable, name, state](const std::string& s) {
 			auto e = magic_enum::enum_cast<E>(s);
 			if(!e)
 				ERROR("Validation error for enum: \'%s\', "
 					"passed in \'%s\' which is not parsable.", 
 					mnd::type_name<E>().c_str(), s.c_str());
-			variable = *e;
+			if(state->current_is_authoritative) {
+				// The ! occurrence overrides everything.
+				variable = *e;
+				state->authoritative_seen = true;
+				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM); 
+				std::cerr << KBH_YEL << name << KNRM << " as " 
+					<< KBH_CYN << s << KNRM << '\n';
+			} else if(!state->authoritative_seen) {
+				variable = *e;
+				WARN("Parsed option "); 
+				std::cerr << KBH_YEL << name << KNRM << " as " 
+					<< KBH_CYN << s << KNRM << '\n';
+			}
+			state->current_is_authoritative = false;
 		},
-		mnd::sstrcat("Enum: ",  magic_enum::enum_names<E>(), ". ", description)
-	)
-	->each ( 
-		[name](const std::string& match) {
-			WARN("Parsed option "); 
-			std::cerr << KBH_YEL << name << KNRM << " as " 
-				<< KBH_YEL << match << KNRM << '\n';
-		}
-	);
+		mnd::sstrcat("Enum: ",  magic_enum::enum_names<E>(), ". ", description))
+		->transform( [state](std::string input) -> std::string {
+			if(!input.empty() && input.front() == mnd::cli::detail::auth_sym) {
+				state->current_is_authoritative = true;
+				input.erase(input.begin());
+			}
+			return input; // RVO
+		})
+		->trigger_on_parse();
+
 	if constexpr(d == DisplayDefault::Yes)
-		opt->default_str(std::string{magic_enum::enum_name(variable)});
+		opt->default_str(default_value);
 
 	return opt;
 }
@@ -89,7 +133,7 @@ template <
 namespace mnd {
 
 /* A small wrapper to parse out the sections in the config file block. */
-Maybe<std::string_view> extract_section_body(std::string_view , std::string_view );
+Maybe<std::string_view> extract_text_body(std::string_view , std::string_view , std::string_view );
 
 /* Split a string into smaller substrings. */
 std::vector<std::string> split(const std::string& , char );
@@ -173,5 +217,26 @@ std::istream& operator>>(std::istream& in, std::array<T, N>& out) {
 }
 /* ^^^^^^ We don't put this in global namespace as it would wreak havoc on the 
  * ADL and overload resolver. */
+
 } // namespace mnd
 
+
+namespace CLI {
+
+/* Extra validator wrapper */
+template<typename T>
+Validator RangeOrEmpty(T min, T max) {
+	return Validator {
+		[range = Range(min, max)](std::string& input) mutable -> std::string {
+			return input == "{}" ? std::string{} : range(input);
+		},
+		std::string(detail::type_name<T>()) +
+			" in [" + std::to_string(min) +
+			" - " + std::to_string(max) +
+			"] or none"
+		,
+		"RangeOrEmpty"
+	};
+}
+
+} // namespace CLI
