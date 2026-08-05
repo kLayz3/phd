@@ -5,7 +5,7 @@ include $(BASE)/../includes/monad/common.mk
 include $(BASE)/../includes/q.mk
 
 CXXFLAGS += $(shell root-config --cflags) \
-	-Wall -Wextra -I$(MONAD_DIR)../ \
+	-Wall -Wextra -I$(MONAD_DIR)../ -I./ \
 
 LIBS += $(shell root-config --libs)
 LDFLAGS += $(shell root-config --ldflags) 

@@ -14,8 +14,8 @@ using DisplayDefault = mnd::BinaryOpt;
 namespace mnd::cli::detail {
 	struct State {
 		bool authoritative_seen = false;
-        bool current_is_authoritative = false;
-    };
+		bool current_is_authoritative = false;
+	};
 	static constexpr char auth_sym = '!';
 }
 
@@ -172,7 +172,7 @@ public:
 	Argv(size_t n) : capacity(n) {
 		assert(n > 0 && "Cannot construct argv without at least one entry (program name).");
 		storage.reserve(n);
-		argv.reserve(n+1); // fills with nullptr: empty value init of ptr = nullptr 
+		argv.reserve(n+1); // fills with nullptr
 		argv.push_back( nullptr );
 		assert(argv.size() == 1);
 	}
@@ -199,8 +199,11 @@ Argv parse_argv(std::string_view, std::string );
 #endif
 
 /* Parse an array range from a text input by a separator 'c' */
-template<unsigned char c, typename T, std::size_t N>
-std::istream& operator>>(std::istream& in, std::array<T, N>& out) {
+template<unsigned char c, typename Cont, 
+	typename std::enable_if<mnd::is_an_array_v<Cont>>::type* = nullptr
+> std::istream& operator>>(std::istream& in, Cont& out) {
+	constexpr size_t N = mnd::is_an_array<Cont>::size;
+
 	for(size_t i=0; i<N; ++i) {
 		if(i != 0) {
 			char sep{};
@@ -215,8 +218,37 @@ std::istream& operator>>(std::istream& in, std::array<T, N>& out) {
 	}
 	return in;	
 }
-/* ^^^^^^ We don't put this in global namespace as it would wreak havoc on the 
- * ADL and overload resolver. */
+
+/* Other overload is specifically for dynamically sized objects */
+template<unsigned char c, typename T>
+std::istream& operator>>(std::istream& in, std::vector<T>& out) {
+	T value;
+	
+	/* Try fetching an entry. Can immediately fail and be empty.
+	 * In this case, just promptly return. */
+	if(!(in >> value)) 
+		return in;
+	
+	out.push_back(value);
+
+	while(true) {
+		const auto next = in.peek();
+
+		if(next == std::char_traits<char>::eof() ||
+		   next != c)
+		{
+			return in;
+		}
+		in.get(); // consume it
+
+		if(!(in >> value)) {
+			in.setstate(std::ios::failbit); // if the separator is consumed, next token must be a valid value.
+			return in;
+		}
+		out.push_back(std::move(value));
+	}
+	return in;	
+}
 
 } // namespace mnd
 

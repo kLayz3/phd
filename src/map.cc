@@ -148,7 +148,7 @@ int main(i32 argc, char* argv[]) {
 		option::ShowPercentage{true},
 		option::ShowElapsedTime{true},
 		option::ShowRemainingTime{true},
-		option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
+		option::FontStyles{std::vector{FontStyle::bold}}
 	};
 	
 	tv.emplace_back(TimePoint("start"));

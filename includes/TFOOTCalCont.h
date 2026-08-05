@@ -444,7 +444,7 @@ struct FOOTParam {
 	
 protected: 
 	/* Some cached values for quick Q- calculation.
-	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but 
+	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default 
 	 * JSON propagator cannot know this. Meaning that `ResetQ` has to be called manually. */
 	mutable double f_, c_;
 	mutable bool is_initialized_ = 0;

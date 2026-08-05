@@ -157,9 +157,10 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
 	inline static const std::map<std::string, u32> tpc_moniker { 
 		{"21", 0}, {"22", 1}, {"23", 2}, {"24", 3}, {"41", 4}, {"42", 5}, {"31", 6}
 	}; 
-	inline static const std::map<std::string, u32> sci_moniker { 
-		{"21", 0}, {"22", 1},                       {"31", 2}, {"41", 3}
-	};
+	inline static constexpr auto tpc_label = std::array{ "21", "22", "23", "24", "41", "42", "31" };
+
+	inline static const std::map<std::string, u32> sci_moniker {{"21", 0}, {"22", 1}, {"31", 2}, {"41", 3}};
+	inline static constexpr auto sci_label = std::array{ "21", "22", "31", "41" };
 
 	TH2I* h2_tpc_xy[RNFRSCal::N_VALID_TPC][2];
 	TH1I* h1_tpc_y[RNFRSCal::N_VALID_TPC][4];

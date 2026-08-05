@@ -2,10 +2,8 @@
 
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.hxx"
-#include "magic_enum/magic_enum.hpp"
 
 #include "TApplication.h"
-#include "TParameter.h"
 #include "TFOOTCalCont.h"
 #include "TFRSCalCont.h"
 
@@ -18,7 +16,9 @@ std::istream& operator>>(std::istream& , Dead& );
 std::ostream& operator<<(std::ostream& , const Dead& );
 
 int main(int argc, char* argv[]) {
-	CLI::App app{"Calibrate referent FOOT detectors' offset, based on the primary beam cal run."};
+	CLI::App app{"Calibrate referent FOOT detectors' offset, based on the primary beam cal run.\n\
+	              This alignment algorithm is reserved only for non-rotated detectors.\n\
+                  For referent detectors, use the `fit_angle` routine."};
 	
 	std::vector<std::string> fileName;
 	uint32_t ifoot = -1;
@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-f,--file", fileName, "Pass one or more file names, delimited by ','")
 		->delimiter(',')
 		->check(CLI::ReadPermissions);
-	add_logged_option<DisplayDefault::Yes>(app, "-i,--foot-id", ifoot, 
+	add_logged_option(app, "-i,--foot-id", ifoot, 
 		"Select which FOOT detector.")
 		->check([](const std::string& match) -> std::string { 
 			u32 id = -1;
@@ -50,9 +50,9 @@ int main(int argc, char* argv[]) {
 		"Dead regions [in mm] that won't go into the fit, separated by \';\'")
 		->delimiter(';')
 		->type_name("LO,HI[;LO,HI...]");
-	add_logged_option<DisplayDefault::Yes>(app, "-b,--bins-x",binning_x, "Binning X")
+	add_logged_option(app, "-b,--bins-x",binning_x, "Binning X")
 		->delimiter(',');
-	add_logged_option<DisplayDefault::Yes>(app, "-q,--foot-cut",foot_q_cut, "FOOT Q cut (charge)")
+	add_logged_option(app, "-q,--foot-cut",foot_q_cut, "FOOT Q cut (charge)")
 		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci21",sci21_cut, "SCI21 QDC cut (also implying multiplicity 1). Default no cut.")
 		->delimiter(','); 
@@ -231,7 +231,7 @@ int main(int argc, char* argv[]) {
 }
 
 std::istream& operator>>(std::istream& in, Dead& out) {
-	return mnd::template operator>> <','>(in, out.val);
+	return ::mnd::template operator>> <','>(in, out.val);
 }
 std::ostream& operator<<(std::ostream& os, const Dead& out) {
 	return os << out.val;

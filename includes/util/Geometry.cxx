@@ -228,6 +228,22 @@ Line3D& Line3D::RepresentInShifted (
 	return (*this %= offset).RepresentInRotated(axis, angle);
 }
 
+// cos(θ) = hat{v} * hat{z}
+// cos(φ) = ( hat{v} * hat{x} ) / (1 - cos^2(θ) )
+SphericalAngles Line3D::GetSpherical() const noexcept {
+	const Eigen::Vector3d nv = detail::mapv(this->v).normalized();
+	const double cos_theta = std::abs( nv.z() ); // always must be >= 0
+	const double cos_phi   = std::clamp ( 
+		nv.x() / (1 - cos_theta*cos_theta ),
+		-1.0, 1.0 );
+	
+	// Phi can be (-π, π], but principal value of acos is [0,π]
+	return SphericalAngles {
+		.theta = std::acos( cos_theta ),
+		.phi   = (nv.y() > 0)? std::acos( cos_phi ): -std::acos( cos_phi )
+	};
+}
+
 /* ============================================================ */
 
 Rectangle2D::Rectangle2D(Point2D midpoint, double wx, double wy) :

@@ -146,7 +146,7 @@ public:
 	using Entry = mnd::hm::Data;
 	using Cached  = mnd::hm::Cached;
 	using ActiveIndex = uint32_t;
-	using RawHitPairRef = std::array<hit_type const*, 2>;
+	struct RawHitPairRef { hit_type const *x, *y; };
 
 	static constexpr size_t X = 0;
 	static constexpr size_t Y = 1;

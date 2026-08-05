@@ -16,7 +16,6 @@
 #include "../monad/monad.hxx"
 #include "../magic_enum/magic_enum.hpp"
 #include "CLI.h"
-#include "cli/CLI11.hpp"
 
 namespace _detail {
 inline TFile* file_ptr(TFile* f) noexcept {
@@ -27,7 +26,7 @@ inline TFile* file_ptr(std::unique_ptr<TFile> const& f) noexcept {
 }
 }
 /* Handle can be either unique ptr, or standard pointer. 
- * `var` must be a raw pointer! You own the object, never the ROOT. */
+ * `var` must be a raw pointer! You own the object now, never the ROOT. */
 template<typename F, typename P>
 void get_obj(F&& fhandle, P& var, const char* label) {
 	static_assert(std::is_pointer_v<P>, "get_obj(): var must be a raw pointer");
@@ -45,14 +44,13 @@ void get_obj(F&& fhandle, P& var, const char* label) {
 		var = f->Get<T>(label);
 	}
 
-	if(!var) {
-		std::cerr << "get_obj(): cannot extract object: '" << label << "'\n";
-		std::abort();
-	}
+	if(!var) ERROR("get_obj(): cannot extract object: '%s'\n", label);
 }
 
 using A2 = std::array<double, 2>;
 using A3 = std::array<double, 3>;
+template<typename T, size_t M, size_t N>
+using Arr2 = std::array<std::array<T,N>, M>;
 
 enum class DoSave { yes, no };
 
@@ -194,10 +192,11 @@ struct InputWrapper<T, Tag, false> {
 
 /* Why is Rust amazing? Well, simple:
  * enum Option<T> {
- *   Yes(T),
- *   No
+ *   Some(T),
+ *   None
  * }
- A true algebraic sum type! */
+ * A true algebraic sum type! Nullability isn't tied to 
+ * a self-defined `nil` subset within `T` itself. */
 
 template<typename T>
 class Option {
@@ -226,6 +225,29 @@ public:
 
 private:
 	std::variant<Yes, std::monostate> data;
+};
+
+/* Few prepared dynamic objects.. don't judge me. #kthxbai */
+inline constexpr auto dancer0 = std::array { 
+	std::string_view{" ┏(-_-)┛"}, 
+	std::string_view{" ┗(-_-)┓"},
+	std::string_view{" ┗(^_^)┛"},
+	std::string_view{" ┏(^_^)┓"} 
+};
+inline constexpr auto dancer1 = std::array { 
+	std::string_view{" <('' <)"},
+	std::string_view{" <( '' )>"},
+	std::string_view{"  (> '')>"},
+	std::string_view{" <( '' )>"}
+};
+inline constexpr auto dancer2 = std::array {
+	std::string_view{R"( (>'-')> )"},
+	std::string_view{R"( <('_'<) )"},
+	std::string_view{R"( ^('_')\- )"},
+	std::string_view{R"( \m/(-_-)\m/)"},
+	std::string_view{R"( <( '-')> )"},
+	std::string_view{R"( \_( .\")>)"},
+	std::string_view{R"( <( ._.)-`)"}
 };
 
 } // namespace mnd

@@ -33,7 +33,7 @@ struct TrackCost {
 	// For k==3 degrees of freedom: total Chi^2 of about 12 is 99% confidence. 
 	// In ideal world... but both `kt` and `kq` can dance like crazy. */
 	constexpr static double DEFAULT_MAX_CANDIDATE_COST = 1'000;
-	constexpr static double DEFAULT_MAX_FINAL_COST = 22;
+	constexpr static double DEFAULT_MAX_FINAL_COST = 24;
 
 	constexpr static double NIL_VALUE = NAN;
 	

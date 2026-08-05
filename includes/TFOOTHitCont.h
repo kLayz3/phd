@@ -33,7 +33,7 @@ struct FOOTQ {
 
 	/* Few fields taken from RNFOOTCluster.. */
 #ifdef MND_FOOTTRACK_DEBUG
-	ClusterType fCT{}; /* Cluster type. */
+	ClusterType fCT; /* Cluster type. */
 	float delta; /* Delta coefficient of the cluster. */
 	float e0; /* Uncorrected cluster energy. */
 #endif
@@ -110,8 +110,10 @@ struct RNFOOTTrack {
 
 	std::array<double, N_PAIRS> _e0_x;
 	std::array<double, N_PAIRS> _delta_x;
+	std::array<u32,    N_PAIRS> _c0_x; // cluster peak value
 	std::array<double, N_PAIRS> _e0_y;
 	std::array<double, N_PAIRS> _delta_y;
+	std::array<u32,    N_PAIRS> _c0_y; // cluster peak value
 #endif
 
 	RNFOOTTrack() = default;
@@ -125,8 +127,10 @@ struct RNFOOTTrack {
 		const std::array<double, N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& ,
+		const std::array<u32,    N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& ,
-		const std::array<double, N_PAIRS>& 
+		const std::array<double, N_PAIRS>& , 
+		const std::array<u32,    N_PAIRS>&
 #endif
 	);
 	virtual ~RNFOOTTrack() = default;

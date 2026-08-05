@@ -103,9 +103,10 @@ std::tuple <
 	double x_lo,
 	double x_hi,
 	double side_ratio,
-	int Q,
+	int Q, // max harmonic 
 	Verbosity v
 ) {
+	constexpr uint32_t NITER_GAUSS = 2;
 	std::unique_ptr<TH1D> pfx;
 	TAxis* xax = h2->GetXaxis();
 	x_lo = std::max( xax->GetXmin(), x_lo );
@@ -127,7 +128,7 @@ std::tuple <
 		int nbins = ibin_last - ibin_first + 1;
 		
 		if(v > 1) { 
-			printf("[DoFFT] %s: from \'%s\'; taking bin indices: [%d,%d], "
+			fprintf(stderr, "[DoFFT] %s: from \'%s\'; taking bin indices: [%d,%d], "
 				"with lo = %.1f, hi = %.1f, N=%d\n", 
 				module_name_, h2->GetTitle(), ibin_first, ibin_last, xfirst, xlast, nbins);
 		}
@@ -138,11 +139,11 @@ std::tuple <
 		for(int ix = ibin_first, i=1; ix <= ibin_last; ++ix, ++i) {
 			auto py = std::unique_ptr<TH1D>(h2->ProjectionY(Form("_py__%d", ix), ix, ix));
 			py->SetDirectory(nullptr);
-			auto [result, err] = GaussFitMax(py.get(), side_ratio, v);
+			auto [result, err] = GaussFitMax(py.get(), side_ratio, NITER_GAUSS, v);
 			pfx->SetBinContent(i, result[1]);
 			pfx->SetBinError(i, err[1]);
 			if(v > 1) {
-				printf("[%d]: %.2f +- %.2f\n", i, result[1], err[1]);
+				fprintf(stderr, "[%d]: %.2f +- %.2f\n", i, result[1], err[1]);
 			}
 		}
 	}

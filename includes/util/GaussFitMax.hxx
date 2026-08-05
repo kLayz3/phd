@@ -16,46 +16,59 @@ inline std::pair <
 > GaussFitMax (
 	TH1D* h, 
 	double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
+	uint32_t niter = 2,
 	Verbosity v = Verbosity::SILENT
 ) {
+	assert(niter > 0 && "Must be at least 1 iteration passed here.");
 	static uint64_t incrementer_ = 0;
+	double s = NAN, m = NAN, a = NAN;
+	double ss, ms, as; 
 
-	const double m = h->GetXaxis()->GetBinCenter( h->GetMaximumBin() );
-	const double s = h->GetStdDev();
-	
-	const double fitMin = m - side_ratio*s;
-	const double fitMax = m + side_ratio*s;
-	if(v > 1)
-		printf("[GaussFitMax] (%s) Performing gaus fit around %.2f: [%.2f, %2.f]\n",
-			h->GetTitle(), m, fitMin, fitMax);
-	TF1 f(Form("f_%lu_%.1f_%.1f", incrementer_++, fitMin, fitMax),"gaus", fitMin, fitMax);
-	TFitResultPtr res = h->Fit(&f, "Q0SR");
+	for(uint32_t iter=0; iter < niter; ++iter) {
+		m = std::isnan(m) ? h->GetXaxis()->GetBinCenter( h->GetMaximumBin() ) : m;
+		s = std::isnan(s) ? h->GetStdDev() : s;
+		const double fitMin = m - side_ratio*s;
+		const double fitMax = m + side_ratio*s;
+		if(v > 1)
+			fprintf(stderr, "[GaussFitMax: %u/%u] (%s) Performing gaus fit around %.2f: [%.2f, %2.f]\n",
+				iter+1, niter, h->GetTitle(), m, fitMin, fitMax);
+		TF1 f(Form("f_%lu_%.1f_%.1f", incrementer_++, fitMin, fitMax),"gaus", fitMin, fitMax);
+		TFitResultPtr res = h->Fit(&f, "Q0SR");
 
-	if(!res.Get() || (int)res != 0) { // Fit failed.
-		if(v > Verbosity::SILENT) {
-			fprintf(stderr, "No fit performed...\n");
-			fprintf(stderr, "Hist name: '%s', m=%.2f, s=%.2f\n",
-				h->GetName(), m, s);
+		if(!res.Get() || (int)res != 0) { // Fit failed.
+			if(v > Verbosity::SILENT) {
+				fprintf(stderr, "[GaussFitMax: %u/%u] (%s) no fit performed. Log: m=%.2f, s=%.2f\n ", 
+					iter+1, niter, h->GetTitle(), m, s);
+			}
+			/* In case the fit diverges, don't quietly return the NAN's, 
+			 * try to give the best estimate if it were just a random distribution (uniform). */
+			return {{ NAN, m, s }, { NAN, s, s/3 }};
 		}
-		/* In case the fit diverges, don't quietly return the NAN's, 
-		 * try to give the best estimate if it were just a random distribution (uniform). */
-		return {{ NAN, m, s }, { NAN, s, s/3 }};
+		if(v > 1) { 
+			fprintf(stderr, "[GaussFitMax: %u/%u] (%s) result: {%.2f ± %.2f, %.2f ± %.2f, %.2f ± %.2f}\n",
+				iter+1, niter, h->GetTitle(), 
+				f.GetParameter(0), f.GetParError(0),
+				f.GetParameter(1), f.GetParError(1),
+				f.GetParameter(2), f.GetParError(2));
+		}
+		a = f.GetParameter(0);
+		m = f.GetParameter(1);
+		s = f.GetParameter(2);
+		as = f.GetParError(0);
+		ms = f.GetParError(1);
+		ss = f.GetParError(2);
 	}
-	if(v > 1) std::cout << "[GaussFitMax] (" << h->GetTitle() << ") Result: {" 
-		<< f.GetParameter(0) << " ± " << f.GetParError(0) << ", "
-		<< f.GetParameter(1) << " ± " << f.GetParError(1) << ", "
-		<< f.GetParameter(2) << " ± " << f.GetParError(2) << "}" << std::endl;
 
 	return { 
 		std::array<double, 3> { 
-			f.GetParameter(0), /* Amplitude */
-			f.GetParameter(1), /* Mean */
-			f.GetParameter(2)  /* Sigma */
+			a, /* Amplitude */
+			m, /* Mean */
+			s  /* Sigma */
 		}, 
 		std::array<double, 3> { 
-			f.GetParError(0), /* Amplitude */
-			f.GetParError(1), /* Mean */
-			f.GetParError(2)  /* Sigma */
+			as, /* Amplitude */
+			ms, /* Mean */
+			ss  /* Sigma */
 		}
 		// Full covariant matrix I don't really care about. Trust the gauss-chan 🥺 👉👈.
 	};

@@ -39,8 +39,10 @@ RNFOOTTrack::RNFOOTTrack (
 		const std::array<double, N_PAIRS>& _osq,
 		const std::array<double, N_PAIRS>& _oe0_x,
 		const std::array<double, N_PAIRS>& _odelta_x,
+		const std::array<u32,    N_PAIRS>& _oc0_x,
 		const std::array<double, N_PAIRS>& _oe0_y,
-		const std::array<double, N_PAIRS>& _odelta_y
+		const std::array<double, N_PAIRS>& _odelta_y,
+		const std::array<u32,    N_PAIRS>& _oc0_y
 #endif
 ) : x0(xline[0]), y0(yline[0]), ax(xline[1]), ay(yline[1]),
 	Q(Q_), score(score_), n(n_) 
@@ -53,8 +55,10 @@ RNFOOTTrack::RNFOOTTrack (
 		_sq(_osq),
 		_e0_x(_oe0_x),
 		_delta_x(_odelta_x),
+		_c0_x(_oc0_x),
 		_e0_y(_oe0_y),
-		_delta_y(_odelta_y)
+		_delta_y(_odelta_y),
+		_c0_y(_oc0_y)
 #endif
 {}
 

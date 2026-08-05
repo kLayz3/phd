@@ -6,12 +6,14 @@
 script_dir=$(dirname -- $(readlink -f -- $0))
 CLANGD=$script_dir/../.clangd
 INC_DIR=$script_dir/../includes
+QUICK_DIR=$script_dir/../quick
 
 echo \
 "CompileFlags:
   Add:
     - -I$(root-config --incdir)
     - -I$INC_DIR
+    - -I$QUICK_DIR
     - -std=c++17
   Remove: [-std=*]
 " > $CLANGD

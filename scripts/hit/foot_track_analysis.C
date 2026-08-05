@@ -223,14 +223,14 @@ void foot_track_analysis (
 	c1d->Divide(N_PAIRS, 5);
 	for(size_t i=0; i<N_PAIRS; ++i) {
 		c1d->cd(i+1);
-		auto [fit_result_x, _x_] = resx[i]->DrawAndFit(2.0, kMagenta + 2, 4.8);
+		auto [fit_result_x, _x_] = resx[i]->DrawAndFit(2.0, kMagenta + 2, 5, 4 /* niter */);
 		WARN("FOOT%zu X: " KBH_MAG "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_x[1], 1e3*fit_result_x[2]);
 		c1d->cd(i+1 + N_PAIRS);
-		auto [fit_result_y, _y_] = resy[i]->DrawAndFit(2.0, kMagenta + 2, 4.8);
+		auto [fit_result_y, _y_] = resy[i]->DrawAndFit(2.0, kMagenta + 2, 5, 4 /* niter */);
 		WARN("FOOT%zu Y: " KBH_YEL "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_y[1], 1e3*fit_result_y[2]);
 
 		c1d->cd(i+1 + 2*N_PAIRS);
-		auto [fit_result_q, _q_] = resq[i]->DrawAndFit(2.0, kMagenta + 2, 4.8);
+		auto [fit_result_q, _q_] = resq[i]->DrawAndFit(2.0, kMagenta + 2, 5, 4 /* niter */);
 		WARN("FOOT%zu Q: " KBH_CYN "%.3f, %.3f" KRNM " [Q]\n", i, fit_result_q[1], fit_result_q[2]);
 
 		c1d->cd(i+1+ 3*N_PAIRS);

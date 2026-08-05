@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <sstream>
+#include "RtypesCore.h"
 #include "TH1D.h"
 #include "TH2D.h"
 #include "TColor.h"
@@ -215,10 +216,11 @@ struct TH1P {
 	inline auto DrawAndFit (
 		double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
 		ph_detail::__ARGB col = kRed,
-		Double_t w = 1.8,
+		Width_t line_width = 2, // short
+		uint32_t niter = 2,
 		Verbosity v = Verbosity::SILENT
-	) {
-		auto fitresult   = GaussFitMax(&h, side_ratio, v);
+	) -> decltype( GaussFitMax(std::declval<TH1D*>()) ) {
+		auto fitresult   = GaussFitMax(&h, side_ratio, niter, v);
 		const auto& res = fitresult.first;
 		const double A     = res[0];
 		const double mu    = res[1];
@@ -238,7 +240,7 @@ struct TH1P {
 		f->SetParameters(A, mu, sigma);
 		f->SetParNames("A", "#mu", "#sigma");
 		f->SetLineColor( col.GetColorCode() );
-		f->SetLineWidth( w );
+		f->SetLineWidth( line_width );
 
 		this->Draw();
 		f->Draw("same");
@@ -526,4 +528,4 @@ inline TLine* vline(TH2D* h2, double x, double r = 0) {
 	return vline(&h2->h, x, r);	
 }
 
-}
+} // namespace hist

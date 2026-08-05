@@ -285,12 +285,9 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 		this->hm[i].InitEvent( this->out.inner().pair[i] );
 	});
 
-#ifdef MND_FOOTTRACK_DEBUG
 	ConstructObviousTracks();
-#else
 	ConstructDAG();
 	AnalyseDAG();
-#endif
 	PostProcess();
 }
 
@@ -314,7 +311,7 @@ void TFOOTHitProc::ProcessPair (
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
 			output.x.emplace_back(q, mult 
 #ifdef MND_FOOTTRACK_DEBUG
-				, ctype, ce, hit.Delta() 
+				, ctype, hit.Delta(), ce
 #endif
 				, xprime);
 	}
@@ -328,7 +325,7 @@ void TFOOTHitProc::ProcessPair (
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
 			output.y.emplace_back(q, mult 
 #ifdef MND_FOOTTRACK_DEBUG
-				, ctype, ce, hit.Delta() 
+				, ctype, hit.Delta(), ce 
 #endif
 				, yprime);
 	}
@@ -514,19 +511,23 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 #ifdef MND_FOOTTRACK_DEBUG
 	std::array<double, N_PAIRS> qm, sqm; 
 	auto e0_x    = mnd::make_filled_array<double, N_PAIRS>(NAN);
-	auto e0_y    = mnd::make_filled_array<double, N_PAIRS>(NAN);
 	auto delta_x = mnd::make_filled_array<double, N_PAIRS>(NAN);
+	auto c0_x    = mnd::make_filled_array<u32,    N_PAIRS>(-1);
+	auto e0_y    = mnd::make_filled_array<double, N_PAIRS>(NAN);
 	auto delta_y = mnd::make_filled_array<double, N_PAIRS>(NAN);
+	auto c0_y    = mnd::make_filled_array<u32,    N_PAIRS>(-1);
 	for(size_t layer=0; layer<N; ++layer) {
 		qm[layer] = tau.q[layer].mean();
 		sqm[layer] = tau.q[layer].s();
 		Maybe<FHitMatrix::RawHitPairRef> p = GetHitFromPath(layer, path);
 		if(p) {
 			FHitMatrix::RawHitPairRef& val = p.value();
-			e0_x[layer]    = val[0]->Q.e0;
-			delta_x[layer] = val[0]->Q.delta;
-			e0_y[layer]    = val[1]->Q.e0;
-			delta_y[layer] = val[1]->Q.delta;
+			e0_x[layer]    = val.x->Q.e0;
+			delta_x[layer] = val.x->Q.delta;
+			c0_x[layer] = static_cast<u32>(refl[layer].x() * val.x->m * FOOTParam::MM_TO_STRIP + FOOTParam::DETECTOR_MIDPOINT);
+			e0_y[layer]    = val.y->Q.e0;
+			delta_y[layer] = val.y->Q.delta;
+			c0_y[layer] = static_cast<u32>(refl[layer].y() * val.y->m * FOOTParam::MM_TO_STRIP + FOOTParam::DETECTOR_MIDPOINT);
 		}
 	}
 #endif
@@ -540,7 +541,8 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 		tau.zs,
 		qm,
 		sqm,
-		e0_x, delta_x, e0_y, delta_y
+		e0_x, delta_x, c0_x, 
+		e0_y, delta_y, c0_y
 #endif
 	);
  
@@ -649,7 +651,7 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 		
 		dag.path = std::move( new_paths );
 	} // for(u32 n = 0; n < N_PAIRS; ++n)
-}
+} // void TFOOTHitProc::ConstructDAG() 
 
 void TFOOTHitProc::AnalyseDAG() noexcept {
 	static_assert(N_PAIRS - 1 >= 3, "Maximal paranoia");
@@ -711,9 +713,11 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		auto qm      = mnd::make_filled_array<double, N_PAIRS>(NAN); 
 		auto sqm     = mnd::make_filled_array<double, N_PAIRS>(NAN); 
 		auto e0_x    = mnd::make_filled_array<double, N_PAIRS>(NAN);
-		auto e0_y    = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto delta_x = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto c0_x    = mnd::make_filled_array<u32,    N_PAIRS>(-1);
+		auto e0_y    = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto delta_y = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto c0_y    = mnd::make_filled_array<u32,    N_PAIRS>(-1);
 
 		for(size_t layer = 0, valid=0; layer < N; ++layer) {
 			if( path.node[layer] ) {
@@ -727,10 +731,12 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 				Maybe<FHitMatrix::RawHitPairRef> p = GetHitFromPath(layer, path);
 				if(!p) ERROR("huh?");
 				FHitMatrix::RawHitPairRef& val = p.value();
-				e0_x[layer]    = val[0]->Q.e0;
-				delta_x[layer] = val[0]->Q.delta;
-				e0_y[layer]    = val[1]->Q.e0;
-				delta_y[layer] = val[1]->Q.delta;
+				e0_x[layer]    = val.x->Q.e0;
+				delta_x[layer] = val.x->Q.delta;
+				c0_x[layer] = static_cast<u32>(refl[layer].x() * val.x->m * FOOTParam::MM_TO_STRIP + FOOTParam::DETECTOR_MIDPOINT);
+				e0_y[layer]    = val.y->Q.e0;
+				delta_y[layer] = val.y->Q.delta;
+				c0_y[layer] = static_cast<u32>(refl[layer].y() * val.y->m * FOOTParam::MM_TO_STRIP + FOOTParam::DETECTOR_MIDPOINT);
 
 				++valid;
 			}
@@ -740,7 +746,9 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		out.inner().track.emplace_back (
 			t.l.xarray(), t.l.yarray(), t.q.mean(), score, N
 #ifdef MND_FOOTTRACK_DEBUG
-				, xs, ys, zs, qm, sqm, e0_x, delta_x, e0_y, delta_y
+				, xs, ys, zs, qm, sqm, 
+				e0_x, delta_x, c0_x, 
+				e0_y, delta_y, c0_y
 #endif
 		);
 		
@@ -748,7 +756,7 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		 * This way, no other track can reuse either the same `x` or the same `y` entry. */
 		PoisonEntriesFromHMs(path);
 	}
-}
+} // void TFOOTHitProc::AnalyseDAG()
 
 /* High frequency call, decoding a DAGPath sequence into an online track. */
 FTrackOnline TFOOTHitProc::GetPrelimTrackFromPath(const DAG::DAGPath& p) const noexcept {

@@ -29,7 +29,8 @@ int main(int argc, char* argv[]) {
 		->check(CLI::ExecPermissions);
 	
 	add_logged_option<DisplayDefault::No>(app, "-c,--config", config, 
-		"Config file name. If it doesn't match an appropriate file name, will try the same name in: program_name/cfg/program_stem/")
+		"Config file name. If it doesn't match an appropriate file name, \
+		will try the same file name in: program_name/cfg/program_stem/")
 		->required()
 		->transform( CLI::Validator{[&prog](std::string& s) -> std::string /* err string */ {
 			if(CLI::ReadPermissions(s).empty()) return ""; // is fine.

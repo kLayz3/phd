@@ -6,6 +6,8 @@
 #include "json_struct_def.hh" // std::ostream& operator<<(array<T,N> const&) 
 #include "../Eigen/Core"
 
+/* Optional monad dependency.. */
+#ifndef __MONAD_INCLUDE_HXX__
 #if __cplusplus >= 202000L 
 #	include <span>
 	namespace mnd {
@@ -21,23 +23,22 @@
 #else
 #	error "Neither C++20 given, nor boost library for span found. Cannot proceed"
 #endif
+namespace mnd {
+    template<typename T>
+    span<const T> as_span(const std::vector<T>& v) noexcept {
+        return span<const T>{v.data(), v.size()};
+    }
+
+    template<typename T, std::size_t N>
+    span<const T> as_span(const std::array<T, N>& a) noexcept {
+        return span<const T>{a.data(), a.size()};
+    }
+}
+#endif // __MONAD_INCLUDE_HXX__
 
 #define FORMAT_ANGLES_IN_RADIANS
 
-namespace mnd { 
-
-/* Helper fnc's to convert a contiguous containers to a span. */
-template<typename T>
-span<const T> as_span(const std::vector<T>& v) noexcept {
-	return span<const T>{v.data(), v.size()};
-}
-
-template<typename T, std::size_t N>
-span<const T> as_span(const std::array<T, N>& a) noexcept {
-	return span<const T>{a.data(), a.size()};
-}
-
-namespace geom {
+namespace mnd::geom {
 
 struct Point2D { 
 	static const Point2D null;
@@ -81,13 +82,6 @@ struct Point3D {
 // Conventiently, a vector shall just be stored as a point.
 using Vector2D = Point2D;
 using Vector3D = Point3D;
-
-struct SphericalAngles {
-	double theta, phi;
-	friend std::ostream& operator<<(std::ostream& os, const SphericalAngles& rhs) {
-		return os << "(θ: " << rhs.theta <<  ", φ: " << rhs.phi << ')';	
-	}
-};
 
 /* Usual way to represent lines in 2D:
  * x(z) = a[1]*z + a[0]
@@ -137,13 +131,19 @@ struct Line2D {
 	std::array<double, 2> value {NAN,NAN}; // {a0, a1} = {offset, slope} 
 };
 
+struct SphericalAngles {
+	double theta, phi;
+	friend std::ostream& operator<<(std::ostream& os, const SphericalAngles& rhs) {
+		return os << "(θ: " << rhs.theta <<  ", φ: " << rhs.phi << ')';	
+	}
+};
 
 /* Two ways to represent lines in 3D:
  * Usual experiment:
  * x(z) = a[0] + a[1]*z
  * y(z) = b[0] + b[1]*z
  * ... and also:
- * vec{r} = vec{p} + λ*vec{v}
+ * vec{r} = vec{p} + λ * vec{v}
  */
 struct Line3D {
 	static constexpr double ALMOST_PARALLEL  = 1e-4;
@@ -216,12 +216,15 @@ struct Line3D {
 		const double b0 = p[1] - b1 * p[2];
 		return {b0, b1};
 	}
+
+	SphericalAngles GetSpherical() const noexcept;
 	[[ nodiscard ]] inline std::array<double,2> xarray() const noexcept { return XLine().array(); } 
 	[[ nodiscard ]] inline std::array<double,2> yarray() const noexcept { return YLine().array(); }
 
 	std::array<double, 3> p {NAN,NAN,NAN}; // {a0, b0, 0} , nominally
 	std::array<double, 3> v {NAN,NAN,NAN}; // {a1, b1, 1} , nominally
-};
+
+}; // Line3D
 
 struct Rectangle2D {
 	/* Spanned by bottom left and top right:
@@ -250,12 +253,10 @@ struct Rectangle2D {
 };
 
 /* Find a point with a minimal distance to a sequence of lines (aka: a vertex). */
-Point3D FindVertex(::mnd::span<const Line3D> ) noexcept;
+Point3D FindVertex(mnd::span<const Line3D> ) noexcept;
 Point3D FindVertex(const Line3D&, const Line3D& ) noexcept;
 
-} // namespace geom 
-} // namespace mnd
-
+} /* namespace mnd::geom */
 
 /* Can't share the same symbol, as it will confuse the overload resolver:
  * `GetLine(<brace-enclosed initializer list>, <brace-enclosed initializer list>)` is ambiguous */
