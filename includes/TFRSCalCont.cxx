@@ -88,6 +88,33 @@ void TFRSCalCont::Setup() {
 	h1_x_sc22_after_target->GetXaxis()->SetTitle("X [mm]");
 }
 
+std::array<double, TPCParam::N_S2_TPC> 
+TFRSCalCont::z_s2_tpc(
+    std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param
+) {
+    if(!tpc_param) 
+        ERROR("nullptr supplied to z_s2_tpc\n");
+    return { 
+        tpc_param->at(0).z0,
+        tpc_param->at(1).z0,
+        tpc_param->at(2).z0,
+        tpc_param->at(3).z0
+    };
+};
+std::array<std::array<double, 2>, TPCParam::N_S2_TPC> 
+TFRSCalCont::z_s2_tpc_delay_lines(
+    std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param
+) {
+    if(!tpc_param) 
+        ERROR("nullptr supplied to z_s2_tpc_delay_lines\n");
+    return { 
+        tpc_param->at(0).zDL(),
+        tpc_param->at(1).zDL(),
+        tpc_param->at(2).zDL(),
+        tpc_param->at(3).zDL()
+    };
+}
+
 ClassImp(RNSciCal);
 ClassImp(RNSciCal::Measurement);
 ClassImp(RNTPCCal);

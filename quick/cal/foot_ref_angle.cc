@@ -77,7 +77,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
 	for(const auto& tpc : ref) {
-		if(!tpc) { // operator bool() 
+		if(!tpc or !tpc.IsDownstream()) {
 			std::cerr << tpc << std::endl; 
 			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid."); 
 		}
@@ -101,7 +101,8 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 		if(o == Orientation::UNKNOWN) ERROR("FOOT%d orientation not specified. I won't allow it.\n", ifoot);
 		foot.o = o;
 	}
-    constexpr double WIDTH = 70.0;
+    constexpr auto N_UPSTREAM_TPC = TPCRef::N_UPSTREAM_TPC;
+    constexpr double WIDTH = TPCRef::TPC_WIDTH;
 	const Arr2<double, N_UPSTREAM_TPC, 2> zDL = [tpc_params](){
 		Arr2<double,N_UPSTREAM_TPC, 2> z{};
 		for(u32 i=0; i<N_UPSTREAM_TPC; ++i) {

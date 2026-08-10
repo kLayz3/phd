@@ -3,12 +3,15 @@
 #include "util/MacroHelpers.h"
 #include "TFRSCalCont.h"
 
-static constexpr u32 N_UPSTREAM_TPC   = 3;
-static constexpr u32 N_DOWNSTREAM_TPC = 1;
 struct TPCRef {
+    static constexpr u32 N_UPSTREAM_TPC   = TPCParam::N_UPSTREAM_TPC;
+    static constexpr u32 N_DOWNSTREAM_TPC = TPCParam::N_DOWNSTREAM_TPC;
+    static constexpr u32 N_S2_TPC = N_UPSTREAM_TPC + N_DOWNSTREAM_TPC;
+    static constexpr auto TPC_WIDTH = TPCParam::TPC_WIDTH;
+
     /* Returns true on a good setup. */
 	bool SetN(u32 x) {
-		if(x <= 3) { n = x; return true; }
+		if(x < N_S2_TPC) { n = x; return true; }
 		const std::string xs = std::to_string(x);
 		try {
 			u32 i = TFRSCalCont::tpc_moniker.at( xs.c_str() );
@@ -22,9 +25,12 @@ struct TPCRef {
         }
 		return false;
 	}
-	operator bool() const { return n < N_UPSTREAM_TPC && (use[0] || use[1]); } 
-	u32 n; // 0 => TPC21; 1 => TPC22; 2 => TPC23
-	std::array<bool,2> use; // Which delay lines to use 
+	operator bool() const { return n < N_S2_TPC && (use[0] || use[1]); } 
+    bool IsDownstream() const { return n < N_DOWNSTREAM_TPC; }
+    bool IsUpstream() const { return n >= N_DOWNSTREAM_TPC && n < N_S2_TPC; }
+
+	u32 n; // 0 => TPC21; 1 => TPC22; 2 => TPC23;  3 => TPC24
+	std::array<bool,2> use; // Which delay lines to use
 };
 
 inline std::istream& operator>>(std::istream& in, TPCRef& out) {

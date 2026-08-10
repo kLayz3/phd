@@ -280,7 +280,7 @@ int main(int argc, char* argv[]) {
 		
 			if(N_valid > 1) {
 				/* Find the vertex. */
-				const mnd::geom::Point3D vertex = mnd::geom::FindVertex(mnd::as_span(tracks));
+				const mnd::geom::Point3D vertex = mnd::geom::FindVertex(tracks);
 
 				/* Cut on vertex distances... */
 				std::vector<double> distances {};

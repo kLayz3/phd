@@ -92,25 +92,44 @@ std::ostream& operator<<(std::ostream& , const FileBrho& );
     > hist; 
 
 	std::vector<double> x, y; // fitting containers
-    u32 i = 0;
+    u32 i_clb_pnt = 1;
 	for(const auto& [fileName, brho] : f) {
-        ++i;
         auto model = RNTupleModel::Create();
         auto frs = model->MakeField<RNFRSCal>("FRS");
         auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
         const double beta_inc = phy::Beta(6, 12, brho.s2_incoming());
         const double beta_out = phy::Beta(6, 12, brho.s2_outgoing());
 
-		auto* h1_dt21_31 = new TH1P(Form("((h1_dt%d_21_31))Delta t [25 ps]@SCI31 - SCI21@TOF Point %s", 
-            i, fileName.c_str()), kMagenta+i, dt_cut21_31[0], dt_cut21_31[1], dt_cut21_31[2]);
-		auto* h1_dt22_31 = new TH1P(Form("((h1_dt%d_22_31))Delta t [25 ps]@SCI31 - SCI21@TOF Point %s", 
-            i, fileName.c_str()), kMagenta+i, dt_cut22_31[0], dt_cut22_31[1], dt_cut22_31[2]);
+		auto* h1_dt21_31 = new TH1P(Form("((h1_dt%u_21_31))Delta t [25 ps]@SCI31 - SCI21@TOF Point[%u] %s", 
+            i_clb_pnt, i_clb_pnt, fileName.c_str()), kMagenta+i_clb_pnt, dt_cut21_31[0], dt_cut21_31[1], dt_cut21_31[2]);
+		auto* h1_dt22_31 = new TH1P(Form("((h1_dt%u_22_31))Delta t [25 ps]@SCI31 - SCI21@TOF Point[%u] %s", 
+            i_clb_pnt, i_clb_pnt, fileName.c_str()), kMagenta+i_clb_pnt, dt_cut22_31[0], dt_cut22_31[1], dt_cut22_31[2]);
+        
+        ProgressBar bar {
+            option::BarWidth{50},
+                option::Start{"["},
+                option::Fill{"="},
+                option::Lead{":)"},
+                option::Remainder{" "},
+                option::End{"]"},
+                option::PostfixText{mnd::msg("Analysis (per event: %s)", fileName.c_str())},
+                option::ForegroundColor{Color::magenta},
+                option::ShowPercentage{true},
+                option::ShowElapsedTime{true},
+                option::ShowRemainingTime{true},
+                option::FontStyles{std::vector{FontStyle::bold}}
+        };
+        const size_t nentries = ntuple->GetNEntries();
 
 		for(auto entryId : *ntuple) {
 			ntuple->LoadEntry(entryId);
+		    mnd::PrintProgress(bar, entryId, nentries, 500, mnd::dancer2, 0.30);
+
             const auto& sci21 = frs->sci[SCI_21_I];
             const auto& sci22 = frs->sci[SCI_22_I];
 			const auto& sci31 = frs->sci[SCI_31_I];
+
+            /* All ToF measuring stations must be single hit. No exception. */
 			if(sci22.hits.size() != 1 or sci31.hits.size() != 1 or sci21.hits.size() != 1) 
                 continue;
 			
@@ -125,6 +144,7 @@ std::ostream& operator<<(std::ostream& , const FileBrho& );
 		    auto [res22_31, __] = GaussFitMax(*h1_dt22_31, sratio, niter);
             x.push_back( res22_31[1] ); // gauss peak value
         }
+        ++i_clb_pnt;
     }
     /* TODO! */
 

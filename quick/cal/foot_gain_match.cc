@@ -241,7 +241,7 @@ int main(int argc, char* argv[]) {
 	constexpr static int N_LOWEST_ENTRIES = 10;
 
 	/* Try to fit a spline(s) for some given ASICs. */
-	if(do_fit.is_some()) { 
+	if(do_fit.is_some()) {
 		FOOTGainParam pp = foot_param->gain;
 
 		const auto& v = do_fit.unwrap();

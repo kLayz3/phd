@@ -163,7 +163,7 @@ struct TH1P {
 	TH1P(const char* label, ph_detail::__ARGB col, Ts&&... args) {
 		const char* semicolon = strchr(label, ';');
 		if(semicolon)
-			throw std::invalid_argument("Label input to 'TH1P' must not contain ';' semicolon delimiter!");
+			throw std::invalid_argument(Form("Label input to 'TH1P' must not contain ';' semicolon delimiter! Received: \'%s\'", label));
 
 		std::string xlabel, hname_extra, title_extra;
 		
@@ -172,10 +172,10 @@ struct TH1P {
 		if(bracket_open !=  nullptr) {
 			const char* bracket_close = strstr(bracket_open, "))");
 			if(bracket_close == nullptr)
-				throw std::invalid_argument("Label input to 'TH1P' contains bracket open \"((\" "
-					"delimiter but not the closing one \"))\" after the opening bracket.");
+				throw std::invalid_argument(Form("Label input to 'TH1P' contains bracket open \"((\" "
+					"delimiter but not the closing one \"))\" after the opening bracket. Received: \'%s\'", label));
 			if(std::distance(bracket_open, bracket_close) <= 2)
-				throw std::invalid_argument("Label input to 'TH1P' has empty block inside \"((\" and \"))\" brackets?");
+				throw std::invalid_argument(Form("Label input to 'TH1P' has empty block inside \"((\" and \"))\" brackets? Received: \'%s\'", label));
 			hname_extra = std::string(bracket_open+2, bracket_close);
 			label = bracket_close+2;
 			label = ph_detail::skip_whitespace(label);
@@ -295,9 +295,9 @@ struct TH2P {
 		const char* colon = strchr(label, ':');
 		const char* semicolon = strchr(label, ';');
 		if(!colon)
-			throw std::invalid_argument("Label input to 'TH2P' must contain ':' delimiter!");
+			throw std::invalid_argument(Form("Label input to 'TH2P' must contain ':' delimiter! Received: \'%s\'", label));
 		if(semicolon)
-			throw std::invalid_argument("Label input to 'TH2P' must not contain ';' semicolon delimiter!");
+			throw std::invalid_argument(Form("Label input to 'TH2P' must not contain ';' semicolon delimiter! Received: \'%s\'", label));
 
 		std::string xlabel, ylabel, hname_extra, title_extra;
 		
@@ -306,10 +306,10 @@ struct TH2P {
 		if(bracket_open !=  nullptr) {
 			const char* bracket_close = strstr(bracket_open, "))");
 			if(bracket_close == nullptr)
-				throw std::invalid_argument("Label input to 'TH2P' contains bracket open \"((\" "
-					"delimiter but not the closing one \"))\" after the opening bracket.");
+				throw std::invalid_argument(Form("Label input to 'TH2P' contains bracket open \"((\" "
+					"delimiter but not the closing one \"))\" after the opening bracket. Received: \'%s\'", label));
 			if(std::distance(bracket_open, bracket_close) <= 2)
-				throw std::invalid_argument("Label input to 'TH2P' has empty block inside \"((\" and \"))\" brackets?");
+				throw std::invalid_argument(Form("Label input to 'TH2P' has empty block inside \"((\" and \"))\" brackets? Received: \'%s\'", label));
 			hname_extra = std::string(bracket_open+2, bracket_close);
 			label = bracket_close+2;
 			label = ph_detail::skip_whitespace(label);

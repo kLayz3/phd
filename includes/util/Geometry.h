@@ -4,37 +4,8 @@
 #include <cmath>
 #include <ostream>
 #include "json_struct_def.hh" // std::ostream& operator<<(array<T,N> const&) 
+#include "../monad/monad.hxx"
 #include "../Eigen/Core"
-
-/* Optional monad dependency.. */
-#ifndef __MONAD_INCLUDE_HXX__
-#if __cplusplus >= 202000L 
-#	include <span>
-	namespace mnd {
-		template<typename T>
-		using span = std::span<T>;
-	}
-#elif __has_include("boost/beast/core/span.hpp")
-#	include "boost/beast/core/span.hpp"
-	namespace mnd {
-		    template<typename T>
-			using span = boost::beast::span<T>;
-	}
-#else
-#	error "Neither C++20 given, nor boost library for span found. Cannot proceed"
-#endif
-namespace mnd {
-    template<typename T>
-    span<const T> as_span(const std::vector<T>& v) noexcept {
-        return span<const T>{v.data(), v.size()};
-    }
-
-    template<typename T, std::size_t N>
-    span<const T> as_span(const std::array<T, N>& a) noexcept {
-        return span<const T>{a.data(), a.size()};
-    }
-}
-#endif // __MONAD_INCLUDE_HXX__
 
 #define FORMAT_ANGLES_IN_RADIANS
 

@@ -89,6 +89,7 @@ struct RNTPCCal {
 struct RNFRSCal {
 	constexpr static i32 N_VALID_SCI = RNFRSMap::N_VALID_SCI;
 	constexpr static i32 N_VALID_TPC = RNFRSMap::N_VALID_TPC;
+    constexpr static double S2_LENGTH = 4560.0;
 	
 	inline static constexpr std::array<const char*, N_VALID_TPC> tpc_label = {
 		"21", "22", "23", "24", "41", "42", "31"
@@ -113,8 +114,15 @@ struct TPCParam {
 	using arr4 = std::array<double,4>;
 	using arr22 = std::array<std::array<double,2>, 2>;
 	using arr24 = std::array<std::array<double,2>, 4>;
-	
+
 	GET_HELP_AUX_IMPL;
+
+    /* Nominal value... not all that important. It's just for a more 
+     * pedantic (x,y,z) measurement of a hit of an anode. */
+    static constexpr double TPC_WIDTH = 70.0;
+    static constexpr u32 N_UPSTREAM_TPC   = 3;
+    static constexpr u32 N_DOWNSTREAM_TPC = 1;
+    static constexpr u32 N_S2_TPC = N_UPSTREAM_TPC + N_DOWNSTREAM_TPC;
 
 	ADD_SERIALIZABLE_FIELD(arr2,   x_offset,             {}, 0);
 	ADD_SERIALIZABLE_FIELD(arr2,   x_factor,             {}, 1);
@@ -127,6 +135,11 @@ struct TPCParam {
 	ADD_SERIALIZABLE_FIELD(arr24,  sci_ref_lim,          {}, 8);
 	ADD_SERIALIZABLE_FIELD(double, z0,                    0, 9); 
 	
+    arr2 zDL() const {
+		return {z0 - TPC_WIDTH/4,
+		        z0 + TPC_WIDTH/4 };
+    }
+
 	virtual ~TPCParam() = default;
 	ClassDef(TPCParam, 1);
 };
@@ -152,6 +165,8 @@ inline void Add(TPCParam&, const TPCParam&) {}
 inline void Add(SCIParam&, const SCIParam&) {}
 
 struct TFRSCalCont : TContainer<RNFRSCal> {
+	friend struct TFRSCalProc;
+
 	// Which name corresponds to which index in later naming convention.
 	// Note, we keep this to match Go4.
 	inline static const std::map<std::string, u32> tpc_moniker { 
@@ -178,7 +193,13 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
 	void Setup() override;
 	void Init(TDictInfo info) override;
 
-	friend struct TFRSCalProc;
+    static std::array<double, TPCParam::N_S2_TPC> z_s2_tpc (
+        std::array<TPCParam, RNFRSCal::N_VALID_TPC> *
+    );
+    static std::array<std::array<double, 2>, TPCParam::N_S2_TPC> z_s2_tpc_delay_lines(
+        std::array<TPCParam, RNFRSCal::N_VALID_TPC> *
+    );
+
 private:
 	inline static nlohmann::json setup {}; 
 	inline static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};

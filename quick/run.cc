@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
 	
 	add_logged_option<DisplayDefault::No>(app, "-c,--config", config, 
 		"Config file name. If it doesn't match an appropriate file name, \
-		will try the same file name in: program_name/cfg/program_stem/")
+		will try the same file name prefixed with: program_dir/cfg/program_stem/")
 		->required()
 		->transform( CLI::Validator{[&prog](std::string& s) -> std::string /* err string */ {
 			if(CLI::ReadPermissions(s).empty()) return ""; // is fine.

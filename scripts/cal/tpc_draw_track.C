@@ -6,9 +6,9 @@
 #include "ROOT/RDataFrame.hxx"
 
 #include "../../includes/util/PrettyHisto.hxx"
-#include "../../includes/util/FitSpline.hxx"
+#include "../../includes/util/FitSpline.h"
 #include "../../includes/util/Tracking.h"
-#include "../../includes/util/MacroHelpers.hxx"
+#include "../../includes/util/MacroHelpers.h"
 #include "../../includes/util/json_struct_def.hh"
 #include <sstream>
 
@@ -307,7 +307,7 @@ void tpc_draw_track (
 				const double b0 = p.x_offset[d];
 				const double a0 = p.x_factor[d];
 
-				auto [rg, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX> (
+				auto [rg, gerr, g] = FitSpline<1, fit_info::GAUSS_MAX> (
 						*h2_tpc_xd[i][d], lo, hi, 40, 1.1
 						);
 				auto [l,k] = rg;
@@ -329,7 +329,7 @@ void tpc_draw_track (
 				const double b0 = p.y_offset[a];
 				const double a0 = p.y_factor[a];
 
-				auto [rg, gerr, g] = FitSplineAndGraph<1, fit_info::GAUSS_MAX> (
+				auto [rg, gerr, g] = FitSpline<1, fit_info::GAUSS_MAX> (
 						*h2_tpc_yd[i][a], lo, hi, 40, 1.1
 						);
 				auto [l,k] = rg;
@@ -349,7 +349,7 @@ void tpc_draw_track (
 	}
 
 	std::cout << setprecision(10);
-	for(int i=0; i<3; ++i) {
+	for(int i=0; i<4; ++i) {
 		printf(BOLD ">> TPC%s: <<\n" KNRM, label[i]);
 		std::cout << "\"x_factor\": " << tpc_params->at(i).x_factor << ",\n";
 		std::cout << "\"x_offset\": " << tpc_params->at(i).x_offset << ",\n";
@@ -357,8 +357,11 @@ void tpc_draw_track (
 		std::cout << "\"y_offset\": " << tpc_params->at(i).y_offset << ",\n";
 		std::cout << " ====================================================== \n";
 	}
+
+#if 0
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
 		save_all(canvas::Extension::png, { eval_code, inf.stem().c_str() });
 	}
+#endif
 }

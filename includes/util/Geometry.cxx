@@ -339,9 +339,8 @@ mnd::geom::Point3D mnd::geom::FindVertex( ::mnd::span<const Line3D> lines) noexc
 
 mnd::geom::Point3D mnd::geom::FindVertex(const mnd::geom::Line3D& l1, const mnd::geom::Line3D& l2) noexcept {
 	const std::array<Line3D, 2> lines{l1, l2};
-	return FindVertex(mnd::as_span(lines));
+	return FindVertex(lines);
 }
-
 
 std::ostream& operator<<(std::ostream& os, const mnd::geom::Point2D& rhs) {
 	return os << '(' << rhs.x << ", " << rhs.y << ')';
