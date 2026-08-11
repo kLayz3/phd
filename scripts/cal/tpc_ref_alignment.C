@@ -5,16 +5,21 @@
 #include "ROOT/RNTupleDS.hxx"
 #include "ROOT/RDataFrame.hxx"
 
-#include "../../includes/util/PolyFitter.hxx"
+#include "../../includes/util/PolyFitter.h"
 #include "../../includes/util/Tracking.h"
 #include "../../includes/util/PrettyHisto.hxx"
 #include "../../includes/util/GaussFitMax.hxx"
-#include "../../includes/util/MacroHelpers.hxx"
+#include "../../includes/util/MacroHelpers.h"
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
 
-void tpc_alignment (
+constexpr uint32_t niter = 4;
+constexpr double sratio = 2.0;
+
+/* In this script, we just align the offsets of at least two TPC detectors
+ * which we trust the drift velocities. */
+void tpc_ref_alignment (
 	std::string fileName = "", 
 	int i_tpc=0,
 	A3 binning_x = {100, -30, 30},
@@ -36,20 +41,17 @@ void tpc_alignment (
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_params;
 	{
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
-		tpc_params = f->Get < 
-			std::remove_reference_t<decltype(*tpc_params)>
-		> ("FRS_tpc_parameters");
-		if(!tpc_params) ERROR("TPC param is nullptr.\n");
+        get_obj(f, tpc_params, "FRS_tpc_parameters");
 	}
 	auto& tpc_param = tpc_params->at(i_tpc);
 
 	TH1P *h1_x[2], *h1_y[4];
 	for(int i=0; i<2; ++i)
-		h1_x[i] = new TH1P(Form("TPC%d - delay line %d X [mm]@TPC%s,X", i_tpc, i, label[i_tpc]), kGreen-3, 
+		h1_x[i] = new TH1P(Form("TPC%s - X%d [mm]", label[i_tpc], i), kGreen-3, 
 			binning_x[0], binning_x[1], binning_x[2]);
 
 	for(int i=0; i<4; ++i)
-		h1_y[i] = new TH1P(Form("TPC%d - anode %d Y [mm]@TPC%s,Y", i_tpc, i, label[i_tpc]), kRed-4,
+		h1_y[i] = new TH1P(Form("TPC%s - Y%d [mm]", label[i_tpc], i), kRed-4,
 			binning_y[0], binning_y[1], binning_y[2]);
 	
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
@@ -84,16 +86,15 @@ void tpc_alignment (
 
 		const std::array<std::vector<Measurement>, 2>& tpc_hits = tpc.hits;
 		for(int d : {0,1}) {
-			const std::vector<Measurement>& m = tpc_hits[d];
-			if(m.size() != 1)
+			if(tpc_hits[d].size() != 1)
 				continue;
-
-			if(!std::isnan(m[0].x))
-				h1_x[d]->Fill(m[0].x);
+            const Measurement& hit = tpc_hits[d].front();
+			if(!std::isnan(hit.x))
+				h1_x[d]->Fill(hit.x);
 
 			for(int a : {0,1}) {
-				if(!std::isnan(m[0].y[a]))
-					h1_y[2*d + a]->Fill( m[0].y[a] );
+				if(!std::isnan(hit.y[a]))
+					h1_y[2*d + a]->Fill( hit.y[a] );
 			}
 		}
 	}
@@ -106,7 +107,7 @@ void tpc_alignment (
 	c->Divide(3,2);
 	for(int d : {0,1}) {
 		c->cd(3*d+1);
-		auto [r, err] = h1_x[d]->DrawAndFit(1.5, kMagenta+2, 5.8); 
+		auto [r, err] = h1_x[d]->DrawAndFit(sratio, kMagenta+2, 6, niter);
 		auto [_, mu, sigma] = r;
 		std::cout << "Fit result: \"DL" << d << ": " << r << "\n";
 		tpc_param.x_offset[d] -= mu;
@@ -114,7 +115,7 @@ void tpc_alignment (
 		for(int a: {0,1}) {
 			c->cd(3*d + 2 + a);
 			const int i = 2*d + a;
-			auto [r, err] = h1_y[i]->DrawAndFit(1.5, kBlue+2, 5.8); 
+			auto [r, err] = h1_y[i]->DrawAndFit(sratio, kBlue+2, 6, niter);
 			auto [_, mu, sigma] = r;
 			std::cout << "Fit result: \"AN" << i << ": " << r << "\n";
 			tpc_param.y_offset[i] -= mu;
@@ -136,6 +137,6 @@ void tpc_alignment (
 	
 	if(do_save == DoSave::yes) {
 		std::filesystem::path inf( fileName );
-		save_all(canvas::Extension::png, { inf.stem().c_str(), Form("TPC%s", label[i_tpc]) });
+        canvas::save_all<canvas::Macro>(canvas::Extension::png, { inf.stem().c_str(), Form("TPC%s", label[i_tpc]) });
 	}
 }

@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
                   => Constraining the exact distances of each of the TPC's.\n\
                   \n\
                   All of these measurements must be done with 12C files. There are 3 files of relevance.\n\
-                  To calibrate (the offsets) of the referent TPC delay lines/anodes, check the `tpc_alignment` in scripts."};
+                  To calibrate (the offsets) of the referent TPC delay lines/anodes, check the `tpc_ref_alignment` in scripts."};
 
     constexpr auto N_TPC = TPCParam::N_S2_TPC;
 
@@ -323,7 +323,7 @@ int main(int argc, char* argv[]) {
 	cTr->cd(1); gPad->SetLogz();
 	h2_track_x->Draw("COLZ");
 
-	double r = 0.8;
+	const double r = 0.8;
 	TLine* line;
 	for(int i=0; i<4; ++i) {
 		line = vline(h2_track_x, zTPC[i], r);

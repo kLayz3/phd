@@ -4,8 +4,8 @@
 #include "TFRSCalCont.h"
 
 struct TPCRef {
-    static constexpr u32 N_UPSTREAM_TPC   = TPCParam::N_UPSTREAM_TPC;
-    static constexpr u32 N_DOWNSTREAM_TPC = TPCParam::N_DOWNSTREAM_TPC;
+    static constexpr u32 N_UPSTREAM_TPC   = TPCParam::N_UPSTREAM_TPC; // 3
+    static constexpr u32 N_DOWNSTREAM_TPC = TPCParam::N_DOWNSTREAM_TPC; // 1
     static constexpr u32 N_S2_TPC = N_UPSTREAM_TPC + N_DOWNSTREAM_TPC;
     static constexpr auto TPC_WIDTH = TPCParam::TPC_WIDTH;
 
@@ -26,8 +26,8 @@ struct TPCRef {
 		return false;
 	}
 	operator bool() const { return n < N_S2_TPC && (use[0] || use[1]); } 
-    bool IsDownstream() const { return n < N_DOWNSTREAM_TPC; }
-    bool IsUpstream() const { return n >= N_DOWNSTREAM_TPC && n < N_S2_TPC; }
+    bool IsUpstream() const { return n < N_UPSTREAM_TPC; }
+    bool IsDownstream() const { return n >= N_UPSTREAM_TPC && n < N_S2_TPC; }
 
 	u32 n; // 0 => TPC21; 1 => TPC22; 2 => TPC23;  3 => TPC24
 	std::array<bool,2> use; // Which delay lines to use

@@ -24,7 +24,7 @@ struct foot_enc {
 int main(int argc, char* argv[]) {
 	CLI::App app{"\
 Calibrate referent FOOT detectors' (FOOT 0/1/2/3) angle, based on either the 12C or 9C beam calibration run.\n\
-Due to the thick target, the offsets shouldn't be touched directly, but rather make them 'agree'\n\
+Due to the thick target, the position offsets shouldn't be touched directly, but rather make them 'agree'\n\
 to referent 0 by manually fitting on the calibration run. This is done by a different program."};
 	
 	std::string fileName = "";
@@ -52,7 +52,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 		->delimiter(';');
 	add_logged_option(app, "-x,--bins-x",binning_x, "Binning X")
 		->delimiter(',');
-	add_logged_option(app, "-y,--bins-y",binning_x, "Binning Y")
+	add_logged_option(app, "-y,--bins-y",binning_y, "Binning Y")
 		->delimiter(',');
 	add_logged_option(app, "-q,--foot-cut",foot_q_cut, "FOOT Q cut (charge)")
 		->delimiter(',');
@@ -77,9 +77,9 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
 	for(const auto& tpc : ref) {
-		if(!tpc or !tpc.IsDownstream()) {
-			std::cerr << tpc << std::endl; 
-			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid."); 
+		if(!tpc || !tpc.IsUpstream()) {
+			ERROR("TPC%s (n=%u) flagged invalid. Must be upstream and at least one dl flagged as valid.",
+                (tpc.n < RNFRSCal::N_VALID_TPC)? TFRSCalCont::tpc_label[tpc.n]: "??", tpc.n); 
 		}
 	}
 
@@ -101,16 +101,10 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 		if(o == Orientation::UNKNOWN) ERROR("FOOT%d orientation not specified. I won't allow it.\n", ifoot);
 		foot.o = o;
 	}
-    constexpr auto N_UPSTREAM_TPC = TPCRef::N_UPSTREAM_TPC;
-    constexpr double WIDTH = TPCRef::TPC_WIDTH;
-	const Arr2<double, N_UPSTREAM_TPC, 2> zDL = [tpc_params](){
-		Arr2<double,N_UPSTREAM_TPC, 2> z{};
-		for(u32 i=0; i<N_UPSTREAM_TPC; ++i) {
-			z[i][0] = tpc_params->at(i).z0 - WIDTH/4;
-			z[i][1] = tpc_params->at(i).z0 + WIDTH/4;
-		}
-		return z;
-	}();
+
+    constexpr auto N_TPC = TPCParam::N_S2_TPC;
+	const Arr2<double, N_TPC, 2> zDL = TFRSCalCont::z_s2_tpc_delay_lines(tpc_params); 
+    const std::array<double, N_TPC> zTPC = TFRSCalCont::z_s2_tpc(tpc_params);
 
 	const auto& binning = (foot.o == Orientation::X) ? binning_x : binning_y; 
 
@@ -139,8 +133,8 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
 	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
 	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
-	auto* h2_track_x = new TH2P("Track density (X) [mm]:Depth z [mm]@S2 area", 600, -20, box->width_outer+20, 600, -60, 60);
-	auto* h2_track_y = new TH2P("Track density (Y) [mm]:Depth z [mm]@S2 area", 600, -20, box->width_outer+20, 600, -60, 60);
+    auto* h2_track_x = new TH2P("((h2_track_x))Track density (X) [mm]:Depth z [mm]@S2 area", 800, 0, RNFRSCal::S2_LENGTH, 800, -60, 60);
+    auto* h2_track_y = new TH2P("((h2_track_x))Track density (Y) [mm]:Depth z [mm]@S2 area", 800, 0, RNFRSCal::S2_LENGTH, 800, -60, 60);
 	auto* h2_ab = new TH2P("Y-angle [mrad]:X-angle [mrad]", 100, -20, 20, 100, -20, 20);
 	auto* h2_xy = new TH2P(Form("Referent y-position [mm]:Referent X-position [mm]@FOOT%d", ifoot), 
 		binning_x[0],binning_x[1],binning_x[2],binning_y[0],binning_y[1],binning_y[2]);
@@ -273,8 +267,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 	/* p is what the fit gives, but this is the offset, so detector is placed at -mean */
 	result_p.mean *= -1;
 	std::cout << "=================\n"
-		<< BOLD "Avg deg: " << result_a << "°\n"
-		<< "Avg off: " << result_p << KNRM "\n";
+		<< BOLD "Avg deg: " << result_a << "°\n" << KNRM;
 
 	TCanvas* cs = new TCanvas("SCIs&Refs", "SCI21,22,31; FOOT Ref", 2150, 1400);
 	cs->Divide(3,3);
@@ -284,8 +277,27 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 	cs->cd(4); h1_sci21_cut->Draw();
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
+    const double r = 0.8;
+	TLine* line;
+#define DRAW_LINES_TPC_AND_FOOT(hname) \
+    { \
+        for(int i=0; i < (int)TPCParam::N_S2_TPC; ++i) { \
+            line = hist::vline(h2_track_x, zTPC[i], r); \
+            line->SetLineColor(kRed); \
+            line->SetLineStyle(2); \
+            line->SetLineWidth(3); \
+            line->Draw("SAME"); \
+        } \
+        line = hist::vline(h2_track_x, foot.z, r); \
+        line->SetLineColor(kGreen + 1); \
+        line->SetLineStyle(2); \
+        line->SetLineWidth(4); \
+        line->Draw("SAME"); \
+    }
 	cs->cd(7); h2_track_x->Draw("COLZ");
+    DRAW_LINES_TPC_AND_FOOT(h2_track_x)
 	cs->cd(8); h2_track_y->Draw("COLZ");
+    DRAW_LINES_TPC_AND_FOOT(h2_track_y)
 	
 	TCanvas* cInfo = new TCanvas("Info", Form("Info-FOOT%d angle", ifoot), 2000, 1200);
 	cInfo->Divide(2,2);
@@ -295,13 +307,12 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 		"Referent track derived from FOOTs: 01&23",
 		Form("Number of measurements: %d", (int)measurements_a.size()),
 		Form("Points per measurement: %zu", Npts),
-		Form("Result angle: (%s)#circ", result_a.lstring().c_str()),
-		Form("Result offset: (%s) mm", result_p.lstring().c_str())
+		Form("Result angle: (%s)#circ", result_a.lstring().c_str())
 	);
 	cInfo->cd(3); h2_xy->Draw("COLZ");
 	cInfo->cd(4); h2_ab->Draw("COLZ");
 
-	canvas::save_all<canvas::Exe>(save, { Form("FOOT%d", ifoot) });
+	canvas::save_all<canvas::Exe>(save, { fileName, Form("FOOT%d", ifoot) });
 	
 	WARN("End-of-main");
 	rootApp.Run(); return 0;
