@@ -88,3 +88,106 @@ std::string ParseFileToString(const std::string& fileName) {
 	
 	return text;
 }
+
+using namespace std::literals;
+
+inline bool ends_with(std::string_view name, std::string_view extension) {
+    if(name.size() < extension.size() ||
+       name.substr(name.size() - extension.size()) != extension) 
+    {
+        return false;
+    }
+    return true;
+}
+
+inline bool starts_with(std::string_view name, std::string_view prefix) {
+    if(name.size() < prefix.size() ||
+       name.substr(0, prefix.size()) != prefix)
+    {
+        return false;
+    }
+    return true;
+}
+
+std::pair<std::string_view, std::string_view>
+mnd::file::file_number_bounds(const std::string& file) {
+    namespace fs = std::filesystem;
+
+    /*
+     * Important: get the location of the filename inside the original string,
+     * because the returned string_views must refer to `file`, not to some
+     * temporary string produced by std::filesystem.
+     */
+    const fs::path path{file};
+    const auto filename = path.filename().string();
+
+    if(filename.size() > file.size())
+        throw std::invalid_argument("Invalid file path: " + file);
+
+    const std::size_t filename_pos = file.size() - filename.size();
+
+    std::string_view name {
+        file.data() + filename_pos,
+        filename.size()
+    };
+
+    // Strip ".root".
+
+    if(! ::ends_with(name, FILE_EXTENSION))
+        throw std::invalid_argument(
+            mnd::msg("Unexpected file extension: expected: \'%s\', received file name: ", FILE_EXTENSION.data(), file.c_str())
+        );
+    name.remove_suffix(FILE_EXTENSION.size());
+
+    if(! ::starts_with(name, FILE_PREFIX))
+        throw std::invalid_argument(
+            mnd::msg("Unexpected file prefix, expected: \'%s\', received file name: %s ", FILE_PREFIX.data(), file.c_str())
+        );
+    name.remove_prefix(FILE_PREFIX.size());
+
+    const auto sep = name.find('_');
+
+    if(sep == std::string_view::npos)
+        throw std::invalid_argument(
+            mnd::msg("Expected %s_<start>_<end>%s: %s", FILE_PREFIX.data(), FILE_EXTENSION.data(), file.c_str())
+        );
+
+    const auto start = name.substr(0, sep);
+    const auto end   = name.substr(sep + 1);
+
+    if(start.empty() || end.empty())
+        throw std::invalid_argument (
+            "Empty file sequence number: " + file
+        );
+
+    return {start, end};
+}
+
+std::string_view mnd::file::file_start_number(const std::string& file) {
+    return file_number_bounds(file).first;
+}
+
+std::string_view mnd::file::file_end_number(const std::string& file) {
+    return file_number_bounds(file).second;
+}
+
+std::pair<std::string_view, std::string_view>
+mnd::file::file_number_bounds(const std::vector<std::string>& files) {
+    if(files.empty())
+        throw std::invalid_argument("Cannot determine bounds of an empty file sequence");
+
+    return {
+        file_start_number(files.front()),
+        file_end_number(files.back())
+    };
+}
+
+std::string mnd::file::file_names_concatenated(const std::vector<std::string>& files) {
+    auto bounds = file_number_bounds(files);
+
+    return std::string{FILE_PREFIX} 
+        + "_" 
+        + std::string{bounds.first} 
+        + "_" 
+        + std::string{bounds.second};
+}

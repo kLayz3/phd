@@ -19,7 +19,7 @@ EXE := $(patsubst %.cc, %, $(SRC))
 
 LIBS += -lROOTNTuple \
 		-L../ \
-		-Wl,-rpath,../ \
+		-Wl,-rpath,${BASE}/.. \
 		-lStructures
 
 .PHONY: all clean

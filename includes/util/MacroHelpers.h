@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <string_view>
 #include <variant>
 #include <filesystem>
 #include <sstream>
@@ -218,22 +219,17 @@ public:
 	/* May panic (throw). Unlike rust, returns back a reference when called on lvalue. */
 	T const& unwrap() const& { return std::get<0>(data).value; }
 	T&       unwrap() &      { return std::get<0>(data).value; }
-	T        unwrap() &&     { return std::get<0>(data).value; } 
+	T        unwrap() &&     { return std::get<0>(data).value; }
 
 	decltype(auto) get() const noexcept { return (data); }
 	decltype(auto) get() noexcept { return (data); }
 
-private:
+protected:
 	std::variant<Yes, std::monostate> data;
 };
 
 /* Few prepared dynamic objects.. don't judge me. #kthxbai */
-inline constexpr auto dancer0 = std::array { 
-	std::string_view{" ┏(-_-)┛"}, 
-	std::string_view{" ┗(-_-)┓"},
-	std::string_view{" ┗(^_^)┛"},
-	std::string_view{" ┏(^_^)┓"} 
-};
+inline constexpr auto dancer0 = mnd::_dyn::dancer;
 inline constexpr auto dancer1 = std::array { 
 	std::string_view{" <('' <)"},
 	std::string_view{" <( '' )>"},
@@ -304,4 +300,43 @@ template <
 		->default_str("none");
 
 	return opt;
+}
+
+/* File names are often of the form: `main_0XXX_0YYY.root`, as such 
+ * metadata'ing multiple files can be concatenated e.g.:
+ * => main_0123_0144.root
+ * +  main_0145_0174.root
+ * +  main_0175_0178.root
+ * ----------------------
+ * =  main_0123_0178.root
+ * */
+
+namespace mnd::file {
+
+constexpr std::string_view FILE_PREFIX    = "main";
+constexpr std::string_view FILE_EXTENSION = ".root";
+
+/* If `main_0023_0144.root` => "0023"sv */
+std::string_view file_start_number(const std::string& );
+
+/* If `main_0023_0144.root` => "0023"sv */
+std::string_view file_end_number(const std::string& );
+
+/* If `main_0023_0144.root` => { "0023"sv, "0144"sv } */
+std::pair <
+    std::string_view,
+    std::string_view
+> file_number_bounds(const std::string& );
+
+/* If `{ main_0023_0144.root, main_0145_0174.root }` => { "0023"sv, "0174"sv }.
+ * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
+std::pair <
+    std::string_view,
+    std::string_view
+> file_number_bounds(const std::vector<std::string>& );
+
+/* If `{ main_0023_0144.root, main_0145_0174.root }` => "main_0023_0174". Doesn't have the extension.
+ * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
+std::string file_names_concatenated(const std::vector<std::string>& );
+
 }

@@ -7,14 +7,16 @@
 
 static constexpr double GAUSS_FIT_SIDE_RATIO_DEFAULT = 1.5;
 /**
- * @brief For a projection, TH1D, quickly fit a gauss around it's peak value, and +-2 sigma 
+ * @brief For a projection, TH1D, quickly fit a gauss around it's peak value, and +-2 sigma.
+ * Returns a pair, where first element is the calculated {A,μ,σ} and second element its corresponding variances
+ * (diagonal of the full covariant matrix).
  * @note Thread-unsafe. The predicate that fit succeeded is: `std::isfinite( result.first[0] )`
  */
 inline std::pair <
 	std::array<double, 3>,
 	std::array<double, 3>
 > GaussFitMax (
-	TH1D* h, 
+	TH1D* h,
 	double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
 	uint32_t niter = 2,
 	Verbosity v = Verbosity::SILENT
@@ -37,10 +39,10 @@ inline std::pair <
 
 		if(!res.Get() || (int)res != 0) { // Fit failed.
 			if(v > Verbosity::SILENT) {
-				fprintf(stderr, "[GaussFitMax: %u/%u] (%s) no fit performed. Log: m=%.2f, s=%.2f\n ", 
+				fprintf(stderr, "[GaussFitMax: %u/%u] (%s) no fit performed. Log: m=%.2f, s=%.2f\n ",
 					iter+1, niter, h->GetTitle(), m, s);
 			}
-			/* In case the fit diverges, don't quietly return the NAN's, 
+			/* In case the fit diverges, don't quietly return the NAN's,
 			 * try to give the best estimate if it were just a random distribution (uniform). */
 			return {{ NAN, m, s }, { NAN, s, s/3 }};
 		}
@@ -60,17 +62,17 @@ inline std::pair <
 	}
 
 	return { 
-		std::array<double, 3> { 
+		std::array<double, 3> {
 			a, /* Amplitude */
 			m, /* Mean */
 			s  /* Sigma */
 		}, 
-		std::array<double, 3> { 
+		std::array<double, 3> {
 			as, /* Amplitude */
 			ms, /* Mean */
 			ss  /* Sigma */
 		}
-		// Full covariant matrix I don't really care about. Trust the gauss-chan 🥺 👉👈.
+		// Full covariant matrix I don't really care about. Trust the gauss-chan 🥺 👉👈
 	};
 }
 

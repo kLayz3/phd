@@ -11,6 +11,7 @@
 #include "TFRSHitCont.h"
 
 enum class Take { gauss, profile, gauss_fit_only };
+enum class HitType { central, side };
 
 using ShowOld = mnd::Option<std::vector<i32>>;
 using DoFit   = mnd::Option<std::vector<i32>>;
@@ -27,15 +28,17 @@ int main(int argc, char* argv[]) {
 		ERROR("MND_FOOTTRACK_DEBUG not compiled in, when the ROOT file got generated. Can't proceed\n");
 
 	CLI::App app{"Perform (re)gain matching of a specific FOOT detector, \
-		based on already preliminary results from the Kalman filter."};
+	              based on already preliminary results from the Kalman filter. Basically, here we can gate explicitly \
+                  on specific \'Z\' tracks (can be wrong z tho)"};
 	
-	std::string fileName = "";
+    std::vector<std::string> fileNames;
 	int ifoot = 0;
 	int bins_per_asic = 64;
 	DoFit do_fit {DoFit::No};
 	double sratio = 0.9;
 	u32 niter = 2;
 	A3 foot_binning = {1000, 4, 4000};
+	HitType hit_type = HitType::central;
 	double delta_cut = 0.05;
 	int Q_target = 6;
 	double Q_width = 0.5;
@@ -47,8 +50,9 @@ int main(int argc, char* argv[]) {
 	Take take = Take::gauss_fit_only;
 	ShowOld show_old { ShowOld::No };
 
-	add_logged_option(app, "-f,--file", fileName, "Pass a file name.")
-		->check(CLI::ReadPermissions);
+	add_logged_option(app, "-f,--file", fileNames, "Pass one or more file name.")
+		->check(CLI::ReadPermissions)
+        ->delimiter(',');
 	add_logged_option(app, "-i,--foot-id", ifoot, 
 		"Select which FOOT detector.")
 		->check(CLI::Range(0, N_FOOT_DETECTORS-1));
@@ -64,6 +68,8 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-d,--delta", delta_cut,
 		"Select the delta cut which will be applied to gate on very central hits.")
 		->check(CLI::Range(0.01, 0.2));
+	add_enum_option(app, "-c,--hit-type", hit_type,
+		"Select to gate either on very central hit or very lateral (side) one.");
 	add_logged_option(app, "-n,--foot-binning",foot_binning, "FOOT ADC binning")
 		->delimiter(',');
 	add_logged_option(app, "-b,--bins",bins_per_asic, "Binning Per ASIC")
@@ -102,25 +108,23 @@ int main(int argc, char* argv[]) {
 	
 	if(test) return 0;
 
-	if(fileName.length() == 0) {
+	if(fileNames.size() == 0) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
 	
 	const int foot_pair_id = ifoot / 2;
 	std::array<FOOTParam, 2> *_tmp_obj; 
 	{
-		auto f = std::make_unique<TFile>(fileName.c_str(), "READ");
+		auto f = std::make_unique<TFile>(fileNames.front().c_str(), "READ");
 		get_obj(f, _tmp_obj, Form("FOOT_%d_setup", foot_pair_id)); 
 	}
 	FOOTParam* const foot_param = &_tmp_obj->at(1);
 	const Orientation o = foot_param->GetOrientation();
+	A2 delta_interval_1 { -delta_cut, delta_cut };
+	A2 delta_interval_2 { -delta_cut, delta_cut };
+	const A2 Q_interval = { Q_target - Q_width, Q_target + Q_width };
 	
 	TApplication rootApp("app", 0, 0);
-	
-	auto model = RNTupleModel::Create();
-	auto foot = model->MakeField<RNFOOTHit>("FOOT");
-	auto frs = model->MakeField<RNFRSHit>("FRS");
-	auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
 	
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
@@ -135,75 +139,148 @@ int main(int argc, char* argv[]) {
 
 	auto* hit_energy_mid = new TH2P(Form("((h2_mid))Cluster energy [ADC]:Strip number [0..640]@FOOT%d Raw, Requested Q=%d", ifoot, Q_target), 
 		bins_per_asic*10, 0,640, foot_binning[0], foot_binning[1], foot_binning[2]);
-	
-	const size_t nentries = ntuple->GetNEntries();
-	const A2 delta_interval_1 { -delta_cut, delta_cut };
-	const A2 delta_interval_2 { -delta_cut, delta_cut };
-	const A2 Q_interval = { Q_target - Q_width, Q_target + Q_width };
-	
-	ProgressBar bar {
-		option::BarWidth{50},
-			option::Start{"["},
-			option::Fill{"="},
-			option::Lead{">"},
-			option::Remainder{" "},
-			option::End{"]"},
-			option::PostfixText{mnd::msg("Analysis (per event: %s)", fileName.c_str())},
-			option::ForegroundColor{Color::cyan},
-			option::ShowPercentage{true},
-			option::ShowElapsedTime{true},
-			option::ShowRemainingTime{true},
-			option::FontStyles{std::vector{FontStyle::bold}}
-	};
-	for(auto entryId : *ntuple) {
-		ntuple->LoadEntry(entryId);
-		mnd::PrintProgress(bar, entryId, nentries, 1000, mnd::dancer2, 0.35);
 
-		const auto& sci21 = frs->cal.sci[0];
-		const auto& sci22 = frs->cal.sci[1];
-		const auto& sci31 = frs->cal.sci[2];
-		
-		if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
-		if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
-		if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
+    u32 f_index = 1;
+    if(hit_type == HitType::side) {
+		WARN("Requesting side hit. Fetching the delta information part first...\n");
+        for(const auto& fileName : fileNames) {
+            auto model = RNTupleModel::Create();
+            auto foot = model->MakeField<RNFOOTHit>("FOOT");
+            auto frs = model->MakeField<RNFRSHit>("FRS");
+            auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
+            
+            const size_t nentries = ntuple->GetNEntries();
+            
+            ProgressBar bar {
+                option::BarWidth{50},
+                    option::Start{"["},
+                    option::Fill{"="},
+                    option::Lead{">"},
+                    option::Remainder{" "},
+                    option::End{"]"},
+                    option::PostfixText{mnd::msg("[%u] (Re)gain FOOT match analysis (per event: %s)", f_index, fileName.c_str())},
+                    option::ForegroundColor{Color::red},
+                    option::ShowPercentage{true},
+                    option::ShowElapsedTime{true},
+                    option::ShowRemainingTime{true},
+                    option::FontStyles{std::vector{FontStyle::bold}}
+            };
 
-		if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
-		if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
-		if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
+            for(auto entryId : *ntuple) {
+                ntuple->LoadEntry(entryId);
+		        mnd::PrintProgress(bar, entryId, nentries, 1000, mnd::dancer2, 0.20);
 
-		if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
-		if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
-		if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
+                const auto& sci21 = frs->cal.sci[0];
+                const auto& sci22 = frs->cal.sci[1];
+                const auto& sci31 = frs->cal.sci[2];
+                if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+                if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+                if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
+                
+                for(const auto& t : foot->track) {
+                    if(!mnd::IsInside(t.Q, Q_interval)) continue;
 
-		for(const auto& t : foot->track) {
-			if(!mnd::IsInside(t.Q, Q_interval)) continue;
+                    /* All of the cal fields are behind some kind of a `T: std::array<T, N_FOOT_PAIRS>` */
+                    const double delta = (o == Orientation::X)
+                        ? t._delta_x[foot_pair_id]
+                        : t._delta_y[foot_pair_id];
+                    
+                    /* nil value is always mapped to a quiet nan */
+                    if(!std::isfinite(delta)) continue;
+   
+                }
+            }
+            bar.mark_as_completed();
+            ++f_index;
+        } // Loop over files
 
-			/* All of the cal fields are behind some kind of a `T: std::array<T, N_FOOT_PAIRS>` */
-			const double delta = (o == Orientation::X)
-				? t._delta_x[foot_pair_id]
-				: t._delta_y[foot_pair_id];
-			
-			/* nil value is always mapped to a quiet nan */
-			if(!std::isfinite(delta)) continue;
+        TAxis* ax = (*h1_delta)->GetXaxis();
+        ax->SetRangeUser(0.2, 0.45);
+        const double dhi = ax->GetBinCenter( (*h1_delta)->GetMaximumBin() );
+        ax->SetRange(0,0); // unzoom
+                        //
+        ax->SetRangeUser(-0.45, -0.2);
+        const double dlo = ax->GetBinCenter( (*h1_delta)->GetMaximumBin() );
+        ax->SetRange(0,0); // unzoom
+        delta_interval_1 = { dhi-delta_cut, dhi+delta_cut };
+        delta_interval_2 = { dlo-delta_cut, dlo+delta_cut };
+        (*h1_delta)->Reset("ICESM");
+    }
 
-			const u32 i = (o == Orientation::X)
-				? t._c0_x[foot_pair_id]
-				: t._c0_y[foot_pair_id];
-			const double e = (o == Orientation::X)
-				? t._e0_x[foot_pair_id]
-				: t._e0_y[foot_pair_id];
-			
-			h1_delta->Fill(delta);
-				
-			if(mnd::IsInside(delta, delta_interval_1) or mnd::IsInside(delta, delta_interval_2)) {
-				h1_delta_cut_mid->Fill(delta);
-				hit_energy_mid->FillInside(i, e);
-				h1_foot_e_mid->FillInside(e); 
-			}
-		}
-	}
-	bar.mark_as_completed();
-	show_console_cursor(true);
+    f_index = 1;
+    for(const auto& fileName : fileNames) {
+        auto model = RNTupleModel::Create();
+        auto foot = model->MakeField<RNFOOTHit>("FOOT");
+        auto frs = model->MakeField<RNFRSHit>("FRS");
+        auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
+        
+        const size_t nentries = ntuple->GetNEntries();
+        
+        ProgressBar bar {
+            option::BarWidth{50},
+                option::Start{"["},
+                option::Fill{"="},
+                option::Lead{">"},
+                option::Remainder{" "},
+                option::End{"]"},
+                option::PostfixText{mnd::msg("[%u] (Re)gain FOOT match analysis (per event: %s)", f_index, fileName.c_str())},
+                option::ForegroundColor{Color::cyan},
+                option::ShowPercentage{true},
+                option::ShowElapsedTime{true},
+                option::ShowRemainingTime{true},
+                option::FontStyles{std::vector{FontStyle::bold}}
+        };
+        for(auto entryId : *ntuple) {
+            ntuple->LoadEntry(entryId);
+            mnd::PrintProgress(bar, entryId, nentries, 1000, mnd::dancer1, 0.35);
+
+            const auto& sci21 = frs->cal.sci[0];
+            const auto& sci22 = frs->cal.sci[1];
+            const auto& sci31 = frs->cal.sci[2];
+            
+            if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
+            if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
+            if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
+
+            if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
+            if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
+            if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
+
+            if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
+            if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
+            if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
+
+            for(const auto& t : foot->track) {
+                if(!mnd::IsInside(t.Q, Q_interval)) continue;
+
+                /* All of the cal fields are behind some kind of a `T: std::array<T, N_FOOT_PAIRS>` */
+                const double delta = (o == Orientation::X)
+                    ? t._delta_x[foot_pair_id]
+                    : t._delta_y[foot_pair_id];
+                
+                /* nil value is always mapped to a quiet nan */
+                if(!std::isfinite(delta)) continue;
+
+                const u32 i = (o == Orientation::X)
+                    ? t._c0_x[foot_pair_id]
+                    : t._c0_y[foot_pair_id];
+                const double e = (o == Orientation::X)
+                    ? t._e0_x[foot_pair_id]
+                    : t._e0_y[foot_pair_id];
+                
+                h1_delta->Fill(delta);
+                    
+                if(mnd::IsInside(delta, delta_interval_1) or mnd::IsInside(delta, delta_interval_2)) {
+                    h1_delta_cut_mid->Fill(delta);
+                    hit_energy_mid->FillInside(i, e);
+                    h1_foot_e_mid->FillInside(e); 
+                }
+            }
+        }
+        bar.mark_as_completed();
+        show_console_cursor(true);
+        ++f_index;
+    }
 
 	/* Idea is the following. Gain isn't always the same,.. some strips require higher gain for
 	 * lower values. Simply to line up the total cluster energy values to the average ADC, across the detector. */
@@ -388,11 +465,11 @@ int main(int argc, char* argv[]) {
 		Form("Mean mid: %.2f", (take == Take::gauss or take == Take::gauss_fit_only) ? mean_mid
 			: h->GetXaxis()->GetBinCenter(h->GetMaximumBin()))
 	);
-
+    
 	canvas::save_all<canvas::Exe>(save, { 
 		Form("FOOT%d", ifoot), 
 		Form("Z_%d",  Q_target), 
-		std::filesystem::path(fileName).stem().string()
+		mnd::file::file_names_concatenated(fileNames)
 	});
 
 	WARN("End-of-main");

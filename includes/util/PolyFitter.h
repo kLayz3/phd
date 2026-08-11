@@ -263,13 +263,37 @@ extern template std::array<double, 2> PolyFit<1,2>(const std::array<double, 2>&,
 extern template std::array<double, 2> PolyFit<1,3>(const std::array<double, 3>&, const std::array<double, 3>&, size_t );
 extern template std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>&, const std::array<double, 4>&, size_t );
 
-/* Runtime polynomial degree version... */
-void PolyFit(size_t, const std::vector<double>& , const std::vector<double>& , std::vector<double>& );
-std::vector<double> PolyFit(size_t, const std::vector<double>& , const std::vector<double>& );
+/* Runtime polynomial degree version.. */
+/* Input arguments to the runtime fitter should be a span type, not simply a vector.
+ * But since C++17/20 issues, it's not completely trivial to do it without tagging
+ * along the entire monad dependency.
+ * Namely, above its matching only vector type, since the API for statically
+ * known both the poly degree AND container size is the `StaticPolyFitter` */
+#if !defined(MND_INCLUDE_SPAN_IS_DEFINED)
+#define MND_INCLUDE_SPAN_IS_DEFINED
+#if __cplusplus >= 202000L 
+#	include <span>
+	namespace mnd {
+		template<typename T>
+		using span = std::span<T>;
+	}
+#elif __has_include("boost/beast/core/span.hpp")
+#	include "boost/beast/core/span.hpp"
+	namespace mnd {
+		    template<typename T>
+			using span = boost::beast::span<T>;
+	}
+#else
+#	error "Neither C++20 given, nor boost span library found. Cannot proceed."
+#endif
+#endif // MND_INCLUDE_SPAN_IS_DEFINED
+
+void                PolyFit(size_t, mnd::span<const double> , mnd::span<const double> , std::vector<double>& );
+std::vector<double> PolyFit(size_t, mnd::span<const double> , mnd::span<const double> );
 
 /* Runtime polynomial degree version with weight coefficients... */
-void PolyFit(size_t, const std::vector<double>& , const std::vector<double>& , const std::vector<double>&, std::vector<double>& );
-std::vector<double> PolyFit(size_t, const std::vector<double>& , const std::vector<double>&, const std::vector<double>& );
+void                PolyFit(size_t, mnd::span<const double> , mnd::span<const double> , mnd::span<const double> , std::vector<double>& );
+std::vector<double> PolyFit(size_t, mnd::span<const double> , mnd::span<const double> , mnd::span<const double> );
 
 /* One extra algorithm to solve general 2D linear problem,
  * arising from solving rotational measurements:

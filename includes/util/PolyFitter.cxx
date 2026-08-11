@@ -1,5 +1,4 @@
 #include "PolyFitter.h"
-#include "Eigen/Core"
 
 /* This hack is used to instantiate the template for small-ish N's.
  * This has the advantage that then these calls can then be used in ROOT macros.
@@ -55,9 +54,9 @@ template std::array<double, 2> PolyFit<1,3>(const std::array<double, 3>&, const 
 template std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>&, const std::array<double, 4>&, size_t );
 
 void PolyFit (
-	size_t R, 
-	const std::vector<double>& x, 
-	const std::vector<double>& y,
+	size_t R,
+	mnd::span<const double> x,
+	mnd::span<const double> y,
 	std::vector<double>& result
 ) {
 	assert(R >= 1 && "Runtime polynomial fit: rank passed must be >= 1."); 
@@ -78,9 +77,9 @@ void PolyFit (
 }
 [[ nodiscard ]]
 std::vector<double> PolyFit (
-	size_t N, 
-	const std::vector<double>& x, 
-	const std::vector<double>& y
+	size_t N,
+	mnd::span<const double> x, 
+	mnd::span<const double> y
 ) {
 	std::vector<double> res;
 	PolyFit(N, x, y, res);
@@ -89,9 +88,9 @@ std::vector<double> PolyFit (
 
 void PolyFit (
 	size_t R, 
-	const std::vector<double>& x, 
-	const std::vector<double>& y,
-	const std::vector<double>& w,
+	mnd::span<const double> x, 
+	mnd::span<const double> y,
+	mnd::span<const double> w,
 	std::vector<double>& result
 ) {
 	assert(R >= 1 && "Runtime polynomial fit: rank passed must be >= 1."); 
@@ -121,10 +120,10 @@ void PolyFit (
 }
 [[ nodiscard ]]
 std::vector<double> PolyFit (
-	size_t R, 
-	const std::vector<double>& x, 
-	const std::vector<double>& y,
-	const std::vector<double>& w
+	size_t R,
+	mnd::span<const double> x,
+	mnd::span<const double> y,
+	mnd::span<const double> w
 ) {
 	std::vector<double> res;
 	PolyFit(R, x, y, w, res);

@@ -10,7 +10,11 @@
 #include "util/GaussFitMax.hxx"
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.hxx"
+#include "util/PolyFitter.h"
+#include "util/Geometry.h"
+#include "util/FitDrawer.hxx"
 #include "IonOptics.hxx"
+#include "common/MacroCommon.hxx"
 
 #include "TApplication.h"
 #include "TFRSCalCont.h"
@@ -18,6 +22,7 @@
 using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
+using namespace mnd::geom;
 
 struct Brho {
     static constexpr char SEP = ';';
@@ -40,30 +45,34 @@ std::ostream& operator<<(std::ostream& , const Brho& );
 std::istream& operator>>(std::istream& , FileBrho& );
 std::ostream& operator<<(std::ostream& , const FileBrho& );
 
- int main(int argc, char* argv[]) {
-	CLI::App app{"Calibrate the time-of-flight between:\n\
+int main(int argc, char* argv[]) {
+    CLI::App app{"Calibrate the time-of-flight between:\n\
                   [0] : SCI21 -> SCI22 , to indicate \"possible\" velocity at S2\n\
-                  [1] : SCI22 -> SCI31 , optional, due to low transmission, to measure velocity at S3.\n\
-                  [2] : SCI21 -> SCI31 , as a intermediate calculation for [0].\n\
-                  No need to look at 21-41 or 21-31 ToF, as this ToF is anyway invalid for main 9C run.\n\
+                  [1] : SCI22 -> SCI31 , optional, due to low transmission, to measure velocity and A/Q at S3.\n\
+                  No need to look at 21-41 or 21-31 ToF, as this ToF is anyway invalid for main 9C run (due to thick target).\n\
                   All of these measurements must be done with 12C files. There are 3 or 4 files of relevance."};
     
     
 	std::vector<FileBrho> f;
-	std::array<double,3> dt_cut21_31 = {1000, -100, 100};
+	std::vector<TPCRef> ref{}; 
 	std::array<double,3> dt_cut22_31 = {1000, -100, 100};
+	std::array<double,3> dt_cut21_22 = {1000, -100, 100};
     double sratio = GAUSS_FIT_SIDE_RATIO_DEFAULT;
     double niter = 2;
 	auto save = canvas::Extension::nil;
     add_logged_option(app, "-f,--file", f, "Pass one or more file names and corresponding 2 brho's.")
 		->delimiter(',')
         ->type_name("[NAME:BRHO1;BRHO2 , ...]");
-
-	add_logged_option<DisplayDefault::No>(app, "--dt-cut-21-31", dt_cut21_31, 
-        "Delta T (SCI31-SCI21) cut, in TDC units [25ps]")
-		->delimiter(','); 
+    add_logged_option<DisplayDefault::No>(app, "-r, --ref", ref, 
+		"Select which TPC's (either with index: 0,1,2, or with a label: 21,22,23) make the reference. \
+		Select by '0/1' which delay lines get included into the measurement. ")
+		->type_name("[INT|LABEL:BOOL,BOOL;...]")
+		->delimiter(';');
 	add_logged_option<DisplayDefault::No>(app, "--dt-cut-22-31", dt_cut22_31, 
-        "Delta T (SCI31-SCI22) cut, in TDC units [25ps]")
+        "Delta T (SCI31 - SCI21) cut, in TDC units [25ps]")
+		->delimiter(','); 
+	add_logged_option<DisplayDefault::No>(app, "--dt-cut-21-22", dt_cut21_22, 
+        "Delta T (SCI22 - SCI21) cut, in TDC units [25ps]")
 		->delimiter(','); 
     add_logged_option(app, "--sratio", sratio, "Width ratio of raw histogram, how much to fit around the peak.")
 		->check(CLI::PositiveNumber); 
@@ -81,29 +90,56 @@ std::ostream& operator<<(std::ostream& , const FileBrho& );
 	if(f.size() < 3) {
 		WARN("To continue, must supply at least 3 file names!\n"); return 0;
 	}
-    
+    if(ref.size() < 2) 
+		ERROR("At least two valid referent TPC's must be given.\n");
+    for(const auto& tpc : ref) {
+		if(!tpc) { // operator bool() 
+			std::cerr << tpc << std::endl; 
+			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid."); 
+		}
+	}
 	TApplication rootApp("app", 0, 0);
+
+    constexpr static u32 Q0 = 6;
+    constexpr static u32 A0 = 12;
 
     const u32 SCI_21_I = TFRSCalCont::sci_moniker.at("21");
     const u32 SCI_22_I = TFRSCalCont::sci_moniker.at("22");
     const u32 SCI_31_I = TFRSCalCont::sci_moniker.at("31");
-    std::vector <
-        std::pair<TH1P*, TH1P*>
-    > hist; 
+    const size_t nfiles = f.size();
+    
+	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_params;
+    {
+		std::unique_ptr<TFile> fhandle = std::make_unique<TFile>(f.front().name.c_str(), "READ");
+        get_obj(fhandle, tpc_params, "FRS_tpc_parameters");
+    }
+    constexpr auto N_TPC = TPCParam::N_S2_TPC;
+	const Arr2<double, N_TPC, 2> zDL = TFRSCalCont::z_s2_tpc_delay_lines(tpc_params); 
 
-	std::vector<double> x, y; // fitting containers
+    struct HistCont {
+        TH1P *h_22_31, *h_21_22, *h_theta;
+    };
+    std::vector<HistCont> hist;
+
+	std::vector<double> x0, y0; // fitting containers ToF [0]
+	std::vector<double> x1, y1; // fitting containers ToF [1]
     u32 i_clb_pnt = 1;
 	for(const auto& [fileName, brho] : f) {
         auto model = RNTupleModel::Create();
         auto frs = model->MakeField<RNFRSCal>("FRS");
         auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
-        const double beta_inc = phy::Beta(6, 12, brho.s2_incoming());
-        const double beta_out = phy::Beta(6, 12, brho.s2_outgoing());
+        const double beta_inc = phy::Beta(Q0, A0, brho.s2_incoming());
+        const double beta_out = phy::Beta(Q0, A0, brho.s2_outgoing());
 
-		auto* h1_dt21_31 = new TH1P(Form("((h1_dt%u_21_31))Delta t [25 ps]@SCI31 - SCI21@TOF Point[%u] %s", 
-            i_clb_pnt, i_clb_pnt, fileName.c_str()), kMagenta+i_clb_pnt, dt_cut21_31[0], dt_cut21_31[1], dt_cut21_31[2]);
+        /* Containers for TPC extrapolation. */
+        std::vector<double> xe, ye, ze;
+
 		auto* h1_dt22_31 = new TH1P(Form("((h1_dt%u_22_31))Delta t [25 ps]@SCI31 - SCI21@TOF Point[%u] %s", 
             i_clb_pnt, i_clb_pnt, fileName.c_str()), kMagenta+i_clb_pnt, dt_cut22_31[0], dt_cut22_31[1], dt_cut22_31[2]);
+		auto* h1_dt21_22 = new TH1P(Form("((h1_dt%u_21_22))Delta t [25 ps]@SCI21 - SCI22@TOF Point[%u] %s", 
+            i_clb_pnt, i_clb_pnt, fileName.c_str()), kMagenta+i_clb_pnt, dt_cut21_22[0], dt_cut21_22[1], dt_cut21_22[2]);
+        auto* h1_s2_angle = new TH1P(Form("((h1_s2_a%u))S2 polar angle [mrad]@TPC reference, point %u", i_clb_pnt, i_clb_pnt),
+            kGreen -2, 100, 0, 20);
         
         ProgressBar bar {
             option::BarWidth{50},
@@ -112,7 +148,7 @@ std::ostream& operator<<(std::ostream& , const FileBrho& );
                 option::Lead{":)"},
                 option::Remainder{" "},
                 option::End{"]"},
-                option::PostfixText{mnd::msg("Analysis (per event: %s)", fileName.c_str())},
+                option::PostfixText{mnd::msg("ToF Calibration (per event: %s)", fileName.c_str())},
                 option::ForegroundColor{Color::magenta},
                 option::ShowPercentage{true},
                 option::ShowElapsedTime{true},
@@ -123,7 +159,7 @@ std::ostream& operator<<(std::ostream& , const FileBrho& );
 
 		for(auto entryId : *ntuple) {
 			ntuple->LoadEntry(entryId);
-		    mnd::PrintProgress(bar, entryId, nentries, 500, mnd::dancer2, 0.30);
+		    mnd::PrintProgress(bar, entryId, nentries, 500, mnd::dancer2, 0.25);
 
             const auto& sci21 = frs->sci[SCI_21_I];
             const auto& sci22 = frs->sci[SCI_22_I];
@@ -132,21 +168,77 @@ std::ostream& operator<<(std::ostream& , const FileBrho& );
             /* All ToF measuring stations must be single hit. No exception. */
 			if(sci22.hits.size() != 1 or sci31.hits.size() != 1 or sci21.hits.size() != 1) 
                 continue;
-			
-			double dt21_31 = sci31.hits[0].t - sci21.hits[0].t;
+		    
+            /* We want to measure the S2 angle,.. important for 21-22 ToF. */
+            xe.clear(); ye.clear(); ze.clear();
+            /* Find the reference containers. */
+            for(const auto& id : ref) {
+                u32 i = id.n;
+                const auto& tpc = frs->tpc[i];
+                for(u32 d : {0,1}) {
+                    if(!id.use[d] or tpc.hits[d].size() != 1)
+                        continue;
+                    const RNTPCCal::Measurement& hit = tpc.hits[d].front();
+                    const double x = hit.X(); 
+                    const double y = hit.Y(); 
+                    if(!std::isfinite(x) or !std::isfinite(y)) 
+                        continue;
+                    xe.push_back( x );
+                    ye.push_back( y );
+                    ze.push_back( zDL[i][d] );
+                }
+            }
+            if(xe.size() < 3 or ye.size() < 3) continue;
+            const auto fx = PolyFit<1>(ze, xe);
+            const auto fy = PolyFit<1>(ze, ye);
+            Line3D s2_track{ fx, fy };
+            const double theta = s2_track.GetSpherical().theta;
+            h1_s2_angle->Fill(theta);
 			double dt22_31 = sci31.hits[0].t - sci22.hits[0].t;
-			h1_dt21_31->Fill(dt21_31);
+			double dt21_22 = sci22.hits[0].t - sci21.hits[0].t;
 			h1_dt22_31->Fill(dt22_31);
-
-            hist.emplace_back( h1_dt21_31, h1_dt22_31 );
-
-		    auto [res21_31, _ ] = GaussFitMax(*h1_dt21_31, sratio, niter);
-		    auto [res22_31, __] = GaussFitMax(*h1_dt22_31, sratio, niter);
-            x.push_back( res22_31[1] ); // gauss peak value
+			h1_dt21_22->Fill(dt21_22);
         }
+        hist.push_back( { 
+            .h_22_31 = h1_dt22_31,
+            .h_21_22 = h1_dt21_22,
+            .h_theta = h1_s2_angle } );
+        auto [res22_31, _ ] = GaussFitMax(*h1_dt22_31, sratio, niter);
+        auto [res21_22, __] = GaussFitMax(*h1_dt21_22, sratio, niter);
+        x0.push_back( res22_31[1] ); // gauss peak value
+        y0.push_back( 1.0 / beta_out );
+        
+        /* For S21-S22 β use their average. Normally, average path should also depend on theta,
+         * but since it's mostly straight, and correction is O(theta^2), ignore it. */
+        x1.push_back( res21_22[1] );
+        y1.push_back( 2.0 / (beta_inc + beta_out) );
+
+        bar.mark_as_completed();
         ++i_clb_pnt;
     }
-    /* TODO! */
+    assert(hist.size() == nfiles);
+
+    std::vector<double> fit_result_22_23, fit_result_21_22;
+    auto [gerr0, g0] = FitAndDraw(1, x0, y0, {}, fit_result_22_23);
+    auto [gerr1, g1] = FitAndDraw(1, x0, y0, {}, fit_result_21_22);
+    
+    WARN("If the formula is: " EMPH(s / (ΔT + Λ))
+         " then: " EMPH1((s = a , Λ = -b)));
+    WARN("ToF S22 - S31: " EBOLD((b = %.6f, a = %.6f)), fit_result_22_23[0], fit_result_22_23[1]);
+    WARN("ToF S21 - S22: " EBOLD((b = %.6f, a = %.6f)), fit_result_21_22[0], fit_result_21_22[1]);
+    TCanvas *c = new TCanvas("Fit", "Fit", 1400, 700);
+    c->Divide(2,1);
+    c->cd(1); gerr0->Draw("P"); g0->Draw("L SAME");
+    c->cd(2); gerr1->Draw("P"); g1->Draw("L SAME");
+
+    TCanvas *c_raw = new TCanvas("RawToF", "RawToF", 2050, 1400);
+    c_raw->Divide(3, nfiles);
+    for(size_t i=0; i<nfiles; ++i) {
+        auto [h_22_31, h_21_22, h_theta] = hist[i];
+        c_raw->cd(3*i + 1); h_22_31->Draw("COLZ");
+        c_raw->cd(3*i + 2); h_21_22->Draw("COLZ");
+        c_raw->cd(3*i + 3); h_theta->Draw();
+    }
 
     std::time_t now = std::time(nullptr);
     std::tm* tm = std::localtime(&now);
@@ -159,15 +251,13 @@ std::ostream& operator<<(std::ostream& , const FileBrho& );
 	rootApp.Run(); return 0;
 }
 
-
 std::istream& operator>>(std::istream& in, Brho& brho) {
-    return ::mnd::template operator>> <Brho::SEP>(in, brho.data_);    
+    return ::mnd::template operator>> <Brho::SEP>(in, brho.data_);
 }
 std::ostream& operator<<(std::ostream& os, const Brho& brho) {
     return os << brho.data_;
 }
 std::istream& operator>>(std::istream& in, FileBrho& f) {
-    char c;
     if(!std::getline(in, f.name, FileBrho::SEP)) {
         WARN("Parsing Brho into string part (file name) failed.\n");
         return in;

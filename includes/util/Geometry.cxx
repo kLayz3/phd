@@ -1,8 +1,7 @@
 #include "Geometry.h"
-#include "../Eigen.h"
 #include <cmath>
 
-namespace mnd { namespace geom { namespace detail {
+namespace mnd::geom { namespace detail {
 	static_assert(std::is_standard_layout_v<Vector3D>);
 	static_assert(sizeof(Vector3D) == 3*sizeof(double));
 	
@@ -39,7 +38,7 @@ namespace mnd { namespace geom { namespace detail {
 
 /* Not sure if this is legal, but works so far. */
 
-}} // namespace mnd::geom
+} // namespace mnd::geom
 
 using namespace mnd::geom;
 

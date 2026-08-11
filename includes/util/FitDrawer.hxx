@@ -1,26 +1,42 @@
 /* PolyFitter is meant to not depend on ROOT,
- * but here is a small wrapper to draw fit results. 
- * Diagnostic small lib. */
+ * but here is a small wrapper to return the graphs of
+ * actual fit results. Diagnostic small lib. No need to optimise in,
+ * since it shouldn't be called anyway in a tight loop. */
 
 #pragma once
 
 #include "PolyFitter.h"
 #include <algorithm>
-#include <tuple>
-#include "TGraph.h"
+#include "TGraphErrors.h"
 
-template<std::size_t R>
-[[ nodiscard ]] 
-std::pair<TGraph*, TGraph*> FitAndDraw (
-	const std::vector<double>& x, 
-	const std::vector<double>& y, 
-	std::array<double, R+1>& result,
+[[ nodiscard ]]
+inline std::pair <
+    TGraphErrors*, // Points (x,y) that went into the fit.
+    TGraph*        // Graph of the fitted polynomial
+> FitAndDraw (
+    size_t R,
+	const mnd::span<const double>& x,
+	const mnd::span<const double>& y,
+    const mnd::span<const double>& w,
+	std::vector<double>& result,
 	double ratio_outside = 0.1,
-	const int Npts = 60) {
-	
-	PolyFit<R>(x, y, result);
-
-	TGraph* g0 = new TGraph(x.size(), x.data(), y.data());
+	const int Npts = 60
+) {
+    /* Weights vector can either be left empty, or must match the size of x,y. */
+    if(w.empty()) {
+	    PolyFit(R, x, y, result);
+    } else { // Inside this call asserted w.size() == x.size()
+	    PolyFit(R, x, y, w, result);
+    }
+    
+    /* Maybe in later API, `PolyFit` can throw, we construct the graph here 
+     * instead, to not have a possible memory leak. */
+    TGraphErrors* g0;
+    if(w.empty()) {
+	    g0 = new TGraphErrors(x.size(), x.data(), y.data());
+    } else {
+	    g0 = new TGraphErrors(x.size(), x.data(), y.data(), nullptr, w.data());
+    }
 	g0->SetMarkerStyle(20);
 	g0->SetMarkerSize(1.4);
 
@@ -42,6 +58,7 @@ std::pair<TGraph*, TGraph*> FitAndDraw (
 	g1->SetLineStyle(7);
 	
 	return {g0, g1};
+    /* Can customise the lines further, after the call returns. */
 }
 
 /* First one should be drawn as Draw("P SAME"),
