@@ -33,7 +33,7 @@ struct TrackCost {
 	// For k==3 degrees of freedom: total Chi^2 of about 12 is 99% confidence. 
 	// In ideal world... but both `kt` and `kq` can dance like crazy. */
 	constexpr static double DEFAULT_MAX_CANDIDATE_COST = 1'000;
-	constexpr static double DEFAULT_MAX_FINAL_COST = 24;
+	constexpr static double DEFAULT_MAX_FINAL_COST = 50;
 
 	constexpr static double NIL_VALUE = NAN;
 	
@@ -112,26 +112,26 @@ struct TFOOTHitProc : TProcessor <
 	using FHitMatrix = HitMatrix<RNFOOTPair>;
 	using FTrackOnline = Track<N_PAIRS, RNFOOTPair>;
 
-	constexpr static float CLUSTER_SIZE_ONE_Q_CUTOFF = 1.7; // when cluster size == 1 doesn't make sense anymore.
+	constexpr static float CLUSTER_SIZE_ONE_Q_CUTOFF = 1.3; // when cluster size == 1 doesn't make sense anymore.
 	constexpr static double TARGET_Z = 0.0; // by convention. In Kalman coordinates, place target nominally at 0.0
-											// Will be shifted back to "real" FRS coordinates later.
+	                                        // Will be shifted back to "real" FRS coordinates later.
 	constexpr static u32 MAX_CANDIDATES = 10; // To how many paths can a node branch to (at most)
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
-	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ), 
+	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ),
 		double = TrackCost::DEFAULT_MAX_CANDIDATE_COST,
 		double = TrackCost::DEFAULT_MAX_FINAL_COST,
 		const std::array<double,3>& = {NAN, NAN, NAN}, // cost coefficients: {Cr, Cq, Ct}
-		bool  = false,                                      // requires_valid_upstream_track
+		bool  = false,                                 // requires_valid_upstream_track
 		Verbosity = Verbosity::SILENT);
 	TFOOTHitProc() = default;
 	
 	static Verbosity v;	
 	static bool requires_valid_upstream_track;
 
-	double kr(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept; 
-	double kq(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept; 
-	double kt(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept; 
+	double kr(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
+	double kq(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
+	double kt(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
 
 	void ProcessEntry() noexcept;
 
@@ -154,7 +154,7 @@ struct TFOOTHitProc : TProcessor <
 	std::array<double, N_PAIRS> pair_z;
 	mnd::geom::Rectangle2D target_xy;
 	mnd::geom::Point2D upstream_hit_loc;
-	std::vector<mnd::geom::Line3D> lines{};
+	std::vector<mnd::geom::Line3D> lines;
 
 	DAG dag;
 	
@@ -165,6 +165,6 @@ struct TFOOTHitProc : TProcessor <
 	CandidatesBuffer path_specific_candidates_buf;
 
 	FTrackOnline GetPrelimTrackFromPath(const DAG::DAGPath& ) const noexcept;
-	void PoisonEntriesFromHMs(const DAG::DAGPath&) noexcept; 
+	void PoisonEntriesFromHMs(const DAG::DAGPath&) noexcept;
 };
 

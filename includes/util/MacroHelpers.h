@@ -60,8 +60,8 @@ enum struct Extension { png, jpeg, pdf, C, root, nil };
 
 /* ROOT implements GetCurrentMacroName() in pre 6.38 as a simple forward to:
  * return fCurExecutingMacros.back();
- * Which, if called in a standalone program, simply segfaults on the spot. And there's no 
- * public API to make a check. Thanks. */
+ * Which, if called in a standalone program, simply segfaults on the spot. And there's no
+ * public API to make a check. Thanks for this API friends. Take care. */
 enum WhereAmI { Macro, Exe };
 
 template<enum WhereAmI loc>
@@ -144,52 +144,42 @@ inline std::ostream& operator<<(std::ostream& os, DoSave e) {
 
 namespace mnd {
 
-/* Nicer API to name different inputs. */
-
-template<typename T, typename Tag = void, bool CanInherit = std::is_class_v<T>>
-struct InputWrapper;
-
-template<typename T, typename Tag>
-struct InputWrapper<T,Tag,true> : T {
-	using T::T;
-	using underlying_type = T;
-	
-	T& get() noexcept { return *this; }
-	const T& get() const noexcept { return *this; }
-};
-
-/* Arrays are aggregates and don't provide any ctors by default. How nice. */
-template<typename U, std::size_t N, typename Tag>
-struct InputWrapper<std::array<U,N>, Tag, true> : std::array<U,N> {
-	using underlying_type = std::array<U,N>;
-
-	InputWrapper() = default;
-	template<typename... Args,
-		 typename = typename std::enable_if_t<sizeof...(Args) == N>
-	>
-    InputWrapper(Args&&... args)
-        : underlying_type{ { static_cast<U>(std::forward<Args>(args))... } }
-    {}
-
-	underlying_type& get() noexcept { return *this; }
-	const underlying_type& get() const noexcept { return *this; }
-};
-
-template<typename T, typename Tag>
-struct InputWrapper<T, Tag, false> {
-	using underlying_type = T;
+/* Nicer API to tag different instances of same type. 
+ * This is basically a zero-cost abstraction that allows really
+ * pretty API's to directly name the positional arguments. */
+template<typename T, typename Tag = void>
+struct InputWrapper {
+	using value_type = T;
 	T value;
 
 	InputWrapper() = default;
-
-	InputWrapper(T v) : value(v) {}
+	InputWrapper(T v) : value(std::move(v)) {}
 
 	operator T&() noexcept { return value; }
 	operator const T&() const noexcept { return value; }
 
-	T& get() noexcept { return value; }
-	const T& get() const noexcept { return value; }
+    T&       get() &       noexcept { return value; }
+    T const& get() const & noexcept { return value; }
+    T&&      get() &&      noexcept { return std::move(value); }
 };
+
+template<typename T, typename = void>
+struct is_istreamable : std::false_type {};
+template<typename T>
+struct is_istreamable<T,
+    std::void_t <
+        decltype(std::declval<std::istream&>() >> std::declval<T&>())
+    >
+> : std::true_type {};
+
+template<typename T, typename = void>
+struct is_ostreamable : std::false_type {};
+template<typename T>
+struct is_ostreamable<T, 
+    std::void_t<
+        decltype(std::declval<std::ostream&>() << std::declval<T const&>())
+    >
+> : std::true_type {};
 
 /* Why is Rust amazing? Well, simple:
  * enum Option<T> {
@@ -339,4 +329,22 @@ std::pair <
  * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
 std::string file_names_concatenated(const std::vector<std::string>& );
 
+} // namespace mnd::file
+
+/* Custom char buffer streaming operations for the phantom wrapper types, if the underlying type
+ * implements them. If underlying type's definitions are not found at this point, then this
+ * template is sfinae'd out. E.g. vector|array overload is in `json_struct_def.hh`, and won't be 
+ * automatically detected here, if that header is included *after* this one. 
+ *
+ * Non-templated specialized overloads can still be defined and compiler will like them more. Obviously. */
+template<typename T, typename Tag,
+    typename = std::enable_if_t<mnd::is_istreamable<T>::value>
+> std::istream& operator>>(std::istream& in, mnd::InputWrapper<T, Tag>& value) {
+    return in >> value.get();
+}
+
+template<typename T, typename Tag,
+    typename = std::enable_if_t<mnd::is_ostreamable<T>::value>
+> std::ostream& operator<<(std::ostream& out, mnd::InputWrapper<T, Tag> const& value) {
+    return out << value.get();
 }

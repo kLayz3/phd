@@ -91,7 +91,7 @@ std::string ParseFileToString(const std::string& fileName) {
 
 using namespace std::literals;
 
-inline bool ends_with(std::string_view name, std::string_view extension) {
+static bool ends_with(std::string_view name, std::string_view extension) {
     if(name.size() < extension.size() ||
        name.substr(name.size() - extension.size()) != extension) 
     {
@@ -100,7 +100,7 @@ inline bool ends_with(std::string_view name, std::string_view extension) {
     return true;
 }
 
-inline bool starts_with(std::string_view name, std::string_view prefix) {
+static bool starts_with(std::string_view name, std::string_view prefix) {
     if(name.size() < prefix.size() ||
        name.substr(0, prefix.size()) != prefix)
     {

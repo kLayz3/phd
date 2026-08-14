@@ -1,14 +1,11 @@
 #include "TFOOTMapCont.h"
 #include "monad/monad.hxx"
 #include <csignal>
-#include <exception>
 #include <memory>
 #include <string>
 
 #include "TFOOTCalCont.h"
-#include "TFOOTCalProc.h"
 #include "TFRSCalCont.h"
-#include "TFRSCalProc.h"
 #include "TFRSHitCont.h"
 #include "TFRSHitProc.h"
 #include "TFOOTHitCont.h"

@@ -54,30 +54,32 @@ int main(int argc, char* argv[]) {
     
     
 	std::vector<FileBrho> f;
-	std::vector<TPCRef> ref{}; 
+	std::vector<TPCRef> ref{};
 	std::array<double,3> dt_cut22_31 = {1000, -100, 100};
 	std::array<double,3> dt_cut21_22 = {1000, -100, 100};
     double sratio = GAUSS_FIT_SIDE_RATIO_DEFAULT;
     double niter = 2;
+    unsigned short line_size = 4;
 	auto save = canvas::Extension::nil;
     add_logged_option(app, "-f,--file", f, "Pass one or more file names and corresponding 2 brho's.")
 		->delimiter(',')
         ->type_name("[NAME:BRHO1;BRHO2 , ...]");
-    add_logged_option<DisplayDefault::No>(app, "-r, --ref", ref, 
+    add_logged_option<DisplayDefault::No>(app, "-r, --ref", ref,
 		"Select which TPC's (either with index: 0,1,2, or with a label: 21,22,23) make the reference. \
 		Select by '0/1' which delay lines get included into the measurement. ")
 		->type_name("[INT|LABEL:BOOL,BOOL;...]")
 		->delimiter(';');
-	add_logged_option<DisplayDefault::No>(app, "--dt-cut-22-31", dt_cut22_31, 
+	add_logged_option(app, "--dt-cut-22-31", dt_cut22_31,
         "Delta T (SCI31 - SCI21) cut, in TDC units [25ps]")
 		->delimiter(','); 
-	add_logged_option<DisplayDefault::No>(app, "--dt-cut-21-22", dt_cut21_22, 
+	add_logged_option(app, "--dt-cut-21-22", dt_cut21_22,
         "Delta T (SCI22 - SCI21) cut, in TDC units [25ps]")
 		->delimiter(','); 
     add_logged_option(app, "--sratio", sratio, "Width ratio of raw histogram, how much to fit around the peak.")
-		->check(CLI::PositiveNumber); 
+		->check(CLI::PositiveNumber);
 	add_logged_option(app, "--niter", niter, "Gaussian TH1D fit, number of iterations for the peak finder.")
 		->check(CLI::PositiveNumber);
+	add_logged_option(app, "-l,--line-size", line_size, "Fit curve line size.");
 	add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
     bool test = false;
@@ -134,12 +136,12 @@ int main(int argc, char* argv[]) {
         /* Containers for TPC extrapolation. */
         std::vector<double> xe, ye, ze;
 
-		auto* h1_dt22_31 = new TH1P(Form("((h1_dt%u_22_31))Delta t [25 ps]@SCI31 - SCI21@TOF Point[%u] %s", 
-            i_clb_pnt, i_clb_pnt, fileName.c_str()), kMagenta+i_clb_pnt, dt_cut22_31[0], dt_cut22_31[1], dt_cut22_31[2]);
-		auto* h1_dt21_22 = new TH1P(Form("((h1_dt%u_21_22))Delta t [25 ps]@SCI21 - SCI22@TOF Point[%u] %s", 
-            i_clb_pnt, i_clb_pnt, fileName.c_str()), kMagenta+i_clb_pnt, dt_cut21_22[0], dt_cut21_22[1], dt_cut21_22[2]);
+		auto* h1_dt22_31 = new TH1P(Form("((h1_dt%u_22_31))Delta t [25 ps]@SCI31 - SCI22, TOF Point [%u]",
+            i_clb_pnt, i_clb_pnt), kMagenta+i_clb_pnt, dt_cut22_31[0], dt_cut22_31[1], dt_cut22_31[2]);
+		auto* h1_dt21_22 = new TH1P(Form("((h1_dt%u_21_22))Delta t [25 ps]@SCI22 - SCI21, TOF Point [%u]",
+            i_clb_pnt, i_clb_pnt), kMagenta+i_clb_pnt, dt_cut21_22[0], dt_cut21_22[1], dt_cut21_22[2]);
         auto* h1_s2_angle = new TH1P(Form("((h1_s2_a%u))S2 polar angle [mrad]@TPC reference, point %u", i_clb_pnt, i_clb_pnt),
-            kGreen -2, 100, 0, 20);
+            kGreen -2, 500, 0, 20);
         
         ProgressBar bar {
             option::BarWidth{50},
@@ -192,7 +194,7 @@ int main(int argc, char* argv[]) {
             const auto fx = PolyFit<1>(ze, xe);
             const auto fy = PolyFit<1>(ze, ye);
             Line3D s2_track{ fx, fy };
-            const double theta = s2_track.GetSpherical().theta;
+            const double theta = s2_track.GetSpherical().theta * 1000; // mrad
             h1_s2_angle->Fill(theta);
 			double dt22_31 = sci31.hits[0].t - sci22.hits[0].t;
 			double dt21_22 = sci22.hits[0].t - sci21.hits[0].t;
@@ -220,23 +222,31 @@ int main(int argc, char* argv[]) {
 
     std::vector<double> fit_result_22_23, fit_result_21_22;
     auto [gerr0, g0] = FitAndDraw(1, x0, y0, {}, fit_result_22_23);
-    auto [gerr1, g1] = FitAndDraw(1, x0, y0, {}, fit_result_21_22);
-    
+    auto [gerr1, g1] = FitAndDraw(1, x1, y1, {}, fit_result_21_22);
+    gerr0->SetMarkerColor(kBlue - 1); gerr0->SetTitle("ToF Sci22 -> Sci31");
+    gerr0->GetXaxis()->SetTitle("Mean ToF [25 ns], with offset");
+    gerr0->GetYaxis()->SetTitle("1.0 / #beta");
+    gerr1->SetMarkerColor(kRed - 1);  gerr1->SetTitle("ToF Sci21 -> Sci22");
+    gerr1->GetXaxis()->SetTitle("Mean ToF [25 ns], with offset");
+    gerr1->GetYaxis()->SetTitle("1.0 / #beta");
+    g0->SetLineColor(kBlue);
+    g1->SetLineColor(kRed);
+
     WARN("If the formula is: " EMPH(s / (ΔT + Λ))
-         " then: " EMPH1((s = a , Λ = -b)));
-    WARN("ToF S22 - S31: " EBOLD((b = %.6f, a = %.6f)), fit_result_22_23[0], fit_result_22_23[1]);
-    WARN("ToF S21 - S22: " EBOLD((b = %.6f, a = %.6f)), fit_result_21_22[0], fit_result_21_22[1]);
+         " then: " EMPH1(s = a ; Λ = -b\n));
+    WARN("ToF S22 - S31: " EBOLD(b = %.6f; a = %.6f\n), fit_result_22_23[0], fit_result_22_23[1]);
+    WARN("ToF S21 - S22: " EBOLD(b = %.6f; a = %.6f\n), fit_result_21_22[0], fit_result_21_22[1]);
     TCanvas *c = new TCanvas("Fit", "Fit", 1400, 700);
     c->Divide(2,1);
-    c->cd(1); gerr0->Draw("P"); g0->Draw("L SAME");
-    c->cd(2); gerr1->Draw("P"); g1->Draw("L SAME");
+    c->cd(1); gerr0->Draw("AP"); g0->Draw("L SAME"); gPad->SetGrid();
+    c->cd(2); gerr1->Draw("AP"); g1->Draw("L SAME"); gPad->SetGrid();
 
     TCanvas *c_raw = new TCanvas("RawToF", "RawToF", 2050, 1400);
     c_raw->Divide(3, nfiles);
     for(size_t i=0; i<nfiles; ++i) {
         auto [h_22_31, h_21_22, h_theta] = hist[i];
-        c_raw->cd(3*i + 1); h_22_31->Draw("COLZ");
-        c_raw->cd(3*i + 2); h_21_22->Draw("COLZ");
+        c_raw->cd(3*i + 1); h_22_31->DrawAndFit(sratio, kGreen, line_size, niter);
+        c_raw->cd(3*i + 2); h_21_22->DrawAndFit(sratio, kGreen, line_size, niter);
         c_raw->cd(3*i + 3); h_theta->Draw();
     }
 

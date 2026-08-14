@@ -801,7 +801,7 @@ void TFOOTHitProc::PreProcess() noexcept {
 void TFOOTHitProc::PostProcess() noexcept {
 	/* For recognised tracks, try to find their vertex, together with the upstream track. */
 
-	std::sort( /* Sort in descending charge (.Q) attribute. */ 
+	std::sort( /* Sort in descending charge (.Q) attribute. */
 		out.inner().track.begin(), 
 		out.inner().track.end() 
 	);
