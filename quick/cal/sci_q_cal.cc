@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
     auto* h1_sci_ped_r = new TH1P (
         Form("((h1_sci))SCI%s-r pedestal [QDC units]", label[i_sci]),ORGB{0x13973F}, 2000, 0, 2000
     );
-    TH1P *h1_sci_l, *h1_sci_r, *h1_sci_e;
+    TH1P *h1_sci_l = nullptr, *h1_sci_r = nullptr, *h1_sci_e = nullptr;
     if( ped.is_some() ) {
         h1_sci_l = new TH1P (
             Form("((h1_sci))SCI%s-l value [QDC units]@Single hit cut", label[i_sci]), ORGB{0xABABAB}, 4096, 0, 4096
@@ -131,15 +131,16 @@ int main(int argc, char* argv[]) {
             continue;
         }
         
-        if(ped.is_none()) continue; // end of event loop in this case.
-        /* Demand single hit entries. */
-        if(sci.hits.size() != 1) continue;
+        if(ped.is_some()) {
+            /* Demand single hit entries. */
+            if(sci.hits.size() != 1) continue;
 
-        const f64 de_l = std::max(sci.El - ped.unwrap()[0], 0.0);
-        const f64 de_r = std::max(sci.Er - ped.unwrap()[1], 0.0);
-        h1_sci_l->Fill(de_l);
-        h1_sci_r->Fill(de_r);
-        h1_sci_e->Fill( sqrt(de_l * de_r) );
+            const f64 de_l = std::max(sci.El - ped.unwrap()[0], 0.0);
+            const f64 de_r = std::max(sci.Er - ped.unwrap()[1], 0.0);
+            h1_sci_l->Fill(de_l);
+            h1_sci_r->Fill(de_r);
+            h1_sci_e->Fill( sqrt(de_l * de_r) );
+        }
     }
 
     /* In either case, just try to match the pedestal first. */
@@ -156,14 +157,16 @@ int main(int argc, char* argv[]) {
     WARN("Pedestal of SCI%s found:\n", label[i_sci]);
     std::cerr << "\"pedestal\": " << nlohmann::json(result).dump(4) << std::endl;
 
-    TCanvas *c = new TCanvas("qdc_sub", "qdc_sub", 1800, 1200);
-    c->Divide(2,2);
-    c->cd(1);
-    h1_sci_l->Draw();
-    c->cd(2);
-    h1_sci_r->Draw();
-    c->cd(3);
-    h1_sci_e->Draw();
+    if(ped.is_some()) {
+        TCanvas *c = new TCanvas("qdc_sub", "qdc_sub", 1800, 1200);
+        c->Divide(2,2);
+        c->cd(1);
+        h1_sci_l->Draw();
+        c->cd(2);
+        h1_sci_r->Draw();
+        c->cd(3);
+        h1_sci_e->Draw();
+    }
 
     WARN("End-of-main");
     rootApp.Run(); return 0;

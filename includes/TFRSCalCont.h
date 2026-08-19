@@ -223,16 +223,19 @@ struct SCIDEIntoQConverter {
     bool matches_file(std::string_view ) const;
 
     SCIDEIntoQConverter() = default;
-	virtual ~SCIDEIntoQConverter() = default;
-	ClassDef(SCIDEIntoQConverter, 1);
 
 protected:
 	/* Some cached values for quick Q- calculation.
 	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default
 	 * JSON propagator cannot know this. Meaning that `ResetQ` has to be called manually. */
-	mutable double f_, c_;
-	mutable bool is_initialized_ = 0;
+	mutable double f_ = NAN; //!
+    mutable double c_ = NAN; //!
+	mutable bool is_initialized_ = 0; //!
 	void QParamInit() const;
+
+public:
+	virtual ~SCIDEIntoQConverter() = default;
+	ClassDef(SCIDEIntoQConverter, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(SCIDEIntoQConverter, 2)
 
@@ -249,8 +252,6 @@ struct SCIParam {
     ADD_SERIALIZABLE_FIELD(DeltaEToQConverterSeq, de_to_q,   {}, 4);
 
     SCIParam() = default;
-	virtual ~SCIParam() = default;
-	ClassDef(SCIParam, 1);
 
     double Q(const RNSciCal& s) const noexcept;
     
@@ -264,7 +265,11 @@ struct SCIParam {
     SCIDEIntoQConverter const* GetConverter() const;
 
 protected:
-    mutable SCIDEIntoQConverter const* current_converter;
+    mutable SCIDEIntoQConverter const* current_converter = nullptr; //!
+
+public:
+	virtual ~SCIParam() = default;
+	ClassDef(SCIParam, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(SCIParam, 4)
 

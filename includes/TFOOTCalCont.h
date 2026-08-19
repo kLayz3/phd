@@ -442,12 +442,13 @@ struct FOOTParam {
 	}
 	inline void ResetQ() const noexcept { this->is_initialized_ = false; }
 	
-protected: 
+protected:
 	/* Some cached values for quick Q- calculation.
 	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default 
 	 * JSON propagator cannot know this. Meaning that `ResetQ` has to be called manually. */
-	mutable double f_, c_;
-	mutable bool is_initialized_ = 0;
+	mutable double f_ = NAN; //!
+    mutable double c_ = NAN; //!
+	mutable bool is_initialized_ = false; //!
 
 	inline void QParamInit() const {
 		std::vector<double> x, y;
@@ -462,7 +463,7 @@ protected:
 	}
 
 public:
-	int de10_index_ = -1;
+	int de10_index_ = -1; //!
 	virtual ~FOOTParam() = default;
 	ClassDef(FOOTParam, 1);
 };
