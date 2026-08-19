@@ -109,7 +109,7 @@ int main(int argc, char* argv[]) {
     using Measurement = RNTPCCal::Measurement;
 	TApplication rootApp("app", 0, 0);
 	
-    const auto& label = TFRSCalCont::tpc_label;
+    const auto& label = RNFRSCal::tpc_label;
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_params;
     {
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileNames.front().c_str(), "READ");

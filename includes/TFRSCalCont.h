@@ -17,11 +17,13 @@ struct RNSciCal {
 		ClassDef(Measurement, 1);
 	};
 
-	double E = NAN;
+    double El = NAN; // left  PMT QDC measurement
+    double Er = NAN; // right PMT QDC measurement
+	double E  = NAN; // quick n' dirty: sqrt(El * Er)
 	std::vector<Measurement> hits;
 
 	inline bool IsOk() const noexcept  { return hits.size() > 0; }
-	inline void Clean() noexcept { E = 0; hits.clear(); }
+	inline void Clean() noexcept { E = (El = (Er = NAN)); hits.clear(); }
 	virtual ~RNSciCal() = default;
 	ClassDef(RNSciCal, 1);
 };
@@ -90,13 +92,43 @@ struct RNFRSCal {
 	constexpr static i32 N_VALID_SCI = RNFRSMap::N_VALID_SCI;
 	constexpr static i32 N_VALID_TPC = RNFRSMap::N_VALID_TPC;
     constexpr static double S2_LENGTH = 4560.0;
-	
-	inline static constexpr std::array<const char*, N_VALID_TPC> tpc_label = {
-		"21", "22", "23", "24", "41", "42", "31"
-	};	
-	inline static constexpr std::array<const char*, N_VALID_SCI> sci_label = {
-		"21", "22",             "31", "41"
+
+	// Which name corresponds to which index in later naming convention.
+	// Note, we keep this to match Go4.
+    static constexpr u32 SCI21_I = 0;
+    static constexpr u32 SCI22_I = 1;
+    static constexpr u32 SCI31_I = 2;
+    static constexpr u32 SCI41_I = 3;
+
+    static constexpr u32 TPC21_I = 0;
+    static constexpr u32 TPC22_I = 1;
+    static constexpr u32 TPC23_I = 2;
+    static constexpr u32 TPC24_I = 3;
+    static constexpr u32 TPC41_I = 4;
+    static constexpr u32 TPC42_I = 5;
+    static constexpr u32 TPC31_I = 6;
+
+	inline static const std::map<std::string, u32> tpc_moniker {
+		{"21", TPC21_I},
+        {"22", TPC22_I},
+        {"23", TPC23_I},
+        {"24", TPC24_I},
+        {"41", TPC41_I},
+        {"42", TPC42_I},
+        {"31", TPC31_I}
 	};
+	static constexpr std::array<const char*, N_VALID_TPC> tpc_label = {
+		"21", "22", "23", "24", "41", "42", "31"
+	};
+    inline static const std::map<std::string, u32> sci_moniker {
+        {"21", SCI21_I},
+        {"22", SCI22_I},
+        {"31", SCI31_I},
+        {"41", SCI41_I}
+    };
+	static constexpr std::array<const char*, N_VALID_SCI> sci_label = { 
+        "21", "22", "31", "41"
+    };
 
 	std::array<RNSciCal, N_VALID_SCI> sci;
 	std::array<RNTPCCal, N_VALID_TPC> tpc;
@@ -143,45 +175,108 @@ struct TPCParam {
 	virtual ~TPCParam() = default;
 	ClassDef(TPCParam, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(TPCParam, 9)
+ADD_JSON_TYPE_RESOLUTION(TPCParam, 9);
+
+struct SCIQDCPedestal {
+    GET_HELP_AUX_IMPL
+    ADD_SERIALIZABLE_FIELD(f64, left,  0.0, 0);
+    ADD_SERIALIZABLE_FIELD(f64, right, 0.0, 1);
+    
+    SCIQDCPedestal() = default;
+	virtual ~SCIQDCPedestal() = default;
+	ClassDef(SCIQDCPedestal, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(SCIQDCPedestal, 1)
+
+/* We don't globally have only a single parameter for dE -> Q conversion,
+ * There can be different QDC gains set for different files. We tag the sequence of files
+ * with a string regex. */
+struct SCIMeanQDC {
+	GET_HELP_AUX_IMPL
+    ADD_SERIALIZABLE_FIELD(i32, Q,        -1,  0);
+    ADD_SERIALIZABLE_FIELD(f64, qdc_mean, NAN, 1);
+
+    SCIMeanQDC() = default;
+	virtual ~SCIMeanQDC() = default;
+	ClassDef(SCIMeanQDC, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(SCIMeanQDC, 1)
+
+struct SCIDEIntoQConverter {
+	GET_HELP_AUX_IMPL
+    constexpr static f64 BELOW_PEDESTAL_VAL = 0.66;
+
+    using SCIMeanQDCSeq = std::vector<SCIMeanQDC>;
+    ADD_SERIALIZABLE_FIELD(std::string,    regex,    {},  0);
+    ADD_SERIALIZABLE_FIELD(SCIQDCPedestal, pedestal, {},  1);
+    ADD_SERIALIZABLE_FIELD(SCIMeanQDCSeq,  values,   {},  2);
+ 
+    /* Main method: convert SCI energy (E) to nominal charge (Q)
+	 * If the dependence is: Inv(Q) = A * Q^a, where 
+     * Inv = sqrt((Left - Pedestal) * (Right - Pedestal))
+     * then:
+	 * f = 1/A, c = 1/a <=> Q(Inv) = (f * Inv)^c */
+	double Q(const RNSciCal& ) const noexcept;
+	inline void ResetQ() const noexcept { this->is_initialized_ = false; }
+
+    /* Quickly compile the regex, and match a file name against it. */
+    bool matches_file(std::string_view ) const;
+
+    SCIDEIntoQConverter() = default;
+	virtual ~SCIDEIntoQConverter() = default;
+	ClassDef(SCIDEIntoQConverter, 1);
+
+protected:
+	/* Some cached values for quick Q- calculation.
+	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default
+	 * JSON propagator cannot know this. Meaning that `ResetQ` has to be called manually. */
+	mutable double f_, c_;
+	mutable bool is_initialized_ = 0;
+	void QParamInit() const;
+};
+ADD_JSON_TYPE_RESOLUTION(SCIDEIntoQConverter, 2)
 
 struct SCIParam {
 	GET_HELP_AUX_IMPL
-	constexpr static std::size_t N_PARAMS = 4;
 	constexpr static double channel_to_ns = 0.025;
 	using arr2 = std::array<double,2>;
+    using DeltaEToQConverterSeq = std::vector<SCIDEIntoQConverter>;
 
-	ADD_SERIALIZABLE_FIELD(double, x_offset,  0,  0);
-	ADD_SERIALIZABLE_FIELD(double, x_factor,  1,  1);
-	ADD_SERIALIZABLE_FIELD(arr2,   cdiff_lim, {}, 2);
-	ADD_SERIALIZABLE_FIELD(double, z0,        0,  3); 
+	ADD_SERIALIZABLE_FIELD(double,                x_offset,  0,  0);
+	ADD_SERIALIZABLE_FIELD(double,                x_factor,  1,  1);
+	ADD_SERIALIZABLE_FIELD(arr2,                  cdiff_lim, {}, 2);
+	ADD_SERIALIZABLE_FIELD(double,                z0,        0,  3);
+    ADD_SERIALIZABLE_FIELD(DeltaEToQConverterSeq, de_to_q,   {}, 4);
 
+    SCIParam() = default;
 	virtual ~SCIParam() = default;
 	ClassDef(SCIParam, 1);
+
+    double Q(const RNSciCal& s) const noexcept;
+    
+    /* Getting the correct converter depends on which run number
+     * we are currently to do correct dE->Q conversion. But monad's TContainers cannot know of the
+     * file name, it is passed only explicitly at the initial TAnalysisProcess ctor. */
+
+    /* Assigns the intrinsic converter from a passed-in file name. Returns how many
+     * instances matched. Sequential matches override the previous ones. */
+    u32 SetConverter(std::string_view ) const;
+    SCIDEIntoQConverter const* GetConverter() const;
+
+protected:
+    mutable SCIDEIntoQConverter const* current_converter;
 };
-ADD_JSON_TYPE_RESOLUTION(SCIParam, 3)
-	
+ADD_JSON_TYPE_RESOLUTION(SCIParam, 4)
+
 inline void Add(TPCParam&, const TPCParam&) {}
 inline void Add(SCIParam&, const SCIParam&) {}
 
 struct TFRSCalCont : TContainer<RNFRSCal> {
 	friend struct TFRSCalProc;
-
-	// Which name corresponds to which index in later naming convention.
-	// Note, we keep this to match Go4.
-	inline static const std::map<std::string, u32> tpc_moniker { 
-		{"21", 0}, {"22", 1}, {"23", 2}, {"24", 3}, {"41", 4}, {"42", 5}, {"31", 6}
-	}; 
-	inline static constexpr auto tpc_label = std::array{ "21", "22", "23", "24", "41", "42", "31" };
-
-	inline static const std::map<std::string, u32> sci_moniker {{"21", 0}, {"22", 1}, {"31", 2}, {"41", 3}};
-	inline static constexpr auto sci_label = std::array{ "21", "22", "31", "41" };
-
+	
 	TH2I* h2_tpc_xy[RNFRSCal::N_VALID_TPC][2];
 	TH1I* h1_tpc_y[RNFRSCal::N_VALID_TPC][4];
-
 	TH1I* h1_tpc_mask[RNFRSCal::N_VALID_TPC][2];
-
 	TH1I* h1_x_sc21_before_target;
 	TH1I* h1_x_sc22_after_target;
 
@@ -201,7 +296,6 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
     );
 
 private:
-	inline static nlohmann::json setup {}; 
-	inline static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
-	inline static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
+    inline static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
+    inline static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
 };

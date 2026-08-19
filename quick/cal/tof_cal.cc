@@ -13,8 +13,10 @@
 #include "util/PolyFitter.h"
 #include "util/Geometry.h"
 #include "util/FitDrawer.hxx"
-#include "IonOptics.hxx"
+#include "util/Tracking.h"
 #include "common/MacroCommon.hxx"
+
+#include "IonOptics.hxx"
 
 #include "TApplication.h"
 #include "TFRSCalCont.h"
@@ -105,21 +107,25 @@ int main(int argc, char* argv[]) {
     constexpr static u32 Q0 = 6;
     constexpr static u32 A0 = 12;
 
-    const u32 SCI_21_I = TFRSCalCont::sci_moniker.at("21");
-    const u32 SCI_22_I = TFRSCalCont::sci_moniker.at("22");
-    const u32 SCI_31_I = TFRSCalCont::sci_moniker.at("31");
+    const u32 SCI21_I = RNFRSCal::SCI21_I;
+    const u32 SCI22_I = RNFRSCal::SCI22_I;
+    const u32 SCI31_I = RNFRSCal::SCI31_I;
+    const u32 SCI_S2_I[2] = { SCI21_I, SCI22_I };
     const size_t nfiles = f.size();
     
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_params;
+    std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_params;
     {
 		std::unique_ptr<TFile> fhandle = std::make_unique<TFile>(f.front().name.c_str(), "READ");
         get_obj(fhandle, tpc_params, "FRS_tpc_parameters");
+        get_obj(fhandle, sci_params, "FRS_sci_parameters");
     }
     constexpr auto N_TPC = TPCParam::N_S2_TPC;
 	const Arr2<double, N_TPC, 2> zDL = TFRSCalCont::z_s2_tpc_delay_lines(tpc_params); 
 
     struct HistCont {
         TH1P *h_22_31, *h_21_22, *h_theta;
+        TH2P *h_track_x;
     };
     std::vector<HistCont> hist;
 
@@ -142,6 +148,9 @@ int main(int argc, char* argv[]) {
             i_clb_pnt, i_clb_pnt), kMagenta+i_clb_pnt, dt_cut21_22[0], dt_cut21_22[1], dt_cut21_22[2]);
         auto* h1_s2_angle = new TH1P(Form("((h1_s2_a%u))S2 polar angle [mrad]@TPC reference, point %u", i_clb_pnt, i_clb_pnt),
             kGreen -2, 500, 0, 20);
+        auto* h2_track_x = new TH2P (
+            Form("((h2_track_x%u))Track density (X) [mm]:Depth z [mm]@S2 area, TOF Point [%u]", i_clb_pnt, i_clb_pnt),
+            800, 0, RNFRSCal::S2_LENGTH, 800, -60, 60);
         
         ProgressBar bar {
             option::BarWidth{50},
@@ -163,9 +172,9 @@ int main(int argc, char* argv[]) {
 			ntuple->LoadEntry(entryId);
 		    mnd::PrintProgress(bar, entryId, nentries, 500, mnd::dancer2, 0.25);
 
-            const auto& sci21 = frs->sci[SCI_21_I];
-            const auto& sci22 = frs->sci[SCI_22_I];
-			const auto& sci31 = frs->sci[SCI_31_I];
+            const auto& sci21 = frs->sci[SCI21_I];
+            const auto& sci22 = frs->sci[SCI22_I];
+			const auto& sci31 = frs->sci[SCI31_I];
 
             /* All ToF measuring stations must be single hit. No exception. */
 			if(sci22.hits.size() != 1 or sci31.hits.size() != 1 or sci21.hits.size() != 1) 
@@ -200,11 +209,13 @@ int main(int argc, char* argv[]) {
 			double dt21_22 = sci22.hits[0].t - sci21.hits[0].t;
 			h1_dt22_31->Fill(dt22_31);
 			h1_dt21_22->Fill(dt21_22);
+            FillTrack(*h2_track_x, fx);
         }
-        hist.push_back( { 
+        hist.push_back( {
             .h_22_31 = h1_dt22_31,
             .h_21_22 = h1_dt21_22,
-            .h_theta = h1_s2_angle } );
+            .h_theta = h1_s2_angle,
+            .h_track_x = h2_track_x } );
         auto [res22_31, _ ] = GaussFitMax(*h1_dt22_31, sratio, niter);
         auto [res21_22, __] = GaussFitMax(*h1_dt21_22, sratio, niter);
         x0.push_back( res22_31[1] ); // gauss peak value
@@ -242,12 +253,24 @@ int main(int argc, char* argv[]) {
     c->cd(2); gerr1->Draw("AP"); g1->Draw("L SAME"); gPad->SetGrid();
 
     TCanvas *c_raw = new TCanvas("RawToF", "RawToF", 2050, 1400);
-    c_raw->Divide(3, nfiles);
+    c_raw->Divide(4, nfiles);
     for(size_t i=0; i<nfiles; ++i) {
-        auto [h_22_31, h_21_22, h_theta] = hist[i];
-        c_raw->cd(3*i + 1); h_22_31->DrawAndFit(sratio, kGreen, line_size, niter);
-        c_raw->cd(3*i + 2); h_21_22->DrawAndFit(sratio, kGreen, line_size, niter);
-        c_raw->cd(3*i + 3); h_theta->Draw();
+        auto [h_22_31, h_21_22, h_theta, h2_track_x] = hist[i];
+        c_raw->cd(4*i + 1); h_22_31->DrawAndFit(sratio, kGreen, line_size, niter);
+        c_raw->cd(4*i + 2); h_21_22->DrawAndFit(sratio, kGreen, line_size, niter);
+        c_raw->cd(4*i + 3); h_theta->Draw();
+        c_raw->cd(4*i + 4); h2_track_x->Draw("COLZ"); gPad->SetLogz();
+
+        double r = 0.72;
+        TLine* line;
+        for(int sci: {0,1}) {
+            line = hist::vline(h2_track_x, sci_params->at(SCI_S2_I[sci]).z0, r);
+            line = hist::vline(h2_track_x, sci_params->at(SCI_S2_I[sci]).z0, r);
+            line->SetLineColor(kRed);
+            line->SetLineStyle(2);
+            line->SetLineWidth(4);
+            line->Draw("SAME");
+        }
     }
 
     std::time_t now = std::time(nullptr);

@@ -33,7 +33,7 @@ STRUCT_LIB = $(INC_DIR)/$(BUILD_DIR)/libStructures.so
 
 MKDIR = mkdir -p $(@D)
 
-.PHONY: all make_cling_cache
+.PHONY: all
 
 all: $(EXE) $(AUX)
 

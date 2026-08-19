@@ -1,4 +1,4 @@
- #pragma once
+#pragma once
 
 #include "monad/monad.hxx"
 #include "TFRSCalCont.h"
@@ -18,6 +18,8 @@ struct TFRSHitProc : TProcessor <
 
 	void ProcessEntry() noexcept;
 	void ProcessS2BT() noexcept;
+	void ProcessS2AT() noexcept;
+    void ProcessS3() noexcept;
 
 	/* Local buffer containers. */
 	std::array<double, 2> fit_result;

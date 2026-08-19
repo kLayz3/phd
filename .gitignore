@@ -39,6 +39,8 @@ quick/hit/*
 !quick/hit/*.cc
 !quick/hit/cfg/**/*.cfg
 
+sim/build
+
 exec/*.txt
 autosave
 randomstuff

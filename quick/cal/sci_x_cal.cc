@@ -16,9 +16,9 @@ using namespace indicators;
 
 constexpr double zT = 3355 - 440.0/2;
 
- int main(int argc, char* argv[]) {
-	CLI::App app{"Calibrate the X measuring dimension (roughly) of either SCI21 and SCI22"};
-    
+int main(int argc, char* argv[]) {
+    CLI::App app{"Calibrate the X measuring dimension (roughly) of either SCI21 and SCI22"};
+
     std::string fileName{};
 	std::vector<TPCRef> ref{}; 
 	u32 i_sci = 0;
@@ -74,7 +74,7 @@ constexpr double zT = 3355 - 440.0/2;
 			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid."); 
 		}
 	}
-    const auto& label = TFRSCalCont::sci_label;
+    const auto& label = RNFRSCal::sci_label;
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_params;
 	std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_params;
 

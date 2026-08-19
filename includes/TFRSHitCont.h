@@ -9,6 +9,8 @@
 #include "Rtypes.h"
 #include "TH2D.h"
 
+/* In this low-Z experiments, we always perform the PiD with
+ * different scintillators, and not directly with gas detectors. */
 struct FRSTargetParam {
 	GET_HELP_AUX_IMPL;
 
@@ -37,14 +39,42 @@ struct FRSIdParam {
 };
 ADD_JSON_TYPE_RESOLUTION(FRSIdParam, 5)
 
+struct FRSToFSingle {
+    GET_HELP_AUX_IMPL;
+
+    template<typename T>
+    using A = std::array<T, 2>;
+    
+    ADD_SERIALIZABLE_FIELD(A<u32>,    combo, {}, 0);
+    ADD_SERIALIZABLE_FIELD(A<double>, par,   {}, 1);
+
+	FRSToFSingle() = default;
+	virtual ~FRSToFSingle() = default;
+	ClassDef(FRSToFSingle, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FRSToFSingle, 1)
+
+struct FRSToFParam {
+    GET_HELP_AUX_IMPL;
+
+    using FRSToFSingleVec = std::vector<FRSToFSingle>;
+    ADD_SERIALIZABLE_FIELD(FRSToFSingleVec, ToF, {}, 0);
+	
+    FRSToFParam() = default;
+	virtual ~FRSToFParam() = default;
+	ClassDef(FRSToFParam, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FRSToFParam, 0)
+
 struct RNFRSHit {
-	static constexpr uint32_t S2_BT_TRACKING_INCLUDE_SCI21_MASK            = 0x01;
-	static constexpr uint32_t S2_BT_TRACKING_INCLUDE_TPC21_MASK            = 0x02;
-	static constexpr uint32_t S2_BT_TRACKING_INCLUDE_TPC22_MASK            = 0x04;
-	static constexpr uint32_t S2_BT_TRACKING_INCLUDE_TPC23_MASK            = 0x08;
-	static constexpr uint32_t S2_BT_TRACKING_INCLUDE_POINTLIKE_TARGET_MASK = 0x10;
+	static constexpr i32 S2_BT_TRACKING_INCLUDE_SCI21_MASK            = 0x01;
+	static constexpr i32 S2_BT_TRACKING_INCLUDE_TPC21_MASK            = 0x02;
+	static constexpr i32 S2_BT_TRACKING_INCLUDE_TPC22_MASK            = 0x04;
+	static constexpr i32 S2_BT_TRACKING_INCLUDE_TPC23_MASK            = 0x08;
+	static constexpr i32 S2_BT_TRACKING_INCLUDE_POINTLIKE_TARGET_MASK = 0x10;
 
 	/* At this level, FRS ID in a single focal point is determined uniquely by:
+     * - (A,Q) particle ID
 	 * - β velocity
 	 * - (x,y) at z=0, nominal
 	 * - (a,b) angles
@@ -52,20 +82,22 @@ struct RNFRSHit {
 	 * It must either resolve to a single unique track or nothing. Multihit is anyway
 	 * invalidated, as FOOT's can reliably map-out only a single reaction. */
 
-	/* One per focal point. S2/S3 */
+	/* S2/S3 */
 	struct Id {
-		double x0 = NAN; // at nominal z = 0 ; FRS standard coordinates
-		double y0 = NAN; // at nominal z = 0 ; FRS standard coordinates
-		double ax = NAN;
-		double ay = NAN;
-		double beta = NAN;
+        f64 A  = NAN;
+        f64 Q  = NAN;
+		f64 x0 = NAN; // at nominal z = 0 ; FRS standard coordinates
+		f64 y0 = NAN; // at nominal z = 0 ; FRS standard coordinates
+		f64 ax = NAN;
+		f64 ay = NAN;
+		f64 beta = NAN;
 
-		uint64_t code = 0; // some metadata fed from the processor.
+		i64 code = 0; // some metadata fed from the processor.
 		
 		Id() = default;
 
 		inline void Clean() noexcept {
-			x0=y0=ax=ay=beta = NAN;
+			A=Q=x0=y0=ax=ay=beta = NAN;
 			code = 0;
 		}
 		virtual ~Id() = default;
@@ -105,13 +137,14 @@ struct TFRSHitCont : TContainer<RNFRSHit> {
 
 	FRSIdParam *s2p, *s3p;
 	FRSTargetParam *sTar;
+    FRSToFParam *sTof;
 	std::string *setupName;
-		
+	
 	TFRSHitCont();
 
 	void Init(TDictInfo info) override;
 	void Setup() override;
 };
 
-namespace mnd { namespace geom { struct Line3D; }}
+namespace mnd::geom { struct Line3D; }
 mnd::geom::Line3D RNTrackToLine3D(const RNFRSHit::Id& );

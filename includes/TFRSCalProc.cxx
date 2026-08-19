@@ -474,14 +474,16 @@ void TFRSCalProc::ProcessSci(int _i_sci) noexcept {
 	RNSciMap const& in = std::get<0>(this->in).inner().sci[_i_sci];
 	RNSciCal&      out = (this->out).inner().sci[_i_sci];
 	out.Clean();
-	
-	out.E = sqrt( static_cast<double>(in.qdc[0] * in.qdc[1] + 0.00000001) );
+
+    out.El = in.qdc[0];
+    out.Er = in.qdc[1];
+	out.E = sqrt( static_cast<double>(in.qdc[0] * in.qdc[1] + 0.000000001) );
 	/* ^^^ Last addition is t make sqrt() stable for (0,0) combination. */
 
 	const auto& hits = in.tdc;
 
 	[[maybe_unused]]
-	const auto& [bx, ax, lim, _] = TFRSCalCont::_sci_param.at(_i_sci);
+	const auto& [bx, ax, lim, _, __] = TFRSCalCont::_sci_param.at(_i_sci);
 
 	double d_l, d_r;
 

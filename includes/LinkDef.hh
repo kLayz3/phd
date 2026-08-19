@@ -1,4 +1,5 @@
 #ifdef __CLING__
+
 #pragma link off all globals;
 #pragma link off all classes;
 #pragma link off all functions;
@@ -23,10 +24,15 @@
 #pragma link C++ class RNTPCCal::Measurement+;
 #pragma link C++ class RNFRSCal+;
 #pragma link C++ class TPCParam+;
+#pragma link C++ class SCIQDCPedestal+;
+#pragma link C++ class SCIMeanQDC+;
+#pragma link C++ class SCIDEIntoQConverter+;
 #pragma link C++ class SCIParam+;
 
 #pragma link C++ class FRSIdParam+;
 #pragma link C++ class FRSTargetParam+;
+#pragma link C++ class FRSToFSingle+;
+#pragma link C++ class FRSToFParam+;
 #pragma link C++ class RNFRSHit+;
 #pragma link C++ class RNFRSHit::Id+;
 

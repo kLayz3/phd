@@ -1,0 +1,12 @@
+# Must be set before /run/initialize. Change 8 to however many workers you want.
+/run/numberOfThreads 8
+
+/run/verbose 1
+/event/verbose 0
+/tracking/verbose 0
+
+/run/initialize
+
+# First statistics run. With sigmaTotal=1 barn, roughly O(40%) of primaries
+# react in 7.5 g/cm^2 of Be, so this gives plenty of channel events.
+/run/beamOn 100000

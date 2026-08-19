@@ -216,7 +216,7 @@ struct TH1P {
 	inline auto DrawAndFit (
 		double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
 		ph_detail::__ARGB col = kRed,
-		Width_t line_width = 2, // short
+		Width_t line_width = 2, // type: short
 		uint32_t niter = 2,
 		Verbosity v = Verbosity::SILENT
 	) -> decltype( GaussFitMax(std::declval<TH1D*>()) ) {

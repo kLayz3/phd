@@ -39,9 +39,11 @@ static std::array<double, 2> uniform_circle(double R) noexcept {
 	return { r*cos(phi), r*sin(phi) };
 }
 
+/* This ctor only gets called once, at the creation. Later on, the clones 
+ * call the implicit copy-ctor. */
 TFRSHitProc::TFRSHitProc (
 	TFRSHitCont& out,
-	const TFRSCalCont& in, 
+	const TFRSCalCont& in,
 	int s2_bt_mask
 ) : TFRSHitProc::Base(out, in),
 	s2_bt_tracking_mask(s2_bt_mask)
@@ -54,6 +56,23 @@ TFRSHitProc::TFRSHitProc (
 	tar_width = out.sTar->width;
 
 	out.h2_target_xy->SetTitle(Form("%s@z0=%.1f", out.h2_target_xy->GetTitle(), z0));
+
+#define INIT_DE_TO_Q_PART(SCI) \
+    { \
+        const SCIParam& s = in.sci_param->at( RNFRSCal::sci_moniker.at(#SCI) ); \
+        u32 r = s.SetConverter( mnd::get_current_input_file() ); \
+        if(r > 1) { \
+            WARN("SCI%s parameter: found >1 `de_to_q` matches for current file: \'%s\'. Is OK, will take last match.\n", \
+                 #SCI, mnd::get_current_input_file().c_str()); \
+        } else if(r == 0) { \
+            WARN("SCI%s parameter: found =0 `de_to_q` matches for current file: \'%s\'. Is OK, charge values will be NAN.\n", \
+                 #SCI, mnd::get_current_input_file().c_str()); \
+        } \
+    }
+    INIT_DE_TO_Q_PART(21);
+    INIT_DE_TO_Q_PART(22);
+    INIT_DE_TO_Q_PART(31);
+#undef INIT_DE_TO_Q_PART
 }
 
 void TFRSHitProc::ProcessEntry() noexcept {
@@ -62,6 +81,8 @@ void TFRSHitProc::ProcessEntry() noexcept {
 
 	out.cal = std::get<0>(this->in).inner(); // RNFRSCal& operator=(RNFRSCal& )
 	ProcessS2BT();
+    ProcessS2AT();
+    ProcessS3();
 }
 
 void TFRSHitProc::ProcessS2BT() noexcept {
@@ -73,7 +94,7 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 	
 	/* Local references. */
 	RNFRSHit::Id& bt = out.inner().s2_bt;
-	double& xT = out.inner().xT; 
+	double& xT = out.inner().xT;
 	double& yT = out.inner().yT;
 
 	/* This is a mask to say that for incoming track, a (0,0) point directly on the target 
@@ -89,7 +110,7 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 
 	if(s2_bt_tracking_mask & RNFRSHit::S2_BT_TRACKING_INCLUDE_SCI21_MASK) {
 		static const double sci21_z = cal.sci_param->at(0).z0;
-		const std::vector<RNSciCal::Measurement>& hits = in.sci[0].hits; 
+		const std::vector<RNSciCal::Measurement>& hits = in.sci[0].hits;
 		if(hits.size() == 1) { // otherwise can't resolve.
 			x.push_back( hits[0].x );
 			zx.push_back( sci21_z );
@@ -126,11 +147,39 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 	if(y.size() >= 2) {
 		PolyFit<1>(zx, y, this->fit_result);
 		bt.y0 = fit_result[0];
-		bt.ay = fit_result[1]; 
+		bt.ay = fit_result[1];
 		yT = poly::Eval(z0, fit_result);
 	}
 	
 	out.h2_target_xy->Fill(xT, yT);
 	
 	g_upstream_track = RNTrackToLine3D(bt); // could be null.
+
+    const SCIParam& sci21_p   = cal.sci_param->operator[]( RNFRSCal::SCI21_I );
+    const RNSciCal& sci21_data = in.sci[ RNFRSCal::SCI21_I ];
+    bt.Q = sci21_p.Q( sci21_data );
+}
+
+void TFRSHitProc::ProcessS2AT() noexcept {
+    const TFRSCalCont& cal = std::get<0>( this->in );
+	const RNFRSCal& in = cal.inner();
+	
+	/* Local references. */
+	RNFRSHit::Id& at = out.inner().s2_at;
+
+    const SCIParam& sci22_p   = cal.sci_param->operator[]( RNFRSCal::SCI22_I );
+    const RNSciCal& sci22_data = in.sci[ RNFRSCal::SCI22_I ];
+    at.Q = sci22_p.Q( sci22_data );
+}
+
+void TFRSHitProc::ProcessS3() noexcept {
+    const TFRSCalCont& cal = std::get<0>( this->in );
+	const RNFRSCal& in = cal.inner();
+	
+	/* Local references. */
+	RNFRSHit::Id& s3 = out.inner().s3;
+
+    const SCIParam& sci31_p   = cal.sci_param->operator[]( RNFRSCal::SCI31_I );
+    const RNSciCal& sci31_data = in.sci[ RNFRSCal::SCI31_I ];
+    s3.Q = sci31_p.Q( sci31_data );
 }

@@ -88,10 +88,11 @@
 	
 	"SCI": {
 		"21": {
-			"x_offset": -55.91179, // [ mm / TDC_UNITS ]
-			"x_factor": 1.34929,   // [ mm ]
-			"cdiff_lim": [-80, 150],
-			"z0": 1554.5
+			"x_offset": -55.91179,   // [ mm / TDC_UNITS ]
+			"x_factor": 1.34929,     // [ mm ]
+			"cdiff_lim": [-80, 150], // [ TDC_UNITS ]
+			"z0": 1554.5,            // [ mm ]
+            "de_to_q": []
 		},
 		"22": {
 			"x_offset": -23.26287,
@@ -132,12 +133,22 @@
 			"dispersion": 0.0,
 			"zfocus": 1279
 		},
-		"ToF": {
-			"combo": [1,2], /* Referring to scintillator indices. */
-			"par": [-131.6129539, 58.84367] 
-			// ^^^ dT[TDC] = par[1]/β + par[0] 
-			// -> β = par[1] / (dT[TDC] - par[0])
-			// dt[TDC] is just raw V1290 TDC difference between SCI's.
-		}
+		"ToF": [
+            {
+                /* Referring to scintillator indices: TFRSCalCont::sci_moniker
+                 * SCI21 => [0]
+                 * SCI22 => [1]
+                 * SCI31 => [2] */
+                "combo": [1,2],
+                "par": [2.232431, 0.016926]
+                // ^^^ dT[TDC] = par[1]/β + par[0] 
+                // -> β = par[1] / (dT[TDC] - par[0])
+                // dt[TDC] is just raw V1290 TDC difference between SCI's.
+            },
+            {
+                "combo": [0,1],
+                "par": [-3.596724, 0.105703]
+            }
+		]
 	}
 }

@@ -79,7 +79,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 	for(const auto& tpc : ref) {
 		if(!tpc || !tpc.IsUpstream()) {
 			ERROR("TPC%s (n=%u) flagged invalid. Must be upstream and at least one dl flagged as valid.",
-                (tpc.n < RNFRSCal::N_VALID_TPC)? TFRSCalCont::tpc_label[tpc.n]: "??", tpc.n); 
+                (tpc.n < RNFRSCal::N_VALID_TPC)? RNFRSCal::tpc_label[tpc.n]: "??", tpc.n); 
 		}
 	}
 

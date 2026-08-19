@@ -2,12 +2,14 @@
 #include "util/JSONParser.h"
 
 #include "util/Geometry.h"
+#include "util/json_struct_def.hh"
 
 using nlohmann::json;
 
 static nlohmann::json setup {};
 static FRSIdParam _s2p, _s3p;
 static FRSTargetParam _sTar;
+static FRSToFParam _sTof;
 
 static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
 static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
@@ -46,20 +48,20 @@ void TFRSHitCont::Init(TDictInfo info) {
 
 	/* Copy over params from cal step. */
 	for(const auto& [_tpc_i, params] : setup.at("TPC").items()) {
-		if(TFRSCalCont::tpc_moniker.find(_tpc_i) == TFRSCalCont::tpc_moniker.end())
+		if(RNFRSCal::tpc_moniker.find(_tpc_i) == RNFRSCal::tpc_moniker.end())
 			ERROR("TPC parameter named \'%s\' found in the %s JSON parameter file isn't mapped to 0..%zu index.",
 				_tpc_i.c_str(), file_name.c_str(), _tpc_param.size());
 		
-		u32 i = TFRSCalCont::tpc_moniker.at(_tpc_i);
+		u32 i = RNFRSCal::tpc_moniker.at(_tpc_i);
 		if(i >= RNFRSCal::N_VALID_TPC) continue;
 		UNROLL_JSON_PARAM(_tpc_param[i], params, 9)
 	}
 	for(const auto& [_sci_i, params] : setup.at("SCI").items()) {
-		if(TFRSCalCont::sci_moniker.find(_sci_i) == TFRSCalCont::sci_moniker.end())
+		if(RNFRSCal::sci_moniker.find(_sci_i) == RNFRSCal::sci_moniker.end())
 			ERROR("Sci parameter named \'%s\' found in the %s JSON parameter file isn't mapped to 0..%zu index.",
 				_sci_i.c_str(), file_name.c_str(), _sci_param.size());
 		
-		u32 i = TFRSCalCont::sci_moniker.at(_sci_i);
+		u32 i = RNFRSCal::sci_moniker.at(_sci_i);
 		if(i >= RNFRSCal::N_VALID_SCI) continue;
 		UNROLL_JSON_PARAM(_sci_param[i], params, 3)
 	}
@@ -81,6 +83,14 @@ void TFRSHitCont::Init(TDictInfo info) {
 	j_it  = jfrs.find("S3");
 	if(j_it == jfrs.end()) ERROR("\'S3\' key not found in \'FRS\' section of JSON file: %s\n", file_name.c_str());
 	UNROLL_JSON_PARAM(_s3p, j_it.value(), 5);
+
+	j_it  = jfrs.find("ToF");
+	if(j_it == jfrs.end()) {
+        UNROLL_JSON_PARAM(_sTof, j_it.value(), 0)
+    } else {
+        WARN("\'ToF\' key not found in \'FRS\' section of JSON file: %s .. Is OK.\n", file_name.c_str());
+    }
+
 }
 
 void Add(FRSIdParam&, const FRSIdParam&) {}
@@ -114,4 +124,6 @@ ClassImp(FRSIdParam);
 ClassImp(FRSTargetParam);
 ClassImp(RNFRSHit);
 ClassImp(RNFRSHit::Id);
+ClassImp(FRSToFSingle);
+ClassImp(FRSToFParam)
 

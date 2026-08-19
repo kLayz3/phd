@@ -14,7 +14,7 @@ struct TPCRef {
 		if(x < N_S2_TPC) { n = x; return true; }
 		const std::string xs = std::to_string(x);
 		try {
-			u32 i = TFRSCalCont::tpc_moniker.at( xs.c_str() );
+			u32 i = RNFRSCal::tpc_moniker.at( xs.c_str() );
 			if(i <= N_UPSTREAM_TPC) { 
                 n = i; 
                 return true; 
