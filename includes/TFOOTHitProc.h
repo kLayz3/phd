@@ -32,8 +32,8 @@ struct TrackCost {
 
 	// For k==3 degrees of freedom: total Chi^2 of about 12 is 99% confidence. 
 	// In ideal world... but both `kt` and `kq` can dance like crazy. */
-	constexpr static double DEFAULT_MAX_CANDIDATE_COST = 1'000;
-	constexpr static double DEFAULT_MAX_FINAL_COST = 50;
+	constexpr static double DEFAULT_MAX_CANDIDATE_COST = 500;
+	constexpr static double DEFAULT_MAX_FINAL_COST = 20;
 
 	constexpr static double NIL_VALUE = NAN;
 	
@@ -74,7 +74,7 @@ struct TrackCost {
 			*sum_ += v;
 	}
 	template<enum F o>
-	bool is_set() const noexcept { 
+	bool is_set() const noexcept {
 		if constexpr(o == KR) {
 			return std::isfinite(kr_);
 		}
@@ -87,7 +87,10 @@ struct TrackCost {
 	}
 
 	inline double sum() const noexcept { return sum_ ? *sum_ : std::numeric_limits<double>::infinity(); }
-	inline void reset() noexcept { sum_.reset(); }
+	inline void reset() noexcept {
+        kr_ = kq_ = kt_ = NAN;
+        sum_.reset();
+    }
 
 	friend std::ostream& operator<<(std::ostream&, const TrackCost&);
 	friend bool operator>(const TrackCost& , double );
@@ -135,9 +138,8 @@ struct TFOOTHitProc : TProcessor <
 
 	void ProcessEntry() noexcept;
 
-	using CandidatesBuffer = std::array <
-		std::pair<double, DAG::Index>, 50
-	>;
+    using CostIndex =  std::pair<double, DAG::Index>;
+	using CandidatesBuffer = std::array<CostIndex, 50>;
 
 	void ProcessPair(const std::pair<const TFOOTCalCont&, const TFOOTCalCont&>&, i32) noexcept;
 	void ConstructObviousTracks() noexcept;
@@ -159,7 +161,7 @@ struct TFOOTHitProc : TProcessor <
 	DAG dag;
 	
 	std::array<FHitMatrix, N_PAIRS> hm; // hit matrices
-	std::array<Eigen::Vector2d, N_PAIRS> refl; // +-1 based on the on each of the `orientation` params  
+	std::array<Eigen::Vector2d, N_PAIRS> refl; // +-1 based on the on each of the `orientation` params
 	void SetConversionMatrices(int , const FOOTParam& , const FOOTParam& );
 
 	CandidatesBuffer path_specific_candidates_buf;

@@ -53,9 +53,17 @@ int main(int argc, char* argv[]) {
 	add_logged_flag(app, "-v", help_underlying, "Pass --help flag to the underlying process");
 
 	CLI11_PARSE(app, argc, argv);
-	
+
+    /* Check that the program isn't pointed back to itself, then a nasty exec loop happens. Hihihi
+     * Simply disallow completely to fork to other programs with identical name. */
+    const auto self_name = mnd::current_executable_path().filename();
+    const auto prog_name = std::filesystem::path(prog).filename();
+    if(self_name == prog_name) {
+        ERROR("Do not replace the run delegator with itself! Dangerous stuff.\n");
+    }
+
 	/* Parse the config file. */
-	const std::string cfg_contents = ParseFileToString(config);	
+	const std::string cfg_contents = ParseFileToString(config);
 
 	/* Global contents, in the GLOBAL() block. */
 	auto g_contents = mnd::extract_text_body("GLOBAL", cfg_contents, "");

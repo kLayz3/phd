@@ -111,7 +111,8 @@ int main(int argc, char* argv[]) {
 	if(fileNames.size() == 0) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
-	
+
+#ifdef MND_FOOTTRACK_DEBUG
 	const int foot_pair_id = ifoot / 2;
 	std::array<FOOTParam, 2> *_tmp_obj; 
 	{
@@ -473,5 +474,9 @@ int main(int argc, char* argv[]) {
 	});
 
 	WARN("End-of-main");
-	rootApp.Run(); return 0;
+	rootApp.Run();
+#else
+    WARN("\n" BOLD ".. MND_FOOTTRACK_DEBUG not compiled in. This program does nothing.\n" KNRM);
+#endif
+    return 0;
 }

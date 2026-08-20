@@ -7,8 +7,8 @@
 
 class TH2I;
 
-/* Debugging features compiled in. Can be toggled together automatically */
-#define MND_FOOTTRACK_DEBUG
+/* Heavy debugging features compiled in. Can be toggled together automatically */
+//#define MND_FOOTTRACK_DEBUG
 
 /* In case the heavy debug build is enabled, also feature it in here. */
 #if defined(MND_DEBUG_ENABLED) && !defined(MND_FOOTTRACK_DEBUG)

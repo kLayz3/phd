@@ -434,7 +434,6 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 
 		// Fetch the preliminary track that the path describes.
 		FTrackOnline tau = this->GetPrelimTrackFromPath(path);
-		TrackCost cost(n);
 
 		double cost_min_current = INFINITY;
 		DAG::Index best_i;
@@ -458,9 +457,9 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 			}
 			// FHitMatrix::Cached is column-major (Eigen convention).
 			const mnd::hm::Data& e = h(i,j);
-			if(e.q.mean() < 2.5) continue; 
+			if(e.q.mean() < 2.5) continue; // Obvious tracks should be Li,Be,B,C
 			
-			cost.reset();
+		    TrackCost cost(n);
 			const double kq = this->kq(tau, e, n);
 			const double kr = this->kr(tau, e, n);
 			const double kt = this->kt(tau, e, n);
@@ -477,20 +476,22 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 				best_i = {i,j};
 			}
 
-			out.h1_diff_q[n]->Fill( kq / Cq ); 
-			out.h1_diff_r[n]->Fill( kr / Cr );	 
+#ifdef MND_FOOTTRACK_DEBUG
+			out.h1_diff_q[n]->Fill( kq / Cq );
+			out.h1_diff_r[n]->Fill( kr / Cr );
 			out.h1_diff_t[n]->Fill( kt / Ct );
+#endif
 		}
-		// After processing the layer, check if total cost acquired 
+		// After processing the layer, check if minimum cost candidate acquired
 		// for this specific {i,j} entry of layer `n` is within the limits of `max_cost`.
-		if(best_i and cost < max_cost) {
+		if(best_i and cost_min_current < max_cost) {
 			path.node[n] = best_i;
 
 #ifdef MND_FOOTTRACK_DEBUG
-			if(v > 2) std::cerr << "Found best index: " << best_i << std::endl; 
+			if(v > 2) std::cerr << "Found best index: " << best_i << std::endl;
 #endif
 		}
-	}
+	} // for(u32 n = 0; n < N_PAIRS; ++n)
 
 	FTrackOnline tau = this->GetPrelimTrackFromPath(path);
 	const size_t N = tau.N();
@@ -509,7 +510,7 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 	const FTrack& t = tau.get(); // evaluate the actual track fit.
 	
 #ifdef MND_FOOTTRACK_DEBUG
-	std::array<double, N_PAIRS> qm, sqm; 
+	std::array<double, N_PAIRS> qm, sqm;
 	auto e0_x    = mnd::make_filled_array<double, N_PAIRS>(NAN);
 	auto delta_x = mnd::make_filled_array<double, N_PAIRS>(NAN);
 	auto c0_x    = mnd::make_filled_array<u32,    N_PAIRS>(-1);
@@ -554,7 +555,7 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 #endif
 }
 
-using CostIndex =  std::pair<double, TFOOTHitProc::DAG::Index>;
+using CostIndex =  TFOOTHitProc::CostIndex;
 static constexpr auto sort_by_cost = [](const CostIndex& lhs, const CostIndex& rhs) {
 	return lhs.first < rhs.first;
 };
@@ -594,7 +595,6 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 			
 			// Fetch the preliminary track that the path describes.
 			FTrackOnline tau = this->GetPrelimTrackFromPath(path);
-			TrackCost cost(tau.N());
 			u32 ncounted = 0;
 			
 			// FHitMatrix::Cached is column-major (Eigen::Matrix convention).
@@ -602,31 +602,29 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 				for(size_t i=0; i<nx; ++i) {
 					const mnd::hm::Data& e = h(i,j);
 			
+			        TrackCost cost(tau.N());
 					cost.set<TrackCost::KQ>( kq(tau, e, n) );
 					cost.set<TrackCost::KR>( kr(tau, e, n) );
 					if(cost > max_cost) continue;
-					/* Even though other 2 costs aren't yet evaluated, `kr` is the stictest.
-					 * If that one already fails here, no need evaluate it. */
+					/* Even though the other cost(s) aren't yet evaluated, `kr` is the stictest.
+					 * If that one already fails here, no need evaluate further costs. */
 
-					const double kt  = this->kt(tau, e, n);
-					cost.set<TrackCost::KT>(kt);
+					cost.set<TrackCost::KT>( kt(tau, e, n) );
 					if(cost > max_cost) continue;
 
 					// If the flow survives til this point means that
-					// the candidate is good. Add it to the `path_specific_candidates_buf` buffer.
+					// the candidate is decent. Add it to the `path_specific_candidates_buf` buffer.
 					path_specific_candidates_buf[ncounted++] = { cost.sum(), DAG::Index(i,j) };
 					
-					// If the buffer is full, sort it and hold on to only the first `MAX_CANDIDATES` 
+					// If the buffer is full, sort it and hold on to only the first `MAX_CANDIDATES`
 					if( ncounted == (u32)path_specific_candidates_buf.size() ) {
 						std::sort(
-							path_specific_candidates_buf.begin(),	
+							path_specific_candidates_buf.begin(),
 							path_specific_candidates_buf.begin() + ncounted,
 							sort_by_cost
 						);
 						ncounted = MAX_CANDIDATES;
 					}
-					new_paths.emplace_back(path); // copy-ctor.
-					new_paths.back().node[n] = DAG::Index(i,j);
 				}
 			}
 			
@@ -637,13 +635,14 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 				sort_by_cost
 			);
 
-			/* Take at most the best `MAX_CANDIDATES` as branching point. */
+			/* Take at most the best `MAX_CANDIDATES` from `path_specific_candidates_buf`
+             * as branching points. */
 			ncounted = std::min( ncounted, MAX_CANDIDATES );
 			for(u32 i=0; i<ncounted; ++i) {
-				new_paths.emplace_back(path);
+				new_paths.emplace_back(path); // copy-ctor.
 				new_paths.back().node[n] = path_specific_candidates_buf[i].second;
 			}
-			/* Add a null node only if current candidate path has no pre-existing "layer holes" */ 
+			/* Add a null node only if current candidate path has no pre-existing "layer holes" */
 			if(path.Rank() >= static_cast<int>(n))
 				new_paths.emplace_back(path);
 
@@ -651,7 +650,7 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 		
 		dag.path = std::move( new_paths );
 	} // for(u32 n = 0; n < N_PAIRS; ++n)
-} // void TFOOTHitProc::ConstructDAG() 
+} // void TFOOTHitProc::ConstructDAG()
 
 void TFOOTHitProc::AnalyseDAG() noexcept {
 	static_assert(N_PAIRS - 1 >= 3, "Maximal paranoia");
@@ -660,7 +659,7 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 	 * valid measurements and be below total allowed cost. */
 	dag.KeepIf( [this](const DAG::DAGPath& p) -> bool {
 		return (
-			(p.Rank() > (int)N_PAIRS - 1) and
+			(p.Rank() >= (int)N_PAIRS - 1) and
 			this->GetPrelimTrackFromPath(p).GetScore() < max_cost_final_track 
 		);
 	});	

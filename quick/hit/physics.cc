@@ -97,15 +97,15 @@ int main(int argc, char* argv[]) {
 
 	TApplication rootApp("app", 0, 0);
 
-	double Cr, Cq, Ct, Cp, max_cost, max_cost_f;
+	double Cr, Cq, Ct, max_cost, max_cost_f;
 	{
 		const auto& fname = fileName.front();
-		std::array<double, 4>* c;
+		std::array<double, 3>* c;
 		TParameter<double>* m;
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fname.c_str(), "READ");
 		get_obj(f, c, "FOOT_cost_coeff");
 		get_obj(f, m, "FOOT_max_cost");
-		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2); Cp = c->at(3);
+		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2);
 		max_cost = m->GetVal();
 		get_obj(f, m, "FOOT_max_cost_f");
 		max_cost_f = m->GetVal();
@@ -206,7 +206,7 @@ int main(int argc, char* argv[]) {
 		};
 		WARN("Proceeding with file [%zu/%zu]: \'%s\'. Entries: [%'zu]\n", i+1, fileName.size(), fname.c_str(), nentries);
 		for(size_t entryId{0}; entryId < nentries; ++entryId ) {
-			mnd::PrintProgress(bar, entryId, nentries, 1000);
+			mnd::PrintProgress(bar, entryId, nentries, 500, mnd::dancer0, 0.30);
 
 			ntuple->LoadEntry(entryId);
 			bool is_valid = true;
@@ -355,7 +355,6 @@ int main(int argc, char* argv[]) {
 		Form("Cr = %.1f mm^-2", Cr),
 		Form("Cq = %.1f Q^-2", Cq),
 		Form("Ct = %.1f mm^-2", Ct),
-		Form("Cp = %.1f", Cp),
 		Form("max cost for candidate: %.1f", max_cost),
 		Form("max cost for whole track: %.1f", max_cost_f)
 	);
