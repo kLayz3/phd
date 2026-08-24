@@ -1,0 +1,44 @@
+=======> dx = 11.0:
+9C run:
+Scale factor (4): 0.998651 ± 0.0074206
+Scale factor (5): 0.994287 ± 0.00459888
+Scale factor (6): 0.994942 ± 0.00623665
+Scale factor (7): 0.997841 ± 0.00293534
+
+12C run:
+Scale factor (4): 1.00556 ± 0.00103794
+Scale factor (5): 1.00092 ± 0.000741088
+Scale factor (6): 1.00376 ± 0.00166309
+Scale factor (7): 1.00188 ± 0.00148043
+
+=======> dx = 10.0:
+Scale factor (4): 0.998666 ± 0.00807252
+Scale factor (5): 0.994234 ± 0.00563843
+Scale factor (6): 0.995213 ± 0.00723807
+Scale factor (7): 0.997658 ± 0.00348454
+
+
+=======> dx = 5.5:
+9C run:
+Scale factor (4): 0.998641 ± 0.00771051
+Scale factor (5): 0.994255 ± 0.00459022
+Scale factor (6): 0.995078 ± 0.0076195
+Scale factor (7): 0.997644 ± 0.00262867
+
+12C run:
+Scale factor (4): 1.00039 ± 0.00106749
+Scale factor (5): 0.999458 ± 0.000702361
+Scale factor (6): 0.998918 ± 0.00166647
+Scale factor (7): 1.00033 ± 0.00147117
+
+=======> dx = 4.5:
+Scale factor (4): 0.996552 ± 0.00558688
+Scale factor (5): 0.99407 ± 0.00410951
+Scale factor (6): 0.993006 ± 0.00901369
+Scale factor (7): 0.996955 ± 0.0026174
+
+
+=======> dx = 3.5:
+Scale factor (4): 0.998678 ± 0.00842689
+Scale factor (5): 0.994178 ± 0.00386785
+Scale factor (6): 0.994873 ± 0.00593243

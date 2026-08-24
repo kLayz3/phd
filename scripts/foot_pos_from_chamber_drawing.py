@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import numpy as np
+#import numpy as np
 
 # FOOT box has equidistance two pairs, always ~109.7 mm
 # So it is always:
@@ -11,7 +11,7 @@ pair_width = 10.15
 foot_width = 0.9
 dfixed = 129.9
 
-dx = 5.5 # dx = 5.5 best found now. 
+dx = 5.5 # dx = 5.5 best found now.
 d0 = 48.0 - dx
 dist12 = 136.85 + dx
 
@@ -24,9 +24,9 @@ dtarget = -10.1
 # | A  |             | PAIR |                     | PAIR |                      | PAIR |                     | PAIR |
 # | L  |             |  0   |                     |  1   |                      |  2   |                     |  3   |
 # | L  |             |      |                     |      |                      |      |                     |      |
-#                    <------>  `pair_width`       <------> `pair_width`         <------> `pair_width`        <------> `pair_width                         
-# <------------------------->  `d0`; CHANGING     <------------------------------------> `dist12`; CHANGING                       
-#                    <-----------------------------------> `dfixed`             <-----------------------------------> `dfixed` 
+#                    <======>  `pair_width`       <======> `pair_width`         <======> `pair_width`        <======> `pair_width`
+# <=========================>  `d0`; CHANGING     <====================================> `dist12`; CHANGING                       
+#                    <===================================> `dfixed`             <===================================> `dfixed`
 #                                                 
 #                                                                               
 

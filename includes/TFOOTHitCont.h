@@ -9,7 +9,7 @@ class TH2I;
 
 /* Heavy debugging features compiled in. Can be toggled together automatically.
  * This is either for sanity debugging or for: ../scripts/hit/foot_track_analysis.C */
-#define MND_FOOTTRACK_DEBUG
+//#define MND_FOOTTRACK_DEBUG
 
 /* In case the heavy debug build is enabled, also feature it in here. */
 #if defined(MND_DEBUG_ENABLED) && !defined(MND_FOOTTRACK_DEBUG)

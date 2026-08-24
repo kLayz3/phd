@@ -2,12 +2,10 @@
 
 /* This hack is used to instantiate the template for small-ish N's.
  * This has the advantage that then these calls can then be used in ROOT macros.
- *
  * Problem is that Eigen is heavily optimized from rank 2 onward for algorithms such
  * as colPivHouseholderQr() decomposition and ROOT's cling when it tries to compile the source of macro,
- * it sees opaque Eigen optimizations (SIMD stuff), and you will catch the weirdest segfault in your life.
+ * it sees opaque Eigen optimizations (SIMD/AVX stuff), and you will catch the weirdest segfault in your life.
  * Who would've thought that making a C++ interpreter would make users' lives easier?
- *
  * Don't ask me why, but I was swearing in >4 different languages debugging this... */
 
 template void PolyFit< 1>(const std::vector<double>& , const std::vector<double>& , std::array<double,  2>& );
@@ -78,7 +76,7 @@ void PolyFit (
 [[ nodiscard ]]
 std::vector<double> PolyFit (
 	size_t N,
-	mnd::span<const double> x, 
+	mnd::span<const double> x,
 	mnd::span<const double> y
 ) {
 	std::vector<double> res;
@@ -87,8 +85,8 @@ std::vector<double> PolyFit (
 }
 
 void PolyFit (
-	size_t R, 
-	mnd::span<const double> x, 
+	size_t R,
+	mnd::span<const double> x,
 	mnd::span<const double> y,
 	mnd::span<const double> w,
 	std::vector<double>& result
@@ -141,9 +139,9 @@ double AngleFitResult::Angle(AngleFitResult::Direction d) const noexcept {
 }
 
 AngleFitResult FitAngle (
-    const std::vector<double>& x0, // Referent measurement (along the device's axis)
-    const std::vector<double>& y0, // Referent measurement (orthogonal to the device's axis)
-    const std::vector<double>& x   // Device's measurements
+    mnd::span<const double> x0, // Referent measurement (along the device's axis)
+    mnd::span<const double> y0, // Referent measurement (orthogonal to the device's axis)
+    mnd::span<const double> x   // Device's measurements
 ) {
 	const std::size_t N = x.size();
 	assert(x0.size() == N && "FitAngle(): vectors `x0` and `x` must be identically sized.");
@@ -152,7 +150,7 @@ AngleFitResult FitAngle (
 
 	Eigen::MatrixXd A(N, 2);
 	Eigen::VectorXd b(N);
-	for (std::size_t i = 0; i < N; ++i) {
+	for(std::size_t i = 0; i < N; ++i) {
 		A(i, 0) = x0[i];
 		A(i, 1) = y0[i];
 		b(i)    = x[i];
@@ -166,9 +164,9 @@ AngleFitResult FitAngle (
 }
 
 AngleOffsetFitResult FitAngleOffset (
-    const std::vector<double>& x0,
-    const std::vector<double>& y0,
-    const std::vector<double>& x
+    mnd::span<const double> x0,
+    mnd::span<const double> y0,
+    mnd::span<const double> x
 ) {
 	const std::size_t N = x.size();
 	assert(x0.size() == N && "FitAngleOffset(): vectors `x0` must be identically sized.");
@@ -177,7 +175,7 @@ AngleOffsetFitResult FitAngleOffset (
 
 	Eigen::MatrixXd A(N, 3);
 	Eigen::VectorXd rhs(N);
-	for (std::size_t i = 0; i < N; ++i) {
+	for(std::size_t i = 0; i < N; ++i) {
 		A(i, 0) = x0[i];
 		A(i, 1) = y0[i];
 		A(i, 2) = 1.0;
@@ -190,4 +188,4 @@ AngleOffsetFitResult FitAngleOffset (
 	out.t.b = fit(1);
 	out.c   = fit(2);
 	return out;
-}; 
+}

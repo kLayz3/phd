@@ -269,6 +269,7 @@ extern template std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>&,
  * along the entire monad dependency.
  * Namely, above its matching only vector type, since the API for statically
  * known both the poly degree AND container size is the `StaticPolyFitter` */
+
 #if !defined(MND_INCLUDE_SPAN_IS_DEFINED)
 #define MND_INCLUDE_SPAN_IS_DEFINED
 #if __cplusplus >= 202000L 
@@ -298,12 +299,17 @@ std::vector<double> PolyFit(size_t, mnd::span<const double> , mnd::span<const do
 /* One extra algorithm to solve general 2D linear problem,
  * arising from solving rotational measurements:
  * x' = cos(t)*x + sin(t)*y  , AKA:
- * x' = a*x + b*y      where a^2 + b^2 == 1
+ * x' = A*x + B*y      where A^2 + B^2 == 1
  * Where `(x,y)` is the 'true' referent measurement,
- * and `x'` is what the detector gives us.
- * We want to solve for `a` and `b`.
- * We are given sequences of events: `(x,y, x')` here
- * given as the vectors `x0`, `y0`, `x` respectively.
+ * and x' is what the detector gives us.
+ * We want to solve for `A` and `B`.
+ * We are given sequences of events: `(x,y,x')` here
+ * given as the spans `x0`, `y0`, `x` respectively.
+ *
+ * AngleOffsetFitResult struct is in general case where the (x',y') system 
+ * is also offsetted by some (dx,dy) relative to the reference system (along
+ * the referent `x`, `y` axes). Then the design problem becomes:
+ * x' = cos(t)*x + sin(t)*y + (-dx*cos(t) - dy*sin(t))
  */
 
 struct AngleFitResult {
@@ -319,13 +325,13 @@ struct AngleOffsetFitResult {
 };
 
 AngleFitResult FitAngle (
-    const std::vector<double>& x0,
-    const std::vector<double>& y0,
-    const std::vector<double>& x
+    mnd::span<const double>,
+    mnd::span<const double>,
+    mnd::span<const double>
 );
 
 AngleOffsetFitResult FitAngleOffset (
-    const std::vector<double>& x0,
-    const std::vector<double>& y0,
-    const std::vector<double>& x
+    mnd::span<const double>,
+    mnd::span<const double>,
+    mnd::span<const double>
 );

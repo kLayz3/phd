@@ -420,8 +420,8 @@ struct FOOTParam {
 	}
 	double Q(const RNFOOTCluster& ) const noexcept;
 
-	/* Calculate the (bare) cluster hit position in millimeters. Note: this does not 
-	 * take offsets or rotations into account. */
+	/* Calculate the (bare) cluster hit position in millimeters.
+     * Note: this does NOT take offsets or rotations into account. */
 	double BarePosition(const RNFOOTCluster& ) const noexcept;
 
 	/* Calculate the cluster hit position in millimeters, along the detector's axis. */
@@ -463,7 +463,7 @@ protected:
 	}
 
 public:
-	int de10_index_ = -1; //!
+	int de10_index_ = -1;
 	virtual ~FOOTParam() = default;
 	ClassDef(FOOTParam, 1);
 };
