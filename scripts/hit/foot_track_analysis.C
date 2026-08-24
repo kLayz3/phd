@@ -218,7 +218,10 @@ void foot_track_analysis (
 	}
 	ROOT::DisableImplicitMT();
 
-	/* Around each residue, also fit a teeny-weeny gauss-chan 🥺 👉👈 */
+	std::vector<std::string> resolutions {};
+	
+	/* Around each residue, also fit a teeny-weeny gauss-chan 🥺 👉👈 
+	 * Its' width is what we label as detector resolution. */
 	TCanvas* c1d = new TCanvas("FitResidue1D", "Fit residues 1D", 2150, 1650);
 	c1d->Divide(N_PAIRS, 5);
 	for(size_t i=0; i<N_PAIRS; ++i) {
@@ -237,6 +240,11 @@ void foot_track_analysis (
 		h1_footx[i]->Draw();
 		c1d->cd(i+1+ 4*N_PAIRS);
 		h1_footy[i]->Draw();
+
+		resolutions.emplace_back (
+			Form("FOOT%zu (X,Y): (%s%.2f%s, %s%.2f%s) um",
+				i, KRED, 1e3*fit_result_x[2], KNRM, KBLU, 1e3*fit_result_y[2], KNRM)
+		);
 	}
 	
 	TCanvas* c2d = new TCanvas("FitResidue2D", "Fit residues 2D", 2200, 1400);
@@ -279,6 +287,12 @@ void foot_track_analysis (
 		Form("max cost_f: %.1f", max_cost_f)
 	);
 	cscore->cd(3); h1_has_upstream->Draw();
+	
+	cscore->cd(4);
+	PLatex(0.08,
+		"Position resolution: ",
+		mnd::as_span(resolutions)
+	);
 
 	TCanvas* cR = new TCanvas("RScore", "Individual R-score component", 2150, 1400);
 	TCanvas* cQ = new TCanvas("QScore", "Individual Q-score component", 2150, 1400);

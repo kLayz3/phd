@@ -1,6 +1,6 @@
 #pragma once
 
-/* Eigen's fancy AVX512 SIMD instructors give a stroke
+/* Eigen's fancy AVX512 SIMD instructions give a stroke
  * to GCC 14.2.0, so hide the standard diagnostics so that the tty
  * can live in peace. */
 

@@ -1,15 +1,14 @@
-#include "TROOT.h"
 #include "util/CLI.h"
-#include "util/MacroHelpers.h"
-#include "util/PrettyHisto.hxx"
-#include "util/json_struct_def.hh" // for operator<< with ranges.
-#include "magic_enum/magic_enum.hpp"
 
-#include "monad/monad.hxx"
+#include "TROOT.h"
 #include "TApplication.h"
 #include "TParameter.h"
+#include "util/MacroHelpers.h"
+#include "util/PrettyHisto.hxx"
+
 #include "TFOOTHitCont.h"
 #include "TFRSHitCont.h"
+#include "TFRSCalCont.h"
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
@@ -98,6 +97,7 @@ int main(int argc, char* argv[]) {
 	TApplication rootApp("app", 0, 0);
 
 	double Cr, Cq, Ct, max_cost, max_cost_f;
+	TrigParam *trig_param;
 	{
 		const auto& fname = fileName.front();
 		std::array<double, 3>* c;
@@ -109,6 +109,7 @@ int main(int argc, char* argv[]) {
 		max_cost = m->GetVal();
 		get_obj(f, m, "FOOT_max_cost_f");
 		max_cost_f = m->GetVal();
+		get_obj(f, trig_param, "trigger_map");
 	}
 	/* Sanitize some CLI passed in arguments... */
 	u32 sum_n_tracks_required = std::accumulate(

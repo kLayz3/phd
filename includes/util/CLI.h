@@ -1,5 +1,5 @@
 #pragma once
-#include "json_struct_def.hh" // for std::ostream& operator<< on arrays/ranges.
+#include "json_struct_def.hh" // for std::ostream& operator<< on ranges.
 #include "../magic_enum/magic_enum.hpp"
 #include "../monad/monad.hxx"
 

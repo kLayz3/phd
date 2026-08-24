@@ -7,7 +7,7 @@
  * Reason is that the hack: `u64 value = *(u64*)(&val);` is infact UB under C++'s strict aliasing rule:
  * https://gist.github.com/shafik/848ae25ee209f698763cffee272a58f8
  * Namely, compiler can assume that u64* pointer cannot mutate the original double, and can completely optimize away
- * (e.g., ignore the store) any write to that adress through the aliased `u64*` pointer.
+ * (e.g., ignore the store) any write to that address through the aliased `u64*` pointer.
  * In general, this is only really UB if binding the repr to a function return, e.g.:
  * __attribute__((noinline)) u64* as_bits(double* p) {
  *    return reinterpret_cast<std::uint64_t*>(p);

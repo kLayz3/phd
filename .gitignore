@@ -2,6 +2,8 @@ build*
 includes/build*
 includes/util/build*
 includes/util/.*
+.nfs*
+includes/*.nfs
 
 includes/test*
 includes/makeme*

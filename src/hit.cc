@@ -22,7 +22,15 @@ int main(int argc, char* argv[]) {
 	signal(SIGSEGV, sig_callback_handler);
 	CLI::App app{"This program will do FOOT tracking (and tbd: S2/S3 FRS PID + momentum measurement).\n\
 		Always remember: PHYSICS IS FUN <(^.^)>"};
-	
+
+#ifdef MND_FOOTTRACK_DEBUG
+    {
+        std::string descr = app.get_description();
+        descr += "\n" BOLD "Compiled in DEBUG mode. Extra fields appended, and ROOT I/O won't work against "
+            "versions with non-debug mode." KNRM;
+        app.description(std::move(descr));
+    }
+#endif
 	int verbosity_raw = 0; 
 	std::string fileName, outFile, setupFile, footSetupFile;
 	u64 maxEvents = -1;

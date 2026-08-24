@@ -17,6 +17,25 @@
 
 #include "GaussFitMax.hxx"
 
+#if !defined(MND_INCLUDE_SPAN_IS_DEFINED)
+#define MND_INCLUDE_SPAN_IS_DEFINED
+#if __cplusplus >= 202000L 
+#	include <span>
+	namespace mnd {
+		template<typename T>
+		using span = std::span<T>;
+	}
+#elif __has_include("boost/beast/core/span.hpp")
+#	include "boost/beast/core/span.hpp"
+	namespace mnd {
+		template<typename T>
+		using span = boost::beast::span<T>;
+	}
+#else
+#	error "Neither C++20 given, nor boost span library found. Cannot proceed."
+#endif
+#endif // MND_INCLUDE_SPAN_IS_DEFINED
+
 struct ORGB { uint32_t v; };
 
 namespace ph_detail {
@@ -377,8 +396,32 @@ struct TH2P {
 	const inner_type& operator*()  const noexcept { return h; }
 };
 
+namespace mnd::type_traits {
+
+template<typename T, typename = void>
+struct is_text_sequence : std::false_type {};
+
+template<typename T>
+struct is_text_sequence<T,
+		std::void_t<
+			typename std::decay_t<T>::value_type
+		>
+	> : std::bool_constant<
+			std::is_convertible_v<
+				typename std::decay_t<T>::value_type const&,
+				std::string_view
+			>
+		> 
+	{};
+
+template<typename T>
+inline constexpr bool is_text_sequence_v = is_text_sequence<T>::value;
+
+} // namespace mnd::type_traits
+
 /* This instance is thread-unsafe! But anyway if some psycho like me uses latex'ing
- * in multithreaded/async, they should start touching grass. Honest opinion. */
+ * in multithreaded/async, they should start touching grass. Honest opinion.
+ * Also - very badly written API. I apologise.. */
 struct PLatex {
 	static constexpr double MAX_H = 0.9;
 	static constexpr double MIN_H = 0.1;
@@ -388,11 +431,10 @@ struct PLatex {
 	TLatex latex;
     std::string __temporary {};
 
-	/* Ts is one the: std::string/std::string_view/const char* */
+	/* Ts is one the: std::string/std::string_view/const char* or a range of it. */
 	template<typename... Ts>
-	PLatex(double textsize, Ts&&... texts) : N( static_cast<uint32_t>(sizeof...(Ts))) 
+	PLatex(double textsize, Ts&&... texts) : N((...+ TextCount(texts)))
 	{
-		static_assert(sizeof...(Ts) > 0, "Cannot create PLatex from empty text box!");
 		assert(textsize > 0 && "First argument to PLatex ctor must be textsize > 0.");
 
 		latex.SetNDC();
@@ -402,13 +444,23 @@ struct PLatex {
 		gPad->Modified();
 		gPad->Update();
 	}
-	template<typename T>
-	void DrawOne(T&& text) {
+	template<
+		typename T,
+	    typename = std::enable_if_t<std::is_convertible_v<T, std::string_view>>
+	> void DrawOne(T&& text) {
 		double height = MAX_H - current_text_index * (MAX_H - MIN_H) / (N-1);
 		if(!std::isfinite(height)) height = (MAX_H + MIN_H) / 2;
 
 		latex.DrawLatex(START_X, height, to_const_char( std::forward<T>(text) ));
 		++current_text_index;
+	}
+	/* Special overload for a sequence of texts. */
+	template<typename T>
+	void DrawOne(mnd::span<T const> text_sequence) {
+		static_assert(std::is_convertible_v<T const&, std::string_view>);
+		for(const auto& text : text_sequence) {
+			DrawOne(std::string_view{text});
+		}
 	}
 
 	/* Small routine to convert random-C++ text back into non-dangling `const char*` range.
@@ -449,6 +501,16 @@ struct PLatex {
 		}
 	}
 
+private:
+	template <typename T>
+	static uint32_t TextCount(const T& x) {
+		if constexpr(mnd::type_traits::is_text_sequence_v<T>) {
+			return static_cast<uint32_t>(x.size());
+		} else {
+			return 1;
+		}
+	}
+	
 	/* Phew, why are humans still using that god-awful `const char*` API..? */
 };
 
@@ -485,7 +547,6 @@ struct PCanvas {
 	inner_type& operator*()  noexcept { return c; }
 	const inner_type* operator->() const noexcept { return &c; }
 	const inner_type& operator*()  const noexcept { return c; }
-
 };
 
 namespace hist {
