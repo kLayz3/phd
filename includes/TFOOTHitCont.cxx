@@ -1,11 +1,8 @@
 #include "TFOOTHitCont.h"
-#include "TFOOTHitProc.h"
-#include "TFOOTMapCont.h"
-#include "TH2I.h"
-#include "TH1I.h"
 #include "util/JSONParser.h"
 #include "util/Geometry.h"
 #include "TParameter.h"
+#include "util/FloatHacks.hxx"
 
 using json = nlohmann::json;
 
@@ -20,6 +17,17 @@ std::ostream& operator<<(std::ostream& os, const FOOTHit& rhs) noexcept {
 		rhs.Q.fCM,
 		KBH_RED, rhs.m, KNRM);
 	return os;
+}
+
+bool RNFOOTPair::HasDataX() const noexcept {
+    return mnd::get_bit<_DATA_X_PRESENT_BITINDEX>(z);
+}
+bool RNFOOTPair::HasDataY() const noexcept {
+    return mnd::get_bit<_DATA_Y_PRESENT_BITMASK>(z);
+}
+bool RNFOOTPair::HasData() const noexcept {
+    constexpr u64 mask = _DATA_X_PRESENT_BITMASK | _DATA_Y_PRESENT_BITMASK;
+    return mnd::get_fbits(z, mask) == mask;
 }
 
 TFOOTHitCont::TFOOTHitCont() : TContainer("FOOT") {}
@@ -63,7 +71,7 @@ RNFOOTTrack::RNFOOTTrack (
 {}
 
 void TFOOTHitCont::Init(TDictInfo info) {
-auto it = info.find("Setup");	
+auto it = info.find("Setup");
 	if(it == info.end()) 
 		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
 	const std::string& file_name = it->second;

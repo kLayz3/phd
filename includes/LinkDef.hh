@@ -28,6 +28,8 @@
 #pragma link C++ class SCIMeanQDC+;
 #pragma link C++ class SCIDEIntoQConverter+;
 #pragma link C++ class SCIParam+;
+#pragma link C++ class TrigParamSingle+;
+#pragma link C++ class TrigParam+;
 
 #pragma link C++ class FRSIdParam+;
 #pragma link C++ class FRSTargetParam+;

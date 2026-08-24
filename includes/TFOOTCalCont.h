@@ -614,33 +614,55 @@ struct RNFOOTCal {
 	static constexpr int N_STRIPS = _FOOT_N_STRIPS;
 
 	using ClusterType = RNFOOTCluster::ClusterType;
-	std::vector<RNFOOTCluster> fCl{}; 
+	std::vector<RNFOOTCluster> fCl{};
+    
+    /* Record whole event in a vector, if we find a large cluster, for some reason, or 
+     * a good cluster but with some weird gimmicks. Vector size will be either 0 or 640.*/
+	std::vector<double> fRaw{};
 
-	/* Record whole event in a vector, if we find a large cluster, for some reason. */
-	std::vector<double> _fBadE{};      /* Size will be either 0 or 640. */
-	std::vector<double> _fHeClSize1{}; /* Size will be either 0 or 640. */
-	
+    /* Type of currently captured event. */
+    enum EventType : u32 {
+        Undetermined,    // Not handled by the analysis yet
+        Empty,           // Event doesn't contain FOOT data
+        MassiveCluster,  // Event contains a massive cluster
+        IsolatedStrip,   // Event contains an isolated high-adc strip (cluster size 1)
+        Good,            // Otherwise, a good sanity-checked event
+    } w_ev_type { EventType::Undetermined };
+
 	RNFOOTCal();
 	void Clean() noexcept;
 
-	/**
-	 * Return a fresh vector containing all the collected energies in the event.
-	 */
-	std::vector<double> E() const noexcept; 
+    /* This API is written this way, bit unintuitive I admit - because adding a fresh single
+     * `bool` indicator will spill the alignment over into the next cache line. And to keep it 
+     * all nice and tucked while also having room to */
 
 	/**
 	 * Return a fresh vector containing all the collected energies in the event.
 	 */
-	std::vector<double> X() const noexcept; 
+	std::vector<double> E() const noexcept;
+
+	/**
+	 * Return a fresh vector containing all the collected energies in the event.
+	 */
+	std::vector<double> X() const noexcept;
 	inline void AddCluster(RNFOOTCluster cl) noexcept {
 		fCl.push_back(std::move(cl));
 	}
 	inline void AddCluster(double x, double e, u32 m, ClusterType ty, FOOTClusterFit f) noexcept {
 		fCl.emplace_back(x, e, m, ty, f);
 	}
+    inline bool IsEmptyEvent() const noexcept {
+        return w_ev_type == EventType::Empty;
+    }
+
+    /* A check if the debug field isn't already assigned. No need to assign it multiple times. */
+    inline bool DebugAssigned() const noexcept {
+        return !fRaw.empty();
+    }
 	virtual ~RNFOOTCal() = default;
 	ClassDef(RNFOOTCal, 1);
 };
+static_assert(sizeof(RNFOOTCal) == 64);
 
 inline void Add(FOOTParam&, const FOOTParam&) {}
 inline void Add(FOOTBoxParam&, const FOOTBoxParam&) {}

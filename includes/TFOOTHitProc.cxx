@@ -11,8 +11,15 @@
 #include <utility>
 #include "TParameter.h"
 #include "util/HitMatrix.hxx"
+#include "util/FloatHacks.hxx"
 
 extern thread_local mnd::geom::Line3D g_upstream_track; // extern'ed from `includes/TFRSHitProc.cxx`
+
+/* These following values are assigned only once; at the TFOOTHitProc ctor.
+ * Later access is read-only, as such safe to be non thread_local. */
+static std::array<double, TFOOTHitProc::N_PAIRS> pair_z;
+static mnd::geom::Rectangle2D target_xy;
+static std::array<Eigen::Vector2d, TFOOTHitProc::N_PAIRS> refl; // +-1 based on the on each of the `orientation` params
 
 #define GEN_ARG_INSTANCE_FOOT(z, n, data) \
 	const TFOOTCalCont& in_##n
@@ -109,7 +116,7 @@ void TFOOTHitProc::SetConversionMatrices(int ipair, const FOOTParam& px, const F
 	hm[ipair].dxy << px.delta_p, // already in [mm] scale, don't need to convert.
 	                 py.delta_p;
 	
-	refl[ipair] << px.R(), 
+	::refl[ipair] << px.R(),
 	               py.R();
 }
 
@@ -214,7 +221,7 @@ TFOOTHitProc::TFOOTHitProc (
 	/* Assign the average z-values of each of the pairs. */
 	i = 0;
 	mnd::for_pair_in_tuple(this->in, [this, &i, box](const TFOOTCalCont& f1, const TFOOTCalCont& f2) {
-			this->pair_z[i] = ( 
+			::pair_z[i] = (
 				box->GetFOOTZRel(f1.setup->N) + f1.setup->dz + 
 				box->GetFOOTZRel(f2.setup->N) + f2.setup->dz
 			) / 2.0 + TFOOTHitProc::TARGET_Z;
@@ -224,7 +231,7 @@ TFOOTHitProc::TFOOTHitProc (
 
 				this->out.foot_param[i]->at(0) = *f1.setup;
 				this->out.foot_param[i]->at(1) = *f2.setup;
-			} else { 
+			} else {
 				this->SetConversionMatrices(i, *f2.setup, *f1.setup);
 
 				this->out.foot_param[i]->at(0) = *f2.setup;
@@ -237,12 +244,12 @@ TFOOTHitProc::TFOOTHitProc (
 	const ExpertTarget& target = box->target;
 	
 	/* Assign S2 Be target parameters (EXPERT target). */
-	this->target_xy = mnd::geom::Rectangle2D (
+	::target_xy = mnd::geom::Rectangle2D (
 		{target.dx, target.dy}, target.width_x, target.width_y
 	);
 
 	if(v > 2) {
-		WARN("FOOT pairs placed at: "); std::cerr << this->pair_z << std::endl;
+		WARN("FOOT pairs placed at: "); std::cerr << ::pair_z << std::endl;
 		WARN("EXPERT target placed at: %.2f\n", TFOOTHitProc::TARGET_Z);
 		WARN("EXPERT target dimensions: "); std::cerr << target_xy << std::endl;
 	}
@@ -305,9 +312,9 @@ void TFOOTHitProc::ProcessPair (
 
 		float q = static_cast<float>( px.Q(hit) );
 		
-		double xprime = refl[ipair].x() * (cx - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM; 
+		double xprime = refl[ipair].x() * (cx - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM;
 		// Cluster size 1 fucks with everything above Z >~ 1,
-		// so only care about it if its sitting at low energies.. 
+		// so only care about it if its sitting at low energies..
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
 			output.x.emplace_back(q, mult 
 #ifdef MND_FOOTTRACK_DEBUG
@@ -321,7 +328,7 @@ void TFOOTHitProc::ProcessPair (
 
 		float q = static_cast<float>( py.Q(hit) );
 
-		double yprime = refl[ipair].y() * (cy - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM; 
+		double yprime = refl[ipair].y() * (cy - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM;
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
 			output.y.emplace_back(q, mult 
 #ifdef MND_FOOTTRACK_DEBUG
@@ -336,9 +343,13 @@ void TFOOTHitProc::ProcessPair (
 	std::sort(output.y.begin(), output.y.end(), comparator);
 	
 	output.z = pair_z[ipair];
+
+    u32 pair_data_flag = ( fx.IsEmptyEvent() << RNFOOTPair::_DATA_X_PRESENT_BITINDEX)
+                       | ( fx.IsEmptyEvent() << RNFOOTPair::_DATA_X_PRESENT_BITINDEX);
+    mnd::set_low_bits<2>(output.z, pair_data_flag); // h4ckz, b40.. k14y23 g0d
 }
 
-constexpr auto X = FHitMatrix::X; 
+constexpr auto X = FHitMatrix::X;
 constexpr auto Y = FHitMatrix::Y;
 using Entry = FHitMatrix::Entry;
 
@@ -409,8 +420,8 @@ void TFOOTHitProc::PoisonEntriesFromHMs(const DAG::DAGPath& path) noexcept {
 }
 
 /* Some heavy particle tracks can be obviously taken out of the full glory
- * CKF algorithm. E.g. if each FOOT in-order measures Z=4,5,6 is fine. 
- * NOTE: the only obvious particle we can find at this point, is the largest Q one. 
+ * CKF algorithm. E.g. if each FOOT in-order measures Z=4,5,6 is fine.
+ * NOTE: the only obvious particle we can find at this point, is the largest Q one.
  * Isn't very efficient, so its called only in debug mode. */
 void TFOOTHitProc::ConstructObviousTracks() noexcept {
 	static_assert(DAG::depth == N_PAIRS, "Paranoia V4");
@@ -430,7 +441,7 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 		const size_t ny = h.GetN<Y>();
 		const size_t n_last_row_col = nx+ny-1;
 
-		if(nx == 0 or ny == 0) continue; 
+		if(nx == 0 or ny == 0) continue;
 
 		// Fetch the preliminary track that the path describes.
 		FTrackOnline tau = this->GetPrelimTrackFromPath(path);

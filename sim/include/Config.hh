@@ -6,7 +6,8 @@
 namespace cfg {
 
 // Beam
-inline const G4double beamEnergyPerU = 580.0 * MeV;
+//inline const G4double beamEnergyPerU = 580.0 * MeV;
+inline const G4double beamEnergyPerU = 700.0 * MeV;
 inline const G4int beamA = 9;
 inline const G4int beamZ = 6;
 
@@ -32,7 +33,7 @@ inline const G4double ex1 = 0.770 * MeV;
 inline const G4double width1 = 35.6 * keV;
 inline const G4double ex2 = 2.320 * MeV;
 inline const G4double width2 = 350.0 * keV;
-inline constexpr G4double state1Probability = 0.5;
+inline constexpr G4double state1Probability = 0.18;
 
 // Truncate the Cauchy/Breit-Wigner sampling to avoid very remote tails in this
 // simple toy model. This is not an R-matrix line shape.

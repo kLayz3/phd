@@ -9,11 +9,11 @@
 
 struct TFRSCalProc : TProcessor <
 	TFRSCalCont
-	(TFRSMapCont)
+	(TFRSMapCont, TTrigMapCont)
 > {
-	using Base = TProcessor<TFRSCalCont(TFRSMapCont)>;
+	using Base = TProcessor<TFRSCalCont(TFRSMapCont, TTrigMapCont)>;
 	
-	TFRSCalProc(TFRSCalCont& , const TFRSMapCont& );
+	TFRSCalProc(TFRSCalCont& , const TFRSMapCont&, const TTrigMapCont& );
 	TFRSCalProc() = default;
 
 #ifdef TFRSCALPROC_VERBOSE_
@@ -93,9 +93,6 @@ private:
 #ifdef TFRSCALPROC_SINGLEHIT
 	void ProcessSingleHit(int, int ) noexcept;
 #endif
-
-	void ProcessS2Angle() noexcept;
-	void ProcessS4Angle() noexcept;
 
 	/* === SCI analysis helper fnc's. === */
 	void ProcessSci(int ) noexcept;

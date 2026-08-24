@@ -243,7 +243,7 @@ public:
 	template<size_t L>
 	inline size_t GetN() const noexcept {
 		if constexpr(L == X)
-			return p->x.size(); 
+			return p->x.size();
 		else if constexpr(L == Y)
 			return p->y.size();
 		else

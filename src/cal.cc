@@ -57,6 +57,8 @@ int main(int argc, char *argv[]) {
 
     TFRSMapCont mfrs{};
     mfrs.Setup();
+	TTrigMapCont trig{};
+	trig.Setup();
 
     TFRSCalCont cfrs{};
     cfrs.Init({{"Setup", setupFile}});
@@ -80,7 +82,7 @@ int main(int argc, char *argv[]) {
         .emplace_process<TFOOTCalProc>(cfoot[5], mfoot[5])
         .emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6])
         .emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7])
-        .emplace_process<TFRSCalProc>(cfrs, mfrs)
+        .emplace_process<TFRSCalProc>(cfrs, mfrs, trig)
 #ifdef MND_DEBUG_ENABLED
     .MakePool<1>(512);
 #else

@@ -159,5 +159,45 @@
                 "par": [-3.596724, 0.105703]
             }
 		]
-	}
+	},
+
+	"trigger_map": [
+		{
+			"label": "pended",
+			"tpat": 0,
+			"ttype": 12,
+			"contains_tracker": false
+		},
+		{
+			"label": "foot&box",
+			"tpat": 1,
+			"contains_tracker": true
+		},
+		{
+			"label": "foot&s21&!s22hi",
+			"tpat": 2,
+			"contains_tracker": true
+		},
+		{
+			"label": "foot&s21&!s22hi&s22lo",
+			"tpat": 3,
+			"contains_tracker": true
+		},
+		{
+			"label": "!foot&box",
+			"tpat": 4,
+			"contains_tracker": false
+		},
+		{
+			"label": "offspill&pulser",
+			"tpat": 5,
+			"contains_tracker": false
+		},
+		{
+			"label": "offspill&aida",
+			"tpat": 6,
+			"ttype": 3,
+			"contains_tracker": false
+		}
+	]
 }

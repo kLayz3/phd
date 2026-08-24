@@ -1,7 +1,4 @@
 #include "TFOOTCalCont.h"
-#include "TH1I.h"
-#include "TH2I.h"
-#include "TParameter.h"
 #include "util/JSONParser.h"
 #include "nlohmann/json.hpp"
 #include "util/json_struct_def.hh"
@@ -43,15 +40,14 @@ RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, FOOTClust
 
 /* ------------------------------------------------------- */
 
-RNFOOTCal::RNFOOTCal() { 
-	fCl.reserve(INIT_CAPACITY); 
-	_fBadE.reserve(N_STRIPS);
-	_fHeClSize1.reserve(N_STRIPS);
+RNFOOTCal::RNFOOTCal() {
+	fCl.reserve(INIT_CAPACITY);
+	fRaw.reserve(N_STRIPS);
 }
 void RNFOOTCal::Clean() noexcept {
-	fCl.clear(); 
-	_fBadE.clear();
-	_fHeClSize1.clear();
+	fCl.clear();
+	fRaw.clear();
+    w_ev_type = EventType::Undetermined;
 }
 std::vector<double> RNFOOTCal::E() const noexcept {
 	std::vector<double> res;
@@ -97,7 +93,7 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	UNROLL_JSON_PARAM(par, jf, 9);
 
 	par.de10_index_ = FOOT_N;
-	if(par.N == -1) 
+	if(par.N == -1)
 		ERROR("Parsed the setup file fine, but the \"N\" table entry for FOOT%d not found. "
 			"It is mandatory to label the FOOT's!", FOOT_N);
 	/* Note, if two FOOT's in the setup have identical `.N` field, it will throw a

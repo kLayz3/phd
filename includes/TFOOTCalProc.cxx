@@ -1,8 +1,6 @@
 #include "TFOOTCalProc.h"
 #include "TFOOTCalCont.h"
 #include "TFOOTMapCont.h"
-#include "TH2I.h"
-#include "TParameter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -203,10 +201,13 @@ void TFOOTCalProc::ProcessEntry() noexcept {
 	out.Clean();
 	_e = std::get<0>(in).inner().FOOTE.data(); /* Don't know if rebinding is really necessary... */
 
-	if( std::isnan(_e[0]) ) return; /* Missing data; previous step marked it NAN. */
+	if( std::isnan(_e[0]) ) {
+        out->w_ev_type = RNFOOTCal::EventType::Empty;
+        return; /* Missing data; previous step marked it NAN. */
+    }
 	
 	/* Copy	the data over, since there's a write to `e`. */
-	memcpy(e, _e, sizeof(e)); 
+	memcpy(e, _e, sizeof(e));
 
 	int i = 0;
 	/* Try to find a central 'seed' strip. */
@@ -215,6 +216,10 @@ void TFOOTCalProc::ProcessEntry() noexcept {
 			MakeACluster(i);
 		}
 	}
+
+    if(out->w_ev_type == RNFOOTCal::EventType::Undetermined) {
+        out->w_ev_type = RNFOOTCal::EventType::Good;
+    }
 }
 
 void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold check. */ ) {
@@ -334,9 +339,12 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	out.h1_X->Fill(cl_wx);
 	out.h1_cl_type->Fill(ct);
 
-	/* Debug cluster. */
-	if(_cl_cnt >= MASSIVE_CLUSTER_CUTOFF && out.inner()._fBadE.size() == 0) {
-		out.inner()._fBadE.assign(e, e + N_STRIPS); 
+	/* Debug massive clusters. This takes prio over isolated clusters. */
+	if(_cl_cnt >= MASSIVE_CLUSTER_CUTOFF) {
+        out->w_ev_type = RNFOOTCal::EventType::MassiveCluster;
+        
+        if(!out->DebugAssigned())
+	        out->fRaw.assign(e, e + N_STRIPS);
 	}
 
 	switch(_cl_cnt) {
@@ -393,14 +401,16 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	
 	if(cl_fit.IsOk()) out.h1_cl_sigma->Fill(cl_fit.sigma);
 
-	if(it_max->e > 30 and _cl_cnt == 1 and 
-		out.inner()._fHeClSize1.size() == 0 and 
-		out.inner()._fBadE.size() == 0) 
-	{
-		out.inner()._fHeClSize1.assign(e, e + N_STRIPS);
+    /* `MassiveCluster`` event state has priority over other states. */
+	if(it_max->e > ISOLATED_CLUSTER_ADC_CUTOFF and _cl_cnt == 1 and
+	    out->w_ev_type != RNFOOTCal::EventType::MassiveCluster)
+    {
+        out->w_ev_type = RNFOOTCal::EventType::IsolatedStrip;
+        if(!out->DebugAssigned())
+		    out->fRaw.assign(e, e + N_STRIPS);
 	}
 	
-	out.inner().AddCluster(cl_wx, cl_e, _cl_cnt, ct, cl_fit);
+	out->AddCluster(cl_wx, cl_e, _cl_cnt, ct, cl_fit);
 }
 
 /* When noisy strip is found in a middle of the cluster, extrapolate it's value based

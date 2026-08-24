@@ -138,6 +138,7 @@ struct TFRSHitCont : TContainer<RNFRSHit> {
 	FRSIdParam *s2p, *s3p;
 	FRSTargetParam *sTar;
     FRSToFParam *sTof;
+    TrigParam *trig_param;
 	std::string *setupName;
 	
 	TFRSHitCont();

@@ -152,16 +152,12 @@ struct TFOOTHitProc : TProcessor <
 	void ReplayCostCalculation(const DAG::DAGPath& ) noexcept;
 	mnd::Maybe<FHitMatrix::RawHitPairRef> GetHitFromPath(size_t, const DAG::DAGPath& ) const;
 #endif
-
-	std::array<double, N_PAIRS> pair_z;
-	mnd::geom::Rectangle2D target_xy;
 	mnd::geom::Point2D upstream_hit_loc;
 	std::vector<mnd::geom::Line3D> lines;
 
 	DAG dag;
 	
 	std::array<FHitMatrix, N_PAIRS> hm; // hit matrices
-	std::array<Eigen::Vector2d, N_PAIRS> refl; // +-1 based on the on each of the `orientation` params
 	void SetConversionMatrices(int , const FOOTParam& , const FOOTParam& );
 
 	CandidatesBuffer path_specific_candidates_buf;

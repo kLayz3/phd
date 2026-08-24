@@ -7,7 +7,8 @@
 
 class TH2I;
 
-/* Heavy debugging features compiled in. Can be toggled together automatically */
+/* Heavy debugging features compiled in. Can be toggled together automatically.
+ * This is either for sanity debugging or for: ../scripts/hit/foot_track_analysis.C */
 //#define MND_FOOTTRACK_DEBUG
 
 /* In case the heavy debug build is enabled, also feature it in here. */
@@ -29,7 +30,7 @@ struct FOOTQ {
 	using ClusterType = RNFOOTCluster::ClusterType;
 
 	float q; // nominal charge 'value'
-	u32 fCM = 0; /* Cluster multiplicity. */ 
+	u32 fCM = 0; /* Cluster multiplicity. */
 
 	/* Few fields taken from RNFOOTCluster.. */
 #ifdef MND_FOOTTRACK_DEBUG
@@ -39,7 +40,7 @@ struct FOOTQ {
 #endif
 	
 	FOOTQ() = default;
-	FOOTQ(float q_, u32 fCM_ 
+	FOOTQ(float q_, u32 fCM_
 #ifdef MND_FOOTTRACK_DEBUG
 		, ClusterType fCT_, float d_, float e0_
 #endif
@@ -53,11 +54,14 @@ struct FOOTQ {
 	virtual ~FOOTQ() = default;
 	ClassDef(FOOTQ, 1);
 };
+#ifndef MND_FOOTTRACK_DEBUG
+static_assert(sizeof(FOOTQ) == 16, "Alignment obsession, friends.");
+#endif
 
 struct FOOTHit {
 	using ClusterType = FOOTQ::ClusterType;
 
-	FOOTQ Q; 
+	FOOTQ Q;
 	double m; // measurement [ mm ]
 	
 	FOOTHit() = default;
@@ -66,7 +70,7 @@ struct FOOTHit {
 		, ClusterType fCT_, float d_, float e0_
 #endif
 		, double m_) :
-		Q(q_, fCM_ 
+		Q(q_, fCM_
 #ifdef MND_FOOTTRACK_DEBUG
 			, fCT_, d_, e0_
 #endif
@@ -75,18 +79,38 @@ struct FOOTHit {
 	virtual ~FOOTHit() = default;
 	ClassDef(FOOTHit, 1);
 };
+#ifndef MND_FOOTTRACK_DEBUG
+static_assert(sizeof(FOOTHit) == 32, "Alignment obsession, friends.");
+#endif
 std::ostream& operator<<(std::ostream& , const FOOTHit& ) noexcept;
 
 struct RNFOOTPair {
 	std::vector<FOOTHit> x;
 	std::vector<FOOTHit> y;
+
+    /* Nominally, it is the z- position of the pair center in FOOT-box coordinates.
+     * However, we can use the lowest two bits of the mantissa to indicate if the
+     * `x` or the `y` foot are missing. This changes the precision by ~1e-16 or so
+     * such that it doesn't really matter. Sane person would implement a separate flag, but I'm an
+     * OCD masochist who likes alignment very much. Not safe for kids. :)
+     * NOTE: Remapping it to `nan` would open up the full 51-bits mantissa, but then have to handle it properly per event. */
 	double z;
 	RNFOOTPair() = default;
+
+    constexpr static u32 _DATA_X_PRESENT_BITINDEX = 0;
+    constexpr static u32 _DATA_Y_PRESENT_BITINDEX = 1;
+    constexpr static u64 _DATA_X_PRESENT_BITMASK  = (1ULL << _DATA_X_PRESENT_BITINDEX);
+    constexpr static u64 _DATA_Y_PRESENT_BITMASK  = (1ULL << _DATA_Y_PRESENT_BITINDEX);
+
+    bool HasDataX() const noexcept;
+    bool HasDataY() const noexcept;
+    bool HasData() const noexcept;
 
 	inline void Clean() noexcept { x.clear(); y.clear(); }
 	virtual ~RNFOOTPair() = default;
 	ClassDef(RNFOOTPair, 1);
 };
+static_assert(sizeof(RNFOOTPair) == 64, "Alignment obsession, friends.");
 
 struct RNFOOTTrack {
 	double x0, y0;
@@ -136,6 +160,9 @@ struct RNFOOTTrack {
 	virtual ~RNFOOTTrack() = default;
 	ClassDef(RNFOOTTrack, 1);
 };
+#ifndef MND_FOOTTRACK_DEBUG
+static_assert(sizeof(RNFOOTTrack) == 64, "Alignment obsession, friends.");
+#endif
 
 struct RNFOOTHit {
 	static constexpr u32 N_PAIRS = N_FOOT_DETECTORS / 2;
@@ -151,7 +178,7 @@ struct RNFOOTHit {
 		ClassDef(Vertex, 1);
 	};
 
-	RNFOOTTrack heavy_fragment; // mostly a debug field. The same track will be found in the vector (usually).
+	RNFOOTTrack heavy_fragment; // Mostly a debug field. The same track will be found in the vector (usually).
 	std::array<RNFOOTPair, N_PAIRS> pair;
 	Vertex vertex;
 	std::vector<RNFOOTTrack> track;

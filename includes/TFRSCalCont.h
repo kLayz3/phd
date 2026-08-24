@@ -132,6 +132,7 @@ struct RNFRSCal {
 
 	std::array<RNSciCal, N_VALID_SCI> sci;
 	std::array<RNTPCCal, N_VALID_TPC> tpc;
+    RNTrigMap trig; // Just gets directly mapped from the map step.
 
 	inline void Clean() noexcept { 
 		for(auto& s : sci) s.Clean();
@@ -273,8 +274,43 @@ public:
 };
 ADD_JSON_TYPE_RESOLUTION(SCIParam, 4)
 
+struct TrigParamSingle {
+    GET_HELP_AUX_IMPL
+    ADD_SERIALIZABLE_FIELD(std::string, label,            "",    0);
+    ADD_SERIALIZABLE_FIELD(u32,         tpat,             0,     1);
+    ADD_SERIALIZABLE_FIELD(u32,         ttype,            1,     2);
+    ADD_SERIALIZABLE_FIELD(bool,        enabled,          true,  3);
+    ADD_SERIALIZABLE_FIELD(bool,        contains_tracker, false, 4);
+
+    bool IsActive(u32 ) const noexcept;
+    TrigParamSingle() = default;
+	virtual ~TrigParamSingle() = default;
+	ClassDef(TrigParamSingle, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(TrigParamSingle, 4)
+
+struct TrigParam {
+    GET_HELP_AUX_IMPL
+
+    static constexpr u32 MAX_TPAT = 16;
+    ADD_SERIALIZABLE_FIELD(std::vector<TrigParamSingle>, trigger_map, {},  0);
+
+    bool HasFOOT(u32 ) const noexcept;
+
+    using TLabels = std::array<std::string, MAX_TPAT+1>; // Rather return owned string to not worry about dangles.
+    using TLabelsMap = std::map<u32, std::string>;
+    TLabels GetTrigLabels() const;
+    TLabelsMap GetTrigLabelsMap() const;
+
+    TrigParam() = default;
+	virtual ~TrigParam() = default;
+	ClassDef(TrigParam, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(TrigParam, 0)
+
 inline void Add(TPCParam&, const TPCParam&) {}
 inline void Add(SCIParam&, const SCIParam&) {}
+inline void Add(TrigParam&, const TrigParam&) {}
 
 struct TFRSCalCont : TContainer<RNFRSCal> {
 	friend struct TFRSCalProc;
@@ -287,6 +323,7 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
 
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param{};
 	std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_param{};
+    TrigParam *trig_param{};
 	std::string *setupName{};
 
 	TFRSCalCont();
@@ -303,4 +340,5 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
 private:
     inline static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
     inline static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
+    inline static TrigParam _trig_param {};
 };

@@ -76,11 +76,47 @@ u32 SCIParam::SetConverter(std::string_view fname) const {
 SCIDEIntoQConverter const* SCIParam::GetConverter() const {
     return current_converter;
 }
+bool TrigParamSingle::IsActive(u32 tpat) const noexcept {
+    // Tpat index == 0 is special. TRIG_PENDING gets mapped to that
+    // and it only matches if the entire tpat is exactly 0.
+    if(this->tpat == 0)
+        return tpat == 0;
+    return (enabled &&
+           (tpat >> ((this->tpat)-1)) & 1);
+}
+
+bool TrigParam::HasFOOT(u32 tpat) const noexcept {
+    for(const TrigParamSingle& trig : trigger_map) {
+        if(trig.contains_tracker && trig.IsActive(tpat))
+            return true;
+    }
+    return false;
+}
+
+TrigParam::TLabels TrigParam::GetTrigLabels() const {
+    TLabels labels {}; // std::array<...> = {"", "", ... };
+    for(const auto& trig: trigger_map) {
+        const u32 index = trig.tpat;
+        if(index > MAX_TPAT)
+            ERROR("TrigParam::GetTrigLabels() requested index is %u>%u. Fix the param file.\n", index, MAX_TPAT);
+        labels[index] = trig.label;
+    }
+    return labels;
+}
+TrigParam::TLabelsMap TrigParam::GetTrigLabelsMap() const {
+    TLabelsMap map {};
+    auto labels = this->GetTrigLabels();
+    for(u32 i=0; i<(u32)labels.size(); ++i) {
+        if(!labels[i].empty())
+            map.emplace(i, labels[i]);
+    }
+    return map;
+}
 
 TFRSCalCont::TFRSCalCont() : TContainer("FRS") {}
 
 void TFRSCalCont::Init(TDictInfo info) {
-	auto it = info.find("Setup");	
+	auto it = info.find("Setup");
 	if(it == info.end()) 
 		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
 	const std::string& file_name = it->second;
@@ -114,6 +150,11 @@ void TFRSCalCont::Init(TDictInfo info) {
 		if(i >= RNFRSCal::N_VALID_SCI) continue;
 		UNROLL_JSON_PARAM(_sci_param[i], params, 4)
 	}
+
+    constexpr auto trig_param_json_name = TrigParam::get_name<0>();
+    if(setup.contains(trig_param_json_name)) {
+        UNROLL_JSON_PARAM(_trig_param, setup.at(trig_param_json_name), 0);
+    }
 }
 
 using T1 = std::remove_reference_t<decltype(*TFRSCalCont::tpc_param)>; // std::array<TPCParam, _>
@@ -151,13 +192,14 @@ void TFRSCalCont::Setup() {
 	if(SCIParam::channel_to_ns < 0)
 		ERROR("Conversion between channel number to ns not given (or parsed) in \'%s\'", setupFileName.c_str());
 
+    trig_param = RegisterObject<TrigParam>("trigger_map", _trig_param);
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setupFileName);
 
 	h1_x_sc21_before_target->GetXaxis()->SetTitle("X [mm]");
 	h1_x_sc22_after_target->GetXaxis()->SetTitle("X [mm]");
 }
 
-std::array<double, TPCParam::N_S2_TPC> 
+std::array<double, TPCParam::N_S2_TPC>
 TFRSCalCont::z_s2_tpc(
     std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param
 ) {
@@ -174,9 +216,9 @@ std::array<std::array<double, 2>, TPCParam::N_S2_TPC>
 TFRSCalCont::z_s2_tpc_delay_lines(
     std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param
 ) {
-    if(!tpc_param) 
+    if(!tpc_param)
         ERROR("nullptr supplied to z_s2_tpc_delay_lines\n");
-    return { 
+    return {
         tpc_param->at(0).zDL(),
         tpc_param->at(1).zDL(),
         tpc_param->at(2).zDL(),
@@ -195,3 +237,5 @@ ClassImp(SCIQDCPedestal);
 ClassImp(SCIMeanQDC);
 ClassImp(SCIDEIntoQConverter);
 ClassImp(SCIParam);
+ClassImp(TrigParamSingle);
+ClassImp(TrigParam);

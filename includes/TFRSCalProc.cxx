@@ -1,7 +1,7 @@
+#include "TFRSHitCont.h"
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
 #include "TFRSCalProc.h"
-#include "Eigen.h"
 
 /* This ostream API is really hacked. Close your eyes. */
 #ifdef TFRSCALPROC_VERBOSE_
@@ -38,7 +38,11 @@ static double uniform() noexcept {
 	return static_cast<double>(rand()) / static_cast<double>(RAND_MAX + 1ULL); 
 }
 
-TFRSCalProc::TFRSCalProc(TFRSCalCont& out, const TFRSMapCont& in) : TFRSCalProc::Base(out, in) {
+TFRSCalProc::TFRSCalProc(
+	TFRSCalCont& out,
+	const TFRSMapCont& in_frs,
+	const TTrigMapCont& in_trig
+) : TFRSCalProc::Base(out, in_frs, in_trig) {
 	for(auto& l2 : candidate_list)
 		for(auto& list : l2) list.reserve(CANDIDATE_LIST_CAPACITY);
 	for(auto& list : full_candidate_list)	
@@ -49,13 +53,18 @@ void TFRSCalProc::ProcessEntry() noexcept {
 #ifdef TFRSCALPROC_VERBOSE_
 	++called_;
 #endif
-	for(int i=0; i < N_VALID_SCI; ++i)
+	mnd::static_for<0, N_VALID_SCI>([this](auto I) {
+		constexpr int i = static_cast<int>(decltype(I)::value);
 		this->ProcessSci(i);
-	for(int i=0; i < N_VALID_TPC; ++i)
-		this->ProcessTPC(i);
+	});
 
-	//this->ProcessS2Angle();
-	//this->ProcessS4Angle();
+	mnd::static_for<0, N_VALID_TPC>([this](auto I) {
+		constexpr int i = static_cast<int>(decltype(I)::value);
+		this->ProcessTPC(i);
+	});
+
+	// Just copy the value.
+	out.inner().trig = std::get<1>(this->in).inner();
 }
 
 void TFRSCalProc::ProcessTPC(int _i_tpc) noexcept {
@@ -398,75 +407,6 @@ void TFRSCalProc::PostProcessTPC(int _i_tpc) noexcept {
 		}
 	}
 }
-
-/* Preliminary angle analysis at S2. */
-void TFRSCalProc::ProcessS2Angle() noexcept {
-#if 0 
-	constexpr int N = 3; /* Take 3 TPC's into the fit. */
-
-	static const auto& tpc_param = this->out._tpc_param;
-	static const std::array<double,4> z = {
-		tpc_param[0].z0,
-		tpc_param[1].z0,
-		tpc_param[2].z0,
-		tpc_param[3].z0,
-	};
-
-	constexpr double zT = 3355 - 440/2.0; 
-	using QR = Eigen::ColPivHouseholderQR<Eigen::Matrix<double, N, 2>>;
-	static QR qr = {};
-
-	[[maybe_unused]]
-	static const Eigen::Matrix<double, N, 2> A = []{
-		Eigen::Matrix<double, N, 2> tmp;
-		for(int i=0; i<N; ++i) {
-			tmp(i,0)  = z[i];
-			tmp(i,1) = 1.0;
-		}
-		qr.compute(tmp);
-		return tmp;
-	}();
-	
-	const auto& tpc = this->out.inner().tpc;
-	if(tpc[0].hits[0].size() == 1 and tpc[0].hits[1].size() == 1 and
-		tpc[1].hits[0].size() == 1 and tpc[1].hits[1].size() == 1 and 
-		tpc[2].hits[0].size() == 1 and tpc[2].hits[1].size() == 1)
-	{
-		std::array<double, N> x = {0}, y = {0};
-		for(int i=0; i<N; ++i) {
-			for(int d : {0,1}) {
-				x[i] += tpc[i].hits[d][0].x;
-				y[i] += tpc[i].hits[d][0].y;
-			}
-			x[i] /= 2;
-			y[i] /= 2;
-		}
-		Eigen::Map<const Eigen::Matrix<double, N, 1>> xv(x.data());
-		Eigen::Map<const Eigen::Matrix<double, N, 1>> yv(y.data());
-
-		Eigen::Vector2d coeffs_x = qr.solve(xv);
-		Eigen::Vector2d coeffs_y = qr.solve(yv);
-		double ax = coeffs_x(1), bx = coeffs_x(0);
-		double ay = coeffs_y(1), by = coeffs_y(0);
-		
-		out.h2_ab_s2_before_target->Fill(1000*ax, 1000*bx);
-		out.h2_xy_s2_at_target->Fill(ax*zT + bx, ay*zT + by); 
-	}
-	
-	if(tpc[3].hits[0].size() == 1 and tpc[3].hits[1].size() == 1) {
-		double x = (tpc[3].hits[0][0].x + tpc[3].hits[1][0].x) / 2;
-		double y = (tpc[3].hits[0][0].y + tpc[3].hits[1][0].y) / 2;
-		out.h2_xy_s2_after_target->Fill(x,y);
-		out.h2_ab_s2_after_target->Fill (
-			1000 * x / (z[3] - zT),
-			1000 * y / (z[3] - zT)
-		);
-	}
-#endif
-}
-
-/* Preliminary angle analysis at S2. */
-void TFRSCalProc::ProcessS4Angle() noexcept {}
 
 void TFRSCalProc::ProcessSci(int _i_sci) noexcept {
 	constexpr i32 INVALID = RNSciMap::Measurement::TDC_INVALID;

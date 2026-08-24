@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
 	
 	/* All cut entries now hold only A2 range. Sort them out, so that light stuff is first.
 	 * Also use this time to do some sanity checks for the ranges. */
-	std::sort(selected.begin(), selected.end(), 
+	std::sort(selected.begin(), selected.end(),
 		[](const auto& lhs, const auto& rhs) {
 			if(std::get<1>(lhs.fragment)[0] > std::get<1>(lhs.fragment)[1]) {
 				WARN("Range: "); std::cerr << std::get<1>(lhs.fragment) << " isn't valid (lhs >= rhs)?";
@@ -167,10 +167,14 @@ int main(int argc, char* argv[]) {
 	TH2P* h2_score_vs_mult = new TH2P("Track score [a.u.]:Track multp@Full FOOT system",
 		10, -0.5, 9.5, 300, 0, 50);
 	TH1P* h1_track_distance = new TH1P("Track distances [mm]", kBlue-1, 600, 0, 30);
-	TH1P* h1_track_angle = new TH1P("Track angles [mrad]", kMagenta+1, 200, 0, 100);
-	TH1P* h1_angle_ex = new TH1P("Track angles, excitation sqrt(#sum t_i^2) [mrad]", kCyan-9, 300, 0, 300);
+	TH1P* h1_track_angle = new TH1P("Track angles [mrad]@Between all tracks selected", kMagenta+1, 200, 0, 100);
+	TH1P* h1_angle_ex = new TH1P(Form("#sqrt #sum_{i=1}^{%u} #theta_{i|heavy}^{2} [mrad]@Track invariant angle",
+		sum_n_tracks_required-1), kCyan-9, 300, 0, 300);
 
-	TH2P* h2_vertex_z = new TH2P("RMS angle [mrad]:Vertex z [mm]@Traced by the FOOT", 200, -100, 100, 100,0,100);
+	if(sum_n_tracks_required == 2 and angle_type == AngleType::p)
+		(*h1_angle_ex)->GetXaxis()->SetTitle("#theta(p,frag) [mrad]");
+
+	TH2P* h2_vertex_z = new TH2P("Invariant angle normalized per track [mrad]:Vertex z [mm]@Traced by the FOOT", 160, -80, 80, 100,0,100);
 	
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
@@ -249,7 +253,7 @@ int main(int argc, char* argv[]) {
 						track_used_mask[i] = true;
 						if(--n == 0) break;
 					};
-				} 
+				}
 
 				/* `n` now must be 0, otherwise we didn't catch all unique tracks for this
 				 * specific charge interval. */
@@ -257,7 +261,7 @@ int main(int argc, char* argv[]) {
 			}
 			if(!is_valid) continue; // skip event.
 			
-			h1_track_mult->Fill(N);
+			h1_track_mult->Fill(static_cast<double>(N));
 
 			/* From the selected tracks, fill out the `tracks` 
 			 * sequence. Here, we eliminate tracks from the event that didn't fell in the 
@@ -429,7 +433,7 @@ std::istream& operator>>(std::istream& is, SingleSelect& out) {
 			break;
 		}
 
-		default: 
+		default:
 			is.setstate(std::ios::failbit);
 	}
 	return is;

@@ -65,6 +65,13 @@ void TFRSMapCont::Setup() {
 	}
 };
 
+bool RNTrigMap::HasTrigger(u32 n) const noexcept {
+	if(n > 16) return false;
+	return tpat != INVALID_TPAT
+		&& static_cast<bool> (
+			(tpat >> (n-1)) & 1
+		);
+}
 TTrigMapCont::TTrigMapCont() : TContainer("Trig") {}
 
 void TTrigMapCont::Setup() {

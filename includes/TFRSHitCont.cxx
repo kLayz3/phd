@@ -1,4 +1,5 @@
 #include "TFRSHitCont.h"
+#include "TFRSCalCont.h"
 #include "util/JSONParser.h"
 
 #include "util/Geometry.h"
@@ -10,6 +11,7 @@ static nlohmann::json setup {};
 static FRSIdParam _s2p, _s3p;
 static FRSTargetParam _sTar;
 static FRSToFParam _sTof;
+static TrigParam _trig_param;
 
 static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
 static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
@@ -35,10 +37,16 @@ std::string RNFRSHit::DecodeS3() const noexcept {
 	return "Work in progress! 🚧";
 }
 
-TFRSHitCont::TFRSHitCont() : TContainer("FRS") {}  
- 
+TFRSHitCont::TFRSHitCont() : TContainer("FRS") {}
+
+/* This is a bit of copy-paste from cal step. Just to keep the
+ * parameter values also in this ROOT file. NOTE that the src program
+ * extracts the file name from the ROOT file itself,
+ * special JSON file name shouldn't be given directly. This is a bit of an inconvenience
+ * in the API,.. small todo: could be solved in stone if we call the init directly during 
+ * TFRSHitProc constructor (*not* the copy-ctor). */
 void TFRSHitCont::Init(TDictInfo info) {
-	auto it = info.find("Setup");	
+	auto it = info.find("Setup");
 	if(it == info.end()) 
 		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
 	const std::string& file_name = it->second;
@@ -91,6 +99,10 @@ void TFRSHitCont::Init(TDictInfo info) {
         WARN("\'ToF\' key not found in \'FRS\' section of JSON file: %s .. Is OK.\n", file_name.c_str());
     }
 
+    constexpr auto trig_param_json_name = TrigParam::get_name<0>();
+    if(setup.contains(trig_param_json_name)) {
+        UNROLL_JSON_PARAM(_trig_param, setup.at(trig_param_json_name), 0);
+    }
 }
 
 void Add(FRSIdParam&, const FRSIdParam&) {}
@@ -115,6 +127,7 @@ void TFRSHitCont::Setup() {
 	s3p = RegisterObject<FRSIdParam>("FRS S3 ID Parameter");
 	sTar = RegisterObject<FRSTargetParam>("FRS S2 Target Parameter");
 
+    trig_param = RegisterObject<TrigParam>("trigger_map", _trig_param);
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 }
 

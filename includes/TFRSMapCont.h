@@ -160,6 +160,8 @@ struct RNTrigMap {
 		 * It needs to hold the state of the previous entry. */
 	}
 
+	bool HasTrigger(u32 ) const noexcept;
+
 	virtual ~RNTrigMap() = default;
 	ClassDef(RNTrigMap, 1);
 };
