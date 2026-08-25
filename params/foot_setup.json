@@ -5,8 +5,7 @@
 		"z0": 3355, // Nominal placement of the center of the box.
 		"width_outer": 435.5,
 		// FOOT detector nominal `z` positions, relative to the box' outer edge (edge with smaller z)
-		//"det_pos": [32.05, 43.80, 151.00, 162.75, 281.90, 293.65, 400.85, 412.60], // <--- very good
-		"det_pos": [31.45, 43.40, 150.30, 162.25, 281.60, 293.55, 400.45, 412.40],
+		"det_pos": [31.45, 43.40, 150.30, 162.25, 281.60, 293.55, 400.45, 412.40], // <--- very good, dx=5.5
 		"dx": 0.0, // Small offset in x- direction 
 		"dy": 0.0, // Small offset in y- direction
 		"da": 0.0, // Small offset in x- angle relative to the TPCs' defined axis.
@@ -27,7 +26,7 @@
 		"mirrored": false,  // can be rotated and mirrored
 		"c_threshold": 3.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
-		"delta_p": -1.9032, // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
+		"delta_p": -1.8896, // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
 		"delta_a": 0.0,     // Offset in angle [degrees], around the z-axis. 
 		"gain": {
 			"fit": [
@@ -362,8 +361,8 @@
 		"mirrored": false,
 		"c_threshold": 3.0,
 		"n_threshold": 1.5,
-		"delta_p": 1.1058, 
-		"delta_a": 0.0, // by definition 
+		"delta_p": 1.2067,
+		"delta_a": 0.0, // by definition
 		"gain": {
 			"fit": [
 				{
@@ -705,7 +704,7 @@
 		"mirrored": false,
 		"c_threshold": 3.0,
 		"n_threshold": 1.5,
-		"delta_p": -2.0874,
+		"delta_p": -2.0975,
 		"delta_a": 0.0, // by definition
 		"gain": {
 			"fit": [
@@ -1036,7 +1035,7 @@
 		"mirrored": false,
 		"c_threshold": 3.0,
 		"n_threshold": 1.5,
-		"delta_p": 2.14864,
+		"delta_p": 2.1337,
 		"delta_a": 0.0, // by definition
 		"gain": {
 			"fit": [
@@ -1379,8 +1378,8 @@
 		"mirrored": false,
 		"c_threshold": 3.0,
 		"n_threshold": 1.5,
-		"delta_p": -1.703,
-		"delta_a": -11.0845,
+		"delta_p": -1.70856,
+		"delta_a": -11.0879,
 		"gain": {
 			"fit": [
 				{
@@ -1710,8 +1709,8 @@
 		"mirrored": false,
 		"c_threshold": 3.0,
 		"n_threshold": 1.5,
-		"delta_p": 2.9603,
-		"delta_a": -10.9936,
+		"delta_p": 2.8869,
+		"delta_a": -11.0003,
 		// ASICs #0 and #1 are weird. In fact whole det is shifted low in energy ...
 		// Some of the params are completely eye-balled, not gonna lie.
 		"gain": {
@@ -2069,8 +2068,8 @@
 		"mirrored": false,
 		"c_threshold": 3.0,
 		"n_threshold": 1.5,
-		"delta_p": -2.3051,
-		"delta_a": -0.287,
+		"delta_p": -2.3027,
+		"delta_a": -0.30,
 		"gain": {
 			"fit": [
 				{ // ASIC[0]
@@ -2408,8 +2407,8 @@
 		"mirrored": false,
 		"c_threshold": 3.0,
 		"n_threshold": 1.5,
-		"delta_p": 3.8623,
-		"delta_a": 0.148,
+		"delta_p": 3.6831,
+		"delta_a": 0.139,
 		"gain": {
 			"fit": [
 				{
