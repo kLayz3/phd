@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "--niter", niter, "Gaussian TH1D fit, number of iterations for the peak finder.")
 		->check(CLI::PositiveNumber);
 	add_logged_option(app, "-l,--line-size", line_size, "Fit curve line size.");
-	add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
+	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
     bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");

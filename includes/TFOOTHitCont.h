@@ -20,6 +20,7 @@ class TH2I;
 #	ifndef MND_HITMATRIX_DO_BOUNDS_CHECK
 #		define MND_HITMATRIX_DO_BOUNDS_CHECK
 #	endif
+#   pragma message(MND_FILE_LINE_STR " => FOOT Hit Step Debugging Features Enabled!")
 #endif
 
 #include "util/HitMatrix.hxx"
@@ -183,14 +184,19 @@ struct RNFOOTHit {
 	Vertex vertex;
 	std::vector<RNFOOTTrack> track;
 
-	RNFOOTHit() = default;
+    /* Count number of FOOT detector pairs with present both (X,Y) measurements. */
+    u32 DataPresentCount() const noexcept;
+    /* Returns true if all underlying FOOT pairs have a non-empty entry. */
+    bool HasData() const noexcept;
 
-	inline void Clean() noexcept { 
+	inline void Clean() noexcept {
 		heavy_fragment.n = 0;
 		for(auto& p: pair) { p.Clean(); }
 		vertex.Clean();
-		track.clear(); 
+		track.clear();
 	}
+
+	RNFOOTHit() = default;
 	virtual ~RNFOOTHit() = default;
 	ClassDef(RNFOOTHit, 1);
 };

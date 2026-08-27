@@ -19,15 +19,17 @@ namespace mnd::cli::detail {
 	static constexpr char auth_sym = '!';
 }
 
+/* Overload for non-enum types. */
 template <
 	DisplayDefault d = DisplayDefault::Yes,
-	typename T
+	typename T,
+	typename std::enable_if<!std::is_enum_v<T>>::type* = nullptr
 > CLI::Option* add_logged_option (
 	CLI::App& app,
 	const std::string& name,
 	T& variable,
 	const std::string& description
-) {	
+) {
 	auto state = std::make_shared<mnd::cli::detail::State>();
 	const std::string default_value = CLI::detail::to_string(variable);
 	auto* opt = app.add_option_function<T>(
@@ -62,33 +64,16 @@ template <
 	return opt;
 }
 
-inline CLI::Option* add_logged_flag (
-	CLI::App& app,
-	std::string name,
-	bool& variable,
-	std::string description
-) {
-	return app.add_flag(name, variable, description)
-		->each (
-			[name](const std::string& match) {
-				WARN("Parsed flag "); 
-				std::cerr << KBH_YEL << name << KNRM << " as " 
-					<< KBH_CYN << match << KNRM << '\n';
-			}
-		);
-}
-
 template <
 	DisplayDefault d = DisplayDefault::Yes,
-	typename E
-> CLI::Option* add_enum_option (
+	typename E,
+	typename std::enable_if<std::is_enum_v<E>>::type* = nullptr
+> CLI::Option* add_logged_option (
 	CLI::App& app,
 	const std::string& name,
 	E& variable,
-	const std::string& description 
+	const std::string& description
 ) {
-	static_assert(std::is_enum_v<E>);
-
 	auto state = std::make_shared<mnd::cli::detail::State>();
 	const std::string default_value = std::string{magic_enum::enum_name(variable)};
 	auto* opt = app.add_option_function<std::string>(
@@ -97,19 +82,19 @@ template <
 			auto e = magic_enum::enum_cast<E>(s);
 			if(!e)
 				ERROR("Validation error for enum: \'%s\', "
-					"passed in \'%s\' which is not parsable.", 
+					"passed in \'%s\' which is not parsable.",
 					mnd::type_name<E>().c_str(), s.c_str());
 			if(state->current_is_authoritative) {
 				// The ! occurrence overrides everything.
 				variable = *e;
 				state->authoritative_seen = true;
-				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM); 
-				std::cerr << KBH_YEL << name << KNRM << " as " 
+				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM);
+				std::cerr << KBH_YEL << name << KNRM << " as "
 					<< KBH_CYN << s << KNRM << '\n';
 			} else if(!state->authoritative_seen) {
 				variable = *e;
-				WARN("Parsed option "); 
-				std::cerr << KBH_YEL << name << KNRM << " as " 
+				WARN("Parsed option ");
+				std::cerr << KBH_YEL << name << KNRM << " as "
 					<< KBH_CYN << s << KNRM << '\n';
 			}
 			state->current_is_authoritative = false;
@@ -128,6 +113,92 @@ template <
 		opt->default_str(default_value);
 
 	return opt;
+}
+
+/* A more specialized overload to parse a sequence of enum tokens. */
+template <
+	DisplayDefault d = DisplayDefault::Yes,
+	typename E,
+	typename std::enable_if<std::is_enum_v<E>>::type* = nullptr
+> CLI::Option* add_logged_option (
+	CLI::App& app,
+	const std::string& name,
+	std::vector<E>& variable,
+	const std::string& description
+) {
+	auto state = std::make_shared<mnd::cli::detail::State>();
+
+	std::vector<std::string> default_values;
+	default_values.reserve(variable.size());
+
+	for(const auto e : variable)
+		default_values.emplace_back(magic_enum::enum_name(e));
+
+	auto* opt = app.add_option_function<std::vector<std::string>>(
+		name,
+		[&variable, name, state](const std::vector<std::string>& matches) {
+			std::vector<E> parsed;
+			parsed.reserve(matches.size());
+
+			for(const auto& s : matches) {
+				auto e = magic_enum::enum_cast<E>(s);
+				if(!e)
+					ERROR("Validation error for enum: \'%s\', "
+						"passed in \'%s\' which is not parsable.",
+						mnd::type_name<E>().c_str(), s.c_str());
+
+				parsed.push_back(*e);
+			}
+
+			if(state->current_is_authoritative) {
+				// The ! occurrence overrides everything.
+				variable = std::move(parsed);
+				state->authoritative_seen = true;
+
+				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM);
+				std::cerr << KBH_YEL << name << KNRM << " as "
+					<< KBH_CYN << matches << KNRM << '\n';
+			} else if(!state->authoritative_seen) {
+				variable = std::move(parsed);
+				WARN("Parsed option ");
+				std::cerr << KBH_YEL << name << KNRM << " as "
+					<< KBH_CYN << matches << KNRM << '\n';
+			}
+			state->current_is_authoritative = false;
+		},
+		mnd::sstrcat("Enum: ", magic_enum::enum_names<E>(), ". ", description))
+		->transform([state](std::string input) -> std::string {
+			if(!input.empty() &&
+			input.front() == mnd::cli::detail::auth_sym)
+			{
+				state->current_is_authoritative = true;
+				input.erase(input.begin());
+			}
+
+			return input;
+		})
+		->trigger_on_parse();
+
+	if constexpr(d == DisplayDefault::Yes)
+		opt->default_str(CLI::detail::to_string(default_values));
+
+	return opt;
+}
+
+inline CLI::Option* add_logged_flag (
+	CLI::App& app,
+	std::string name,
+	bool& variable,
+	std::string description
+) {
+	return app.add_flag(name, variable, description)
+		->each (
+			[name](const std::string& match) {
+				WARN("Parsed flag "); 
+				std::cerr << KBH_YEL << name << KNRM << " as " 
+					<< KBH_CYN << match << KNRM << '\n';
+			}
+		);
 }
 
 namespace mnd {

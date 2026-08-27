@@ -5,9 +5,16 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-#ifndef __FILENAME__
-#   define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+#ifndef __FILE_NAME__
+#	ifdef __unix__
+#		define __FILE_NAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+#	elif defined(__WIN32) || defined(WIN32)
+#		define __FILE_NAME__  (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
+#	else
+#		define __FILE_NAME__ __FILE__
+#	endif
 #endif
+
 #ifndef KNRM
 #	define KNRM "\e[0m"
 #endif
@@ -21,7 +28,7 @@
 #ifndef ERROR 
 #define ERROR(...) \
 do { \
-	fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
+	fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
 	fprintf(stderr, __VA_ARGS__); \
 	throw std::runtime_error("JSON Parser: error"); \
 } while(0);

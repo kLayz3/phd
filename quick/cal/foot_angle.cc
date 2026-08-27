@@ -60,7 +60,7 @@ particle tracks to match with other detectors in the sequence. "};
 		->delimiter(','); 
 	add_logged_option(app, "-N,--npts", Npts, "Amount of statistics required to issue a fit.");
     add_logged_flag(app, "--nodraw", no_draw, "Do not draw the histograms.");
-	add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
+	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");

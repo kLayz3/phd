@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
         app.description(std::move(descr));
     }
 #endif
-	int verbosity_raw = 0; 
+	int verbosity_raw = 0;
 	std::string fileName, outFile, setupFile, footSetupFile;
 	u64 maxEvents = -1;
 	double kalman_max_cost   = TrackCost::DEFAULT_MAX_CANDIDATE_COST;

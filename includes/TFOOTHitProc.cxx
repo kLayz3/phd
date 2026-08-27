@@ -344,9 +344,9 @@ void TFOOTHitProc::ProcessPair (
 	
 	output.z = pair_z[ipair];
 
-    u32 pair_data_flag = ( fx.IsEmptyEvent() << RNFOOTPair::_DATA_X_PRESENT_BITINDEX)
-                       | ( fx.IsEmptyEvent() << RNFOOTPair::_DATA_X_PRESENT_BITINDEX);
-    mnd::set_low_bits<2>(output.z, pair_data_flag); // h4ckz, b40.. k14y23 g0d
+    u32 pair_data_flag = ( static_cast<u32>(fx.IsEmptyEvent()) << RNFOOTPair::_DATA_X_PRESENT_BITINDEX)
+                       | ( static_cast<u32>(fy.IsEmptyEvent()) << RNFOOTPair::_DATA_Y_PRESENT_BITINDEX);
+    mnd::set_low_bits<2>(output.z, pair_data_flag); // ħ4ckz
 }
 
 constexpr auto X = FHitMatrix::X;

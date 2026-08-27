@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
 		->delimiter(','); 
 	add_logged_flag(app, "--verify", do_verify, "Already take inputted parameters and calculate the true position.");
-	add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
+	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");

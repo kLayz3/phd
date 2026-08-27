@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
         ->check(CLI::PositiveNumber);
 	add_logged_flag(app, "-d,--diff", do_diff, "For the correlation plot, have y-axis be the difference (ref - sci), instead of the actual SCI measurement.");
     add_logged_flag(app, "--no-fit", dont_fit, "Do not fit the correlation plot.");
-    add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
+    add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");

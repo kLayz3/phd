@@ -29,6 +29,16 @@ bool RNFOOTPair::HasData() const noexcept {
     constexpr u64 mask = _DATA_X_PRESENT_BITMASK | _DATA_Y_PRESENT_BITMASK;
     return mnd::get_fbits(z, mask) == mask;
 }
+u32 RNFOOTHit::DataPresentCount() const noexcept {
+    return std::accumulate(
+        pair.begin(),
+        pair.end(),
+        0, [](u32 sum, const auto& fp) { return sum + static_cast<u32>(fp.HasData()); }
+    );
+}
+bool RNFOOTHit::HasData() const noexcept {
+    return DataPresentCount() == pair.size();
+}
 
 TFOOTHitCont::TFOOTHitCont() : TContainer("FOOT") {}
 

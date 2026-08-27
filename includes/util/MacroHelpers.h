@@ -11,6 +11,8 @@
 #include "TROOT.h"
 #include "TCanvas.h"
 #include "TInterpreter.h"
+#include "TSystem.h"
+#include "TImage.h"
 
 #include "TFile.h"
 
@@ -66,9 +68,9 @@ enum WhereAmI { Macro, Exe };
 
 template<enum WhereAmI loc>
 void save_all (
-	Extension extension = Extension::png, 
+	Extension extension = Extension::png,
 	std::vector<std::string_view> extra_tag = {}
-) { 
+) {
 	const char* ext = "";
 #define HANDLE_CASE_SAVE_ALL(e) case(Extension::e): { ext = #e; break; }
 
@@ -84,12 +86,12 @@ void save_all (
 
 	std::string stem{};
 	if constexpr(loc == Macro) {
-		const char* macro_name = gInterpreter->GetCurrentMacroName(); 
+		const char* macro_name = gInterpreter->GetCurrentMacroName();
 		stem = std::filesystem::path(macro_name).stem().string();
 	}
 	else { // standalone executable, or no interpreted macro currently active
 		stem = mnd::current_executable_path().stem().string();
-	} 
+	}
 
 	std::filesystem::path p = "autosave";
 	p = p / stem / ext;
@@ -99,7 +101,7 @@ void save_all (
 	try {
 		std::filesystem::create_directories(p); 
 	} catch(const std::filesystem::filesystem_error& e) {
-		WARN("canvas::save_all : Error in creating directories: \'%s\', err: %s\n", p.c_str(), e.what());  
+		WARN("canvas::save_all : Error in creating directories: \'%s\', err: %s\n", p.c_str(), e.what());
 		return;
 	}
 
@@ -115,9 +117,22 @@ void save_all (
 		auto name = std::string(c->GetName()); 
 		auto outfile = p / (name + "." + ext);
 		// Force rendering
+		c->cd();
 		c->Modified();
 		c->Update();
-		c->SaveAs( outfile.c_str() ); 
+		gSystem->ProcessEvents();
+		if(extension == Extension::png) {
+			auto img = std::unique_ptr<TImage>{TImage::Create()};
+			if(!img) {
+				WARN("canvas::save_all: TImage::Create() failed for Canvas: \'%s\' (title: \'%s\')\n",
+					c->GetName(), c->GetTitle());
+				continue;
+			}
+			img->FromPad(c);
+			img->WriteImage(outfile.c_str());
+		} else {
+			c->Print(outfile.c_str());
+		}
 	}
 	if(cs.size() == 1 or (extension != Extension::png and extension != Extension::jpeg)) return;
 
@@ -127,13 +142,26 @@ void save_all (
 	cs.front()->Print(Form("%s(", outpdf.c_str()));
 	for(size_t i=1; i < cs.size() - 1; ++i) {
 		cs[i]->Print( outpdf.c_str() );
-	} 
+	}
 	cs.back()->Print(Form("%s)", outpdf.c_str()));
 }
+
+template<enum WhereAmI loc>
+void save_all (
+	std::vector<Extension> extension,
+	std::vector<std::string_view> extra_tag = {}
+) {
+	for(auto const e : extension)
+		save_all<loc>(e, extra_tag);
+}
+/* All vectors passed by value, but it's small so overhead is whatever,
+ * and this fnc won't ever get called in a loop. */
 
 }; // namespace canvas
 extern template void canvas::save_all<canvas::Macro>(canvas::Extension , std::vector<std::string_view> );
 extern template void canvas::save_all<canvas::Exe  >(canvas::Extension , std::vector<std::string_view> );
+extern template void canvas::save_all<canvas::Macro>(std::vector<canvas::Extension> , std::vector<std::string_view> );
+extern template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extension> , std::vector<std::string_view> );
 
 inline std::ostream& operator<<(std::ostream& os, canvas::Extension e) {
 	return os << magic_enum::enum_name(e);
@@ -144,7 +172,7 @@ inline std::ostream& operator<<(std::ostream& os, DoSave e) {
 
 namespace mnd {
 
-/* Nicer API to tag different instances of same type. 
+/* Nicer API to tag different instances of same type.
  * This is basically a zero-cost abstraction that allows really
  * pretty API's to directly name the positional arguments. */
 template<typename T, typename Tag = void>

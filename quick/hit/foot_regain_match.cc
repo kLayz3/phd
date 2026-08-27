@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-d,--delta", delta_cut,
 		"Select the delta cut which will be applied to gate on very central hits.")
 		->check(CLI::Range(0.01, 0.2));
-	add_enum_option(app, "-c,--hit-type", hit_type,
+	add_logged_option(app, "-c,--hit-type", hit_type,
 		"Select to gate either on very central hit or very lateral (side) one.");
 	add_logged_option(app, "-n,--foot-binning",foot_binning, "FOOT ADC binning")
 		->delimiter(',');
@@ -93,13 +93,13 @@ int main(int argc, char* argv[]) {
 		->delimiter(','); 
 	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
 		->delimiter(','); 
-	add_enum_option(app, "-t,--take", take, 
+	add_logged_option(app, "-t,--take", take, 
 		"Which type of projection fit to take. `gauss_fit_only` will only use gaussian spline for well sampled data.");
 	add_logged_option(app, "-s,--show-old", show_old, 
 		"Sequence of Z charges (, sep) to overlay their current gain match curve on the canvas.")
 		->delimiter(',')
 		->type_name("INT[,INT...]");
-	add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
+	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 	
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");

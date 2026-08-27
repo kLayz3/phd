@@ -1,3 +1,6 @@
+/* Main program: on the track multp. vs charge graph do different cuts and look
+ * at the resulting spectra... */
+
 #include "util/CLI.h"
 
 #include "TROOT.h"
@@ -47,11 +50,11 @@ int main(int argc, char* argv[]) {
 	auto sci22_cut = mnd::make_filled_array<double,2>(NAN);
 	auto sci31_cut = mnd::make_filled_array<double,2>(NAN);
 	bool allow_others = false;
-	size_t max_events = -1; 
+	size_t max_events = -1;
 
 	Select selected{};
 	auto angle_type = AngleType::all;
-	auto save = canvas::Extension::nil;
+	std::vector<canvas::Extension> save = {};
 
 	add_logged_option(app, "-f,--file", fileName, "Pass one or more file names, delimited by ','")
 		->delimiter(',')
@@ -66,21 +69,22 @@ int main(int argc, char* argv[]) {
 	add_logged_option<DisplayDefault::No>(app, "-d,--distance", distance_cut, 
 		"Distance from vertex cut (all tracks must be below this threshold). Default no cut.");
 	add_logged_option<DisplayDefault::No>(app, "--sci21",sci21_cut, "SCI21 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci22",sci22_cut, "SCI22 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_flag(app, "-a,--allow-others", allow_others, "Allow events where also some non-selected tracks are present. "
 		"These tracks will not enter the track analysis.");
 
-	add_enum_option(app, "-t,--angle", angle_type, "Specify which type of formula to use for angular "
+	add_logged_option(app, "-t,--angle", angle_type, "Specify which type of formula to use for angular "
 		"spectroscopic coeff of N-body decay:\n"
 		"[he] : sqrt(Σ θ_i^2) angles between all heavy tracks and a single light one, (N-1) angles.\n"
 		"[p]  : sqrt(Σ θ_i^2) angles between all light tracks and a single heavy one, (N-1) angles.\n" 
 		"[all]: sqrt(Σ θ_i^2) combination of all the angles between all the tracks, N*(N-1)/2 angles.");
-	add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
-	add_logged_option(app, "-i,--info", info, 
+	add_logged_option(app, "-o,--save", save, "Save the resulting canvases as one or more extensions.")
+		->delimiter(',');
+	add_logged_option(app, "-i,--info", info,
 		"Sequence of strings, such that the output will be saved descending these directories in autosave.")
 		->delimiter(',');
 	
@@ -97,7 +101,6 @@ int main(int argc, char* argv[]) {
 	TApplication rootApp("app", 0, 0);
 
 	double Cr, Cq, Ct, max_cost, max_cost_f;
-	TrigParam *trig_param;
 	{
 		const auto& fname = fileName.front();
 		std::array<double, 3>* c;
@@ -109,10 +112,9 @@ int main(int argc, char* argv[]) {
 		max_cost = m->GetVal();
 		get_obj(f, m, "FOOT_max_cost_f");
 		max_cost_f = m->GetVal();
-		get_obj(f, trig_param, "trigger_map");
 	}
 	/* Sanitize some CLI passed in arguments... */
-	u32 sum_n_tracks_required = std::accumulate(
+	const u32 sum_n_tracks_required = std::accumulate(
 		selected.begin(), selected.end(), 0, [](u32 sum, const auto& x) {
 			return sum + x.index;
 		}
@@ -124,7 +126,7 @@ int main(int argc, char* argv[]) {
 		if(std::holds_alternative<AtomicNumber>(key)) {
 			key = elem_to_a2( std::get<AtomicNumber>(key) );
 		}
-		if(value == 0) ERROR("Must require 1 or more tracks, cannot be 0. Stop that.");
+		if(value == 0) ERROR("Must require 1 or more tracks, cannot set to require 0 tracks. Stop that.");
 	}
 	
 	/* All cut entries now hold only A2 range. Sort them out, so that light stuff is first.
@@ -148,7 +150,7 @@ int main(int argc, char* argv[]) {
 			// if lower elem's upper bound is bigger than higher elem's lower bound, means the intervals overlap.
 		}
 	) != selected.end() ) {
-		ERROR("An interval from the 'selected' field is overlapping. Not allowed");
+		ERROR("Some interval from the 'selected' field is overlapping. Not allowed");
 	}
 
 	/* Sanitize the angle part. If selected isn't given by at least
@@ -162,20 +164,19 @@ int main(int argc, char* argv[]) {
 	 * in this program. */
 	std::array<bool, 32> track_used_mask = {};
 
-	TH1P* h1_track_mult = new TH1P("Track multiplicity", kRed-1, 10, -0.5, 9.5);
+	TH1P* h1_track_mult = new TH1P("Track multiplicity [unique tracks]@-1 means no FOOT in event.", kRed-1, 11, -1.5, 9.5);
 	TH2P* h2_q_vs_mult = new TH2P("Track charge [Q]:Track multp@Full FOOT system",
 		10, -0.5, 9.5, 40, 0,8);
 	TH2P* h2_score_vs_mult = new TH2P("Track score [a.u.]:Track multp@Full FOOT system",
 		10, -0.5, 9.5, 300, 0, 50);
 	TH1P* h1_track_distance = new TH1P("Track distances [mm]", kBlue-1, 600, 0, 30);
 	TH1P* h1_track_angle = new TH1P("Track angles [mrad]@Between all tracks selected", kMagenta+1, 200, 0, 100);
-	TH1P* h1_angle_ex = new TH1P(Form("#sqrt #sum_{i=1}^{%u} #theta_{i|heavy}^{2} [mrad]@Track invariant angle",
-		sum_n_tracks_required-1), kCyan-9, 300, 0, 300);
-
+	TH1P* h1_angle_ex = new TH1P(Form("#rho sqrt( #sum_{i=1}^{%s} #theta_{i|heavy}^{2} ) [mrad]@#rho angle",
+		sum_n_tracks_required>0 ? std::to_string(sum_n_tracks_required-1).c_str() : "??"), kCyan-9, 300, 0, 300);
 	if(sum_n_tracks_required == 2 and angle_type == AngleType::p)
 		(*h1_angle_ex)->GetXaxis()->SetTitle("#theta(p,frag) [mrad]");
 
-	TH2P* h2_vertex_z = new TH2P("Invariant angle normalized per track [mrad]:Vertex z [mm]@Traced by the FOOT", 160, -80, 80, 100,0,100);
+	TH2P* h2_vertex_z = new TH2P("#rho angle [mrad]:Vertex z [mm]@Traced by the FOOT", 160, -80, 80, 100,0,100);
 	
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
@@ -183,9 +184,9 @@ int main(int argc, char* argv[]) {
 	auto* h1_sci21_cut  = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
 	auto* h1_sci22_cut  = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
 	auto* h1_sci31_cut  = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
-	auto* h1_sci21_cut2 = new TH1P("((h1_cut2)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
-	auto* h1_sci22_cut2 = new TH1P("((h1_cut2)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
-	auto* h1_sci31_cut2 = new TH1P("((h1_cut2)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
+	auto* h1_sci21_cut2 = new TH1P("((h1_cut2)) SCI21 QDC mean [QDC units]@With cut and FOOT selection", ORGB{0x890389}, 500, 300, 4000);
+	auto* h1_sci22_cut2 = new TH1P("((h1_cut2)) SCI22 QDC mean [QDC units]@With cut and FOOT selection", ORGB{0x6180FD}, 500, 300, 4000);
+	auto* h1_sci31_cut2 = new TH1P("((h1_cut2)) SCI31 QDC mean [QDC units]@With cut and FOOT selection", ORGB{0x7DE69D}, 500, 300, 4000);
 
 	show_console_cursor(false);
 	for(size_t i{0}; i < fileName.size(); ++i) {
@@ -211,7 +212,7 @@ int main(int argc, char* argv[]) {
 		};
 		WARN("Proceeding with file [%zu/%zu]: \'%s\'. Entries: [%'zu]\n", i+1, fileName.size(), fname.c_str(), nentries);
 		for(size_t entryId{0}; entryId < nentries; ++entryId ) {
-			mnd::PrintProgress(bar, entryId, nentries, 500, mnd::dancer0, 0.30);
+			mnd::PrintProgress(bar, entryId, nentries, 500, mnd::dancer0, 0.33);
 
 			ntuple->LoadEntry(entryId);
 			bool is_valid = true;
@@ -222,7 +223,8 @@ int main(int argc, char* argv[]) {
 			if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
 			if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
 			if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
-
+			
+			/* Promtly skip the event entirely in case a SCI cut isn't met. */
 			if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
 			if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
 			if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
@@ -234,7 +236,7 @@ int main(int argc, char* argv[]) {
 			const size_t N = foot->track.size();
 			if(N > track_used_mask.size()) continue; // abnormally large event?
 
-			/* In case we don't allow 'rogue' tracks, then the number of validated tracks 
+			/* In case we don't allow 'rogue' tracks, then the number of validated tracks
 			 * must be the total number. */
 			if(!allow_others && N != sum_n_tracks_required) continue;
 			
@@ -242,17 +244,17 @@ int main(int argc, char* argv[]) {
 			 * respective 'quantity' */
 			track_used_mask.fill(false);
 			
-			for(const auto& [cut, n_tracks_required] : selected) { // selected windows are sorted in ascending charge.
-				A2 const& charge_cut = std::get<A2>( cut ); 
+			for(const auto& [cut, n_tracks_required] : selected) { // Selected windows are presorted in ascending charge.
+				A2 const& charge_cut = std::get<A2>( cut );
 				/* Go over the tracks, if it's sorted within a cut then 'mask' the corresponding entry for
-				 * next iterations. */
+				 * next iterations over current event's tracks. */
 				u32 n = n_tracks_required;
 				for(size_t i=0; i<N; ++i) {
-					if( track_used_mask[i] ) continue; // skip entry. Already "sorted out" somewhere beforehand 
+					if( track_used_mask[i] ) continue; // Skip this track entry. Already "sorted out" somewhere else
 					const RNFOOTTrack& t = foot->track[i];
 					if(mnd::IsInside(t.Q, charge_cut)) {
 						track_used_mask[i] = true;
-						if(--n == 0) break;
+						if((--n) == 0) break;
 					};
 				}
 
@@ -260,20 +262,25 @@ int main(int argc, char* argv[]) {
 				 * specific charge interval. */
 				if(n != 0) is_valid = false;
 			}
-			if(!is_valid) continue; // skip event.
-			
-			h1_track_mult->Fill(static_cast<double>(N));
+			if(!is_valid) continue; // Skip event.
+		
+			if(sum_n_tracks_required == 0 && N==0) {
+				/* In this case, possible that the FOOT data got omitted entirely. */
+				h1_track_mult->Fill( foot->HasData()? 0: -1 );
+			} else {
+				h1_track_mult->Fill(static_cast<double>(N));
+			}
 
-			/* From the selected tracks, fill out the `tracks` 
-			 * sequence. Here, we eliminate tracks from the event that didn't fell in the 
-			 * `selected` window(s). */
+			/* From the selected tracks, fill out the `tracks` sequence.
+			 * Here, we eliminate tracks from the event that didn't fall
+			 * in the `selected` window(s). */
 			std::vector<mnd::geom::Line3D> tracks {};
 			
 			/* Sometime no selection is provided, in that case just fetch everything. */
 			for(size_t i=0; i<N; ++i) {
 				/* If the current track wasn't marked by the `selected` filtering above, means it didn't
 				 * fall into any of the selection windows. */
-				if( selected.size() > 0 and !track_used_mask[i] ) continue; 
+				if( selected.size() > 0 and !track_used_mask[i] ) continue;
 				const RNFOOTTrack& t = foot->track[i];
 				
 				h2_q_vs_mult->Fill(N, t.Q);
@@ -281,7 +288,7 @@ int main(int argc, char* argv[]) {
 
 				tracks.push_back( RNTrackToLine3D(t) );
 			}
-			const size_t N_valid = tracks.size();
+			const size_t N_valid = tracks.size(); // Is either `sum_n_tracks_required` or simply `N`
 		
 			if(N_valid > 1) {
 				/* Find the vertex. */
@@ -303,43 +310,50 @@ int main(int argc, char* argv[]) {
 
 				for(auto d: distances) h1_track_distance->Fill( d );
 				
-				/* In this case, look for angles between 
-				 * 'lightweight' particles and the heaviest one. */
 				double sum2 = 0;
 				double theta;
-				if(angle_type == AngleType::p) {
-					const mnd::geom::Line3D heavy_track = tracks.back();	
-
-					for(size_t i=0; i < N_valid-1; ++i) {
-						theta = 1000.0 * tracks[i].AngleRelativeTo( heavy_track );
-						sum2 += theta*theta;
-						h1_track_angle->Fill( theta );
-					}
-				}
-				else if(angle_type == AngleType::he) {
-					const mnd::geom::Line3D light_track = tracks.front();	
-
-					for(size_t i=1; i < N_valid; ++i) {
-						theta = 1000.0 * tracks[i].AngleRelativeTo( light_track );
-						sum2 += theta*theta;
-					}
-					if(N_valid > 2) {
-						theta = 1000.0 * tracks[1].AngleRelativeTo( tracks[2] );
-						h1_track_angle->Fill( theta );
-					}
-				}
-				else {
-					for(size_t i=0; i<N_valid; ++i) {
-						for(size_t j=i+1; j<N_valid; ++j) {
-							theta = 1000.0 * tracks[i].AngleRelativeTo( tracks[j] );
+				switch(angle_type) {
+					/* In this case, look for angles between
+					* 'light' particles and the heaviest one. */
+					case(AngleType::p): {
+						const mnd::geom::Line3D heavy_track = tracks.back();
+						for(size_t i=0; i < N_valid-1; ++i) {
+							theta = 1000.0 * tracks[i].AngleRelativeTo( heavy_track );
 							sum2 += theta*theta;
 							h1_track_angle->Fill( theta );
 						}
+						break;
+					}
+					/* In this case, look for angles between
+					 * 'heavy' particles and the lightest one.  */
+					case(AngleType::he): {
+						const mnd::geom::Line3D light_track = tracks.front();
+						for(size_t i=1; i < N_valid; ++i) {
+							theta = 1000.0 * tracks[i].AngleRelativeTo( light_track );
+							sum2 += theta*theta;
+						}
+						if(N_valid > 2) {
+							theta = 1000.0 * tracks[1].AngleRelativeTo( tracks[2] );
+							h1_track_angle->Fill( theta );
+						}
+						break;
+					}
+					/* In this case, angular `rho` is simply the RMS of
+					 * all the possible angles.  */
+					case(AngleType::all): {
+						for(size_t i=0; i<N_valid; ++i) {
+							for(size_t j=i+1; j<N_valid; ++j) {
+								theta = 1000.0 * tracks[i].AngleRelativeTo( tracks[j] );
+								sum2 += theta*theta;
+								h1_track_angle->Fill( theta );
+							}
+						}
+						break;
 					}
 				}
-				if(!is_valid) continue;
-				h1_angle_ex->Fill( sqrt(sum2) );
-				h2_vertex_z->Fill( vertex.z, sqrt(sum2) / N_valid );
+				const double invariant_theta = sqrt(sum2);
+				h1_angle_ex->Fill( invariant_theta );
+				h2_vertex_z->Fill( vertex.z, invariant_theta);
 
 				h1_sci21_cut2->Fill(sci21.E);
 				h1_sci22_cut2->Fill(sci22.E);
@@ -364,7 +378,7 @@ int main(int argc, char* argv[]) {
 		Form("max cost for whole track: %.1f", max_cost_f)
 	);
 
-	TCanvas* ct = new TCanvas("TrackDistance", "Recognized tracks distances between eachother", 2150, 1400);
+	TCanvas* ct = new TCanvas("TrackDistance", "Recognized tracks distances between each other", 2150, 1400);
 	ct->Divide(2,2);
 	ct->cd(1); h1_track_distance->Draw();
 	ct->cd(2); h1_track_angle->Draw();
@@ -387,7 +401,7 @@ int main(int argc, char* argv[]) {
 
 	canvas::save_all<canvas::Exe>( save, mnd::to_views(info) );
 
-	WARN("End-of-main");
+	WARN("End-of-main\n");
 	rootApp.Run(); return 0;
 }
 

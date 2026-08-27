@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-l,--line-size", line_size, "Fit curve line size.");
     add_logged_option(app, "-p,--ped", ped, "Do pedestal subtraction. Two numbers represent average pedestals for left and right channel.");
     add_logged_flag(app, "--ped-from-file", ped_from_file, "Take the pedestal values from the file itself. Will invalidate the --ped option's entered values.");
-    add_enum_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
+    add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");
