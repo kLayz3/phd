@@ -57,7 +57,53 @@ using Arr2 = std::array<std::array<T,N>, M>;
 
 enum class DoSave { yes, no };
 
+/* File names are often of the form: `main_0XXX_0YYY.root`, as such 
+ * metadata'ing multiple files can be concatenated e.g.:
+ * => main_0123_0144.root
+ * +  main_0145_0174.root
+ * +  main_0175_0178.root
+ * ----------------------
+ * =  main_0123_0178.root
+ * */
+
+namespace mnd::fs {
+
+constexpr std::string_view FILE_PREFIX    = "main";
+constexpr std::string_view FILE_EXTENSION = ".root";
+
+/* If `main_0023_0144.root` => "0023"sv */
+std::string_view file_start_number(const std::string& );
+
+/* If `main_0023_0144.root` => "0023"sv */
+std::string_view file_end_number(const std::string& );
+
+/* If `main_0023_0144.root` => { "0023"sv, "0144"sv } */
+std::pair <
+    std::string_view,
+    std::string_view
+> file_number_bounds(const std::string& );
+
+/* If `{ main_0023_0144.root, main_0145_0174.root }` => { "0023"sv, "0174"sv }.
+ * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
+std::pair <
+    std::string_view,
+    std::string_view
+> file_number_bounds(const std::vector<std::string>& );
+
+/* If `{ main_0023_0144.root, main_0145_0174.root }` => "main_0023_0174". Doesn't have the extension.
+ * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
+std::string file_names_concatenated(const std::vector<std::string>& );
+
+
+} // namespace mnd::fs
+
 namespace canvas {
+
+/* Get all TObject-derived elements from a Canvas. */
+void DumpPrimitives(TVirtualPad* , int = 0);
+/* Extract all histogram objects from a Canvas. */
+std::vector<TH1*> GetHistograms(TVirtualPad* );
+
 enum struct Extension { png, jpeg, pdf, C, root, nil };
 
 /* ROOT implements GetCurrentMacroName() in pre 6.38 as a simple forward to:
@@ -90,7 +136,7 @@ void save_all (
 		stem = std::filesystem::path(macro_name).stem().string();
 	}
 	else { // standalone executable, or no interpreted macro currently active
-		stem = mnd::current_executable_path().stem().string();
+		stem = mnd::fs::current_executable_path().stem().string();
 	}
 
 	std::filesystem::path p = "autosave";
@@ -99,7 +145,7 @@ void save_all (
 		p /= tag;
 
 	try {
-		std::filesystem::create_directories(p); 
+		std::filesystem::create_directories(p);
 	} catch(const std::filesystem::filesystem_error& e) {
 		WARN("canvas::save_all : Error in creating directories: \'%s\', err: %s\n", p.c_str(), e.what());
 		return;
@@ -319,45 +365,6 @@ template <
 
 	return opt;
 }
-
-/* File names are often of the form: `main_0XXX_0YYY.root`, as such 
- * metadata'ing multiple files can be concatenated e.g.:
- * => main_0123_0144.root
- * +  main_0145_0174.root
- * +  main_0175_0178.root
- * ----------------------
- * =  main_0123_0178.root
- * */
-
-namespace mnd::file {
-
-constexpr std::string_view FILE_PREFIX    = "main";
-constexpr std::string_view FILE_EXTENSION = ".root";
-
-/* If `main_0023_0144.root` => "0023"sv */
-std::string_view file_start_number(const std::string& );
-
-/* If `main_0023_0144.root` => "0023"sv */
-std::string_view file_end_number(const std::string& );
-
-/* If `main_0023_0144.root` => { "0023"sv, "0144"sv } */
-std::pair <
-    std::string_view,
-    std::string_view
-> file_number_bounds(const std::string& );
-
-/* If `{ main_0023_0144.root, main_0145_0174.root }` => { "0023"sv, "0174"sv }.
- * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
-std::pair <
-    std::string_view,
-    std::string_view
-> file_number_bounds(const std::vector<std::string>& );
-
-/* If `{ main_0023_0144.root, main_0145_0174.root }` => "main_0023_0174". Doesn't have the extension.
- * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
-std::string file_names_concatenated(const std::vector<std::string>& );
-
-} // namespace mnd::file
 
 /* Custom char buffer streaming operations for the phantom wrapper types, if the underlying type
  * implements them. If underlying type's definitions are not found at this point, then this

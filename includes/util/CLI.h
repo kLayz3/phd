@@ -264,9 +264,12 @@ public:
 Argv parse_argv(std::string_view, std::string );
 
 #ifdef __linux__
-	/* Get the executable path which invokes this call. For ROOT macros, use
-	 * `gInterpreter` API instead. */
-	std::filesystem::path current_executable_path(); 
+/* Get the executable path which invokes this call. For ROOT macros, use
+ * `gInterpreter` API instead. */
+namespace fs {
+std::filesystem::path current_executable_path();
+std::filesystem::path current_executable_name();
+}
 #endif
 
 /* Parse an array range from a text input by a separator 'c' */

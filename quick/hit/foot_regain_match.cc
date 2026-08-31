@@ -1,7 +1,7 @@
 #include "util/CLI.h"
 
 #include "util/MacroHelpers.h"
-#include "util/PrettyHisto.hxx"
+#include "util/PrettyHisto.h"
 #include "util/FitSpline.h"
 
 #include "TStyle.h"
@@ -19,6 +19,7 @@ using DoFit   = mnd::Option<std::vector<i32>>;
 using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
+using namespace mnd::col::literals;
 
 /* This procedure basically redoes the FOOT gain match but instead of using cal level,
  * goes to hit level to be also able to gate on straight tracks. */
@@ -127,16 +128,16 @@ int main(int argc, char* argv[]) {
 	
 	TApplication rootApp("app", 0, 0);
 	
-	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
-	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
-	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", ORGB{0x009B2F}, 500, 300, 4000);
-	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
-	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
-	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
+	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000);
+	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000);
+	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", 0x009B2F_c, 500, 300, 4000);
+	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", 0x890389_c, 500, 300, 4000);
+	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, 500, 300, 4000);
+	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", 0x7DE69D_c, 500, 300, 4000);
 	auto* h1_delta     = new TH1P("((h1_d0))Delta [from -0.5, 0.5]", kGreen-2, 150, -0.499, 0.499); 
 	auto* h1_delta_cut_mid = new TH1P("((h1_d1_mid))Delta [from -0.5, 0.5]", kRed-7, 150, -0.499, 0.499); 
 
-	auto* h1_foot_e_mid = new TH1P("((h1_e_mid))FOOT E [ADC units]@Central strip value", ORGB{0xB2FD30}, (int)(1.5*foot_binning[0]), foot_binning[1], foot_binning[2]); 
+	auto* h1_foot_e_mid = new TH1P("((h1_e_mid))FOOT E [ADC units]@Central strip value", 0xB2FD30_c, (int)(1.5*foot_binning[0]), foot_binning[1], foot_binning[2]); 
 
 	auto* hit_energy_mid = new TH2P(Form("((h2_mid))Cluster energy [ADC]:Strip number [0..640]@FOOT%d Raw, Requested Q=%d", ifoot, Q_target), 
 		bins_per_asic*10, 0,640, foot_binning[0], foot_binning[1], foot_binning[2]);
@@ -470,7 +471,7 @@ int main(int argc, char* argv[]) {
 	canvas::save_all<canvas::Exe>(save, { 
 		Form("FOOT%d", ifoot), 
 		Form("Z_%d",  Q_target), 
-		mnd::file::file_names_concatenated(fileNames)
+		mnd::fs::file_names_concatenated(fileNames)
 	});
 
 	WARN("End-of-main");

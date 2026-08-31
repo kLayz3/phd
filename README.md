@@ -22,4 +22,16 @@ cmake -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DBUILD_SHARED_LIBS=ON
 
 See how its linked properly in `GaussFitter.hxx` file. It's a linking nightmare.
 
+Python3 only needed for the pretty histogramming API. On GSI cluster is a nightmare to due to various
+wrong pip versions.
+In this case:
+```
+python3 -m venv --without-pip .venv
+curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+.venv/bin/python -m pip install numpy matplotlib
+set -gx PYTHONPATH "$PWD/.venv/lib/python3.13/site-packages"
+```
+
+Later just `source .venv/bin/activate` if working in bash/zsh, otherwise `activate.fish`
+
 --𝒦𝓁𝒶𝓎𝓏𝓮

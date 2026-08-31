@@ -4,3 +4,7 @@
 [submodule "includes/ceres-solver"]
 	path = includes/ceres-solver
 	url = https://github.com/ceres-solver/ceres-solver
+[submodule "includes/pybind11"]
+	path = includes/pybind11
+	url = https://github.com/pybind/pybind11.git
+	branch = stable

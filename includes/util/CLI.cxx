@@ -175,7 +175,7 @@ bool mnd::parse(std::string_view v, bool& b) {
 
 #include <unistd.h>
 
-std::filesystem::path mnd::current_executable_path() {
+std::filesystem::path mnd::fs::current_executable_path() {
 	std::array<char, 4096> buf{};
 
 	ssize_t n = ::readlink("/proc/self/exe", buf.data(), buf.size() - 1);
@@ -184,6 +184,9 @@ std::filesystem::path mnd::current_executable_path() {
 
 	buf[ (size_t)n ] = '\0';
 	return std::filesystem::path(buf.data());
+}
+std::filesystem::path mnd::fs::current_executable_name() {
+	return current_executable_path().stem();	
 }
 
 #endif

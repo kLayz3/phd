@@ -9,7 +9,7 @@
 
 #include "util/GaussFitMax.hxx"
 #include "util/MacroHelpers.h"
-#include "util/PrettyHisto.hxx"
+#include "util/PrettyHisto.h"
 #include "util/PolyFitter.h"
 #include "util/Geometry.h"
 #include "util/FitDrawer.hxx"
@@ -25,6 +25,7 @@ using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
 using namespace mnd::geom;
+using namespace mnd::col::literals;
 
 struct Brho {
     static constexpr char SEP = ';';
@@ -261,11 +262,12 @@ int main(int argc, char* argv[]) {
         c_raw->cd(4*i + 3); h_theta->Draw();
         c_raw->cd(4*i + 4); h2_track_x->Draw("COLZ"); gPad->SetLogz();
 
+		using mnd::hist::vline;
         double r = 0.72;
         TLine* line;
         for(int sci: {0,1}) {
-            line = hist::vline(h2_track_x, sci_params->at(SCI_S2_I[sci]).z0, r);
-            line = hist::vline(h2_track_x, sci_params->at(SCI_S2_I[sci]).z0, r);
+            line = vline(h2_track_x, sci_params->at(SCI_S2_I[sci]).z0, r);
+            line = vline(h2_track_x, sci_params->at(SCI_S2_I[sci]).z0, r);
             line->SetLineColor(kRed);
             line->SetLineStyle(2);
             line->SetLineWidth(4);

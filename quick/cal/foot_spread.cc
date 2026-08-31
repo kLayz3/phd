@@ -1,7 +1,7 @@
 #include "util/CLI.h"
 
 #include "util/MacroHelpers.h"
-#include "util/PrettyHisto.hxx"
+#include "util/PrettyHisto.h"
 
 #include "TApplication.h"
 #include "TFOOTCalCont.h"
@@ -10,6 +10,7 @@
 using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
+using namespace mnd::col::literals;
 
 struct Dead { A2 val; };
 std::istream& operator>>(std::istream& , Dead& );
@@ -92,12 +93,12 @@ int main(int argc, char* argv[]) {
 	auto* foot_q_vs_x = new TH2P(Form("Cluster Charge:FOOT measurement [mm]@FOOT%d", ifoot), 
 		binning_x[0], binning_x[1], binning_x[2], 100, foot_q_cut[0], foot_q_cut[1]);
 	auto* foot_pos = new TH1P(Form("((h1))FOOT measurement [mm]@FOOT%d", ifoot), kCyan - 6, binning_x[0], binning_x[1], binning_x[2]);
-	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
-	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
-	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", ORGB{0x009B2F}, 500, 300, 4000);
-	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
-	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
-	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
+	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000);
+	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000);
+	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", 0x009B2F_c, 500, 300, 4000);
+	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", 0x890389_c, 500, 300, 4000);
+	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, 500, 300, 4000);
+	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", 0x7DE69D_c, 500, 300, 4000);
 
 	for(size_t i{0}; i < fileName.size(); ++i) {
 		const auto& fname = fileName[i];

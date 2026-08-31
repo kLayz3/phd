@@ -1,6 +1,6 @@
 #include "util/CLI.h"
 #include "util/MacroHelpers.h"
-#include "util/PrettyHisto.hxx"
+#include "util/PrettyHisto.h"
 
 #include "TApplication.h"
 #include "TFRSCalCont.h"
@@ -8,6 +8,7 @@
 using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
+using namespace mnd::col::literals;
 
 using MaybePed = mnd::Option<A2>;
 
@@ -78,21 +79,21 @@ int main(int argc, char* argv[]) {
         };
     }
     auto* h1_sci_ped_l = new TH1P (
-        Form("((h1_sci))SCI%s-l pedestal [QDC units]", label[i_sci]),ORGB{0xCB00CB}, 2000, 0, 2000
+        Form("((h1_sci))SCI%s-l pedestal [QDC units]", label[i_sci]),0xCB00CB_c, 2000, 0, 2000
     );
     auto* h1_sci_ped_r = new TH1P (
-        Form("((h1_sci))SCI%s-r pedestal [QDC units]", label[i_sci]),ORGB{0x13973F}, 2000, 0, 2000
+        Form("((h1_sci))SCI%s-r pedestal [QDC units]", label[i_sci]),0x13973F_c, 2000, 0, 2000
     );
     TH1P *h1_sci_l = nullptr, *h1_sci_r = nullptr, *h1_sci_e = nullptr;
     if( ped.is_some() ) {
         h1_sci_l = new TH1P (
-            Form("((h1_sci))SCI%s-l value [QDC units]@Single hit cut", label[i_sci]), ORGB{0xABABAB}, 4096, 0, 4096
+            Form("((h1_sci))SCI%s-l value [QDC units]@Single hit cut", label[i_sci]), 0xABABAB_c, 4096, 0, 4096
         );
         h1_sci_r = new TH1P (
-            Form("((h1_sci))SCI%s-r value [QDC units]@Single hit cut", label[i_sci]), ORGB{0xBABABA}, 4096, 0, 4096
+            Form("((h1_sci))SCI%s-r value [QDC units]@Single hit cut", label[i_sci]), 0xBABABA_c, 4096, 0, 4096
         );
         h1_sci_e = new TH1P (
-            Form("((h1_sci))SCI%s average value [QDC units]@Single hit cut", label[i_sci]), ORGB{0xBABABA}, 4096, 0, 4096
+            Form("((h1_sci))SCI%s average value [QDC units]@Single hit cut", label[i_sci]), 0xBABABA_c, 4096, 0, 4096
         );
     }
 	TApplication rootApp("app", 0, 0);

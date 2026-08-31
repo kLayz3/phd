@@ -2,13 +2,16 @@
 
 #include <cstring>
 #include <sstream>
+#include <stdexcept>
+#include <string_view>
+#include <type_traits>
+#include <variant>
+#include <filesystem>
+
 #include "RtypesCore.h"
 #include "TH1D.h"
 #include "TH2D.h"
 #include "TColor.h"
-#include <stdexcept>
-#include <string_view>
-#include <type_traits>
 #include "TPad.h"
 #include "TLatex.h"
 #include "TGClient.h"
@@ -38,23 +41,23 @@
 
 struct ORGB { uint32_t v; };
 
-namespace ph_detail {
+namespace mnd::detail {
 
-static inline const char* skip_whitespace(const char* str) {
+inline const char* skip_whitespace(const char* str) noexcept {
 	while(*str and isspace(*str)) {
 		++str;
 	}
 	return str;
 }
 
-static inline std::string trim(std::string_view s) {
+inline std::string trim(std::string_view s) noexcept {
 	std::stringstream ss{};
 	auto is_ws = [](const char c) -> bool { return std::isspace(c); };
 	while(!s.empty() && !is_ws(s.front())) ss << s;
 	return ss.str();
 }
 
-static inline std::string strip_square_brackets(std::string_view s) {
+inline std::string strip_square_brackets(std::string_view s) noexcept {
 	std::string out;
 	out.reserve(s.size());
 
@@ -76,7 +79,7 @@ static inline std::string strip_square_brackets(std::string_view s) {
 
 /* Collapse all consecutive sequences of non-alphanumberic char to a single '_'.
  * Also trims leading/trailing whitespace by default. */
-static inline std::string nonalnum_to_underscore(std::string_view s) {
+inline std::string nonalnum_to_underscore(std::string_view s) noexcept {
 	std::string out;
 	out.reserve(s.size());
 
@@ -99,51 +102,36 @@ static inline std::string nonalnum_to_underscore(std::string_view s) {
 	return out;
 }
 
-struct __ARGB {
-	double a = 1.0, r, g, b;
-	Color_t id;
+} // namespace mnd::detail
 
-	__ARGB() = default;
-	__ARGB(ORGB val) {
-		b = (val.v & 0xff) / 255.0; val.v >>= 8;
-		g = (val.v & 0xff) / 255.0; val.v >>= 8;
-		r = (val.v & 0xff) / 255.0; val.v >>= 8;
-		a = std::max(1.0 - (val.v & 0xff) / 255.0, 0.0);
-		mode_ = Mode::argb;
-	}
-	__ARGB(Color_t rc) {
-		id = rc;
-		mode_ = Mode::root_col;
-	}
+namespace mnd::col {
 
-	Int_t GetColorCode() {
-		switch(mode_) {
-			case Mode::empty: 
-				return 0;
-			case Mode::argb: 
-				return TColor::GetColor((Float_t)r, (Float_t)g, (Float_t)b);
-			case Mode::root_col:
-				return id;
-		}
-		return 0;
-	}
-	void ApplyFill(TH1* h) {
-		Int_t idx = GetColorCode();
-		
-		/* Sometimes setting alpha doesn't work. The transparency is implicitly enabled through
-		 * $ROOTSYS/etc/system.rootrc
-		 * OpenGL.CanvasPreferGL = 1
-		 * , if it is 0, then alpha will always be total (1.0). */
-		h->SetFillColorAlpha(idx, a);
-	}
+struct RGBA {
+	double r = 0.0;
+	double g = 0.0;
+	double b = 0.0;
+	double a = 1.0;
 
-	enum class Mode { empty, argb, root_col } mode_ = Mode::empty;
+	RGBA() = default;
+	RGBA(double r_, double g_, double b_, double a_ = 1.0) :
+		r(r_), g(g_), b(b_), a(a_) {}
+
+	/* ROOT palette/index color, e.g. kRed+1. */
+	RGBA(Color_t );
+	/* No RBGA(uint32_t ) ctor, as that would be ambiguous. */
+
+	/* Preserve the old ORGB packed representation: 0xTTRRGGBB, where
+	 * TT is transparency (00 = opaque, ff = fully transparent). */
+	static RGBA from_packed(uint32_t value) noexcept;
+
+	Int_t GetColorCode() const;
+	void ApplyFill(TH1* h) const;
 };
+namespace literals {
+	RGBA operator""_c(unsigned long long int );
+}
 
-} // namespace ph_detail
-
-namespace mnd { namespace col {
-static Int_t hex_to_col(uint32_t val) {
+static inline Int_t hex_to_col(uint32_t val) {
 	Float_t b = (val & 0xff) / 255.0; val >>= 8;
 	Float_t g = (val & 0xff) / 255.0; val >>= 8;
 	Float_t r = (val & 0xff) / 255.0; val >>= 8;
@@ -152,7 +140,7 @@ static Int_t hex_to_col(uint32_t val) {
 
 inline Int_t Col(uint32_t i) {
 	static uint32_t cols[] = {
-		0xC41E3A, 0xA330C9, 0xFF7C0A, 0x33937F, 
+		0xC41E3A, 0xA330C9, 0xFF7C0A, 0x33937F,
 		0xAAD372, 0x3FC7EB, 0x00FF98, 0xF48CBA,
 		0xFFF468, 0x0070DD, 0x8788EE, 0xC69B6D
 	};
@@ -161,15 +149,16 @@ inline Int_t Col(uint32_t i) {
 	return hex_to_col( cols[i % Ncols] );
 }
 
-}} // namespace mnd::col
-#define FWD_DRAW(inner) \
+} // namespace mnd::col
+
+#define MND_FWD_DRAW(inner) \
 	template<typename... Ts> \
 	auto Draw(Ts&&... args) { \
 		h.Draw( std::forward<Ts>(args)... ); \
 		if(gPad) gPad->SetGrid(); \
 	}
 
-#define FWD_FCN(fcn, inner) \
+#define MND_FWD_FCN(fcn, inner) \
 	template<typename... Ts> \
 	auto fcn(Ts&&... args) { return inner.fcn( std::forward<Ts>(args)... ); }
 
@@ -177,9 +166,9 @@ struct TH1P {
 	using inner_type = TH1D;
 	
 	inner_type h;
-		
+
 	template<typename... Ts>
-	TH1P(const char* label, ph_detail::__ARGB col, Ts&&... args) {
+	TH1P(const char* label, mnd::col::RGBA col, Ts&&... args) {
 		const char* semicolon = strchr(label, ';');
 		if(semicolon)
 			throw std::invalid_argument(Form("Label input to 'TH1P' must not contain ';' semicolon delimiter! Received: \'%s\'", label));
@@ -197,7 +186,7 @@ struct TH1P {
 				throw std::invalid_argument(Form("Label input to 'TH1P' has empty block inside \"((\" and \"))\" brackets? Received: \'%s\'", label));
 			hname_extra = std::string(bracket_open+2, bracket_close);
 			label = bracket_close+2;
-			label = ph_detail::skip_whitespace(label);
+			label = mnd::detail::skip_whitespace(label);
 		}
 
 		// Possible `@` separator 
@@ -209,9 +198,9 @@ struct TH1P {
 			xlabel = std::string(label);
 		}
 		
-		std::string xs = ph_detail::strip_square_brackets( xlabel );
+		std::string xs = mnd::detail::strip_square_brackets( xlabel );
 		std::string hname = hname_extra + "_"
-			+ ph_detail::nonalnum_to_underscore(xs);
+			+ mnd::detail::nonalnum_to_underscore(xs);
 		
 		h = inner_type(hname.c_str(), "", std::forward<Ts>(args)...); 
 		std::stringstream title;
@@ -228,13 +217,13 @@ struct TH1P {
 	}
 
 	/* Forward only Fill and Draw methods. Don't care about others. */
-	FWD_DRAW(h);
-	FWD_FCN(Fill, h);
+	MND_FWD_DRAW(h);
+	MND_FWD_FCN(Fill, h);
 
 	/* Draw while also fitting a small gauss-chan 🥺 👉👈 around the peak value. */
 	inline auto DrawAndFit (
 		double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
-		ph_detail::__ARGB col = kRed,
+		mnd::col::RGBA col = kRed,
 		Width_t line_width = 2, // type: short
 		uint32_t niter = 2,
 		Verbosity v = Verbosity::SILENT
@@ -267,7 +256,7 @@ struct TH1P {
 		return fitresult;
 	}
 
-	inline __attribute__((always_inline)) 
+	inline __attribute__((always_inline))
 	bool IsInside(double x) const noexcept {
 		return (
 			x >= h.GetXaxis()->GetXmin() &&
@@ -285,17 +274,17 @@ struct TH1P {
 	}
 
 	/* Implicit ref cvt */
-	operator inner_type&()             noexcept { return h; }
-	operator const inner_type&() const noexcept { return h; }
+	inline operator inner_type&()             noexcept { return h; }
+	inline operator const inner_type&() const noexcept { return h; }
 
 	/* Implicit pointer cvt */
-	operator inner_type*()             noexcept { return &h; }
-	operator const inner_type*() const noexcept { return &h; }
+	inline operator inner_type*()             noexcept { return &h; }
+	inline operator const inner_type*() const noexcept { return &h; }
 
-	inner_type* operator->() noexcept { return &h; }
-	inner_type& operator*()  noexcept { return h; }
-	const inner_type* operator->() const noexcept { return &h; }
-	const inner_type& operator*()  const noexcept { return h; }
+	inline inner_type* operator->() noexcept { return &h; }
+	inline inner_type& operator*()  noexcept { return h; }
+	inline const inner_type* operator->() const noexcept { return &h; }
+	inline const inner_type& operator*()  const noexcept { return h; }
 };
 
 /* Wrapper to pretty-decorate standard CERN ROOT histograms
@@ -331,7 +320,7 @@ struct TH2P {
 				throw std::invalid_argument(Form("Label input to 'TH2P' has empty block inside \"((\" and \"))\" brackets? Received: \'%s\'", label));
 			hname_extra = std::string(bracket_open+2, bracket_close);
 			label = bracket_close+2;
-			label = ph_detail::skip_whitespace(label);
+			label = mnd::detail::skip_whitespace(label);
 		}
 
 		ylabel = std::string(label, colon);
@@ -344,11 +333,11 @@ struct TH2P {
 		} else {
 			xlabel = std::string(colon+1);
 		}
-		std::string ys = ph_detail::strip_square_brackets( ylabel );
-		std::string xs = ph_detail::strip_square_brackets( xlabel );
+		std::string ys = mnd::detail::strip_square_brackets( ylabel );
+		std::string xs = mnd::detail::strip_square_brackets( xlabel );
 		
 		std::string hname = hname_extra + "_" 
-			+ ph_detail::nonalnum_to_underscore(ys) + ".v." + ph_detail::nonalnum_to_underscore(xs);
+			+ mnd::detail::nonalnum_to_underscore(ys) + ".v." + mnd::detail::nonalnum_to_underscore(xs);
 		
 		h = inner_type(hname.c_str(), "", std::forward<Ts>(args)...); 
 		std::stringstream title;
@@ -361,8 +350,8 @@ struct TH2P {
 	}
 
 	/* Forward only Fill and Draw methods. Don't care about others. */
-	FWD_DRAW(h);
-	FWD_FCN(Fill, h);
+	MND_FWD_DRAW(h);
+	MND_FWD_FCN(Fill, h);
 
 	inline __attribute__((always_inline))
 	bool IsInside(double x, double y) const noexcept {
@@ -446,7 +435,7 @@ struct PLatex {
 	}
 	template<
 		typename T,
-	    typename = std::enable_if_t<std::is_convertible_v<T, std::string_view>>
+	    typename std::enable_if_t<std::is_convertible_v<T, std::string_view>>* = nullptr
 	> void DrawOne(T&& text) {
 		double height = MAX_H - current_text_index * (MAX_H - MIN_H) / (N-1);
 		if(!std::isfinite(height)) height = (MAX_H + MIN_H) / 2;
@@ -514,62 +503,27 @@ private:
 	/* Phew, why are humans still using that god-awful `const char*` API..? */
 };
 
-inline void MaximizeCanvas(TCanvas* c) {
-	c->SetWindowSize (
-		gClient->GetDisplayWidth(),
-		gClient->GetDisplayHeight()
-	);
-}
-/* TODO */
-struct PCanvas {
-	using inner_type = TCanvas;
-	inner_type c;
-	
-	template<typename... Ts>
-	PCanvas(const char* label, Ts&&... args) {
-		const char* semicolon = strchr(label, ';');
-		if(!semicolon)
-			throw std::invalid_argument("Label input to 'PCanvas' must contain ';' semicolon delimiter");
-		
-		std::string obj_name = std::string(label, semicolon);
-		std::string title    = std::string(semicolon + 1);	
-	}
+namespace mnd::hist {
 
-	/* Implicit ref cvt */
-	operator inner_type&()             noexcept { return c; }
-	operator const inner_type&() const noexcept { return c; }
-
-	/* Implicit pointer cvt */
-	operator inner_type*()             noexcept { return &c; }
-	operator const inner_type*() const noexcept { return &c; }
-
-	inner_type* operator->() noexcept { return &c; }
-	inner_type& operator*()  noexcept { return c; }
-	const inner_type* operator->() const noexcept { return &c; }
-	const inner_type& operator*()  const noexcept { return c; }
-};
-
-namespace hist {
-
-inline double lo_y(TH2D* h2, double r=0) { 
+inline double lo_y(TH2D* h2, double r=0) {
 	if(r > 1 || r <= 0)
 		throw std::runtime_error("lo_y::second arg must be <0, 1]");
-	return  (1-r)/2 * h2->GetYaxis()->GetXmax() + (1+r)/2 * h2->GetYaxis()->GetXmin(); 
+	return  (1-r)/2 * h2->GetYaxis()->GetXmax() + (1+r)/2 * h2->GetYaxis()->GetXmin();
 }
-inline double hi_y(TH2D* h2, double r=0) { 
+inline double hi_y(TH2D* h2, double r=0) {
 	if(r > 1 || r <= 0)
 		throw std::runtime_error("hi_y::second arg must be <0, 1]");
-	return  (1+r)/2 * h2->GetYaxis()->GetXmax() + (1-r)/2 * h2->GetYaxis()->GetXmin(); 
+	return  (1+r)/2 * h2->GetYaxis()->GetXmax() + (1-r)/2 * h2->GetYaxis()->GetXmin();
 }
-inline double lo_x(TH2D* h2, double r=0) { 
+inline double lo_x(TH2D* h2, double r=0) {
 	if(r > 1 || r <= 0)
 		throw std::runtime_error("lo_x::second arg must be <0, 1]");
-	return  (1-r)/2 * h2->GetXaxis()->GetXmax() + (1+r)/2 * h2->GetXaxis()->GetXmin(); 
+	return  (1-r)/2 * h2->GetXaxis()->GetXmax() + (1+r)/2 * h2->GetXaxis()->GetXmin();
 }
-inline double hi_x(TH2D* h2, double r=0) { 
+inline double hi_x(TH2D* h2, double r=0) {
 	if(r > 1 || r <= 0)
 		throw std::runtime_error("hi_x::second arg must be <0, 1]");
-	return  (1+r)/2 * h2->GetXaxis()->GetXmax() + (1-r)/2 * h2->GetXaxis()->GetXmin(); 
+	return  (1+r)/2 * h2->GetXaxis()->GetXmax() + (1-r)/2 * h2->GetXaxis()->GetXmin();
 }
 
 inline double lo_y(TH2P* h2, double r=0) { return lo_y(&h2->h, r); };
@@ -586,7 +540,169 @@ inline TLine* vline(TH2D* h2, double x, double r = 0) {
 	return line;
 }
 [[nodiscard ]] inline TLine* vline(TH2P* h2, double x, double r = 0) {
-	return vline(&h2->h, x, r);	
+	return vline(&h2->h, x, r);
 }
 
-} // namespace hist
+} // namespace mnd::hist
+
+class TGraph;
+class TGraphErrors;
+
+namespace mnd::plot {
+
+template<typename T>
+using Maybe = std::optional<T>;
+using mnd::col::RGBA;
+
+enum class HistMode {
+	stairs,
+	errors,
+	points,
+};
+enum class Hist2DMode {
+	mesh,
+	image,
+	contour,
+};
+enum class GraphMode {
+	plot,
+	scatter,
+	scatterplot,
+};
+
+struct HistStyle {
+	Maybe<std::string> label_;
+	Maybe<double>      line_width_;
+	Maybe<std::string> line_style_;
+	Maybe<std::string> marker_;
+	Maybe<RGBA>        line_color_;
+	Maybe<RGBA>        fill_color_;
+	HistMode mode_ = HistMode::stairs;
+
+	bool do_fill = false;
+
+	auto label(std::string ) && -> HistStyle;
+	auto line_width(double ) && -> HistStyle;
+	auto line_style(std::string ) && -> HistStyle;
+	auto marker(std::string ) && -> HistStyle;
+	auto fill(bool = true) && -> HistStyle;
+	auto facecolor(RGBA ) && -> HistStyle;
+
+	auto stairs() && -> HistStyle;
+	auto errors() && -> HistStyle;
+	auto points() && -> HistStyle;
+};
+
+struct Hist2DStyle {
+	Maybe<std::string> label_;
+	bool colorbar_ = true;
+	Hist2DMode mode_ = Hist2DMode::mesh;
+
+	auto label(std::string ) && -> Hist2DStyle;
+	auto colorbar(bool = true) && -> Hist2DStyle;
+
+	auto mesh() && -> Hist2DStyle;
+	auto image() && -> Hist2DStyle;
+	auto contour() && -> Hist2DStyle;
+};
+
+struct GraphStyle {
+	Maybe<std::string> label_;
+	Maybe<double> line_width_;
+	Maybe<std::string> line_style_;
+	Maybe<std::string> marker_;
+	Maybe<RGBA> color_;
+	GraphMode mode_ = GraphMode::plot;
+
+	auto label(std::string ) && -> GraphStyle;
+	auto line_width(double ) && -> GraphStyle;
+	auto line_style(std::string ) && -> GraphStyle;
+	auto marker(std::string ) && -> GraphStyle;
+
+	auto plot() && -> GraphStyle;
+	auto scatter() && -> GraphStyle;
+	auto scatterplot() && -> GraphStyle;
+};
+
+struct Hist1DData {
+	std::vector<double> edges;
+	std::vector<double> values;
+	std::vector<double> errors;
+
+	HistStyle style;
+};
+
+struct Hist2DData {
+	std::vector<double> x_edges;
+	std::vector<double> y_edges;
+
+	// row-major:
+	// values[iy * nx + ix]
+	std::vector<double> values;
+
+	std::size_t nx = 0;
+	std::size_t ny = 0;
+
+	Hist2DStyle style;
+};
+
+struct GraphData {
+	std::vector<double> x;
+	std::vector<double> y;
+
+	std::vector<double> xerr;
+	std::vector<double> yerr;
+
+	GraphStyle style;
+};
+
+using Drawable = std::variant<
+    Hist1DData,
+    Hist2DData,
+    GraphData
+>;
+
+struct Figure {
+	Figure() = default;
+
+	auto plot(const TH1& , HistStyle = {}) && -> Figure;
+	auto plot(const TH2& , Hist2DStyle = {}) && -> Figure;
+	auto plot(const TGraph& , GraphStyle = {}) && -> Figure;
+	auto plot(const TGraphErrors& , GraphStyle = {}) && -> Figure;
+
+	auto xlabel(std::string ) && -> Figure;
+	auto xlabel(const TObject* ) && -> Figure;
+	auto ylabel(std::string ) && -> Figure;
+	auto ylabel(const TObject* ) && -> Figure;
+	auto title(std::string ) && -> Figure;
+	auto title(const TObject*) && -> Figure;
+
+	auto xlim(double , double ) && -> Figure;
+	auto ylim(double , double ) && -> Figure;
+
+	auto logx(bool = true) && -> Figure;
+	auto logy(bool = true) && -> Figure;
+	auto grid(bool = true) && -> Figure;
+	auto enable_right_top_spline(bool = true) && -> Figure;
+	auto legend(bool = true) && -> Figure;
+
+	auto save(const std::filesystem::path& ) const -> void;
+
+private:
+	std::vector<Drawable> objects_;
+
+	std::string xlabel_;
+	std::string ylabel_;
+	std::string title_;
+
+	Maybe<std::pair<double, double>> xlim_;
+	Maybe<std::pair<double, double>> ylim_;
+	bool hide_right_and_top_spline_ = true;
+
+	bool logx_ = false;
+	bool logy_ = false;
+	bool grid_ = false;
+	bool legend_ = false;
+};
+
+} // namespace mnd::plot

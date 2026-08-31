@@ -1,7 +1,7 @@
 #include "util/CLI.h"
 
 #include "util/MacroHelpers.h"
-#include "util/PrettyHisto.hxx"
+#include "util/PrettyHisto.h"
 #include "util/FitSpline.h"
 
 #include "TStyle.h"
@@ -15,10 +15,12 @@ enum class HitType { central, side };
 
 using ShowOld = mnd::Option<std::vector<i32>>;
 using DoFit   = mnd::Option<std::vector<i32>>;
+namespace fs = std::filesystem;
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
+using namespace mnd::col::literals;
 
 int main(int argc, char* argv[]) {
 	CLI::App app{"Perform gain matching of a specific FOOT detector."};
@@ -93,7 +95,9 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 	
 	bool test = false;
+	bool test_py = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");
+	add_logged_flag(app, "--test-py", test_py, "Test the Python Matplotlib renderer.");
 
 	CLI11_PARSE(app, argc, argv);
 	
@@ -103,7 +107,7 @@ int main(int argc, char* argv[]) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
 
-	FOOTParam *foot_param; 
+	FOOTParam *foot_param;
 	{
 		auto f = std::make_unique<TFile>(fileName.c_str(), "READ");
 		get_obj(f, foot_param, Form("FOOT%d_setup", ifoot));
@@ -116,18 +120,18 @@ int main(int argc, char* argv[]) {
 	auto frs = model->MakeField<RNFRSCal>("FRS");
 	auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
 	
-	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
-	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
-	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", ORGB{0x009B2F}, 500, 300, 4000);
-	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
-	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
-	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
-	auto* h1_delta     = new TH1P("((h1_d0))Delta [from -0.5, 0.5]", kGreen-2, 150, -0.499, 0.499); 
-	auto* h1_delta_cut_mid = new TH1P("((h1_d1_mid))Delta [from -0.5, 0.5]", kRed-7, 150, -0.499, 0.499); 
+	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000);
+	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000);
+	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", 0x009B2F_c, 500, 300, 4000);
+	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", 0x890389_c, 500, 300, 4000);
+	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, 500, 300, 4000);
+	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", 0x7DE69D_c, 500, 300, 4000);
+	auto* h1_delta     = new TH1P("((h1_d0))Delta [from -0.5, 0.5]", kGreen-2, 150, -0.499, 0.499);
+	auto* h1_delta_cut_mid = new TH1P("((h1_d1_mid))Delta [from -0.5, 0.5]", kRed-7, 150, -0.499, 0.499);
 
-	auto* h1_foot_e_mid = new TH1P("((h1_e_mid))FOOT E [ADC units]@Central strip value", ORGB{0xB2FD30}, (int)(1.5*foot_binning[0]), foot_binning[1], foot_binning[2]); 
+	auto* h1_foot_e_mid = new TH1P("((h1_e_mid))FOOT E [ADC units]@Central strip value", 0xB2FD30_c, (int)(1.5*foot_binning[0]), foot_binning[1], foot_binning[2]);
 
-	auto* hit_energy_mid = new TH2P(Form("((h2_mid))Cluster energy [ADC]:Strip number [0..640]@FOOT%d Raw, Requested Q=%d", ifoot, Q_target), 
+	auto* hit_energy_mid = new TH2P(Form("((h2_mid))Cluster energy [ADC]:Strip number [0..640]@FOOT%d Raw, Requested Q=%d", ifoot, Q_target),
 		bins_per_asic*10, 0,640, foot_binning[0], foot_binning[1], foot_binning[2]);
 	
 	const size_t nentries = ntuple->GetNEntries();
@@ -206,11 +210,11 @@ int main(int argc, char* argv[]) {
 			
 			int i = static_cast<int>( cl.fCX );
 			double e = cl.fCE;
-				
+
 			if(mnd::IsInside(delta, delta_interval_1) or mnd::IsInside(delta, delta_interval_2)) {
 				h1_delta_cut_mid->Fill(delta);
 				hit_energy_mid->FillInside(i, e);
-				h1_foot_e_mid->FillInside(e); 
+				h1_foot_e_mid->FillInside(e);
 			}
 		}
 	}
@@ -221,7 +225,7 @@ int main(int argc, char* argv[]) {
 	 * lower values. Simply to line up the total cluster energy values to the average ADC, across the detector. */
 	
 	/* Do the small fit in the 1D plot. */	
-	TH1D* const h = *h1_foot_e_mid; 
+	TH1D* const h = *h1_foot_e_mid;
 	auto [fitr_mid, err_mid] = GaussFitMax(h, sratio, niter);
 	WARN("[CENTRAL HIT] 1D projection yields: max: %.2f, gauss fit max (around this max+-%.1f sigma): %.2f +- %.2f\n",
 		h->GetXaxis()->GetBinCenter( h->GetMaximumBin() ), sratio,
@@ -252,7 +256,7 @@ int main(int argc, char* argv[]) {
 			
 			FMultiPoly* mp = asic.GetPoly(Q_target);
 			if(!mp) {
-				asic.multi_poly.emplace_back(Q_target); 
+				asic.multi_poly.emplace_back(Q_target);
 				mp = &asic.multi_poly.back();
 			}
 			
@@ -260,65 +264,65 @@ int main(int argc, char* argv[]) {
 			double x_hi = (a+1) * 64 - 0.00001;
 			
 			if( contains(v, a) ) {
-				auto [rg, graw, gfit] = FitSpline<fit_info::GAUSS_MAX> ( 
+				auto [rg, graw, gfit] = FitSpline<fit_info::GAUSS_MAX> (
 					poly_deg, *hit_energy_mid, x_lo, x_hi, 40, sratio, niter /*, Verbosity::CHATTY */
-				); 
-				auto [rp, praw, pfit] = FitSpline<fit_info::PROFILE_MAX> ( 
-					poly_deg, *hit_energy_mid, x_lo, x_hi, 40 /*, whatever, Verbosity::CHATTY */ 
-				); 
-				gauss_fit.push_back(gfit); 
-				gauss_raw.push_back(graw); 
-				profile_fit.push_back(pfit); 
-				profile_raw.push_back(praw); 
+				);
+				auto [rp, praw, pfit] = FitSpline<fit_info::PROFILE_MAX> (
+					poly_deg, *hit_energy_mid, x_lo, x_hi, 40 /*, whatever, Verbosity::CHATTY */
+				);
+				gauss_fit.push_back(gfit);
+				gauss_raw.push_back(graw);
+				profile_fit.push_back(pfit);
+				profile_raw.push_back(praw);
 				
 				if(take == Take::gauss or take == Take::gauss_fit_only) {
-					mp->pol = std::vector<double>(rg.begin(), rg.end()); 
+					mp->pol = std::vector<double>(rg.begin(), rg.end());
 				} else {
 					mp->pol = std::vector<double>(rp.begin(), rp.end());
 				}
 			} 
 			else {
-				TAxis *xax = (*hit_energy_mid)->GetXaxis(); 
-				int firstbin = xax->FindBin(x_lo); 
-				int lastbin = xax->FindBin(x_hi); 
+				TAxis *xax = (*hit_energy_mid)->GetXaxis();
+				int firstbin = xax->FindBin(x_lo);
+				int lastbin = xax->FindBin(x_hi);
 
-				auto pasic = std::unique_ptr<TH1D>((*hit_energy_mid)->ProjectionY("__py", firstbin, lastbin)); 
-				pasic->SetDirectory(nullptr); 
+				auto pasic = std::unique_ptr<TH1D>((*hit_energy_mid)->ProjectionY("__py", firstbin, lastbin));
+				pasic->SetDirectory(nullptr);
 
-				double profile_mean, gauss_mean; 
-				if(pasic->Integral() >= N_NEEDED_ENTRIES) { /* If it contains more than 500 events, we can sample it. */ 
-					profile_mean = pasic->GetXaxis()->GetBinCenter( pasic->GetMaximumBin() ); 
-					auto [pg0, err_pg0] = GaussFitMax( pasic.get(), sratio );  
-					gauss_mean = pg0[1]; 
-				} else { /* No clue. Just take profile mean the mean, but gauss is invalidated. */ 
-					profile_mean = pasic->GetMean(); 
-					gauss_mean = mean_mid; 
+				double profile_mean, gauss_mean;
+				if(pasic->Integral() >= N_NEEDED_ENTRIES) { /* If it contains more than 500 events, we can sample it. */
+					profile_mean = pasic->GetXaxis()->GetBinCenter( pasic->GetMaximumBin() );
+					auto [pg0, err_pg0] = GaussFitMax( pasic.get(), sratio );
+					gauss_mean = pg0[1];
+				} else { /* No clue. Just take profile mean the mean, but gauss is invalidated. */
+					profile_mean = pasic->GetMean();
+					gauss_mean = mean_mid;
 				}
-				TGraph* gfit = new TGraph(60); 
-				TGraph* pfit = new TGraph(60); 
-				for(int i=0; i<60; ++i) { 
-					double x = x_lo + (i+0.00001) * (x_hi - x_lo)/59; 
-					gfit->SetPoint(i, x, gauss_mean); 
-					pfit->SetPoint(i, x, profile_mean); 
-				} 
-				if(pasic->Integral() >= N_NEEDED_ENTRIES) { 
-					gfit->SetLineColor(gCol_); gfit->SetLineWidth(4); 
-					pfit->SetLineColor(pCol_); pfit->SetLineWidth(4); 
-				} else { 
-					gfit->SetLineColor(gCol_ + 1); gfit->SetLineWidth(12); 
-					pfit->SetLineColor(pCol_ + 1); pfit->SetLineWidth(12); 
-				} 
-				gauss_fit.push_back(gfit); 
-				profile_fit.push_back(pfit); 
+				TGraph* gfit = new TGraph(60);
+				TGraph* pfit = new TGraph(60);
+				for(int i=0; i<60; ++i) {
+					double x = x_lo + (i+0.00001) * (x_hi - x_lo)/59;
+					gfit->SetPoint(i, x, gauss_mean);
+					pfit->SetPoint(i, x, profile_mean);
+				}
+				if(pasic->Integral() >= N_NEEDED_ENTRIES) {
+					gfit->SetLineColor(gCol_); gfit->SetLineWidth(4);
+					pfit->SetLineColor(pCol_); pfit->SetLineWidth(4);
+				} else {
+					gfit->SetLineColor(gCol_ + 1); gfit->SetLineWidth(12);
+					pfit->SetLineColor(pCol_ + 1); pfit->SetLineWidth(12);
+				}
+				gauss_fit.push_back(gfit);
+				profile_fit.push_back(pfit);
 
 				mp->pol = std::vector<double>(1);
 				if(pasic->Integral() < N_NEEDED_ENTRIES) {
-					if(take == Take::gauss) { mp->pol[0] = gauss_mean; } 
+					if(take == Take::gauss) { mp->pol[0] = gauss_mean; }
 					else if(pasic->Integral() >= N_LOWEST_ENTRIES) { mp->pol[0] = profile_mean; }
-					else { mp->pol[0] = gauss_mean; }; // in case if there are really no entries there... 
+					else { mp->pol[0] = gauss_mean; }; // in case if there are really no entries there...
 				}
 				else { // integral >= N_NEEDED_ENTRIES
-					mp->pol[0] = gauss_mean; 
+					mp->pol[0] = gauss_mean;
 				}
 			}
 
@@ -326,13 +330,13 @@ int main(int argc, char* argv[]) {
 		}
 
 		std::cout << "\"gain\": " << nlohmann::json(pp).dump(4) << std::endl;
-		WARN("Average value: %.5f (bin-center) and %.5f (gauss-fit-center)\n", 
+		WARN("Average value: %.5f (bin-center) and %.5f (gauss-fit-center)\n",
 			(*h1_foot_e_mid)->GetBinCenter((*h1_foot_e_mid)->GetMaximumBin()), mean_mid);
 	}
 
 	std::vector<TLine*> vlines;
 	for(int i = 1; i < 10; ++i) {
-		TLine* line = new TLine(i * 64, foot_binning[1], 
+		TLine* line = new TLine(i * 64, foot_binning[1],
 				                i * 64, foot_binning[2]);
 		line->SetLineColor(kRed);
 		line->SetLineStyle(2);
@@ -404,13 +408,60 @@ int main(int argc, char* argv[]) {
 			: h->GetXaxis()->GetBinCenter(h->GetMaximumBin()))
 	);
 
-	canvas::save_all<canvas::Exe>(save, { 
-		Form("FOOT%d", ifoot), 
-		Form("Z_%d",  Q_target), 
+	canvas::save_all<canvas::Exe>(save, {
+		Form("FOOT%d", ifoot),
+		Form("Z_%d",  Q_target),
 		std::filesystem::path(fileName).stem().string(),
 		ht_info
 	});
 
-	WARN("End-of-main");
+	if(test_py) {
+		mnd::plot::Figure {}
+			.plot(
+				*h1_delta, mnd::plot::HistStyle{}
+					.stairs()
+					.label(R"($\delta$ distribution)")
+					.fill()
+					.line_width(2.2)
+			).xlabel(R"($\delta\,[-0.5,\,0.5]$)")
+			.ylabel(*h1_delta)
+			.grid()
+			.title(*h1_delta)
+			.legend()
+			.save(
+				fs::path{"autosave"} / mnd::fs::current_executable_name() / "pysave.png"
+			);
+		mnd::plot::Figure {}
+			.plot(
+				*h1_delta, mnd::plot::HistStyle{}
+					.stairs()
+					.label(R"($\delta$ distribution)")
+					.line_width(2.2)
+			).xlabel(R"($\delta\,[-0.5,\,0.5]$)")
+			.ylabel(*h1_delta)
+			.grid()
+			.title("Delta, non-fill 'gram")
+			.legend()
+			.save(
+				fs::path{"autosave"} / mnd::fs::current_executable_name() / "pysave_nf.png"
+			);
+		mnd::plot::Figure {}
+			.plot(
+				*h1_delta, mnd::plot::HistStyle{}
+					.points()
+					.label(R"($\delta$ distribution)")
+					.line_width(2.2)
+			).xlabel(R"($\delta\,[-0.5,\,0.5]$)")
+			.ylabel("Count")
+			.grid()
+			.title("Delta, points 'gram")
+			.legend()
+			.save(
+				fs::path{"autosave"} / mnd::fs::current_executable_name() / "pysave_pt.png"
+			);
+	}
+
+	WARN("End-of-main\n");
+
 	rootApp.Run(); return 0;
 }

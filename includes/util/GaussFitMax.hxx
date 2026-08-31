@@ -24,8 +24,8 @@ inline std::pair <
 ) {
 	assert(niter > 0 && "Must be at least 1 iteration passed here.");
 	static uint64_t incrementer_ = 0;
-	double s = NAN, m = NAN, a = NAN;
-	double ss, ms, as; 
+	double s  = NAN, m  = NAN, a  = NAN;
+	double ss = NAN, ms = NAN, as = NAN;
 
 	for(uint32_t iter=0; iter < niter; ++iter) {
 		m = std::isnan(m) ? h->GetXaxis()->GetBinCenter( h->GetMaximumBin() ) : m;
@@ -62,7 +62,7 @@ inline std::pair <
 		ss = f.GetParError(2);
 	}
 
-	return { 
+	return {
 		std::array<double, 3> {
 			a, /* Amplitude */
 			m, /* Mean */

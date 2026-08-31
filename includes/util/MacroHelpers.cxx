@@ -7,6 +7,43 @@ template void canvas::save_all<canvas::Exe  >(canvas::Extension , std::vector<st
 template void canvas::save_all<canvas::Macro>(std::vector<canvas::Extension> , std::vector<std::string_view> );
 template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extension> , std::vector<std::string_view> );
 
+
+void canvas::DumpPrimitives(TVirtualPad* pad, int depth) {
+	if(!pad) return;
+
+	TIter next(pad->GetListOfPrimitives());
+	while(TObject* obj = next()) {
+		std::cout
+			<< std::string(depth * 2, ' ')
+			<< obj->ClassName()
+			<< "  "
+			<< obj->GetName()
+			<< "  "
+			<< obj->GetTitle()
+			<< '\n';
+
+		if(auto* subpad = dynamic_cast<TVirtualPad*>(obj))
+			DumpPrimitives(subpad, depth + 1);
+	}
+}
+
+std::vector<TH1*> canvas::GetHistograms(TVirtualPad* pad) {
+	std::vector<TH1*> out {};
+
+	TIter next(pad->GetListOfPrimitives());
+	while(auto* obj = next()) {
+		if(auto* h = dynamic_cast<TH1*>(obj))
+			out.push_back(h);
+
+		else if(auto* subpad = dynamic_cast<TVirtualPad*>(obj)) {
+			auto sub = GetHistograms(subpad);
+			out.insert(out.end(), sub.begin(), sub.end());
+		}
+	}
+
+	return out;
+}
+
 std::vector<std::string> ParseFile(const std::string& fileName) {
 #ifndef _POSIX_VERSION
 #	error "Cannot compile in this function for non- UNIX operating systems!"
@@ -112,7 +149,7 @@ static bool starts_with(std::string_view name, std::string_view prefix) {
 }
 
 std::pair<std::string_view, std::string_view>
-mnd::file::file_number_bounds(const std::string& file) {
+mnd::fs::file_number_bounds(const std::string& file) {
     namespace fs = std::filesystem;
 
     /*
@@ -165,16 +202,16 @@ mnd::file::file_number_bounds(const std::string& file) {
     return {start, end};
 }
 
-std::string_view mnd::file::file_start_number(const std::string& file) {
+std::string_view mnd::fs::file_start_number(const std::string& file) {
     return file_number_bounds(file).first;
 }
 
-std::string_view mnd::file::file_end_number(const std::string& file) {
+std::string_view mnd::fs::file_end_number(const std::string& file) {
     return file_number_bounds(file).second;
 }
 
 std::pair<std::string_view, std::string_view>
-mnd::file::file_number_bounds(const std::vector<std::string>& files) {
+mnd::fs::file_number_bounds(const std::vector<std::string>& files) {
     if(files.empty())
         throw std::invalid_argument("Cannot determine bounds of an empty file sequence");
 
@@ -184,7 +221,7 @@ mnd::file::file_number_bounds(const std::vector<std::string>& files) {
     };
 }
 
-std::string mnd::file::file_names_concatenated(const std::vector<std::string>& files) {
+std::string mnd::fs::file_names_concatenated(const std::vector<std::string>& files) {
     auto bounds = file_number_bounds(files);
 
     return std::string{FILE_PREFIX} 

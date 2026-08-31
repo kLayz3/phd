@@ -1,7 +1,7 @@
 #include "util/CLI.h"
 #include "util/GaussFitMax.hxx"
 #include "util/MacroHelpers.h"
-#include "util/PrettyHisto.hxx"
+#include "util/PrettyHisto.h"
 #include "util/PolyFitter.h"
 #include "util/Tracking.h"
 #include "util/FitSpline.h"
@@ -13,6 +13,7 @@
 using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
+using namespace mnd::col::literals;
 
 constexpr double zT = 3355 - 440.0/2;
 
@@ -98,7 +99,7 @@ int main(int argc, char* argv[]) {
 	std::vector<double> xe, ye, ze;
     auto* h1_sci = new TH1P (
         Form("((h1_sci))SCI%s QDC mean [QDC units]@Calibration point", label[i_sci]),
-        ORGB{0xCB00CB}, 500, 300, 4000
+        0xCB00CB_c, 500, 300, 4000
     );
     auto* histd = new TH2P(Form("SCI%s X -  TPC extr.[mm]:TPC extr. [mm]", label[i_sci]), 
         binning_ref[0], binning_ref[1], binning_ref[2],
@@ -210,7 +211,7 @@ int main(int argc, char* argv[]) {
             100*std::abs((slope1-slope0)/slope0), 100*std::abs((offset1 - offset0)/offset0));
     }
 
-    using hist::vline;
+    using mnd::hist::vline;
 	TCanvas* cTr = new TCanvas("Tracks", "Tracks", 2000, 1200);
 	cTr->Divide(2,2);
 	cTr->cd(1);

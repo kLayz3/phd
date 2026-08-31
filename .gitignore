@@ -25,6 +25,8 @@ info.yaml
 *.exe
 exec/*.cmd
 log.txt
+.venv
+*.patch
 
 quick/run
 quick/autosave

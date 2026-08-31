@@ -1,7 +1,7 @@
 #include "magic_enum/magic_enum.hpp"
 #include "util/CLI.h"
 
-#include "util/PrettyHisto.hxx"
+#include "util/PrettyHisto.h"
 #include "util/Tracking.h"
 #include "util/MacroHelpers.h"
 
@@ -12,6 +12,7 @@
 using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
+using namespace mnd::col::literals;
 
 struct foot_enc {
 	std::shared_ptr<RNFOOTCal> cont;
@@ -122,18 +123,18 @@ particle tracks to match with other detectors in the sequence. "};
         foot.z
 	);
 
-	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", ORGB{0xCB00CB}, 500, 300, 4000);
-	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", ORGB{0x0070DD}, 500, 300, 4000);
-	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", ORGB{0x009B2F}, 500, 300, 4000);
-	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", ORGB{0x890389}, 500, 300, 4000);
-	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", ORGB{0x6180FD}, 500, 300, 4000);
-	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", ORGB{0x7DE69D}, 500, 300, 4000);
+	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000);
+	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000);
+	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", 0x009B2F_c, 500, 300, 4000);
+	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", 0x890389_c, 500, 300, 4000);
+	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, 500, 300, 4000);
+	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", 0x7DE69D_c, 500, 300, 4000);
 	auto* h2_track_x = new TH2P("Track density (X) [mm]:Depth z [mm]@S2 area", 600, -20, box->width_outer+20, 600, -60, 60);
 	auto* h2_track_y = new TH2P("Track density (Y) [mm]:Depth z [mm]@S2 area", 600, -20, box->width_outer+20, 600, -60, 60);
 	auto* h2_ab = new TH2P("Y-angle [mrad]:X-angle [mrad]", 100, -20, 20, 100, -20, 20);
 	auto* h2_xy = new TH2P(Form("Referent Y-position [mm]:Referent X-position [mm]@FOOT%d", ifoot),
 		binning_x[0],binning_x[1],binning_x[2],binning_y[0],binning_y[1],binning_y[2]);
-	auto* h1_foot = new TH1P(Form("((h1_foot)) FOOT%u measurement [mm]", ifoot), ORGB{0xC500CB},
+	auto* h1_foot = new TH1P(Form("((h1_foot)) FOOT%u measurement [mm]", ifoot), 0xC500CB_c,
 		binning[0],binning[1],binning[2]);
 
 	auto model = RNTupleModel::Create();

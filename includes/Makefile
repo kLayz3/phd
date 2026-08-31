@@ -14,7 +14,8 @@ include monad/common.mk
 
 LDFLAGS := $(shell root-config --ldflags)
 LIBS := $(shell root-config --libs) -lROOTNTuple \
-		-Wl,-rpath,'$$ORIGIN'
+		$(shell python3-config --embed --ldflags) \
+		-Wl,-rpath,'$$ORIGIN' \
 
 # Normally on lustre.hpc the libfftw3 is fucked so I found
 # one normally on a /usr/lib that works and ported it over to $HOME/.local/lib
@@ -60,7 +61,7 @@ $(GEN_LIB) : $(UTIL_LIB) $(OBJ) $(DICT_OBJ)
 	$(Q)$(CXX) $(LDFLAGS) -shared -o $@ \
 		-Wl,--whole-archive $< \
 		-Wl,--no-whole-archive $(filter-out $<,$^) \
-		$(LIBS)	
+		$(LIBS)
 
 $(OBJ) : $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cxx $(SRC_DIR)/%.h $(DICT_OBJ)
 	$(Q)$(call log,CXX,$(notdir $@))
