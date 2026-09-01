@@ -95,9 +95,10 @@ int main(int argc, char* argv[]) {
 	CLI11_PARSE(app, argc, argv);
 	
 	if(test) return 0;
-	if(fileName.size() == 0) {
-		WARN("To continue, must supply at least one file name!\n"); return 0;
-	}
+	if(fileName.size() == 0)
+		ERROR("To continue, must supply at least one file name!\n");
+
+	mnd::python::poke();
 
 	TApplication rootApp("app", 0, 0);
 
@@ -172,7 +173,7 @@ int main(int argc, char* argv[]) {
 		10, -0.5, 9.5, 300, 0, 50);
 	TH1P* h1_track_distance = new TH1P("Track distances [mm]", kBlue-1, 600, 0, 30);
 	TH1P* h1_track_angle = new TH1P("Track angles [mrad]@Between all tracks selected", kMagenta+1, 200, 0, 100);
-	TH1P* h1_angle_ex = new TH1P(Form("#rho sqrt( #sum_{i=1}^{%s} #theta_{i|heavy}^{2} ) [mrad]@#rho angle",
+	TH1P* h1_angle_ex = new TH1P(Form("#sqrt( #sum_{i=1}^{%s} #theta_{i|heavy}^{2} ) [mrad]@#rho angle",
 		sum_n_tracks_required>0 ? std::to_string(sum_n_tracks_required-1).c_str() : "??"), kCyan-9, 300, 0, 300);
 	if(sum_n_tracks_required == 2 and angle_type == AngleType::p)
 		(*h1_angle_ex)->GetXaxis()->SetTitle("#theta(p,frag) [mrad]");

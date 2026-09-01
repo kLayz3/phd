@@ -709,3 +709,10 @@ private:
 };
 
 } // namespace mnd::plot
+
+namespace mnd::python {
+
+/* Poke the embedded Python interpreter. */
+void poke(bool verbose = false);
+
+}

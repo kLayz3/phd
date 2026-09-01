@@ -51,7 +51,44 @@ void ensure_python() {
 	static PythonRuntime runtime;
 }
 
-} // anonymous ns
+} // namespace {anonymous}
+
+void mnd::python::poke(bool verbose) {
+	ensure_python();
+
+	py::gil_scoped_acquire gil;
+
+	try {
+		auto sys = py::module_::import("sys");
+		auto np  = py::module_::import("numpy");
+		auto mpl = py::module_::import("matplotlib");
+		matplotlib.attr("use")("Agg");
+		auto plt = py::module_::import("matplotlib.pyplot");
+
+		PyOS_setsig(SIGINT, SIG_DFL);
+
+		// Force a minimal matplotlib object
+		auto result = plt.attr("subplots")().cast<py::tuple>();
+		py::object fig = result[0];
+
+		plt.attr("close")(fig);
+
+		if(verbose) {
+			std::cout
+				<< "[PYTHON]: OK, executable='"
+				<< py::str(sys.attr("executable")).cast<std::string>()
+				<< "', numpy='"
+				<< py::str(np.attr("__version__")).cast<std::string>()
+				<< "', matplotlib='"
+				<< py::str(mpl.attr("__version__")).cast<std::string>()
+				<< "'\n";
+		}
+	} catch(py::error_already_set const& e) {
+		throw std::runtime_error(
+			std::string{"Python/matplotlib environment not usable:\n"} + e.what()
+		);
+	}
+}
 
 mnd::col::RGBA::RGBA(Color_t root_color) {
 	auto* c = gROOT->GetColor(root_color);
@@ -820,3 +857,5 @@ void Figure::save(const std::filesystem::path& path) const {
 	fprintf(stdout, "[PYTHON]: Figure::save(): output file \'%s\' saved as: \'%s\'\n",
 		path.filename().c_str(), path.c_str());
 }
+
+

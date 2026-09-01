@@ -27,12 +27,18 @@ wrong pip versions.
 In this case:
 ```
 python3 -m venv --without-pip .venv
+source .venv/bin/activate.fish
 curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
 .venv/bin/python /tmp/get-pip.py
 .venv/bin/python -m pip install numpy matplotlib
 set -gx PYTHONPATH "$PWD/.venv/lib/python3.13/site-packages"
 ```
 
-Later just `source .venv/bin/activate` if working in bash/zsh, otherwise `activate.fish`
+Test via:
+```
+set -gx PYTHONPATH "$PWD/.venv/lib/python3.13/site-packages"
+python3 -c 'import numpy, matplotlib; print(numpy.__version__); print(matplotlib.__version__)'
+```
+
 
 --𝒦𝓁𝒶𝓎𝓏𝓮
