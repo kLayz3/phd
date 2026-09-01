@@ -587,6 +587,7 @@ struct HistStyle {
 	auto marker(std::string ) && -> HistStyle;
 	auto fill(bool = true) && -> HistStyle;
 	auto facecolor(RGBA ) && -> HistStyle;
+	auto edgecolor(RGBA ) && -> HistStyle;
 
 	auto stairs() && -> HistStyle;
 	auto errors() && -> HistStyle;
@@ -611,6 +612,7 @@ struct GraphStyle {
 	Maybe<double> line_width_;
 	Maybe<std::string> line_style_;
 	Maybe<std::string> marker_;
+	Maybe<double> marker_size_;
 	Maybe<RGBA> color_;
 	GraphMode mode_ = GraphMode::plot;
 
@@ -618,6 +620,7 @@ struct GraphStyle {
 	auto line_width(double ) && -> GraphStyle;
 	auto line_style(std::string ) && -> GraphStyle;
 	auto marker(std::string ) && -> GraphStyle;
+	auto marker_size(double ) && -> GraphStyle;
 
 	auto plot() && -> GraphStyle;
 	auto scatter() && -> GraphStyle;

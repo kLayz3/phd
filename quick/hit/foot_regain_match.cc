@@ -25,7 +25,7 @@ using namespace mnd::col::literals;
  * goes to hit level to be also able to gate on straight tracks. */
 int main(int argc, char* argv[]) {
 	TClass* _cl = TClass::GetClass(typeid(RNFOOTTrack));
-	if(!_cl or !_cl->GetDataMember("_x")) 
+	if(!_cl or !_cl->GetDataMember("_x"))
 		ERROR("MND_FOOTTRACK_DEBUG not compiled in, when the ROOT file got generated. Can't proceed\n");
 
 	CLI::App app{"Perform (re)gain matching of a specific FOOT detector, \

@@ -435,8 +435,9 @@ int main(int argc, char* argv[]) {
 			.plot(
 				*h1_delta, mnd::plot::HistStyle{}
 					.stairs()
-					.label(R"($\delta$ distribution)")
-					.line_width(2.2)
+					.label(R"($\delta$ distribution (pink-y color)")
+					.line_width(2.8)
+					.edgecolor(0xD800AD_c)
 			).xlabel(R"($\delta\,[-0.5,\,0.5]$)")
 			.ylabel(*h1_delta)
 			.grid()
@@ -449,8 +450,10 @@ int main(int argc, char* argv[]) {
 			.plot(
 				*h1_delta, mnd::plot::HistStyle{}
 					.points()
-					.label(R"($\delta$ distribution)")
+					.label(R"($\delta$ distribution (green-ish color)")
 					.line_width(2.2)
+					.edgecolor(0x008B46_c)
+					.marker("^")
 			).xlabel(R"($\delta\,[-0.5,\,0.5]$)")
 			.ylabel("Count")
 			.grid()

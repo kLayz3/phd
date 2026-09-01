@@ -28,6 +28,7 @@ In this case:
 ```
 python3 -m venv --without-pip .venv
 curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+.venv/bin/python /tmp/get-pip.py
 .venv/bin/python -m pip install numpy matplotlib
 set -gx PYTHONPATH "$PWD/.venv/lib/python3.13/site-packages"
 ```

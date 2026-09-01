@@ -13,7 +13,7 @@ using namespace mnd::col::literals;
 using MaybePed = mnd::Option<A2>;
 
 int main(int argc, char* argv[]) {
-    CLI::App app{"Calibrate the QDC into-charge measurement of SCI21/22/31."
+    CLI::App app{"Calibrate the QDC into-charge measurement of SCI21/22/31. "
         "We don't do the velocity dependence correction, as it is anyway close to the minimum "
         "of the Bethe-Bloch curve. Maybe a TODO for later,..."};
 

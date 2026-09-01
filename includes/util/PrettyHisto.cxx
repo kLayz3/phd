@@ -218,6 +218,9 @@ static GraphStyle resolve_graph_style(
 		style.marker_.value_or(
 			root_marker_style(g.GetMarkerStyle())
 		);
+	
+	style.marker_size_ =
+		style.marker_size_.value_or(g.GetMarkerSize());
 
 	style.color_ =
 		style.color_.value_or(
@@ -261,6 +264,8 @@ auto bin_centers(const Hist1DData& h) -> std::vector<double> {
 	return centers;
 }
 
+/* =============================================================== */
+
 auto HistStyle::label(std::string s) && -> HistStyle {
 	label_ = std::move(s);
 	return std::move(*this);
@@ -297,6 +302,10 @@ auto HistStyle::facecolor(mnd::col::RGBA col) && -> HistStyle {
 	fill_color_ = std::move(col);
 	return std::move(*this);
 }
+auto HistStyle::edgecolor(mnd::col::RGBA col) && -> HistStyle {
+	line_color_ = std::move(col);
+	return std::move(*this);
+}
 
 auto Hist2DStyle::label(std::string s) && -> Hist2DStyle {
 	label_ = std::move(s);
@@ -319,6 +328,8 @@ auto Hist2DStyle::contour() && -> Hist2DStyle {
 	return std::move(*this);
 }
 
+/* =============================================================== */
+
 auto GraphStyle::label(std::string s) && -> GraphStyle {
 	label_ = std::move(s);
 	return std::move(*this);
@@ -335,6 +346,10 @@ auto GraphStyle::marker(std::string s) && -> GraphStyle {
 	marker_ = std::move(s);
 	return std::move(*this);
 }
+auto GraphStyle::marker_size(double w) && -> GraphStyle {
+	marker_size_ = w;
+	return std::move(*this);
+}
 auto GraphStyle::plot() && -> GraphStyle {
 	mode_ = GraphMode::plot;
 	return std::move(*this);
@@ -347,6 +362,8 @@ auto GraphStyle::scatterplot() && -> GraphStyle {
 	mode_ = GraphMode::scatterplot;
 	return std::move(*this);
 }
+
+/* =============================================================== */
 
 auto Figure::plot(const TH1& h, HistStyle style) && -> Figure {
 	Hist1DData out;
@@ -654,11 +671,7 @@ static void render_errors(
 	auto errors  = numpy_view(h.errors);
 
 	auto kwargs = make_line_kwargs(h.style);
-
-	if(h.style.marker_)
-		kwargs["marker"] = *h.style.marker_;
-	else
-		kwargs["marker"] = "o";
+	kwargs["marker"] = h.style.marker_.value_or("o");
 
 	ax.attr("errorbar")(
 		centers,
@@ -680,11 +693,7 @@ static void render_points(
 	auto kwargs = make_line_kwargs(h.style);
 
 	kwargs["linestyle"] = "None";
-
-	if(h.style.marker_)
-		kwargs["marker"] = *h.style.marker_;
-	else
-		kwargs["marker"] = "o";
+	kwargs["marker"] = h.style.marker_.value_or("o");
 
 	ax.attr("plot")(
 		centers,

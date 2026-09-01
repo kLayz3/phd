@@ -1,5 +1,10 @@
 #include "Geometry.h"
+#include <algorithm>
+#include <cassert>
+#include <cfloat>
 #include <cmath>
+
+#include "Combinatorics.hxx"
 
 namespace mnd::geom { namespace detail {
 	static_assert(std::is_standard_layout_v<Vector3D>);
@@ -21,7 +26,7 @@ namespace mnd::geom { namespace detail {
 		dst[2] = v.z();
 	}
 	static Line2D from_point_direction(const Eigen::Vector2d& n, const Eigen::Vector2d& d) noexcept {
-		/* `d` is asserted to be unit vector. 
+		/* `d` is asserted to be unit vector.
 		 * `n` is orthogonal to `d`. */
 		constexpr double eps = 1e-20;
 
@@ -48,8 +53,8 @@ const Line2D Line2D::null { NAN, NAN };
 const Line3D Line3D::null { NAN, NAN, NAN, NAN };
 
 /* Translate the line by an offset vector (val  0). */
-Line2D& Line2D::operator+=(double val) noexcept { 
-	value[0] -= value[1] * val; 
+Line2D& Line2D::operator+=(double val) noexcept {
+	value[0] -= value[1] * val;
 	return *this;
 }
 /* Translate the line by an offset vector (rhs.x  rhs.y). */
@@ -57,12 +62,12 @@ Line2D& Line2D::operator+=(const Vector2D& rhs) noexcept {
 	value[0] += rhs.y - value[1] * rhs.x;
 	return *this;
 }
-/* Represent the line in a coordinate system made by an offset vector (val  0). */ 
-Line2D& Line2D::operator%=(double val) noexcept { 
-	value[0] += value[1] * val; 
+/* Represent the line in a coordinate system made by an offset vector (val  0). */
+Line2D& Line2D::operator%=(double val) noexcept {
+	value[0] += value[1] * val;
 	return *this;
 }
-/* Represent the line in a coordinate system made by an offset vector (rhs.x  rhs.y). */ 
+/* Represent the line in a coordinate system made by an offset vector (rhs.x  rhs.y). */
 Line2D& Line2D::operator%=(const Vector2D& rhs) noexcept {
 	value[0] += -rhs.y + value[1] * rhs.x;
 	return *this;
@@ -109,6 +114,16 @@ Line2D& Line2D::RepresentInShifted (
 	return (*this %= off).RepresentInRotated(theta);
 }
 
+
+std::ostream& operator<<(std::ostream& os, const SphericalAngles& rhs) {
+#ifdef MND_FORMAT_ANGLES_IN_RADIANS
+	return os << "(θ: " << rhs.theta <<  ", φ: " << rhs.phi << ')';
+#else
+	constexpr double CVAL = 180.0 / M_PI;
+	return os << "(θ: " << CVAL*rhs.theta <<  "°, φ: " << CVAL*rhs.phi << "°)";
+#endif
+}
+
 /* ====================== 3D ====================== */
 
 double Line3D::DistanceTo(const Point3D& pt) const noexcept {
@@ -118,7 +133,7 @@ double Line3D::DistanceTo(const Point3D& pt) const noexcept {
 
 	const double n = v.norm();
 
-	if(n < 1e-24) { 
+	if(n < 1e-24) {
 		return NAN; // highly unlikely
 	}
 	return (k-p).cross(v).norm() / n;
@@ -172,12 +187,12 @@ Line3D& Line3D::operator+=(const Vector3D& rhs) noexcept {
 	p[2] += rhs.z;
 	return *this;
 }
-/* Represent the line in a coordinate system made by an offset vector (0  0  val). */ 
+/* Represent the line in a coordinate system made by an offset vector (0  0  val). */
 Line3D& Line3D::operator%=(double val) noexcept {
 	p[2] -= val;
 	return *this;
 }
-/* Represent the line in a coordinate system made by an offset vector (rhs.x  rhs.y  rhs.z). */ 
+/* Represent the line in a coordinate system made by an offset vector (rhs.x  rhs.y  rhs.z). */
 Line3D& Line3D::operator%=(const Point3D& rhs) noexcept {
 	p[0] -= rhs.x;
 	p[1] -= rhs.y;
@@ -185,7 +200,7 @@ Line3D& Line3D::operator%=(const Point3D& rhs) noexcept {
 	return *this;
 }
 
-/* Rotate the line by an unary rotation, represented by a unit vector and an angle (amount) */ 
+/* Rotate the line by an unary rotation, represented by a unit vector and an angle (amount) */
 Line3D& Line3D::Rotate(const Vector3D& axis, double angle) noexcept {
 	const Eigen::Matrix3d R = detail::rotation_matrix(axis, angle);
 	const Eigen::Vector3d p_new = R * detail::mapv(p);
@@ -197,7 +212,7 @@ Line3D& Line3D::Rotate(const Vector3D& axis, double angle) noexcept {
 }
 
 /* Represent the line in a coordinate system made by a unary rotation,
- * which is represented by a unit vector and an angle (amount). */ 
+ * which is represented by a unit vector and an angle (amount). */
 Line3D& Line3D::RepresentInRotated(const Vector3D& axis, double angle) noexcept {
 	const Eigen::Matrix3d R = detail::rotation_matrix(axis, angle).transpose();
 	
@@ -209,18 +224,18 @@ Line3D& Line3D::RepresentInRotated(const Vector3D& axis, double angle) noexcept 
 	return *this;
 
 }
-/* Offset the line in a coordinate system and rotate by a unary rotation. */ 
+/* Offset the line in a coordinate system and rotate by a unary rotation. */
 Line3D& Line3D::ShiftAndRotate (
-	const Vector3D& offset, 
+	const Vector3D& offset,
 	const Vector3D& axis,
 	double angle
 ) noexcept {
 	return (*this += offset).Rotate(axis, angle);
 }
 
-/* Represent the line in a coordinate system by an offset and unary rotation. */ 
+/* Represent the line in a coordinate system by an offset and unary rotation. */
 Line3D& Line3D::RepresentInShifted (
-	const Vector3D& offset, 
+	const Vector3D& offset,
 	const Vector3D& axis,
 	double angle
 ) noexcept {
@@ -232,7 +247,7 @@ Line3D& Line3D::RepresentInShifted (
 SphericalAngles Line3D::GetSpherical() const noexcept {
 	const Eigen::Vector3d nv = detail::mapv(this->v).normalized();
 	const double cos_theta = std::abs( nv.z() ); // always must be >= 0
-	const double cos_phi   = std::clamp ( 
+	const double cos_phi   = std::clamp (
 		nv.x() / (1 - cos_theta*cos_theta ),
 		-1.0, 1.0 );
 	
@@ -254,23 +269,23 @@ Point2D Rectangle2D::Mid() const noexcept {
 }
 
 bool Rectangle2D::IsInside(const Point2D& test) const noexcept {
-	return 
-		test.x > p0.x && test.x < p1.x && 
-		test.y > p0.y && test.y < p1.y; 
+	return
+		test.x > p0.x && test.x < p1.x &&
+		test.y > p0.y && test.y < p1.y;
 }
 bool Rectangle2D::IsInside(double x, double y) const noexcept {
-	return 
-		x > p0.x && x < p1.x && 
-		y > p0.y && y < p1.y; 
+	return
+		x > p0.x && x < p1.x &&
+		y > p0.y && y < p1.y;
 }
 
-Line2D GetLine2D(const mnd::geom::Point2D& p1, const mnd::geom::Point2D& p2) noexcept {
+Line2D GetLine2D(const Point2D& p1, const Point2D& p2) noexcept {
 	double slope = (p2.y - p1.y) / (p2.x - p1.x);
 	double offset = -slope * p1.x + p1.y;
 	return { offset, slope };
 }
 
-Line3D GetLine3D(const mnd::geom::Point3D& p1, const mnd::geom::Point3D& p2) noexcept {
+Line3D GetLine3D(const Point3D& p1, const Point3D& p2) noexcept {
 	const double dz = p2.z - p1.z;
 
 	double a1 = (p2.x - p1.x) / dz;
@@ -282,9 +297,19 @@ Line3D GetLine3D(const mnd::geom::Point3D& p1, const mnd::geom::Point3D& p2) noe
 	return {a0, a1, b0, b1};
 }
 
-/* Find a point with a minimal distance to a sequence of lines (aka: a vertex). 
- * If a line is described as: 
- *   vec{r} = vec{p} + l*vec{v} 
+namespace {
+
+constexpr const Line3D* line_ptr(const Line3D& line) noexcept {
+    return &line;
+}
+
+constexpr const Line3D* line_ptr(const Line3D* line) noexcept {
+    return line;
+}
+
+/* Find a point with a minimal distance to a sequence of lines (aka: a vertex).
+ * If a line is described as:
+ *   vec{r} = vec{p} + l*vec{v}
  * then the distance of a point `k` to this line is:
  * d^2 = ‖ (k-p) ⨯ v / |v| ‖^2 , or simply projection:
  * d^2 = ‖ hat{P} * (k-p ‖^2 , where `P` is a projector.
@@ -292,25 +317,32 @@ Line3D GetLine3D(const mnd::geom::Point3D& p1, const mnd::geom::Point3D& p2) noe
  * For N lines, sum them up, take gradient relative to `k`, and equation is:
  * ( sum_i hat{P_i} ) k = sum_i ( hat{P_i} * p_i )
  * */
-mnd::geom::Point3D mnd::geom::FindVertex( ::mnd::span<const Line3D> lines) noexcept {
+template<typename T>
+Point3D FindVertexImpl( ::mnd::span<T> lines) noexcept {
+	static_assert(
+		std::is_same_v<std::remove_cv_t<T>, Line3D> ||
+		std::is_same_v<std::remove_cv_t<T>, const Line3D*>
+	);
 	constexpr double eps = 1e-20;
 
 	Eigen::Matrix3d A = Eigen::Matrix3d::Zero();
 	Eigen::Vector3d b = Eigen::Vector3d::Zero();
 
 	const Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
-	for(const auto& line : lines) {
-		if(!line.HasValue()) {
+	for(const auto& elem : lines) {
+		const Line3D* line = line_ptr(elem);
+
+		if(!line->HasValue()) {
 			continue; // no trolling allowed
 		}
 
-		Eigen::Map<const Eigen::Vector3d> p( line.p.data() );
-		Eigen::Map<const Eigen::Vector3d> v( line.v.data() );
+		Eigen::Map<const Eigen::Vector3d> p( line->p.data() );
+		Eigen::Map<const Eigen::Vector3d> v( line->v.data() );
 
 		const double norm2 = v.squaredNorm();
 
 		if(norm2 < eps) {
-			continue; // super degenerate case
+			continue; // super degenerate case ?
 		}
 
 		const Eigen::Matrix3d P = I - v * v.transpose() / norm2;
@@ -336,20 +368,148 @@ mnd::geom::Point3D mnd::geom::FindVertex( ::mnd::span<const Line3D> lines) noexc
 	};
 }
 
-mnd::geom::Point3D mnd::geom::FindVertex(const mnd::geom::Line3D& l1, const mnd::geom::Line3D& l2) noexcept {
+} // namespace {anonymous}
+
+Point3D mnd::geom::FindVertex(::mnd::span<const Line3D> lines) noexcept {
+    return FindVertexImpl(lines);
+}
+Point3D mnd::geom::FindVertex(::mnd::span<const Line3D*> lines) noexcept {
+    return FindVertexImpl(lines);
+}
+Point3D mnd::geom::FindVertex(const Line3D& l1, const Line3D& l2) noexcept {
 	const std::array<Line3D, 2> lines{l1, l2};
 	return FindVertex(lines);
 }
 
-std::ostream& operator<<(std::ostream& os, const mnd::geom::Point2D& rhs) {
+std::ostream& operator<<(std::ostream& os, const Point2D& rhs) {
 	return os << '(' << rhs.x << ", " << rhs.y << ')';
 }
-std::ostream& operator<<(std::ostream& os, const mnd::geom::Point3D& rhs) {
+std::ostream& operator<<(std::ostream& os, const Point3D& rhs) {
 	return os << '(' << rhs.x << ", " << rhs.y << ", " << rhs.z << ')';
 }
-std::ostream& operator<<(std::ostream& os, const mnd::geom::Line2D&  rhs) {
+std::ostream& operator<<(std::ostream& os, const Line2D&  rhs) {
 	return os << rhs.value;
 }
-std::ostream& operator<<(std::ostream& os, const mnd::geom::Line3D&  rhs) {
+std::ostream& operator<<(std::ostream& os, const Line3D&  rhs) {
 	return os << '(' << rhs.xarray() << ", " << rhs.yarray() << ')';
+}
+
+constexpr size_t MAX_VERTEXING_MULTP = 7;
+
+/* Heavy algorithm.. should be in its own file. Yikes.
+ * Basically since we're limited to around N=2,..8 tracks, just bruteforcing all the combinations is usually
+ * the fastest. RANSAC not really needed. Greedy regression where we remove the farthest outlier isn't really
+ * stable.
+ *
+ * bruteforcing all the combinations I want to precompute what the available combinations are as a lookup table.
+ * Thx God we work in C++ which is a human language, and this is readily available. :-) */
+
+namespace {
+
+constexpr bool SANITY_CHECK_COMBI = 1;
+
+struct Candidate {
+	double score;
+	u32 n_items;
+	u32 bitmask;
+	constexpr static double DEF_SCORE = DBL_MAX;
+	bool has_value() const noexcept {
+		return score != DEF_SCORE;
+	}
+};
+
+template<u32 N>
+static std::vector<Line3D> try_solve(
+	::mnd::span<const Line3D> lines,
+	double const D
+) { /* It is asserted that `N == lines.size()` */
+	if constexpr(SANITY_CHECK_COMBI) {
+        assert(N == lines.size() && "Paranoia combinatorics (0) hehe.");
+    }
+	Candidate best_candidate { .score = Candidate::DEF_SCORE };
+	std::array<Line3D const*, MAX_VERTEXING_MULTP> tmp;
+	
+	mnd::static_for<N,1>([&](auto _K) {
+		constexpr std::size_t K = decltype(_K)::value;
+		
+		/* If the candidate is already assigned then don't descent down to smaller combinations. */
+		if(best_candidate.has_value())
+			return;
+
+		constexpr auto& table = mnd::combi::combo_lookup_table<N,K>; // std::array<u32, N_choose_K>
+
+		for(const u32 bitmask : table) { // Should I unroll this? N=7,M=3/4 gives already 35 combos!
+			u32 n = 0, m = bitmask;
+			while(m) {
+				/* Count leading zeroes. The first bit '1' is at exactly this position. */
+				const int i = __builtin_ctz(m);
+				tmp[n++] = &lines[i];
+
+				/* Reset the lowest bit in the bitmask.
+				 * https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan */
+				m &= m - 1;
+			}
+			if constexpr(SANITY_CHECK_COMBI) {
+				assert(n == (u32)K && "Paranoia combinatorics (1) hehe.");
+			}
+
+			mnd::span<Line3D const*> selected {tmp.data(), (size_t)n};
+			const Point3D vertex = FindVertex(selected);
+			
+			double score = 0.0;
+			bool reject = false;
+			
+			/* The first candidate which dies vetoes this specific combination.
+			 * This occasion we also use to cache-in the distances calculated. */
+			for(const Line3D* line : selected) {
+				const double d = line->DistanceTo(vertex);
+				if(!(d < D)) { // reject NAN's too!
+					reject = true;
+					break;
+				}
+				/* Score of a valid candidate combination is simply the Σd(t(i), v)^2. */
+				score += d*d;
+			}
+			
+			if(!reject && score < best_candidate.score) {
+				best_candidate = {
+					.score = score,
+					.n_items = K,
+					.bitmask = bitmask
+				};
+			}
+		}
+	}); // static_for
+	
+	std::vector<Line3D> rv;
+
+	if(best_candidate.has_value()) {
+		rv.reserve( best_candidate.n_items );
+
+		u32 m = best_candidate.bitmask;
+		while(m) {
+			const int i = __builtin_ctz(m);
+			rv.push_back( lines[i] );
+			m &= m - 1;
+		}
+	}
+	return rv;
+}
+
+} // namespace {anonymous}
+
+std::vector<Line3D> mnd::geom::FindVertexingTracks(::mnd::span<const Line3D> lines, double const D) {
+	const u32 N = (u32)lines.size();
+
+	return [&]{
+		switch(N) {
+			case 2: return try_solve<2>(lines, D);
+			case 3: return try_solve<3>(lines, D);
+			case 4: return try_solve<4>(lines, D);
+			case 5: return try_solve<5>(lines, D);
+			case 6: return try_solve<6>(lines, D);
+			case 7: return try_solve<7>(lines, D);
+			default: return std::vector<Line3D>{};
+		}
+	}();
 }

@@ -3,15 +3,15 @@
 #include <array>
 #include <cmath>
 #include <ostream>
-#include "json_struct_def.hh" // std::ostream& operator<<(array<T,N> const&) 
+#include "json_struct_def.hh" // std::ostream& operator<<(std::ostream&, array<T,N> const&)
 #include "../monad/monad.hxx"
 #include "../Eigen.h"
 
-#define FORMAT_ANGLES_IN_RADIANS
+#define MND_FORMAT_ANGLES_IN_RADIANS
 
 namespace mnd::geom {
 
-struct Point2D { 
+struct Point2D {
 	static const Point2D null;
 	inline bool is_null() const noexcept { return std::isfinite(x); }
 	
@@ -30,7 +30,7 @@ struct Point2D {
 	double x, y;
 };
 
-struct Point3D { 
+struct Point3D {
 	static const Point3D null;
 	inline bool is_null() const noexcept { return std::isfinite(x); }
 	
@@ -67,31 +67,31 @@ struct Line2D {
 	
 	static const Line2D null;
 
-	inline value_type& operator[](Arr::size_type pos) noexcept { return value[pos]; } 
-	inline value_type const& operator[](Arr::size_type pos) const noexcept { return value[pos]; } 
+	inline value_type& operator[](Arr::size_type pos) noexcept { return value[pos]; }
+	inline value_type const& operator[](Arr::size_type pos) const noexcept { return value[pos]; }
 
 	/* Predicate to see if the line is valid or null. */
 	inline bool HasValue() const noexcept { return std::isfinite(value[0]); }
 
-	/* Translate the line by an offset. */ 
+	/* Translate the line by an offset. */
 	Line2D& operator+=(double ) noexcept; // only along x-axis direction
 	Line2D& operator+=(const Vector2D& ) noexcept;
 
-	/* Represent the line in a coordinate system made by an offset. */ 
+	/* Represent the line in a coordinate system made by an offset. */
 	Line2D& operator%=(double ) noexcept; // only along x-axis direction
 	Line2D& operator%=(const Vector2D& ) noexcept;
 	
-	/* Rotate the line by an an angle (amount) */ 
+	/* Rotate the line by an an angle (amount) */
 	Line2D& Rotate(double ) noexcept;
 
 	/* Represent the line in a coordinate system made by a unary rotation,
-	 * which is represented by an angle (amount). */ 
+	 * which is represented by an angle (amount). */
 	Line2D& RepresentInRotated(double ) noexcept;
 
-	/* Offset the line in a coordinate system and rotate by a unary rotation. */ 
+	/* Offset the line in a coordinate system and rotate by a unary rotation. */
 	Line2D& ShiftAndRotate(const Vector2D& , double ) noexcept;
 
-	/* Represent the line in a coordinate system by an offset and unary rotation. */ 
+	/* Represent the line in a coordinate system by an offset and unary rotation. */
 	Line2D& RepresentInShifted(const Vector2D& , double ) noexcept;
 
 	Arr& array() noexcept { return value; }
@@ -99,14 +99,12 @@ struct Line2D {
 
 	inline double Eval(double z) const noexcept { return value[0] + value[1]*z; }
 
-	std::array<double, 2> value {NAN,NAN}; // {a0, a1} = {offset, slope} 
+	std::array<double, 2> value {NAN,NAN}; // {a0, a1} = {offset, slope}
 };
 
 struct SphericalAngles {
 	double theta, phi;
-	friend std::ostream& operator<<(std::ostream& os, const SphericalAngles& rhs) {
-		return os << "(θ: " << rhs.theta <<  ", φ: " << rhs.phi << ')';	
-	}
+	friend std::ostream& operator<<(std::ostream& , const SphericalAngles& );
 };
 
 /* Two ways to represent lines in 3D:
@@ -122,7 +120,7 @@ struct Line3D {
 
 	Line3D() = default;
 	Line3D (
-		double a0_, /* offset x:z */ 
+		double a0_, /* offset x:z */
 		double a1_, /* slope  x:z */
 		double b0_, /* offset y:z */
 		double b1_  /* slope  y:z */
@@ -178,7 +176,7 @@ struct Line3D {
 		const double a1 = v[0] / v[2];
 		const double a0 = p[0] - a1 * p[2];
 		return {a0, a1};
-	} 
+	}
 	[[ nodiscard ]] inline Line2D YLine() const noexcept {
 		if(!HasValue() || std::abs(v[2]) < 1e-20) {
 			return {NAN, NAN};
@@ -217,15 +215,23 @@ struct Rectangle2D {
 	friend std::ostream& operator<<(std::ostream& os, const Rectangle2D& r) {
 		return os << "{R ("
 			<< r.p0.x << ',' << r.p0.y
-			<< ") <> (" 
+			<< ") <> ("
 			<< r.p1.x << ',' << r.p1.y
 			<< ") R}";
 	}
 };
 
 /* Find a point with a minimal distance to a sequence of lines (aka: a vertex). */
-Point3D FindVertex(mnd::span<const Line3D> ) noexcept;
+Point3D FindVertex(::mnd::span<const Line3D>  ) noexcept;
+Point3D FindVertex(::mnd::span<const Line3D*> ) noexcept;
 Point3D FindVertex(const Line3D&, const Line3D& ) noexcept;
+
+constexpr static double VERTEXING_MIN_DISTANCE = 1.0;
+
+/* In a series of tracks: {t0, t1,... tN}, find the largest subset {𝜏0, 𝜏1, .. 𝜏M) which forms
+ * a vertex with at most `D` width. E.g. the condition: d(vertex, 𝜏(i)) < D ∀i, i<M  holds. */
+std::vector<Line3D> FindVertexingTracks(::mnd::span<const Line3D> , double const D = VERTEXING_MIN_DISTANCE);
+std::vector<Line3D> FindVertexingTracksMut(std::vector<Line3D>& , double const D = VERTEXING_MIN_DISTANCE);
 
 } /* namespace mnd::geom */
 
