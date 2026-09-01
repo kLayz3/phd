@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <ostream>
+#include <vector>
 #include "json_struct_def.hh" // std::ostream& operator<<(std::ostream&, array<T,N> const&)
 #include "../monad/monad.hxx"
 #include "../Eigen.h"
@@ -13,7 +14,7 @@ namespace mnd::geom {
 
 struct Point2D {
 	static const Point2D null;
-	inline bool is_null() const noexcept { return std::isfinite(x); }
+	inline bool is_null() const noexcept { return !std::isfinite(x); }
 	
 	/* Returns quiet NAN if either of the points is null. */
 	inline double Distance2(const Point2D& rhs) const noexcept {
@@ -32,7 +33,7 @@ struct Point2D {
 
 struct Point3D {
 	static const Point3D null;
-	inline bool is_null() const noexcept { return std::isfinite(x); }
+	inline bool is_null() const noexcept { return !std::isfinite(x); }
 	
 	/* Returns quiet NAN if either of the points is null. */
 	inline double Distance2(const Point3D& rhs) const noexcept {
@@ -194,6 +195,7 @@ struct Line3D {
 	std::array<double, 3> v {NAN,NAN,NAN}; // {a1, b1, 1} , nominally
 
 }; // Line3D
+bool operator==(const Line3D& , const Line3D& ) noexcept;
 
 struct Rectangle2D {
 	/* Spanned by bottom left and top right:
@@ -231,6 +233,9 @@ constexpr static double VERTEXING_MIN_DISTANCE = 1.0;
 /* In a series of tracks: {t0, t1,... tN}, find the largest subset {𝜏0, 𝜏1, .. 𝜏M) which forms
  * a vertex with at most `D` width. E.g. the condition: d(vertex, 𝜏(i)) < D ∀i, i<M  holds. */
 std::vector<Line3D> FindVertexingTracks(::mnd::span<const Line3D> , double const D = VERTEXING_MIN_DISTANCE);
+
+/* Same as FindVertexingTracks, except we explicitly mutate the input vector.
+ * We don't mutate the individual lines, just kick them out of the vector, but we don't reorder the vector! */
 std::vector<Line3D> FindVertexingTracksMut(std::vector<Line3D>& , double const D = VERTEXING_MIN_DISTANCE);
 
 } /* namespace mnd::geom */

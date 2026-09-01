@@ -179,6 +179,7 @@ static std::string root_marker_style(Style_t s) {
 	}
 }
 
+[[ maybe_unused ]]
 static bool root_marker_is_open(Style_t s) {
 	s = TAttMarker::GetMarkerStyleBase(s);
 
@@ -239,6 +240,8 @@ static auto numpy_view(const std::vector<double>& v) -> py::array_t<double> {
         v.data()
     );
 }
+
+[[ maybe_unused ]]
 static auto numpy_view_2d(const Hist2DData& h) -> py::array_t<double> {
 	return py::array_t<double>(
 		{

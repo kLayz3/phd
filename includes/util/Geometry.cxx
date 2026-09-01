@@ -48,7 +48,7 @@ namespace mnd::geom { namespace detail {
 using namespace mnd::geom;
 
 const Point2D Point2D::null { NAN, NAN };
-const Point3D Point3D::null { NAN, NAN };
+const Point3D Point3D::null { NAN, NAN, NAN };
 const Line2D Line2D::null { NAN, NAN };
 const Line3D Line3D::null { NAN, NAN, NAN, NAN };
 
@@ -258,6 +258,11 @@ SphericalAngles Line3D::GetSpherical() const noexcept {
 	};
 }
 
+bool mnd::geom::operator==(const Line3D& lhs, const Line3D& rhs) noexcept {
+	return lhs.p == rhs.p
+	    && lhs.v == rhs.v;
+}
+
 /* ============================================================ */
 
 Rectangle2D::Rectangle2D(Point2D midpoint, double wx, double wy) :
@@ -332,7 +337,7 @@ Point3D FindVertexImpl( ::mnd::span<T> lines) noexcept {
 	for(const auto& elem : lines) {
 		const Line3D* line = line_ptr(elem);
 
-		if(!line->HasValue()) {
+		if(!line || !line->HasValue()) {
 			continue; // no trolling allowed
 		}
 
@@ -397,7 +402,7 @@ std::ostream& operator<<(std::ostream& os, const Line3D&  rhs) {
 constexpr size_t MAX_VERTEXING_MULTP = 7;
 
 /* Heavy algorithm.. should be in its own file. Yikes.
- * Basically since we're limited to around N=2,..8 tracks, just bruteforcing all the combinations is usually
+ * Basically since we're limited to around N=2,..7 tracks, just bruteforcing all the combinations is usually
  * the fastest. RANSAC not really needed. Greedy regression where we remove the farthest outlier isn't really
  * stable.
  *
@@ -406,7 +411,7 @@ constexpr size_t MAX_VERTEXING_MULTP = 7;
 
 namespace {
 
-constexpr bool SANITY_CHECK_COMBI = 1;
+constexpr bool SANITY_CHECK_COMBINATORICS = 1;
 
 struct Candidate {
 	double score;
@@ -423,7 +428,7 @@ static std::vector<Line3D> try_solve(
 	::mnd::span<const Line3D> lines,
 	double const D
 ) { /* It is asserted that `N == lines.size()` */
-	if constexpr(SANITY_CHECK_COMBI) {
+	if constexpr(SANITY_CHECK_COMBINATORICS) {
         assert(N == lines.size() && "Paranoia combinatorics (0) hehe.");
     }
 	Candidate best_candidate { .score = Candidate::DEF_SCORE };
@@ -441,7 +446,7 @@ static std::vector<Line3D> try_solve(
 		for(const u32 bitmask : table) { // Should I unroll this? N=7,M=3/4 gives already 35 combos!
 			u32 n = 0, m = bitmask;
 			while(m) {
-				/* Count leading zeroes. The first bit '1' is at exactly this position. */
+				/* Count trailing zeroes. The first bit '1' is at exactly this position. */
 				const int i = __builtin_ctz(m);
 				tmp[n++] = &lines[i];
 
@@ -449,7 +454,7 @@ static std::vector<Line3D> try_solve(
 				 * https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan */
 				m &= m - 1;
 			}
-			if constexpr(SANITY_CHECK_COMBI) {
+			if constexpr(SANITY_CHECK_COMBINATORICS) {
 				assert(n == (u32)K && "Paranoia combinatorics (1) hehe.");
 			}
 
@@ -499,17 +504,33 @@ static std::vector<Line3D> try_solve(
 } // namespace {anonymous}
 
 std::vector<Line3D> mnd::geom::FindVertexingTracks(::mnd::span<const Line3D> lines, double const D) {
-	const u32 N = (u32)lines.size();
+	switch(lines.size()) {
+		case 2: return try_solve<2>(lines, D);
+		case 3: return try_solve<3>(lines, D);
+		case 4: return try_solve<4>(lines, D);
+		case 5: return try_solve<5>(lines, D);
+		case 6: return try_solve<6>(lines, D);
+		case 7: return try_solve<7>(lines, D);
+		default: return {};
+	}
+}
 
-	return [&]{
-		switch(N) {
-			case 2: return try_solve<2>(lines, D);
-			case 3: return try_solve<3>(lines, D);
-			case 4: return try_solve<4>(lines, D);
-			case 5: return try_solve<5>(lines, D);
-			case 6: return try_solve<6>(lines, D);
-			case 7: return try_solve<7>(lines, D);
-			default: return std::vector<Line3D>{};
-		}
-	}();
+std::vector<Line3D> mnd::geom::FindVertexingTracksMut(std::vector<Line3D>& lines, double const D) {
+	auto good_lines = FindVertexingTracks(
+		::mnd::span<const Line3D>{ lines.data(), lines.size() },
+		D
+	);
+	if(!good_lines.empty()) {
+		mnd::Erase(
+			lines,
+			[&](const auto& entry) {
+				return std::find(
+					good_lines.begin(),
+					good_lines.end(),
+					entry
+				) != good_lines.end();
+			}
+		);
+	}
+	return good_lines;
 }
