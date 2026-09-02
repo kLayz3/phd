@@ -187,7 +187,7 @@ struct FOOTGainParam {
 			double evaluated_hi = poly::Eval(x, poly_hi);
 			double gain_lo = nom_lo / evaluated_lo;
 			double gain_hi = nom_hi / evaluated_hi;
-			auto line = GetLine2D( {evaluated_lo, gain_lo}, {evaluated_hi, gain_hi} );
+			auto line = mnd::geom::GetLine2D( {evaluated_lo, gain_lo}, {evaluated_hi, gain_hi} );
 			gain = poly::Eval(e, line.array());
 		}
 		return gain;

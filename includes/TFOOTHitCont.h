@@ -8,7 +8,8 @@
 class TH2I;
 
 /* Heavy debugging features compiled in. Can be toggled together automatically.
- * This is either for sanity debugging or for: ../scripts/hit/foot_track_analysis.C */
+ * This is either for sanity debugging or for: ../scripts/hit/foot_track_analysis.C ,
+ * or for `foot_regain_match.cc` */
 //#define MND_FOOTTRACK_DEBUG
 
 /* In case the heavy debug build is enabled, also feature it in here. */
@@ -25,6 +26,8 @@ class TH2I;
 
 #include "util/HitMatrix.hxx"
 #include "util/FTrack.h"
+
+namespace mnd::geom { struct Line3D; }
 
 /* Represent the 'charge' measurement of each layer. */
 struct FOOTQ {
@@ -48,7 +51,7 @@ struct FOOTQ {
 	) :
 		q(q_), fCM(fCM_)
 #ifdef MND_FOOTTRACK_DEBUG
-		, fCT(fCT_), delta(d_), e0(e0_) 
+		, fCT(fCT_), delta(d_), e0(e0_)
 #endif
 	{}
 
@@ -124,6 +127,11 @@ struct RNFOOTTrack {
 	inline bool operator<(const RNFOOTTrack& rhs) const noexcept {
 		return Q > rhs.Q; // descending charge.
 	}
+
+	/* Comparison and deref operators required for Vertexing API in Geometry.h */
+	friend bool operator==(const RNFOOTTrack& , const RNFOOTTrack &) noexcept;
+	mnd::geom::Line3D operator*() const noexcept;
+
 #ifdef MND_FOOTTRACK_DEBUG
 	static constexpr u32 N_PAIRS = N_FOOT_DETECTORS / 2;
 	
@@ -145,8 +153,8 @@ struct RNFOOTTrack {
 	RNFOOTTrack(const std::array<double, 2>& , const std::array<double, 2>& , double , double, std::size_t
 #ifdef MND_FOOTTRACK_DEBUG
 		,
-		const std::array<double, N_PAIRS>& , 
-		const std::array<double, N_PAIRS>& , 
+		const std::array<double, N_PAIRS>& ,
+		const std::array<double, N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& ,
@@ -154,7 +162,7 @@ struct RNFOOTTrack {
 		const std::array<double, N_PAIRS>& ,
 		const std::array<u32,    N_PAIRS>& ,
 		const std::array<double, N_PAIRS>& ,
-		const std::array<double, N_PAIRS>& , 
+		const std::array<double, N_PAIRS>& ,
 		const std::array<u32,    N_PAIRS>&
 #endif
 	);
@@ -234,4 +242,5 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 extern template struct HitMatrix<RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
 extern template struct Track<TFOOTHitCont::N_PAIRS + 1, RNFOOTPair>; // instantiated in TFOOTHitProc.cxx
 
-mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& );
+/* Convert to 3D line. Delegates to the underlying deref operator. */
+mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& ) noexcept;

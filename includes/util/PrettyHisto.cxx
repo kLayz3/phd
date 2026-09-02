@@ -62,7 +62,7 @@ void mnd::python::poke(bool verbose) {
 		auto sys = py::module_::import("sys");
 		auto np  = py::module_::import("numpy");
 		auto mpl = py::module_::import("matplotlib");
-		matplotlib.attr("use")("Agg");
+		mpl.attr("use")("Agg");
 		auto plt = py::module_::import("matplotlib.pyplot");
 
 		PyOS_setsig(SIGINT, SIG_DFL);

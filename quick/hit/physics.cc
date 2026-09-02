@@ -6,6 +6,7 @@
 #include "TROOT.h"
 #include "TApplication.h"
 #include "TParameter.h"
+#include "util/Geometry.h"
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.h"
 
@@ -161,11 +162,6 @@ int main(int argc, char* argv[]) {
 		angle_type = AngleType::all;
 	}
 
-	/* Tracks from Hit step are sorted according to their score.
-	 * Here to keep, per entry, a sequence of flags if a a specific track got 'resorted'
-	 * in this program. */
-	std::array<bool, 32> track_used_mask = {};
-
 	TH1P* h1_track_mult = new TH1P("Track multiplicity [unique tracks]@-1 means no FOOT in event.", kRed-1, 11, -1.5, 9.5);
 	TH2P* h2_q_vs_mult = new TH2P("Track charge [Q]:Track multp@Full FOOT system",
 		10, -0.5, 9.5, 40, 0,8);
@@ -236,134 +232,15 @@ int main(int argc, char* argv[]) {
 			if(sci31.hits.size() >= 1) h1_sci31_cut->Fill(sci31.E);
 
 			const size_t N = foot->track.size();
-			if(N > track_used_mask.size()) continue; // abnormally large event?
-
-			/* In case we don't allow 'rogue' tracks, then the number of validated tracks
-			 * must be the total number. */
-			if(!allow_others && N != sum_n_tracks_required) continue;
+			mnd::geom::VertexingResult<RNFOOTTrack> vtr = mnd::geom::FindVertexingTracksMut(foot->track, distance_cut);
+			if(!vtr.valid()) continue;
 			
-			/* Select the event only if corresponing charge values are found, in their
-			 * respective 'quantity' */
-			track_used_mask.fill(false);
-			
-			for(const auto& [cut, n_tracks_required] : selected) { // Selected windows are presorted in ascending charge.
-				A2 const& charge_cut = std::get<A2>( cut );
-				/* Go over the tracks, if it's sorted within a cut then 'mask' the corresponding entry for
-				 * next iterations over current event's tracks. */
-				u32 n = n_tracks_required;
-				for(size_t i=0; i<N; ++i) {
-					if( track_used_mask[i] ) continue; // Skip this track entry. Already "sorted out" somewhere else
-					const RNFOOTTrack& t = foot->track[i];
-					if(mnd::IsInside(t.Q, charge_cut)) {
-						track_used_mask[i] = true;
-						if((--n) == 0) break;
-					};
-				}
+		} // for(size_t entryId{0}; entryId < nentries; ++entryId )
 
-				/* `n` now must be 0, otherwise we didn't catch all unique tracks for this
-				 * specific charge interval. */
-				if(n != 0) is_valid = false;
-			}
-			if(!is_valid) continue; // Skip event.
-		
-			if(sum_n_tracks_required == 0 && N==0) {
-				/* In this case, possible that the FOOT data got omitted entirely. */
-				h1_track_mult->Fill( foot->HasData()? 0: -1 );
-			} else {
-				h1_track_mult->Fill(static_cast<double>(N));
-			}
-
-			/* From the selected tracks, fill out the `tracks` sequence.
-			 * Here, we eliminate tracks from the event that didn't fall
-			 * in the `selected` window(s). */
-			std::vector<mnd::geom::Line3D> tracks {};
-			
-			/* Sometime no selection is provided, in that case just fetch everything. */
-			for(size_t i=0; i<N; ++i) {
-				/* If the current track wasn't marked by the `selected` filtering above, means it didn't
-				 * fall into any of the selection windows. */
-				if( selected.size() > 0 and !track_used_mask[i] ) continue;
-				const RNFOOTTrack& t = foot->track[i];
-				
-				h2_q_vs_mult->Fill(N, t.Q);
-				h2_score_vs_mult->Fill(N, t.score);
-
-				tracks.push_back( RNTrackToLine3D(t) );
-			}
-			const size_t N_valid = tracks.size(); // Is either `sum_n_tracks_required` or simply `N`
-		
-			if(N_valid > 1) {
-				/* Find the vertex. */
-				const mnd::geom::Point3D vertex = mnd::geom::FindVertex(tracks);
-
-				/* Cut on vertex distances... */
-				std::vector<double> distances {};
-
-				for(const mnd::geom::Line3D& track : tracks) {
-					double distance = track.DistanceTo( vertex );
-					if(std::isfinite(distance_cut) and distance > distance_cut) {
-						is_valid = false;
-						break;
-					}
-					distances.push_back(distance);
-				}
-				/* If a single track is not within with distance cut, skip event. */
-				if(!is_valid) continue;
-
-				for(auto d: distances) h1_track_distance->Fill( d );
-				
-				double sum2 = 0;
-				double theta;
-				switch(angle_type) {
-					/* In this case, look for angles between
-					* 'light' particles and the heaviest one. */
-					case(AngleType::p): {
-						const mnd::geom::Line3D heavy_track = tracks.back();
-						for(size_t i=0; i < N_valid-1; ++i) {
-							theta = 1000.0 * tracks[i].AngleRelativeTo( heavy_track );
-							sum2 += theta*theta;
-							h1_track_angle->Fill( theta );
-						}
-						break;
-					}
-					/* In this case, look for angles between
-					 * 'heavy' particles and the lightest one.  */
-					case(AngleType::he): {
-						const mnd::geom::Line3D light_track = tracks.front();
-						for(size_t i=1; i < N_valid; ++i) {
-							theta = 1000.0 * tracks[i].AngleRelativeTo( light_track );
-							sum2 += theta*theta;
-						}
-						if(N_valid > 2) {
-							theta = 1000.0 * tracks[1].AngleRelativeTo( tracks[2] );
-							h1_track_angle->Fill( theta );
-						}
-						break;
-					}
-					/* In this case, angular `rho` is simply the RMS of
-					 * all the possible angles.  */
-					case(AngleType::all): {
-						for(size_t i=0; i<N_valid; ++i) {
-							for(size_t j=i+1; j<N_valid; ++j) {
-								theta = 1000.0 * tracks[i].AngleRelativeTo( tracks[j] );
-								sum2 += theta*theta;
-								h1_track_angle->Fill( theta );
-							}
-						}
-						break;
-					}
-				}
-				const double invariant_theta = sqrt(sum2);
-				h1_angle_ex->Fill( invariant_theta );
-				h2_vertex_z->Fill( vertex.z, invariant_theta);
-
-				h1_sci21_cut2->Fill(sci21.E);
-				h1_sci22_cut2->Fill(sci22.E);
-				h1_sci31_cut2->Fill(sci31.E);
-			}
-		}
 		bar.mark_as_completed();
-	}
+
+	} // for(size_t i{0}; i < fileName.size(); ++i)
+
 	show_console_cursor(true);
 
 	TCanvas* cm = new TCanvas("Multp", "Recognized tracks", 2150, 1400);

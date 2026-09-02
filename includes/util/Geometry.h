@@ -1,8 +1,11 @@
 #pragma once
 
 #include <array>
+#include <cfloat>
 #include <cmath>
+#include <limits>
 #include <ostream>
+#include <type_traits>
 #include <vector>
 #include "json_struct_def.hh" // std::ostream& operator<<(std::ostream&, array<T,N> const&)
 #include "../monad/monad.hxx"
@@ -125,7 +128,7 @@ struct Line3D {
 		double a1_, /* slope  x:z */
 		double b0_, /* offset y:z */
 		double b1_  /* slope  y:z */
-	) : p{a0_, b0_, 0}, v{a1_, b1_, 1} {}
+	) noexcept : p{a0_, b0_, 0}, v{a1_, b1_, 1} {}
 
 	Line3D(std::array<double, 2> const& a_, std::array<double, 2> const& b_) :
 		p{a_[0], b_[0], 0}, v{a_[1], b_[1], 1} {}
@@ -194,8 +197,17 @@ struct Line3D {
 	std::array<double, 3> p {NAN,NAN,NAN}; // {a0, b0, 0} , nominally
 	std::array<double, 3> v {NAN,NAN,NAN}; // {a1, b1, 1} , nominally
 
+	/* Is a simple no-op. Needed to vertexing API later. */
+	inline Line3D&       operator*()       noexcept { return *this; }
+	inline Line3D const& operator*() const noexcept { return *this; }
+
 }; // Line3D
 bool operator==(const Line3D& , const Line3D& ) noexcept;
+
+/* Can't share the same symbol, as it will confuse the overload resolver:
+ * `GetLine(<brace-enclosed initializer list>, <brace-enclosed initializer list>)` is ambiguous */
+Line2D GetLine2D(const Point2D& , const Point2D& ) noexcept;
+Line3D GetLine3D(const Point3D& , const Point3D& ) noexcept;
 
 struct Rectangle2D {
 	/* Spanned by bottom left and top right:
@@ -228,24 +240,38 @@ Point3D FindVertex(::mnd::span<const Line3D>  ) noexcept;
 Point3D FindVertex(::mnd::span<const Line3D*> ) noexcept;
 Point3D FindVertex(const Line3D&, const Line3D& ) noexcept;
 
-constexpr static double VERTEXING_MIN_DISTANCE = 1.0;
+constexpr inline double VERTEXING_MIN_DISTANCE = 1.0;
+constexpr inline size_t MAX_VERTEXING_MULTP    = 7;
+
+template<typename T = Line3D>
+struct VertexingResult {
+	std::vector<T> tracks {};
+	Point3D vertex = Point3D::null;
+	double score = std::numeric_limits<double>::infinity();
+
+	bool valid() const noexcept { return tracks.size() >= 2; }
+};
 
 /* In a series of tracks: {t0, t1,... tN}, find the largest subset {𝜏0, 𝜏1, .. 𝜏M) which forms
- * a vertex with at most `D` width. E.g. the condition: d(vertex, 𝜏(i)) < D ∀i, i<M  holds. */
-std::vector<Line3D> FindVertexingTracks(::mnd::span<const Line3D> , double const D = VERTEXING_MIN_DISTANCE);
+ * a vertex with at most `D` width. E.g. the condition: d(vertex, 𝜏(i)) < D, ∀i where i<M must hold.
+ * This is generic over any type `T` that dereferences into a `Line3D` or `Line3D&`. The deref operator can
+ * either return a copy or some internal reference. If it returns a reference, then
+ * the returned reference's lifetime MUST match the object's lifetime. */
+template<typename T = Line3D>
+VertexingResult<T> FindVertexingTracks(::mnd::span<const T> , double const D = VERTEXING_MIN_DISTANCE);
 
-/* Same as FindVertexingTracks, except we explicitly mutate the input vector.
- * We don't mutate the individual lines, just kick them out of the vector, but we don't reorder the vector! */
-std::vector<Line3D> FindVertexingTracksMut(std::vector<Line3D>& , double const D = VERTEXING_MIN_DISTANCE);
+/* Same as FindVertexingTracks, except we explicitly mutate the input vector. Extra requirement is that
+ * the type `T` needs an explicit comparison operator.
+ * We don't mutate the individual objects, just kick them out of the vector, and we also
+ * don't reorder the vector! */
+template<typename T = Line3D>
+VertexingResult<T> FindVertexingTracksMut(std::vector<T>& , double const D = VERTEXING_MIN_DISTANCE);
 
 } /* namespace mnd::geom */
-
-/* Can't share the same symbol, as it will confuse the overload resolver:
- * `GetLine(<brace-enclosed initializer list>, <brace-enclosed initializer list>)` is ambiguous */
-mnd::geom::Line2D GetLine2D(const mnd::geom::Point2D& , const mnd::geom::Point2D& ) noexcept;
-mnd::geom::Line3D GetLine3D(const mnd::geom::Point3D& , const mnd::geom::Point3D& ) noexcept;
 
 std::ostream& operator<<(std::ostream&, const mnd::geom::Point2D& );
 std::ostream& operator<<(std::ostream&, const mnd::geom::Point3D& );
 std::ostream& operator<<(std::ostream&, const mnd::geom::Line2D& );
 std::ostream& operator<<(std::ostream&, const mnd::geom::Line3D& );
+
+#include "GeometryImpl.hxx"

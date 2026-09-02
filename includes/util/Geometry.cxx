@@ -1,10 +1,6 @@
 #include "Geometry.h"
 #include <algorithm>
 #include <cassert>
-#include <cfloat>
-#include <cmath>
-
-#include "Combinatorics.hxx"
 
 namespace mnd::geom { namespace detail {
 	static_assert(std::is_standard_layout_v<Vector3D>);
@@ -284,13 +280,13 @@ bool Rectangle2D::IsInside(double x, double y) const noexcept {
 		y > p0.y && y < p1.y;
 }
 
-Line2D GetLine2D(const Point2D& p1, const Point2D& p2) noexcept {
+Line2D mnd::geom::GetLine2D(const Point2D& p1, const Point2D& p2) noexcept {
 	double slope = (p2.y - p1.y) / (p2.x - p1.x);
 	double offset = -slope * p1.x + p1.y;
 	return { offset, slope };
 }
 
-Line3D GetLine3D(const Point3D& p1, const Point3D& p2) noexcept {
+Line3D mnd::geom::GetLine3D(const Point3D& p1, const Point3D& p2) noexcept {
 	const double dz = p2.z - p1.z;
 
 	double a1 = (p2.x - p1.x) / dz;
@@ -397,140 +393,4 @@ std::ostream& operator<<(std::ostream& os, const Line2D&  rhs) {
 }
 std::ostream& operator<<(std::ostream& os, const Line3D&  rhs) {
 	return os << '(' << rhs.xarray() << ", " << rhs.yarray() << ')';
-}
-
-constexpr size_t MAX_VERTEXING_MULTP = 7;
-
-/* Heavy algorithm.. should be in its own file. Yikes.
- * Basically since we're limited to around N=2,..7 tracks, just bruteforcing all the combinations is usually
- * the fastest. RANSAC not really needed. Greedy regression where we remove the farthest outlier isn't really
- * stable.
- *
- * bruteforcing all the combinations I want to precompute what the available combinations are as a lookup table.
- * Thx God we work in C++ which is a human language, and this is readily available. :-) */
-
-namespace {
-
-constexpr bool SANITY_CHECK_COMBINATORICS = 1;
-
-struct Candidate {
-	double score;
-	u32 n_items;
-	u32 bitmask;
-	constexpr static double DEF_SCORE = DBL_MAX;
-	bool has_value() const noexcept {
-		return score != DEF_SCORE;
-	}
-};
-
-template<u32 N>
-static std::vector<Line3D> try_solve(
-	::mnd::span<const Line3D> lines,
-	double const D
-) { /* It is asserted that `N == lines.size()` */
-	if constexpr(SANITY_CHECK_COMBINATORICS) {
-        assert(N == lines.size() && "Paranoia combinatorics (0) hehe.");
-    }
-	Candidate best_candidate { .score = Candidate::DEF_SCORE };
-	std::array<Line3D const*, MAX_VERTEXING_MULTP> tmp;
-	
-	mnd::static_for<N,1>([&](auto _K) {
-		constexpr std::size_t K = decltype(_K)::value;
-		
-		/* If the candidate is already assigned then don't descent down to smaller combinations. */
-		if(best_candidate.has_value())
-			return;
-
-		constexpr auto& table = mnd::combi::combo_lookup_table<N,K>; // std::array<u32, N_choose_K>
-
-		for(const u32 bitmask : table) { // Should I unroll this? N=7,M=3/4 gives already 35 combos!
-			u32 n = 0, m = bitmask;
-			while(m) {
-				/* Count trailing zeroes. The first bit '1' is at exactly this position. */
-				const int i = __builtin_ctz(m);
-				tmp[n++] = &lines[i];
-
-				/* Reset the lowest bit in the bitmask.
-				 * https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan */
-				m &= m - 1;
-			}
-			if constexpr(SANITY_CHECK_COMBINATORICS) {
-				assert(n == (u32)K && "Paranoia combinatorics (1) hehe.");
-			}
-
-			mnd::span<Line3D const*> selected {tmp.data(), (size_t)n};
-			const Point3D vertex = FindVertex(selected);
-			
-			double score = 0.0;
-			bool reject = false;
-			
-			/* The first candidate which dies vetoes this specific combination.
-			 * This occasion we also use to cache-in the distances calculated. */
-			for(const Line3D* line : selected) {
-				const double d = line->DistanceTo(vertex);
-				if(!(d < D)) { // reject NAN's too!
-					reject = true;
-					break;
-				}
-				/* Score of a valid candidate combination is simply the Σd(t(i), v)^2. */
-				score += d*d;
-			}
-			
-			if(!reject && score < best_candidate.score) {
-				best_candidate = {
-					.score = score,
-					.n_items = K,
-					.bitmask = bitmask
-				};
-			}
-		}
-	}); // static_for
-	
-	std::vector<Line3D> rv;
-
-	if(best_candidate.has_value()) {
-		rv.reserve( best_candidate.n_items );
-
-		u32 m = best_candidate.bitmask;
-		while(m) {
-			const int i = __builtin_ctz(m);
-			rv.push_back( lines[i] );
-			m &= m - 1;
-		}
-	}
-	return rv;
-}
-
-} // namespace {anonymous}
-
-std::vector<Line3D> mnd::geom::FindVertexingTracks(::mnd::span<const Line3D> lines, double const D) {
-	switch(lines.size()) {
-		case 2: return try_solve<2>(lines, D);
-		case 3: return try_solve<3>(lines, D);
-		case 4: return try_solve<4>(lines, D);
-		case 5: return try_solve<5>(lines, D);
-		case 6: return try_solve<6>(lines, D);
-		case 7: return try_solve<7>(lines, D);
-		default: return {};
-	}
-}
-
-std::vector<Line3D> mnd::geom::FindVertexingTracksMut(std::vector<Line3D>& lines, double const D) {
-	auto good_lines = FindVertexingTracks(
-		::mnd::span<const Line3D>{ lines.data(), lines.size() },
-		D
-	);
-	if(!good_lines.empty()) {
-		mnd::Erase(
-			lines,
-			[&](const auto& entry) {
-				return std::find(
-					good_lines.begin(),
-					good_lines.end(),
-					entry
-				) != good_lines.end();
-			}
-		);
-	}
-	return good_lines;
 }

@@ -12,7 +12,7 @@ static FOOTBoxParam _box {};
 double g_expert_target_z {};
 
 std::ostream& operator<<(std::ostream& os, const FOOTHit& rhs) noexcept {
-	os << mnd::msg("(%s%.2f%s,%d,%s%5.1f%s)", 
+	os << mnd::msg("(%s%.2f%s,%d,%s%5.1f%s)",
 		KBH_CYN, rhs.Q.q, KNRM,
 		rhs.Q.fCM,
 		KBH_RED, rhs.m, KNRM);
@@ -43,15 +43,15 @@ bool RNFOOTHit::HasData() const noexcept {
 TFOOTHitCont::TFOOTHitCont() : TContainer("FOOT") {}
 
 RNFOOTTrack::RNFOOTTrack (
-	const std::array<double, 2>& xline, 
-	const std::array<double, 2>& yline, 
-	double Q_, 
+	const std::array<double, 2>& xline,
+	const std::array<double, 2>& yline,
+	double Q_,
 	double score_,
 	std::size_t n_
 #ifdef MND_FOOTTRACK_DEBUG
 		,
-		const std::array<double, N_PAIRS>& _ox, 
-		const std::array<double, N_PAIRS>& _oy, 
+		const std::array<double, N_PAIRS>& _ox,
+		const std::array<double, N_PAIRS>& _oy,
 		const std::array<double, N_PAIRS>& _oz,
 		const std::array<double, N_PAIRS>& _oq,
 		const std::array<double, N_PAIRS>& _osq,
@@ -63,11 +63,11 @@ RNFOOTTrack::RNFOOTTrack (
 		const std::array<u32,    N_PAIRS>& _oc0_y
 #endif
 ) : x0(xline[0]), y0(yline[0]), ax(xline[1]), ay(yline[1]),
-	Q(Q_), score(score_), n(n_) 
+	Q(Q_), score(score_), n(n_)
 #ifdef MND_FOOTTRACK_DEBUG
 		,
-		_x(_ox), 
-		_y(_oy), 
+		_x(_ox),
+		_y(_oy),
 		_z(_oz),
 		_q(_oq),
 		_sq(_osq),
@@ -80,9 +80,36 @@ RNFOOTTrack::RNFOOTTrack (
 #endif
 {}
 
+/* Ok, hacks. Usually two tracks compare equal if their geometry is the same.
+ * We can trust it's almost impossible for two distinct tracks to have exactly the same geometry.
+ * Then this minimizes to comparison of 4 doubles. As long as we don't fuck around with the member order! */
+bool operator==(const RNFOOTTrack& l, const RNFOOTTrack& r) noexcept {
+#ifdef MND_HAS_INTEL_INTRIN
+	const __m256d a = _mm256_loadu_pd(&l.x0);
+	const __m256d b = _mm256_loadu_pd(&r.x0);
+	const __m256d cmp = _mm256_cmp_pd(a, b, _CMP_EQ_OQ); // ordered comparison
+
+	return _mm256_movemask_pd(cmp) == 0xf;
+#else
+	return l.x0 == r.x0 &&
+	       l.y0 == r.y0 &&
+	       l.ax == r.ax &&
+	       l.ay == r.ay;
+#endif
+}
+
+mnd::geom::Line3D RNFOOTTrack::operator*() const noexcept {
+	return {
+		x0,
+		ax,
+		y0,
+		ay
+	};
+}
+
 void TFOOTHitCont::Init(TDictInfo info) {
 auto it = info.find("Setup");
-	if(it == info.end()) 
+	if(it == info.end())
 		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
 	const std::string& file_name = it->second;
 	
@@ -90,11 +117,11 @@ auto it = info.find("Setup");
 	setup["file_name"] = file_name;
 	
 	if(!setup.contains("box")) ERROR("\'box\' key not found in JSON file: %s\n", file_name.c_str());
-		
+
 	UNROLL_JSON_PARAM(_box, setup["box"], 7);
 
 	/* Single global to be shipped over to TFRSHitProc */
-	g_expert_target_z = _box.GetTargetZ(); 
+	g_expert_target_z = _box.GetTargetZ();
 }
 
 using FOOTParams = std::array<FOOTParam, 2>;
@@ -107,7 +134,7 @@ void TFOOTHitCont::Setup() {
 		100, 0, 8);
 	h1_track_nsampled = RegisterObject<TH1I>("h1_qtrack_nsampled", "Points sampled (N) in the track",
 		12, -0.5, 5.5);
-	diff_heavy_frag_vs_upstream = RegisterObject<TH1I>("diff_heavy_frag_vs_upstream", 
+	diff_heavy_frag_vs_upstream = RegisterObject<TH1I>("diff_heavy_frag_vs_upstream",
 		"Distance heaviest fragment track to TPC track;d [mm]", 500, 0.0, 5);
 	
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
@@ -142,7 +169,13 @@ void TFOOTHitCont::Setup() {
 	}
 }
 
-mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& t) { return { t.x0, t.ax, t.y0, t.ay }; }
+mnd::geom::Line3D RNTrackToLine3D(const RNFOOTTrack& t) noexcept {
+	return *t;
+}
+
+/* Instantiate the massive template. */
+template mnd::geom::VertexingResult<RNFOOTTrack>
+mnd::geom::FindVertexingTracksMut(std::vector<RNFOOTTrack> &, double );
 
 ClassImp(FOOTQ);
 ClassImp(FOOTHit);
