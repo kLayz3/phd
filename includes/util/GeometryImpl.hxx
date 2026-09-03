@@ -191,15 +191,17 @@ template <
 
 	if(best_candidate.has_value()) {
 		rv.tracks.reserve( best_candidate.n_items );
-
+		
+		/* Extract according to be bitmask, this will keep the ordering! */
 		u32 m = best_candidate.bitmask;
 		while(m) {
 			const int i = __builtin_ctz(m);
 			rv.tracks.push_back( lines[i] ); // push_back(T& )
 			m &= m - 1;
 		}
-		rv.vertex = best_candidate.vertex;
-		rv.score  = best_candidate.score;
+		rv.vertex  = best_candidate.vertex;
+		rv.score   = best_candidate.score;
+		rv.bitmask = best_candidate.bitmask;
 	}
 	return rv;
 }
@@ -227,16 +229,15 @@ VertexingResult<T> FindVertexingTracksMut(std::vector<T>& lines, double const D)
 		D
 	);
 	if(result.valid()) {
-		const auto& tracks = result.tracks;
-		
+		u32 i = 0;
+
+		/* Kick out all tracks whose indices are marked by the bitmask.
+		 * mnd::Erase anyway goes element by element and simply checks it.
+		 * The actual resizing of vector is done *after* the full pass of the predicate. :) */
 		mnd::Erase(
 			lines,
-			[&](const auto& entry) {
-				return std::find(
-					tracks.begin(),
-					tracks.end(),
-					entry
-				) != tracks.end();
+			[&](auto const& ) {
+				return result.bitmask & (1ULL << i++);
 			}
 		);
 	}

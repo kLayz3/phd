@@ -4,12 +4,43 @@
 #include <pybind11/pytypes.h>
 #include <stdexcept>
 #include <csignal>
+#include <string>
 
 #include "PrettyHisto.h"
 #include "RtypesCore.h"
 #include "TGraph.h"
 #include "TGraphErrors.h"
 #include "TROOT.h"
+
+/* First histogramming API thta we left undefined.. */
+
+#define APPEND_TO_TITLE_IMPL(THXP) \
+void THXP::AppendToTitle(std::string_view v) { \
+	auto current_title = std::string{ h.GetTitle() }; \
+	if(current_title.empty()) { \
+		h.SetTitle( std::string(v).c_str() ); \
+		return; \
+	} \
+	/* Current title can end with a comment: \
+	 * (text) \
+	 * Means strip out the last bracket, paste in the text and add \
+	 * back the bracket */ \
+	\
+	switch(current_title.back()) { \
+		case ')': { \
+			current_title.pop_back(); \
+			current_title += std::string{' '} + std::string{v} + std::string{')'}; \
+			break; \
+		} \
+		default: { \
+			current_title += std::string{' '} + std::string{v}; \
+		} \
+	} \
+	h.SetTitle( current_title.c_str() ); \
+}
+
+APPEND_TO_TITLE_IMPL(TH1P)
+APPEND_TO_TITLE_IMPL(TH2P)
 
 namespace py = pybind11;
 using namespace pybind11::literals;

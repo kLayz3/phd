@@ -248,6 +248,7 @@ struct VertexingResult {
 	std::vector<T> tracks {};
 	Point3D vertex = Point3D::null;
 	double score = std::numeric_limits<double>::infinity();
+	u64 bitmask = 0x0; // 8-byte cuz anyway padded to the boundary.
 
 	bool valid() const noexcept { return tracks.size() >= 2; }
 };

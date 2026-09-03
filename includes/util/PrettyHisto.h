@@ -273,6 +273,8 @@ struct TH1P {
 		else return -1;
 	}
 
+	void AppendToTitle(std::string_view );
+
 	/* Implicit ref cvt */
 	inline operator inner_type&()             noexcept { return h; }
 	inline operator const inner_type&() const noexcept { return h; }
@@ -370,6 +372,8 @@ struct TH2P {
 		if(IsInside(x,y)) return h.Fill(x,y, w);
 		else return -1;
 	}
+	
+	void AppendToTitle(std::string_view );
 
 	/* Implicit ref cvt */
 	operator inner_type&()             noexcept { return h; }

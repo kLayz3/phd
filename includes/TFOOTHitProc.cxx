@@ -680,8 +680,8 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 			WARN(KBH_CYN "~~~> Valid %zu paths thru the tree.\n" KNRM, dag.path.size());
 		}
 #endif
-	/* Sort the sequence of paths through the graph according to their score. 
-	 * Each paths's score anyway has to be evaluated to be robust. There's no way around this. 
+	/* Sort the sequence of paths through the graph according to their score.
+	 * Each paths's score anyway has to be evaluated to be robust. There's no way around this.
 	 * Heavy lifting call. */
 	std::sort (
 		dag.path.begin(),
@@ -812,8 +812,8 @@ void TFOOTHitProc::PostProcess() noexcept {
 	/* For recognised tracks, try to find their vertex, together with the upstream track. */
 
 	std::sort( /* Sort in descending charge (.Q) attribute. */
-		out.inner().track.begin(), 
-		out.inner().track.end() 
+		out.inner().track.begin(),
+		out.inner().track.end()
 	);
 	
 	this->lines.clear();
@@ -826,7 +826,7 @@ void TFOOTHitProc::PostProcess() noexcept {
 	out.inner().vertex = RNFOOTHit::Vertex{ vertex };
 
 	if(lines.size() >= 2) {	
-		out.diff_heavy_frag_vs_upstream->Fill (	/* Hardly converged, fucked up due to rounding. */
+		out.diff_heavy_frag_vs_upstream->Fill ( /* Hardly converged, fucked up due to rounding. */
 			lines.front().DistanceTo( g_upstream_track )
 		);
 	}
