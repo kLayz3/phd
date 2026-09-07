@@ -1,4 +1,5 @@
 /* pybind11 stuff must be first to be included. */
+#include <cstdlib>
 #include <pybind11/numpy.h>
 #include <pybind11/embed.h>
 #include <pybind11/pytypes.h>
@@ -41,6 +42,64 @@ void THXP::AppendToTitle(std::string_view v) { \
 
 APPEND_TO_TITLE_IMPL(TH1P)
 APPEND_TO_TITLE_IMPL(TH2P)
+
+TH1P::TH1P(const TH1P& rhs) {
+	_parent = &const_cast<TH1P&>(rhs);
+	h = rhs.h;
+	h.SetDirectory(nullptr);
+	h.Reset();
+}
+TH1P& TH1P::operator=(const TH1P& rhs) {
+	_parent = &const_cast<TH1P&>(rhs);
+	h = rhs.h;
+	h.SetDirectory(nullptr);
+	h.Reset();
+	return *this;
+}
+TH1P::~TH1P() {
+	/* If parent exists then `Add` all of its contents to it. */
+	if(_parent) {
+		TH1P* parent_dc = dynamic_cast<TH1P*>(_parent);
+		/* Can't throw an exception in dtor. Dangerous stuff.
+		 * Just terminate the entire universe in this case. */
+		if(!parent_dc) {
+			/* Requires sanitising usually, since this is called at the end of the stack frame, in
+			 * possibly multithreaded context. Either way, it's a hard runtime error and shouldn't ever be recoverable */
+			std::fprintf(stderr,
+				"Calling destructor on TH1P \'%s\' (title: %s)'s copied object, but it's parent exists and isn't downcastable? "
+				"Something is very wrong..\n", h.GetName(), h.GetTitle()
+			);
+			std::abort();
+		}
+		parent_dc->h.Add( &this->h );
+	}
+}
+TH2P::TH2P(const TH2P& rhs) {
+	_parent = &const_cast<TH2P&>(rhs);
+	h = rhs.h;
+	h.SetDirectory(nullptr);
+	h.Reset();
+}
+TH2P& TH2P::operator=(const TH2P& rhs) {
+	_parent = &const_cast<TH2P&>(rhs);
+	h = rhs.h;
+	h.SetDirectory(nullptr);
+	h.Reset();
+	return *this;
+}
+TH2P::~TH2P() {
+	if(_parent) {
+		TH2P* parent_dc = dynamic_cast<TH2P*>(_parent);
+		if(!parent_dc) {
+			std::fprintf(stderr,
+				"Calling destructor on TH2P \'%s\' (title: %s)'s copied object, but it's parent exists and isn't downcastable? "
+				"Something is very wrong..\n", h.GetName(), h.GetTitle()
+			);
+			std::abort();
+		}
+		parent_dc->h.Add( &this->h );
+	}
+}
 
 namespace py = pybind11;
 using namespace pybind11::literals;

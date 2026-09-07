@@ -1,6 +1,7 @@
 /* Main program: on the track multp. vs charge graph do different cuts and look
  * at the resulting spectra... */
 
+#include "monad/indicators/indicators.hh"
 #include "util/CLI.h"
 
 #include "TROOT.h"
@@ -22,6 +23,7 @@ using namespace indicators;
 using namespace mnd::col::literals;
 
 #define MND_PHYSICS_PARANOIA
+#define MND_MULTITHREADING_TOGGLE
 
 enum class AtomicNumber { H, He, Li, Be, B, C };
 enum class AngleType { all, p, he };
@@ -56,6 +58,7 @@ int main(int argc, char* argv[]) {
 	auto sci22_cut = mnd::make_filled_array<double,2>(NAN);
 	auto sci31_cut = mnd::make_filled_array<double,2>(NAN);
 	size_t max_events = -1;
+	u32 nthreads = 1;
 
 	Select selected{};
 	auto angle_type = AngleType::all;
@@ -92,6 +95,12 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-i,--info", info,
 		"Sequence of strings, such that the output will be saved descending these directories in autosave.")
 		->delimiter(',');
+	add_logged_option(app, "-n,--nthreads", nthreads,
+		"Run the process multithreaded. One file per thread."
+#ifndef MND_MULTITHREADING_TOGGLE
+		BOLD " Parameter ignored. Compiled purely singlethreaded." KNRM
+#endif // !MND_MUL
+		)->check(CLI::PositiveNumber);
 	
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");
@@ -102,7 +111,8 @@ int main(int argc, char* argv[]) {
 	if(fileName.size() == 0)
 		ERROR("To continue, must supply at least one file name!\n");
 
-	mnd::python::poke();
+	//mnd::python::poke();
+	ROOT::EnableThreadSafety();
 
 	TApplication rootApp("app", 0, 0);
 
@@ -134,7 +144,7 @@ int main(int argc, char* argv[]) {
 
 	/* Convert the selected variant exclusively into the A2 = std::array<double, 2>. */
 	for(auto& [key,value] : selected) {
-		if(value == 0) 
+		if(value == 0)
 			ERROR("Must require 1 or more tracks, cannot set to require 0 tracks. Stop that.");
 		if(std::holds_alternative<AtomicNumber>(key)) {
 			key = elem_to_a2( std::get<AtomicNumber>(key) );
@@ -175,68 +185,87 @@ int main(int argc, char* argv[]) {
 
 	const bool vertex_dist_cut_given = std::isfinite(distance_cut);
 
-	TH1P* h1_track_mult = new TH1P("Track multiplicity [unique tracks]@-1 means no FOOT in event.", kRed-1, 11, -1.5, 9.5);
+	auto h1_track_mult = TH1P{"Track multiplicity [unique tracks]@-1 means no FOOT in event.", kRed-1, 11, -1.5, 9.5};
 	if(vertex_dist_cut_given and sum_n_tracks_required > 0)
-		h1_track_mult->AppendToTitle(" 0 means event not viable.");
+		h1_track_mult.AppendToTitle(" 0 means event not viable.");
 
-	TH2P* h2_q_vs_mult = new TH2P("Track charge [Q]:Track multp@Full FOOT system",
-		10, -0.5, 9.5, 40, 0,8);
-	TH2P* h2_score_vs_mult = new TH2P("Track score [a.u.]:Track multp@Full FOOT system",
-		10, -0.5, 9.5, 300, 0, 50);
-	TH2P* h2_track_distance = new TH2P("Track distances to vertex [mm]:Track I@smaller x-axis means larger Q particle",
+	auto h2_q_vs_mult = TH2P{"Track charge [Q]:Track multp@Full FOOT system",
+		10, -0.5, 9.5, 40, 0,8};
+	auto h2_score_vs_mult = TH2P{"Track score [a.u.]:Track multp@Full FOOT system",
+		10, -0.5, 9.5, 300, 0, 50};
+	auto h2_track_distance = TH2P{"Track distances to vertex [mm]:Track I@smaller x-axis means larger Q particle",
 		(vertex_dist_cut_given && sum_n_tracks_required>0)? sum_n_tracks_required + 1: 10,
 		-0.5,
 		(vertex_dist_cut_given && sum_n_tracks_required>0)? sum_n_tracks_required-0.5: 9.5,
-		600, 0, vertex_dist_cut_given? (2*distance_cut): 30.0);
+		600, 0, vertex_dist_cut_given? (2*distance_cut): 30.0};
 
-	TH1P* h1_track_angle = new TH1P("Track angles [mrad]@Between all tracks selected", kMagenta+1, 200, 0, 100);
-	TH1P* h1_angle_ex = new TH1P (
+	auto h1_track_angle = TH1P{"Track angles [mrad]@Between all tracks selected", kMagenta+1, 200, 0, 100};
+	auto h1_angle_ex = TH1P{
 		Form("#sqrt( #sum_{i=1}^{%s} #theta_{i|heavy}^{2} ) [mrad]@#rho angle",
 			(sum_n_tracks_required>0 && vertex_dist_cut_given) ? std::to_string(sum_n_tracks_required-1).c_str(): "??"),
-		kCyan-9, 300, 0, 300
-	);
+		kCyan-9, 300, 0, 300};
 	if(sum_n_tracks_required == 2 and angle_type == AngleType::p)
-		(*h1_angle_ex)->GetXaxis()->SetTitle("#theta(p,frag) [mrad]");
+		h1_angle_ex->GetXaxis()->SetTitle("#theta(p,frag) [mrad]");
 
-	TH2P* h2_vertex_z = new TH2P("#rho angle [mrad]:Vertex z [mm]@Traced by the FOOT", 160, -80, 80, 100,0,100);
+	auto h2_vertex_z = TH2P{"#rho angle [mrad]:Vertex z [mm]@Traced by the FOOT", 160, -80, 80, 100,0,100};
 	
-	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000);
-	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000);
-	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", 0x009B2F_c, 500, 300, 4000);
-	auto* h1_sci21_cut  = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", 0x890389_c, 500, 300, 4000);
-	auto* h1_sci22_cut  = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, 500, 300, 4000);
-	auto* h1_sci31_cut  = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", 0x7DE69D_c, 500, 300, 4000);
-	auto* h1_sci21_cut2 = new TH1P("((h1_cut2)) SCI21 QDC mean [QDC units]@With cut and FOOT selection", 0x890389_c, 500, 300, 4000);
-	auto* h1_sci22_cut2 = new TH1P("((h1_cut2)) SCI22 QDC mean [QDC units]@With cut and FOOT selection", 0x6180FD_c, 500, 300, 4000);
-	auto* h1_sci31_cut2 = new TH1P("((h1_cut2)) SCI31 QDC mean [QDC units]@With cut and FOOT selection", 0x7DE69D_c, 500, 300, 4000);
+	auto h1_sci21 = TH1P{"SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000};
+	auto h1_sci22 = TH1P{"SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000};
+	auto h1_sci31 = TH1P{"SCI31 QDC mean [QDC units]", 0x009B2F_c, 500, 300, 4000};
+	auto h1_sci21_cut  = TH1P{"((h1_cut)) SCI21 QDC mean [QDC units]@With cut", 0x890389_c, 500, 300, 4000};
+	auto h1_sci22_cut  = TH1P{"((h1_cut)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, 500, 300, 4000};
+	auto h1_sci31_cut  = TH1P{"((h1_cut)) SCI31 QDC mean [QDC units]@With cut", 0x7DE69D_c, 500, 300, 4000};
+	auto h1_sci21_cut2 = TH1P{"((h1_cut2)) SCI21 QDC mean [QDC units]@With cut and FOOT selection", 0x890389_c, 500, 300, 4000};
+	auto h1_sci22_cut2 = TH1P{"((h1_cut2)) SCI22 QDC mean [QDC units]@With cut and FOOT selection", 0x6180FD_c, 500, 300, 4000};
+	auto h1_sci31_cut2 = TH1P{"((h1_cut2)) SCI31 QDC mean [QDC units]@With cut and FOOT selection", 0x7DE69D_c, 500, 300, 4000};
 
 	show_console_cursor(false);
-	
-	for(size_t i{0}; i < fileName.size(); ++i) {
+
+#ifdef MND_MULTITHREADING_TOGGLE
+	DynamicProgress<ProgressBar> progress;
+	mnd::parallel_process(fileName, nthreads, [=, &progress](size_t i, auto fname) mutable {
+#else
+	for(size_t i=0; i<fileName.size(); ++i) {
 		const auto& fname = fileName[i];
+#endif
 		auto model = RNTupleModel::Create();
 		auto foot = model->MakeField<RNFOOTHit>("FOOT");
 		auto frs = model->MakeField<RNFRSHit>("FRS");
 		auto ntuple = RNTupleReader::Open(std::move(model), "h104", fname);
 		const size_t nentries = ( (max_events < ntuple->GetNEntries()) ? max_events : ntuple->GetNEntries() );
-		ProgressBar bar {
-			option::BarWidth{50},
+
+#ifdef MND_MULTITHREADING_TOGGLE
+		auto _bar_ptr = std::make_unique<ProgressBar>
+#else
+	auto bar = ProgressBar
+#endif
+		(
+			option::BarWidth{40},
 			option::Start{"["},
 			option::Fill{"="},
 			option::Lead{">"},
 			option::Remainder{" "},
 			option::End{"]"},
-			option::PostfixText{mnd::msg("Analysis (per event: %s)", fname.c_str())},
-			option::ForegroundColor{Color::yellow},
+			option::PostfixText{mnd::msg("%zu/%zu: %'zu (%s)", i+1, fileName.size(), nentries, fname.c_str())},
+			option::ForegroundColor{ indicators::next_col() },
 			option::ShowPercentage{true},
 			option::ShowElapsedTime{true},
 			option::ShowRemainingTime{true},
 			option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
-		};
-		WARN("Proceeding with file [%zu/%zu]: \'%s\'. Entries: [%'zu]\n", i+1, fileName.size(), fname.c_str(), nentries);
-		
+		);
+
+#ifdef MND_MULTITHREADING_TOGGLE
+		auto idx = progress.push_back(std::move(_bar_ptr));
+		auto& bar = progress[idx];
+#endif
+	
 		for(size_t entryId{0}; entryId < nentries; ++entryId ) {
-			mnd::PrintProgress(bar, entryId, nentries, 500, mnd::dancer0, 0.33);
+#ifdef MND_MULTITHREADING_TOGGLE
+			if( mnd::PrintProgress(bar, entryId, nentries, 1000) )
+				progress.print_progress();
+#else
+			mnd::PrintProgress(bar, entryId, nentries, 1000);
+#endif
 
 			ntuple->LoadEntry(entryId);
 
@@ -244,7 +273,7 @@ int main(int argc, char* argv[]) {
 			const auto& sci22 = frs->cal.sci[1];
 			const auto& sci31 = frs->cal.sci[2];
 			
-			if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
+			if(sci21.hits.size() >= 1) h1_sci21.Fill(sci21.E);
 			if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
 			if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
 			
@@ -260,7 +289,7 @@ int main(int argc, char* argv[]) {
 			const size_t N = foot->track.size();
 
 			/* In this case, don't cut on any charges etc,.. just take the whole event and try to do
-			 * general vertexing, angles, rho, etc. */
+			* general vertexing, angles, rho, etc. */
 			if(!vertex_dist_cut_given) {
 				h1_track_mult->Fill( foot->HasData()? N: -1 );
 
@@ -310,8 +339,8 @@ int main(int argc, char* argv[]) {
 				u32 mask = (1U << n_tracks_selected) - 1; /* sequence 0b 1111.. */
 				u32 unique_track_index = 0;
 				/* Next, we require that this vertexing sequence of tracks also
-				 * satisfies the charge cut. Selection windows are already
-				 * presorted in descending charge. */
+				* satisfies the charge cut. Selection windows are already
+				* presorted in descending charge. */
 				for(const auto& [qcut, n_tracks_required] : selected) {
 					A2 const& charge_cut = std::get<A2>( qcut );
 					
@@ -331,19 +360,19 @@ int main(int argc, char* argv[]) {
 					&& "Huh seriously am I so bad?" );
 				#endif
 				/* `mask` now must be 0, otherwise we didn't catch all unique tracks for this
-				 * specific charge interval. */
+				* specific charge interval. */
 				if(sum_n_tracks_required > 0 && mask != 0)
 					continue;
 			
 				/* Due to lexicographical combinations, the cute fact is that
-				 * vtr.tracks is also already sorted accordingly :) */
+				* vtr.tracks is also already sorted accordingly :) */
 				#ifdef MND_PHYSICS_PARANOIA
 				assert( std::is_sorted(ftracks.begin(), ftracks.end())
 					&& "Huh really?" );
 				#endif
 				
 				/* At this point, selection is completed.
-				 * Manifest back the Line3D objects to do angle calculations. */
+				* Manifest back the Line3D objects to do angle calculations. */
 				std::vector<Line3D> tracks;
 				tracks.reserve(n_tracks_selected);
 				for(const auto& ft : ftracks) {
@@ -367,7 +396,7 @@ int main(int argc, char* argv[]) {
 						break;
 					}
 					/* In this case, look for angles between
-					 * 'heavy' particles and the lightest one. */
+					* 'heavy' particles and the lightest one. */
 					case(AngleType::he): {
 						const mnd::geom::Line3D light_track = tracks.back();
 						for(u32 i=0; i < n_tracks_selected-1; ++i) {
@@ -377,7 +406,7 @@ int main(int argc, char* argv[]) {
 						break;
 					}
 					/* In this case, angular `rho` is simply the RMS of
-					 * all the possible angles.  */
+					* all the possible angles.  */
 					case(AngleType::all): {
 						for(u32 i=0; i<n_tracks_selected; ++i) {
 							for(u32 j=i+1; j<n_tracks_selected; ++j) {
@@ -404,13 +433,18 @@ int main(int argc, char* argv[]) {
 
 			h1_sci21_cut2->Fill(sci21.E);
 			h1_sci22_cut2->Fill(sci22.E);
-			h1_sci31_cut2->Fill(sci31.E);
+			h1_sci31_cut2.Fill(sci31.E);
 
 		} // for(size_t entryId{0}; entryId < nentries; ++entryId )
 
+#ifdef MND_MULTITHREADING_TOGGLE
 		bar.mark_as_completed();
+#endif
+	}
 
-	} // for(size_t i{0}; i < fileName.size(); ++i)
+#ifdef MND_MULTITHREADING_TOGGLE
+); // parallel_process
+#endif
 
 	show_console_cursor(true);
 
@@ -445,7 +479,7 @@ int main(int argc, char* argv[]) {
 	cs->cd(6); h1_sci31_cut->Draw();
 	cs->cd(7); h1_sci21_cut2->Draw();
 	cs->cd(8); h1_sci22_cut2->Draw();
-	cs->cd(9); h1_sci31_cut2->Draw();
+	cs->cd(9); h1_sci31_cut2.Draw();
 
 	WARN("Info: "); std::cerr << info << std::endl;
 

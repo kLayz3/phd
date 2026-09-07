@@ -46,6 +46,7 @@ GEN_MAP = $(BUILD_DIR)/lib$(TARGET).rootmap
 
 RDFLAGS = -I./ -I../ -v3 \
 		  -I$(GO4_SRC_DIR) \
+		  -I$(MND_INCLUDE_DIR) \
 		  -Wall -MMD -MP -rml $(GEN_LIB) -rmf $(GEN_MAP)
 
 UTIL_DIR = $(SRC_DIR)/util

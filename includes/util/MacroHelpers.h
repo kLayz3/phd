@@ -28,7 +28,7 @@ inline TFile* file_ptr(std::unique_ptr<TFile> const& f) noexcept {
     return f.get();
 }
 }
-/* Handle can be either unique ptr, or standard pointer. 
+/* Handle can be either unique ptr, or standard pointer.
  * `var` must be a raw pointer! You own the object now, never the ROOT. */
 template<typename F, typename P>
 void get_obj(F&& fhandle, P& var, const char* label) {
@@ -57,7 +57,7 @@ using Arr2 = std::array<std::array<T,N>, M>;
 
 enum class DoSave { yes, no };
 
-/* File names are often of the form: `main_0XXX_0YYY.root`, as such 
+/* File names are often of the form: `main_0XXX_0YYY.root`, as such
  * metadata'ing multiple files can be concatenated e.g.:
  * => main_0123_0144.root
  * +  main_0145_0174.root
@@ -160,7 +160,7 @@ void save_all (
 	WARN("Will stash %zu canvases as *.%s in path: \'%s\'\n", cs.size(), ext, p.c_str());
 
 	for(auto* c : cs) {
-		auto name = std::string(c->GetName()); 
+		auto name = std::string(c->GetName());
 		auto outfile = p / (name + "." + ext);
 		// Force rendering
 		c->cd();
@@ -218,7 +218,7 @@ inline std::ostream& operator<<(std::ostream& os, DoSave e) {
 
 namespace mnd {
 
-/* Nicer API to tag different instances of same type.
+/* Nicer API to allow strong typing.
  * This is basically a zero-cost abstraction that allows really
  * pretty API's to directly name the positional arguments. */
 template<typename T, typename Tag = void>
@@ -249,7 +249,7 @@ struct is_istreamable<T,
 template<typename T, typename = void>
 struct is_ostreamable : std::false_type {};
 template<typename T>
-struct is_ostreamable<T, 
+struct is_ostreamable<T,
     std::void_t<
         decltype(std::declval<std::ostream&>() << std::declval<T const&>())
     >
@@ -260,7 +260,7 @@ struct is_ostreamable<T,
  *   Some(T),
  *   None
  * }
- * A true algebraic sum type! Nullability isn't tied to 
+ * A true algebraic sum type! Nullability isn't tied to
  * a self-defined `nil` subset within `T` itself. */
 
 template<typename T>
@@ -292,28 +292,10 @@ protected:
 	std::variant<Yes, std::monostate> data;
 };
 
-/* Few prepared dynamic objects.. don't judge me. #kthxbai */
-inline constexpr auto dancer0 = mnd::_dyn::dancer;
-inline constexpr auto dancer1 = std::array { 
-	std::string_view{" <('' <)"},
-	std::string_view{" <( '' )>"},
-	std::string_view{"  (> '')>"},
-	std::string_view{" <( '' )>"}
-};
-inline constexpr auto dancer2 = std::array {
-	std::string_view{R"( (>'-')> )"},
-	std::string_view{R"( <('_'<) )"},
-	std::string_view{R"( ^('_')\- )"},
-	std::string_view{R"( \m/(-_-)\m/)"},
-	std::string_view{R"( <( '-')> )"},
-	std::string_view{R"( \_( .\")>)"},
-	std::string_view{R"( <( ._.)-`)"}
-};
-
 } // namespace mnd
 
 /* Parse a file first thru the GCC preprocessor, and then
- * try to parse the output as a sequence of lines. 
+ * try to parse the output as a sequence of lines.
  * Is not thread safe! */
 std::vector<std::string> ParseFile(const std::string& );
 extern std::vector<std::string> ParseFile(const std::string& );
@@ -321,7 +303,7 @@ extern std::vector<std::string> ParseFile(const std::string& );
 std::string ParseFileToString(const std::string& );
 extern std::string ParseFileToString(const std::string& );
 
-/* For the Option<T> wrapper, also expose a CLI tool template specialization 
+/* For the Option<T> wrapper, also expose a CLI tool template specialization
  * to parse it properly, otherwise boilerplate reeks through the code. */
 template <
 	typename T
@@ -331,24 +313,24 @@ template <
 	mnd::Option<T>& variable,
 	const std::string& description
 ) {
-	auto state = std::make_shared<mnd::cli::detail::State>(); 
+	auto state = std::make_shared<mnd::cli::detail::State>();
 	auto* opt = app.add_option_function<T>(
-			name, 
+			name,
 			[&variable, name, state](const T& match) {
-				if(state->current_is_authoritative) { // Respect my authoritah. 
+				if(state->current_is_authoritative) { // Respect my authoritah.
 					variable = typename mnd::Option<T>::Yes{ .value = match };
 					state->authoritative_seen = true;
-					WARN("Parsed %sauthoritative%s sum-type option ", BOLD, KNRM); 
-					std::cerr << KBH_YEL << name << KNRM << " as " 
+					WARN("Parsed %sauthoritative%s sum-type option ", BOLD, KNRM);
+					std::cerr << KBH_YEL << name << KNRM << " as "
 						<< KBH_CYN << match << KNRM << '\n';
 				} else if(!state->authoritative_seen) {
 					variable = typename mnd::Option<T>::Yes{ .value = match };
-					WARN("Parsed sum-type option "); 
-					std::cerr << KBH_YEL << name << KNRM << " as " 
+					WARN("Parsed sum-type option ");
+					std::cerr << KBH_YEL << name << KNRM << " as "
 						<< KBH_CYN << match << KNRM << '\n';
 				}
 				state->current_is_authoritative = false;
-			}, 
+			},
 			description
 		)
 		->transform([state](std::string input) -> std::string {
@@ -368,8 +350,8 @@ template <
 
 /* Custom char buffer streaming operations for the phantom wrapper types, if the underlying type
  * implements them. If underlying type's definitions are not found at this point, then this
- * template is sfinae'd out. E.g. vector|array overload is in `json_struct_def.hh`, and won't be 
- * automatically detected here, if that header is included *after* this one. 
+ * template is sfinae'd out. E.g. vector|array overload is in `json_struct_def.hh`, and won't be
+ * automatically detected here, if that header is included *after* this one.
  *
  * Non-templated specialized overloads can still be defined and compiler will like them more. Obviously. */
 template<typename T, typename Tag,
@@ -383,3 +365,97 @@ template<typename T, typename Tag,
 > std::ostream& operator<<(std::ostream& out, mnd::InputWrapper<T, Tag> const& value) {
     return out << value.get();
 }
+
+namespace mnd {
+
+/* Invoke a function `func` over a range of objects, over nthreads.
+ * `Range` here binds here to any type anything that is indexable such as array/vector/span.
+ * Function invocation can carry mutable (outside) state, and each thread
+ * gets a copy of the functor. */
+template<typename Range, typename F>
+void parallel_process(
+	Range& objects,
+	size_t nthreads,
+	F&& func
+) {
+	/* Idea of this call is the following - outside objects will get captured
+	 * by value and each thread gets its own copy, invokes the functor over its given objects,
+	 * and then merges its copy's objects back to the original one sitting in the main thread.
+	 *
+	 * How we achieve this, is that the objects that are explicitly mutated in the lambda must have
+	 * structure similar to TH1P/TH2P, where each cloned object (via T(const T&) copy-ctor) 'remembers' its parent
+	 * as a simple pointer, and during destruction gives its acquired contents back. */
+	if(objects.empty() || nthreads == 0)
+		return;
+
+	using Fn  = std::decay_t<F>;
+	using Ref = decltype(objects[size_t{}]);
+
+	static_assert(
+		std::is_copy_constructible_v<Fn>,
+		"parallel_process requires a copyable callable"
+	);
+
+	static_assert(
+		std::is_invocable_v<Fn&, size_t, Ref> ||
+		std::is_invocable_v<Fn&, Ref>,
+		"func must accept either (size_t, T&) or (T&)"
+	);
+
+	nthreads = std::min(nthreads, objects.size());
+
+	/* Stable copies that live in this stack frame.
+	 * In particular, these functors will NOT be owned by the
+	 * std::thread/jthread callable objects. Inside, the threads just
+	 * touch the underlying raw ptr. */
+	std::vector<std::unique_ptr<Fn>> worker_funcs;
+	worker_funcs.reserve(nthreads);
+
+    /* Materialize here *exactly* one callable object first.
+     * Each worker below gets a COPY of this object. This original
+	 * functors is to be pinned to this stack frame and does not move. */
+    worker_funcs.emplace_back(
+		std::make_unique<Fn>( std::forward<F>(func) )
+	);
+
+	for(size_t i = 1; i < nthreads; ++i)
+		worker_funcs.emplace_back(
+			std::make_unique<Fn>( *worker_funcs.front() )
+		);
+
+	std::vector<jthread> threads;
+	threads.reserve(nthreads);
+
+	std::atomic<size_t> next{0};
+	for(size_t t = 0; t < nthreads; ++t) {
+		threads.emplace_back([&, t]() {
+			auto& func = *worker_funcs[t];
+			while(true) {
+				const auto i = next.fetch_add(1, std::memory_order_relaxed);
+
+				if(i >= objects.size())
+					return;
+				
+				if constexpr(std::is_invocable_v<Fn&, size_t, Ref>) {
+					std::invoke(func, i, objects[i]);
+				} else {
+					std::invoke(func, objects[i]);
+				}
+			}
+		});
+	}
+	
+	threads.clear();
+
+	/* Worker functors that will be destroyed are serialized back to the original copy.
+	 * Thus TH1P::~TH1P() merges worker histograms into
+	 * *worker_funcs.front() one at a time. No data remains in the clones!
+	 * Calling vector<T>::clear() does not guarantee sequential dtor calls from back to front
+	 * element. */
+	while(worker_funcs.size() > 1)
+		worker_funcs.pop_back();
+	
+	// *worker_funcs[0] gets destructed here and returns its contents back to the main thread.
+}
+
+} // namespace mnd

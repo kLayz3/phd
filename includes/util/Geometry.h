@@ -261,9 +261,8 @@ struct VertexingResult {
 template<typename T = Line3D>
 VertexingResult<T> FindVertexingTracks(::mnd::span<const T> , double const D = VERTEXING_MIN_DISTANCE);
 
-/* Same as FindVertexingTracks, except we explicitly mutate the input vector. Extra requirement is that
- * the type `T` needs an explicit comparison operator.
- * We don't mutate the individual objects, just kick them out of the vector, and we also
+/* Same as FindVertexingTracks, except we explicitly mutate the input vector.
+ * We don't mutate individual objects, just kick them out of the vector, and we also
  * don't reorder the vector! */
 template<typename T = Line3D>
 VertexingResult<T> FindVertexingTracksMut(std::vector<T>& , double const D = VERTEXING_MIN_DISTANCE);

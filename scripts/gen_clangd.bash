@@ -7,6 +7,7 @@ script_dir=$(dirname -- $(readlink -f -- $0))
 
 CLANGD=$script_dir/../.clangd
 INC_DIR=$script_dir/../includes
+MND_DIR=$script_dir/../includes/monad
 QUICK_DIR=$script_dir/../quick
 PYBIND11_DIR=$script_dir/../includes/pybind11/include
 
@@ -16,16 +17,17 @@ echo \
     - -I$(root-config --incdir)
     - -I$INC_DIR
     - -I$QUICK_DIR
+    - -I$MND_DIR/indicators/include
     - -I$PYBIND11_DIR" > $CLANGD
 
 python_includes=($(python3-config --includes))
 
 for inc in "${python_includes[@]}"; do
     echo \
-"    - $inc" >> .clangd
+"    - $inc" >> $CLANGD
 done
 
-cat >> .clangd <<EOF
+cat >> $CLANGD <<EOF
     - -std=c++17
   Remove: [-std=*]
 EOF

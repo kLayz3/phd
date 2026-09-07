@@ -170,7 +170,7 @@ int main(int argc, char* argv[]) {
 
             for(auto entryId : *ntuple) {
                 ntuple->LoadEntry(entryId);
-		        mnd::PrintProgress(bar, entryId, nentries, 1000, mnd::dancer2, 0.20);
+		        mnd::PrintProgress(bar, entryId, nentries, 1000;
 
                 const auto& sci21 = frs->cal.sci[0];
                 const auto& sci22 = frs->cal.sci[1];
@@ -234,7 +234,7 @@ int main(int argc, char* argv[]) {
         };
         for(auto entryId : *ntuple) {
             ntuple->LoadEntry(entryId);
-            mnd::PrintProgress(bar, entryId, nentries, 1000, mnd::dancer1, 0.35);
+            mnd::PrintProgress(bar, entryId, nentries, 1000);
 
             const auto& sci21 = frs->cal.sci[0];
             const auto& sci22 = frs->cal.sci[1];

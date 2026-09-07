@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cstdint>
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <variant>
 #include <filesystem>
 
@@ -151,6 +153,19 @@ inline Int_t Col(uint32_t i) {
 
 } // namespace mnd::col
 
+namespace mnd::hist {
+
+struct TH1B {
+protected:
+	/* Only hard-constructed objects are top of the hierarchy */
+	TH1B() : _parent(nullptr) {}
+	
+	virtual ~TH1B() = default;
+	TH1B* _parent;
+};
+
+} // namespace mnd::hist
+
 #define MND_FWD_DRAW(inner) \
 	template<typename... Ts> \
 	auto Draw(Ts&&... args) { \
@@ -162,13 +177,16 @@ inline Int_t Col(uint32_t i) {
 	template<typename... Ts> \
 	auto fcn(Ts&&... args) { return inner.fcn( std::forward<Ts>(args)... ); }
 
-struct TH1P {
+struct TH1P : public mnd::hist::TH1B {
 	using inner_type = TH1D;
 	
 	inner_type h;
 
-	template<typename... Ts>
-	TH1P(const char* label, mnd::col::RGBA col, Ts&&... args) {
+	TH1P() = delete;
+	
+	template<typename... Ts> [[ nodiscard ]]
+	TH1P(const char* label, mnd::col::RGBA col, Ts&&... args) : mnd::hist::TH1B()
+	{
 		const char* semicolon = strchr(label, ';');
 		if(semicolon)
 			throw std::invalid_argument(Form("Label input to 'TH1P' must not contain ';' semicolon delimiter! Received: \'%s\'", label));
@@ -189,7 +207,7 @@ struct TH1P {
 			label = mnd::detail::skip_whitespace(label);
 		}
 
-		// Possible `@` separator 
+		// Possible `@` separator
 		const char* at = strchr(label, '@');
 		if(at != nullptr) {
 			xlabel = std::string(label, at);
@@ -203,6 +221,8 @@ struct TH1P {
 			+ mnd::detail::nonalnum_to_underscore(xs);
 		
 		h = inner_type(hname.c_str(), "", std::forward<Ts>(args)...); 
+		h.SetDirectory(nullptr);
+
 		std::stringstream title;
 		title << xs;
 		if(title_extra.length() > 0)
@@ -215,6 +235,12 @@ struct TH1P {
 		h.SetLineColor(kBlack);
 		h.SetLineWidth(2);
 	}
+
+	TH1P(const TH1P & );
+	TH1P& operator=(const TH1P & );
+	TH1P(TH1P&& ) = delete;
+	TH1P& operator=(TH1P &&) = delete;
+	~TH1P();
 
 	/* Forward only Fill and Draw methods. Don't care about others. */
 	MND_FWD_DRAW(h);
@@ -265,11 +291,11 @@ struct TH1P {
 	}
 	
 	inline auto FillInside(double x) {
-		if(IsInside(x)) return h.Fill(x);
+		if(IsInside(x)) return this->Fill(x);
 		else return -1;
 	}
 	inline auto FillInside(double x, double w) {
-		if(IsInside(x)) return h.Fill(x, w);
+		if(IsInside(x)) return this->Fill(x, w);
 		else return -1;
 	}
 
@@ -287,7 +313,8 @@ struct TH1P {
 	inline inner_type& operator*()  noexcept { return h; }
 	inline const inner_type* operator->() const noexcept { return &h; }
 	inline const inner_type& operator*()  const noexcept { return h; }
-};
+
+}; // TH1P
 
 /* Wrapper to pretty-decorate standard CERN ROOT histograms
  * based on label and its rules. 
@@ -296,12 +323,15 @@ struct TH1P {
  * will create a interally a hist:
  * TH2D("sci21x.v.sci22x", "SCI21X vs. SCI22X", ... )
  * ... and set the titles appropriately. */
-struct TH2P {
+struct TH2P : public mnd::hist::TH1B {
 	using inner_type = TH2D;
 	inner_type h;
-	
-	template<typename... Ts>
-	TH2P(const char* label, Ts&&... args) {
+
+	TH2P() = delete;
+
+	template<typename... Ts> [[ nodiscard ]]
+	TH2P(const char* label, Ts&&... args) : mnd::hist::TH1B()
+	{
 		const char* colon = strchr(label, ':');
 		const char* semicolon = strchr(label, ';');
 		if(!colon)
@@ -341,7 +371,9 @@ struct TH2P {
 		std::string hname = hname_extra + "_" 
 			+ mnd::detail::nonalnum_to_underscore(ys) + ".v." + mnd::detail::nonalnum_to_underscore(xs);
 		
-		h = inner_type(hname.c_str(), "", std::forward<Ts>(args)...); 
+		h = inner_type(hname.c_str(), "", std::forward<Ts>(args)...);
+		h.SetDirectory(nullptr);
+
 		std::stringstream title;
 		title << ys << " vs. " << xs;
 		if(title_extra.length() > 0)
@@ -350,6 +382,12 @@ struct TH2P {
 		h.SetTitle(Form("%s;%s;%s", title_materialied.c_str(), xlabel.c_str(), ylabel.c_str()) );
 		h.GetYaxis()->SetTitleOffset(1.0);
 	}
+
+	TH2P(const TH2P & );
+	TH2P& operator=(const TH2P & );
+	TH2P(TH2P&& ) = delete;
+	TH2P& operator=(TH2P &&) = delete;
+	~TH2P();
 
 	/* Forward only Fill and Draw methods. Don't care about others. */
 	MND_FWD_DRAW(h);
@@ -365,11 +403,11 @@ struct TH2P {
 		);
 	}
 	auto FillInside(double x, double y) {
-		if(IsInside(x,y)) return h.Fill(x,y);
+		if(IsInside(x,y)) return this->Fill(x,y);
 		else return -1;
 	}
 	auto FillInside(double x, double y, double w) {
-		if(IsInside(x,y)) return h.Fill(x,y, w);
+		if(IsInside(x,y)) return this->Fill(x,y, w);
 		else return -1;
 	}
 	
@@ -387,7 +425,8 @@ struct TH2P {
 	inner_type& operator*()  noexcept { return h; }
 	const inner_type* operator->() const noexcept { return &h; }
 	const inner_type& operator*()  const noexcept { return h; }
-};
+
+}; // TH2P
 
 namespace mnd::type_traits {
 

@@ -184,7 +184,7 @@ int main(int argc, char* argv[]) {
 	};
 	for(auto entryId : *ntuple) {
 		ntuple->LoadEntry(entryId);
-		mnd::PrintProgress(bar, entryId, nentries, 1000, mnd::dancer0, 0.35);
+		mnd::PrintProgress(bar, entryId, nentries, 1000);
 
 		const auto& sci21 = frs->sci[0];
 		const auto& sci22 = frs->sci[1];
