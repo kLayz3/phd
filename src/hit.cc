@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
 
 	tv.emplace_back(TimePoint("start"));
 
-	pool.Start(bar, maxEvents);	
+	pool.Start(bar, maxEvents);
 	pool.Collect();
 
 	tv.emplace_back(TimePoint("end"));

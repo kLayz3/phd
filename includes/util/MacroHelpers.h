@@ -94,6 +94,17 @@ std::pair <
  * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
 std::string file_names_concatenated(const std::vector<std::string>& );
 
+/* Make a sequence of paths based on an iterable container.
+ * E.g.: path_sequence{"foo", "bar", "baz.txt"} -> "foo/bar/baz.txt" */
+template<typename Range>
+std::filesystem::path path_sequence(Range const& parts) {
+	std::filesystem::path p;
+
+	for(auto const& part : parts)
+		p /= part;
+
+	return p;
+}
 
 } // namespace mnd::fs
 
@@ -378,13 +389,13 @@ void parallel_process(
 	size_t nthreads,
 	F&& func
 ) {
-	/* Idea of this call is the following - outside objects will get captured
-	 * by value and each thread gets its own copy, invokes the functor over its given objects,
-	 * and then merges its copy's objects back to the original one sitting in the main thread.
+	/* Idea of this call is the following: outside objects will get captured
+	 * by value and each thread gets its own copy, invokes the functor over the state of its given objects,
+	 * and then merges its copy's mutated objects back to the original one which is sitting in the main thread.
 	 *
 	 * How we achieve this, is that the objects that are explicitly mutated in the lambda must have
 	 * structure similar to TH1P/TH2P, where each cloned object (via T(const T&) copy-ctor) 'remembers' its parent
-	 * as a simple pointer, and during destruction gives its acquired contents back. */
+	 * as a simple pointer, and during destruction gives its acquired contents back to the parent. */
 	if(objects.empty() || nthreads == 0)
 		return;
 
@@ -448,7 +459,7 @@ void parallel_process(
 	threads.clear();
 
 	/* Worker functors that will be destroyed are serialized back to the original copy.
-	 * Thus TH1P::~TH1P() merges worker histograms into
+	 * Thus THXP::~THXP() merges worker histograms into
 	 * *worker_funcs.front() one at a time. No data remains in the clones!
 	 * Calling vector<T>::clear() does not guarantee sequential dtor calls from back to front
 	 * element. */

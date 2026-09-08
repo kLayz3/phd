@@ -89,7 +89,8 @@ int main(int argc, char *argv[]) {
     .MakePool<8>(4092);
 #endif
 
-    ProgressBar bar{option::BarWidth{50},
+    ProgressBar bar {
+		option::BarWidth{50},
         option::Start{"["},
         option::Fill{"="},
         option::Lead{">"},
@@ -100,7 +101,8 @@ int main(int argc, char *argv[]) {
         option::ShowPercentage{true},
         option::ShowElapsedTime{true},
         option::ShowRemainingTime{true},
-        option::FontStyles{std::vector{FontStyle::bold}}};
+        option::FontStyles{std::vector{FontStyle::bold}}
+	};
 
     tv.emplace_back(TimePoint("start"));
 

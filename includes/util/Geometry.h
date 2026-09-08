@@ -250,7 +250,16 @@ struct VertexingResult {
 	double score = std::numeric_limits<double>::infinity();
 	u64 bitmask = 0x0; // 8-byte cuz anyway padded to the boundary.
 
+	/* Check if the result is valid. AKA, that tracks got selected. */
 	bool valid() const noexcept { return tracks.size() >= 2; }
+
+	/* Strong paranoid check of validity. AKA, that tracks got selected, vertex is a valid point,
+	 * score got assigned. */
+	bool valid_strong() const noexcept {
+		return tracks.size() >= 2 &&
+		!vertex.is_null() &&
+		std::isfinite(score);
+	}
 };
 
 /* In a series of tracks: {t0, t1,... tN}, find the largest subset {𝜏0, 𝜏1, .. 𝜏M) which forms

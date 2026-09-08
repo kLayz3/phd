@@ -49,12 +49,12 @@ std::vector<std::string> ParseFile(const std::string& fileName) {
 #endif
 	static constexpr size_t MAX_BUF_SIZE = (1ULL << 15); // 32 KiB
 
-	std::string cmd = 
+	std::string cmd =
 		"gcc -E -P -Werror -undef -x c++ "
 		"-fdiagnostics-color=always "
 		"-fdiagnostics-show-caret "
-		"-ftrack-macro-expansion=0 " 
-		"\"" + fileName + "\" " 
+		"-ftrack-macro-expansion=0 "
+		"\"" + fileName + "\" "
 		"-o - 2>&1";
 	
 	std::unique_ptr<FILE, PipeDeleter> pipe {popen(cmd.c_str(), "r"), pclose};
@@ -95,12 +95,12 @@ std::string ParseFileToString(const std::string& fileName) {
 #endif
 	static constexpr size_t MAX_BUF_SIZE = (1ULL << 14);
 
-	std::string cmd = 
+	std::string cmd =
 		"gcc -E -P -Werror -undef -x c++ "
 		"-fdiagnostics-color=always "
 		"-fdiagnostics-show-caret "
-		"-ftrack-macro-expansion=0 " 
-		"\"" + fileName + "\" " 
+		"-ftrack-macro-expansion=0 "
+		"\"" + fileName + "\" "
 		"-o - 2>&1";
 	
 	std::unique_ptr<FILE, PipeDeleter> pipe {popen(cmd.c_str(), "r"), pclose};
@@ -131,7 +131,7 @@ using namespace std::literals;
 
 static bool ends_with(std::string_view name, std::string_view extension) {
     if(name.size() < extension.size() ||
-       name.substr(name.size() - extension.size()) != extension) 
+       name.substr(name.size() - extension.size()) != extension)
     {
         return false;
     }
@@ -223,9 +223,9 @@ mnd::fs::file_number_bounds(const std::vector<std::string>& files) {
 std::string mnd::fs::file_names_concatenated(const std::vector<std::string>& files) {
     auto bounds = file_number_bounds(files);
 
-    return std::string{FILE_PREFIX} 
-        + "_" 
-        + std::string{bounds.first} 
-        + "_" 
+    return std::string{FILE_PREFIX}
+        + "_"
+        + std::string{bounds.first}
+        + "_"
         + std::string{bounds.second};
 }

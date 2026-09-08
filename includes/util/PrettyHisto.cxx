@@ -40,9 +40,11 @@ void THXP::AppendToTitle(std::string_view v) { \
 	h.SetTitle( current_title.c_str() ); \
 }
 
-APPEND_TO_TITLE_IMPL(TH1P)
-APPEND_TO_TITLE_IMPL(TH2P)
+APPEND_TO_TITLE_IMPL(TH1P);
+APPEND_TO_TITLE_IMPL(TH2P);
 
+/* This part is so hacked. There must be a nicer way, not to abuse
+ * const cast haha. */
 TH1P::TH1P(const TH1P& rhs) {
 	_parent = &const_cast<TH1P&>(rhs);
 	h = rhs.h;

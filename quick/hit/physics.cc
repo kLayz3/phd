@@ -1,7 +1,7 @@
 /* Main program: on the track multp. vs charge graph do different cuts and look
  * at the resulting spectra... */
 
-#include "monad/indicators/indicators.hh"
+
 #include "util/CLI.h"
 
 #include "TROOT.h"
@@ -16,6 +16,7 @@
 #include "TFRSCalCont.h"
 #include <cassert>
 #include <cmath>
+
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
@@ -59,6 +60,8 @@ int main(int argc, char* argv[]) {
 	auto sci31_cut = mnd::make_filled_array<double,2>(NAN);
 	size_t max_events = -1;
 	u32 nthreads = 1;
+	A3 rho_binning = {300, 0, 300};
+	std::string rho_title, rho_xlabel;
 
 	Select selected{};
 	auto angle_type = AngleType::all;
@@ -101,7 +104,11 @@ int main(int argc, char* argv[]) {
 		BOLD " Parameter ignored. Compiled purely singlethreaded." KNRM
 #endif // !MND_MUL
 		)->check(CLI::PositiveNumber);
-	
+	add_logged_option(app, "--rho-binning", rho_binning, "Binning of the ρ-value, in mrad.")
+		->delimiter(',');
+	add_logged_option(app, "--rho-title", rho_title, "Title of the ρ-value histogram. Can be latex'ed (inside \'\' block)");
+	add_logged_option(app, "--rho-xlabel", rho_xlabel, "X-axis label of the ρ-value histogram. Can be latex'ed (inside \'\' block)");
+
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");
 
@@ -111,7 +118,7 @@ int main(int argc, char* argv[]) {
 	if(fileName.size() == 0)
 		ERROR("To continue, must supply at least one file name!\n");
 
-	//mnd::python::poke();
+	mnd::python::poke();
 	ROOT::EnableThreadSafety();
 
 	TApplication rootApp("app", 0, 0);
@@ -194,16 +201,18 @@ int main(int argc, char* argv[]) {
 	auto h2_score_vs_mult = TH2P{"Track score [a.u.]:Track multp@Full FOOT system",
 		10, -0.5, 9.5, 300, 0, 50};
 	auto h2_track_distance = TH2P{"Track distances to vertex [mm]:Track I@smaller x-axis means larger Q particle",
-		(vertex_dist_cut_given && sum_n_tracks_required>0)? sum_n_tracks_required + 1: 10,
+		(vertex_dist_cut_given && sum_n_tracks_required>0)? sum_n_tracks_required: 10,
 		-0.5,
 		(vertex_dist_cut_given && sum_n_tracks_required>0)? sum_n_tracks_required-0.5: 9.5,
 		600, 0, vertex_dist_cut_given? (2*distance_cut): 30.0};
 
 	auto h1_track_angle = TH1P{"Track angles [mrad]@Between all tracks selected", kMagenta+1, 200, 0, 100};
-	auto h1_angle_ex = TH1P{
+	auto h1_angle_ex = TH1P {
 		Form("#sqrt( #sum_{i=1}^{%s} #theta_{i|heavy}^{2} ) [mrad]@#rho angle",
 			(sum_n_tracks_required>0 && vertex_dist_cut_given) ? std::to_string(sum_n_tracks_required-1).c_str(): "??"),
-		kCyan-9, 300, 0, 300};
+		kCyan-9,
+		rho_binning[0], rho_binning[1], rho_binning[2]
+	};
 	if(sum_n_tracks_required == 2 and angle_type == AngleType::p)
 		h1_angle_ex->GetXaxis()->SetTitle("#theta(p,frag) [mrad]");
 
@@ -277,7 +286,7 @@ int main(int argc, char* argv[]) {
 			if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
 			if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
 			
-			/* Promtly skip the event entirely in case a SCI cut isn't met. */
+			/* Skip the event entirely in case a SCI cut isn't met. */
 			if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
 			if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
 			if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
@@ -286,16 +295,15 @@ int main(int argc, char* argv[]) {
 			if(sci22.hits.size() >= 1) h1_sci22_cut->Fill(sci22.E);
 			if(sci31.hits.size() >= 1) h1_sci31_cut->Fill(sci31.E);
 
-			const size_t N = foot->track.size();
-
 			/* In this case, don't cut on any charges etc,.. just take the whole event and try to do
 			* general vertexing, angles, rho, etc. */
 			if(!vertex_dist_cut_given) {
+				const size_t N = foot->track.size();
 				h1_track_mult->Fill( foot->HasData()? N: -1 );
 
 				std::vector<Line3D> tracks {};
-				
-				/* Sometime no selection is provided, in that case just fetch everything. */
+
+				/* If no selection is provided, then just fetch everything. */
 				for(size_t i=0; i<N; ++i) {
 					const RNFOOTTrack& t = foot->track[i];
 
@@ -322,12 +330,12 @@ int main(int argc, char* argv[]) {
 				h1_angle_ex->Fill( invariant_theta );
 				h2_vertex_z->Fill( vertex.z, invariant_theta);
 			}
-
-			else {
+			else { while(foot->track.size() >= 2) {
 				VertexingResult<RNFOOTTrack> vtr =
 					FindVertexingTracksMut(foot->track, distance_cut);
 
-				if(!vtr.valid()) continue;
+				/* Can promptly break from the `while`; no further tracks can make a vertex anymore. */
+				if(!vtr.valid()) break;
 
 				const std::vector<RNFOOTTrack>& ftracks = vtr.tracks;
 				const Point3D& vertex = vtr.vertex;
@@ -423,13 +431,13 @@ int main(int argc, char* argv[]) {
 				h1_angle_ex->Fill( invariant_theta );
 				h2_vertex_z->Fill( vertex.z, invariant_theta);
 
-				for(u32 i=0; i<sum_n_tracks_required; ++i) {
+				for(u32 i=0; i<n_tracks_selected; ++i) {
 					h2_track_distance->Fill( i, tracks[i].DistanceTo(vertex) );
 				}
 
 				h1_track_mult->Fill(n_tracks_selected);
 
-			} // if(vertex_dist_cut_given)
+			} /* while(...) */ } // if(vertex_dist_cut_given)
 
 			h1_sci21_cut2->Fill(sci21.E);
 			h1_sci22_cut2->Fill(sci22.E);
@@ -450,9 +458,9 @@ int main(int argc, char* argv[]) {
 
 	TCanvas* cm = new TCanvas("Multp", "Recognized tracks", 2150, 1400);
 	cm->Divide(2,2);
-	cm->cd(1); h2_q_vs_mult->Draw("COLZ"); gPad->SetLogz();
-	cm->cd(3); h2_score_vs_mult->Draw("COLZ"); gPad->SetLogz();
-	cm->cd(4); h1_track_mult->Draw();
+	cm->cd(1); h2_q_vs_mult.Draw("COLZ"); gPad->SetLogz();
+	cm->cd(3); h2_score_vs_mult.Draw("COLZ"); gPad->SetLogz();
+	cm->cd(4); h1_track_mult.Draw();
 	cm->cd(2); new PLatex(0.08,
 		"Coefficients: ",
 		Form("Cr = %.1f mm^-2", Cr),
@@ -464,26 +472,51 @@ int main(int argc, char* argv[]) {
 
 	TCanvas* ct = new TCanvas("TrackDistance", "Recognized tracks distances between each other", 2150, 1400);
 	ct->Divide(2,2);
-	ct->cd(1); h2_track_distance->Draw();
-	ct->cd(2); h1_track_angle->Draw();
-	ct->cd(3); h1_angle_ex->Draw();
-	ct->cd(4); h2_vertex_z->Draw("COLZ");
+	ct->cd(1); h2_track_distance.Draw();
+	ct->cd(2); h1_track_angle.Draw();
+	ct->cd(3); h1_angle_ex.Draw();
+	ct->cd(4); h2_vertex_z.Draw("COLZ");
 
 	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2150, 1400);
 	cs->Divide(3,3);
-	cs->cd(1); h1_sci21->Draw();
-	cs->cd(2); h1_sci22->Draw();
-	cs->cd(3); h1_sci31->Draw();
-	cs->cd(4); h1_sci21_cut->Draw();
-	cs->cd(5); h1_sci22_cut->Draw();
-	cs->cd(6); h1_sci31_cut->Draw();
-	cs->cd(7); h1_sci21_cut2->Draw();
-	cs->cd(8); h1_sci22_cut2->Draw();
+	cs->cd(1); h1_sci21.Draw();
+	cs->cd(2); h1_sci22.Draw();
+	cs->cd(3); h1_sci31.Draw();
+	cs->cd(4); h1_sci21_cut.Draw();
+	cs->cd(5); h1_sci22_cut.Draw();
+	cs->cd(6); h1_sci31_cut.Draw();
+	cs->cd(7); h1_sci21_cut2.Draw();
+	cs->cd(8); h1_sci22_cut2.Draw();
 	cs->cd(9); h1_sci31_cut2.Draw();
 
 	WARN("Info: "); std::cerr << info << std::endl;
 
 	canvas::save_all<canvas::Exe>( save, mnd::to_views(info) );
+
+	namespace fs = std::filesystem;
+	mnd::plot::Figure {}
+		.plot(
+			*h1_angle_ex, mnd::plot::HistStyle{}
+				.stairs()
+				.fill()
+				.line_width(2.2)
+		).xlabel(
+			 !rho_xlabel.empty()
+			? rho_xlabel
+			: R"($\theta(p, \mathrm{frag})\,[\mathrm{mrad}]$)")
+		.ylabel(&h1_angle_ex.h)
+		.grid()
+		.title(
+			 !rho_title.empty()
+			? rho_title
+			: R"($\rho = \sqrt{\sum_{i} \theta_{i|\mathrm{frag}}^2}$)")
+		.save(
+			  fs::path{"autosave"}
+			/ mnd::fs::current_executable_name()
+			/ "py"
+			/ mnd::fs::path_sequence(info)
+			/ "excitation.png"
+		);
 
 	WARN("End-of-main\n");
 	rootApp.Run(); return 0;
