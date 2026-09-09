@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> fileNames;
 	int ifoot = 0;
 	int bins_per_asic = 64;
-	DoFit do_fit {DoFit::No};
+	DoFit do_fit = mnd::None;
 	double sratio = 0.9;
 	u32 niter = 2;
 	A3 foot_binning = {1000, 4, 4000};
@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
 	A2 sci31_cut = {NAN, NAN};
 	auto save = canvas::Extension::nil;
 	Take take = Take::gauss_fit_only;
-	ShowOld show_old { ShowOld::No };
+	ShowOld show_old = mnd::None;
 
 	add_logged_option(app, "-f,--file", fileNames, "Pass one or more file name.")
 		->check(CLI::ReadPermissions)

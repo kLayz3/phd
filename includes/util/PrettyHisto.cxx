@@ -1,4 +1,5 @@
 /* pybind11 stuff must be first to be included. */
+#include <cstdint>
 #include <cstdlib>
 #include <pybind11/numpy.h>
 #include <pybind11/embed.h>
@@ -6,6 +7,7 @@
 #include <stdexcept>
 #include <csignal>
 #include <string>
+#include <charconv>
 
 #include "PrettyHisto.h"
 #include "RtypesCore.h"
@@ -182,6 +184,13 @@ void mnd::python::poke(bool verbose) {
 	}
 }
 
+std::string mnd::col::ansi_rgb(uint8_t r, uint8_t g, uint8_t b) {
+	return "\x1b[38;2;" +
+		std::to_string(r) + ";" +
+		std::to_string(g) + ";" +
+		std::to_string(b) + "m";
+}
+
 mnd::col::RGBA::RGBA(Color_t root_color) {
 	auto* c = gROOT->GetColor(root_color);
 	if(!c) return;
@@ -192,12 +201,28 @@ mnd::col::RGBA::RGBA(Color_t root_color) {
 	a = c->GetAlpha();
 }
 
-mnd::col::RGBA mnd::col::RGBA::from_packed(uint32_t value) noexcept {
-	const double b = (value & 0xffu) / 255.0; value >>= 8;
-	const double g = (value & 0xffu) / 255.0; value >>= 8;
-	const double r = (value & 0xffu) / 255.0; value >>= 8;
-	const double a = std::max(1.0 - (value & 0xffu) / 255.0, 0.0);
-	return {r, g, b, a};
+Color_t mnd::col::RGBA::hex_to_col(uint32_t val) noexcept {
+	Float_t b = (val & 0xff) / MAX_V; val >>= 8;
+	Float_t g = (val & 0xff) / MAX_V; val >>= 8;
+	Float_t r = (val & 0xff) / MAX_V; val >>= 8;
+	return TColor::GetColor(r,g,b);
+}
+
+uint32_t mnd::col::RGBA::pack() const noexcept {
+	/* Assume it's not a NAN hehe. */
+	auto to_byte = [](double x) -> uint32_t {
+		x = std::clamp(x, 0.0, 1.0);
+		return static_cast<uint32_t>(x * MAX_V + 0.5);
+	};
+	auto r_ = to_byte(r);
+	auto g_ = to_byte(g);
+	auto b_ = to_byte(b);
+	auto a_ = to_byte(a);
+
+	return ((~a_ & 0xff) << 24)
+	     | (( r_ & 0xff) << 16)
+	     | (( g_ & 0xff) <<  8)
+	     |  ( b_ & 0xff);
 }
 
 Int_t mnd::col::RGBA::GetColorCode() const {
@@ -218,10 +243,158 @@ void mnd::col::RGBA::ApplyFill(TH1* h) const {
 	h->SetFillColorAlpha(idx, a);
 }
 
-mnd::col::RGBA mnd::col::literals::operator""_c(unsigned long long int value) {
-	if(value > std::numeric_limits<uint32_t>::max())
-		throw std::out_of_range("packed color literal does not fit in 32 bits");
-	return mnd::col::RGBA::from_packed(static_cast<uint32_t>(value));
+static bool parse_packed_rgba(std::string_view input, uint32_t& out) noexcept {
+	if(input.size() >= 2 &&
+		input[0] == '0' &&
+		(input[1] == 'x' || input[1] == 'X'))
+	{
+		input.remove_prefix(2);
+	}
+
+	/* (TT)?RRGGBB */
+	if(input.size() != 6 && input.size() != 8)
+		return false;
+
+	uint32_t value{};
+
+	const auto* first = input.data();
+	const auto* last  = input.data() + input.size();
+
+	auto [ptr, ec] = std::from_chars(first, last, value, 16);
+
+	if(ec != std::errc{} || ptr != last)
+		return false;
+
+	out = value;
+	return true;
+}
+
+std::istream& mnd::col::operator>>(std::istream& in, RGBA& out) {
+	std::string input;
+	if(!(in >> input))
+		return in;
+
+	uint32_t packed;
+	
+	const auto comma = input.find(',');
+
+	if(comma != std::string::npos) {
+		const auto lhs = std::string_view{input}.substr(0, comma);
+		const auto rhs = std::string_view{input}.substr(comma + 1);
+
+		/* Match on the packed repr: `(0[xX])?(TT)?RRGGBB`. Note in this case,
+		 * extra opacity after the comma will override optional opacity in the packed obj. */
+		if(parse_packed_rgba(lhs, packed)) {
+			RGBA color = RGBA::from_packed(packed);
+			std::stringstream ss{std::string{rhs}};
+
+			Opacity opacity;
+			if(!(ss >> opacity) || ss.peek() != EOF) {
+				in.setstate(std::ios::failbit);
+				return in;
+			}
+
+			out = color + opacity;
+			return in;
+		}
+	}
+
+	/* Completely packed representation: `(0[xX])?(TT)?RRGGBB`. Must be hexadecimal. */
+	if(parse_packed_rgba(input, packed)) {
+		out = RGBA::from_packed(packed);
+		return in;
+	}
+	
+	/* Last possible representation, decimal: `r,g,b[,a]` */
+	std::istringstream ss{ input };
+
+	double r,g,b, a = 1.0;
+	char sep;
+
+	if(!(ss >> r)   ||
+	   !(ss >> sep) || sep != ',' ||
+	   !(ss >> g)   ||
+	   !(ss >> sep) || sep != ',' ||
+	   !(ss >> b))
+	{
+		in.setstate(std::ios::failbit);
+		return in;
+	}
+
+	/* Optional opacity component. */
+	if(ss.peek() != std::char_traits<char>::eof()) {
+		if(!(ss >> sep) || sep != ',' || !(ss >> a)) {
+			in.setstate(std::ios::failbit);
+			return in;
+		}
+	}
+
+	/* Reject trailing stuff which isn't a whitespace. */
+	ss >> std::ws;
+	if(!ss.eof()) {
+		in.setstate(std::ios::failbit);
+		return in;
+	}
+
+	out = RGBA{r, g, b, a};
+	return in;
+}
+
+template<bool PrettyPrint>
+std::ostream& mnd::col::operator<<(std::ostream& os, const RGBA& o) {
+	const uint32_t packed = o.pack();
+	
+	uint8_t b = static_cast<uint8_t>(packed & 0xff);
+	uint8_t g = static_cast<uint8_t>((packed >> 8) & 0xff);
+	uint8_t r = static_cast<uint8_t>((packed >> 16) & 0xff);
+
+	os << ansi_rgb(r,g,b);
+	
+	if constexpr(PrettyPrint) {
+		std::stringstream opacity {};
+		if(o.a != 1.0) {
+			int opacity_percentage = static_cast<int>(100*o.a + 0.5);
+			opacity << '[' << opacity_percentage << "%]";
+		}
+		os << "col" << opacity.str();
+	} else {
+		os << "0x" << std::hex
+		   << std::setw(8)
+           << std::setfill('0')
+		   << packed
+		   << std::dec << std::setfill(' ');
+	}
+
+	os << "\e[0m";
+	return os;
+}
+template std::ostream& mnd::col::operator<< <true >(std::ostream&, const mnd::col::RGBA& );
+template std::ostream& mnd::col::operator<< <false>(std::ostream&, const mnd::col::RGBA& );
+
+std::istream& mnd::col::operator>>(std::istream& in, mnd::col::Opacity& out) {
+	double value;
+
+	if(!(in >> value))
+		return in;
+
+	if(value < 0.0 || value > 1.0) {
+		in.setstate(std::ios::failbit);
+		return in;
+	}
+
+	out.value = value;
+	return in;
+}
+
+Color_t mnd::col::Col(uint32_t i) {
+	constexpr uint32_t cols[] = {
+		0xC41E3A, 0xA330C9, 0xFF7C0A, 0x33937F,
+		0xAAD372, 0x3FC7EB, 0x00FF98, 0xF48CBA,
+		0xFFF468, 0x0070DD, 0x8788EE, 0xC69B6D
+	};
+	constexpr size_t Ncols = sizeof cols / sizeof *cols;
+	
+	return RGBA::hex_to_col( cols[i % Ncols] );
 }
 
 using namespace mnd::plot;
@@ -337,7 +510,7 @@ static GraphStyle resolve_graph_style(
 		style.label_.value_or(g.GetTitle());
 
 	style.line_width_ =
-		style.line_width_.value_or(g.GetLineWidth());
+		style.line_width_.value_or(0.5 * g.GetLineWidth());
 
 	style.line_style_ =
 		style.line_style_.value_or(
@@ -949,5 +1122,4 @@ void Figure::save(const std::filesystem::path& path) const {
 	fprintf(stdout, "[PYTHON]: Figure::save(): output file \'%s\' saved as: \'%s\'\n",
 		path.filename().c_str(), path.c_str());
 }
-
 

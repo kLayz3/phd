@@ -12,9 +12,11 @@
 
 enum class Take { gauss, profile, gauss_fit_only };
 enum class HitType { central, side };
+template<typename T>
+using Option = mnd::Option<T>;
 
-using ShowOld = mnd::Option<std::vector<i32>>;
-using DoFit   = mnd::Option<std::vector<i32>>;
+using ShowOld = Option<std::vector<i32>>;
+using DoFit   = Option<std::vector<i32>>;
 namespace fs = std::filesystem;
 
 using namespace ROOT;
@@ -28,7 +30,7 @@ int main(int argc, char* argv[]) {
 	std::string fileName = "";
 	int ifoot = 0;
 	int bins_per_asic = 64;
-	DoFit do_fit {DoFit::No};
+	DoFit do_fit {};
 	double sratio = 0.9;
 	u32 niter = 2;
 	A3 foot_binning = {1000, 4, 4000};
@@ -42,7 +44,7 @@ int main(int argc, char* argv[]) {
 	A2 sci31_cut = {NAN, NAN};
 	auto save = canvas::Extension::nil;
 	Take take = Take::gauss_fit_only;
-	ShowOld show_old { ShowOld::No };
+	ShowOld show_old = mnd::None;
 
 	add_logged_option(app, "-f,--file", fileName, "Pass a file name.")
 		->check(CLI::ReadPermissions);
@@ -159,7 +161,6 @@ int main(int argc, char* argv[]) {
 		ax->SetRangeUser(0.2, 0.45);
 		const double dhi = ax->GetBinCenter( (*h1_delta)->GetMaximumBin() );
 		ax->SetRange(0,0); // unzoom
-						   //
 		ax->SetRangeUser(-0.45, -0.2);
 		const double dlo = ax->GetBinCenter( (*h1_delta)->GetMaximumBin() );
 		ax->SetRange(0,0); // unzoom

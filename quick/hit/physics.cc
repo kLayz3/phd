@@ -1,7 +1,6 @@
 /* Main program: on the track multp. vs charge graph do different cuts and look
  * at the resulting spectra... */
 
-
 #include "util/CLI.h"
 
 #include "TROOT.h"
@@ -17,11 +16,14 @@
 #include <cassert>
 #include <cmath>
 
-
 using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
+
+using namespace mnd::col;
 using namespace mnd::col::literals;
+
+namespace fs = std::filesystem;
 
 #define MND_PHYSICS_PARANOIA
 #define MND_MULTITHREADING_TOGGLE
@@ -48,24 +50,33 @@ struct SingleSelect {
 std::istream& operator>>(std::istream&, SingleSelect& );
 std::ostream& operator<<(std::ostream&, const SingleSelect& );
 
+template<typename T>
+using Option = mnd::Option<T>;
 using Select = std::vector<SingleSelect>;
+
+constexpr mnd::col::RGBA DEFAULT_FILL_COL_EX = 0x91E965_c + 0.77_o;
 
 int main(int argc, char* argv[]) {
 	CLI::App app{"This program analyses the Hit level file and produces (hopefully) decent physics."};
 
 	std::vector<std::string> fileName, info;
 	double distance_cut = NAN;
-	auto sci21_cut = mnd::make_filled_array<double,2>(NAN);
-	auto sci22_cut = mnd::make_filled_array<double,2>(NAN);
-	auto sci31_cut = mnd::make_filled_array<double,2>(NAN);
+	Option<A2> sci21_cut;
+	Option<A2> sci22_cut;
+	Option<A2> sci31_cut;
 	size_t max_events = -1;
 	u32 nthreads = 1;
-	A3 rho_binning = {300, 0, 300};
-	std::string rho_title, rho_xlabel;
 
 	Select selected{};
 	auto angle_type = AngleType::all;
 	std::vector<canvas::Extension> save = {};
+
+	/* Few params really only related to the pyplot histogram. */
+	A3 rho_binning = {300,0,300};
+	std::string rho_title, rho_xlabel;
+	Option<double> py_linewidth;
+	Option<RGBA> py_fillcol = mnd::Some{ DEFAULT_FILL_COL_EX };
+	Option<RGBA> py_linecol;
 
 	add_logged_option(app, "-f,--file", fileName, "Pass one or more file names, delimited by ','")
 		->delimiter(',')
@@ -81,17 +92,17 @@ int main(int argc, char* argv[]) {
 		"Distance from vertex cut (all tracks must be below this threshold). Default no cut. "
 		"NOTE: not assigning this field will default to simple angles between all FOOT tracks.")
 		->check(CLI::Range(0.0, 2.0));
-	add_logged_option<DisplayDefault::No>(app, "--sci21",sci21_cut, "SCI21 QDC cut (also implying multiplicity 1). Default no cut.")
+	add_logged_option(app, "--sci21", sci21_cut, "SCI21 QDC cut (also implying multiplicity 1).")
 		->delimiter(',');
-	add_logged_option<DisplayDefault::No>(app, "--sci22",sci22_cut, "SCI22 QDC cut (also implying multiplicity 1). Default no cut.")
+	add_logged_option(app, "--sci22", sci22_cut, "SCI22 QDC cut (also implying multiplicity 1).")
 		->delimiter(',');
-	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
+	add_logged_option(app, "--sci31", sci31_cut, "SCI31 QDC cut (also implying multiplicity 1).")
 		->delimiter(',');
 
 	add_logged_option(app, "-t,--angle", angle_type, "Specify which type of formula to use for angular "
 		"spectroscopic ρ coefficient of N-body decay:\n"
 		"[he] : sqrt(Σ θ_i^2) angles between all heavy tracks and a single light one, (N-1) angles.\n"
-		"[p]  : sqrt(Σ θ_i^2) angles between all light tracks and a single heavy one, (N-1) angles.\n" 
+		"[p]  : sqrt(Σ θ_i^2) angles between all light tracks and a single heavy one, (N-1) angles.\n"
 		"[all]: sqrt(Σ θ_i^2) combination of all the angles between all the tracks, N*(N-1)/2 angles.");
 	add_logged_option(app, "-o,--save", save, "Save the resulting canvases as one or more extensions.")
 		->delimiter(',');
@@ -108,6 +119,13 @@ int main(int argc, char* argv[]) {
 		->delimiter(',');
 	add_logged_option(app, "--rho-title", rho_title, "Title of the ρ-value histogram. Can be latex'ed (inside \'\' block)");
 	add_logged_option(app, "--rho-xlabel", rho_xlabel, "X-axis label of the ρ-value histogram. Can be latex'ed (inside \'\' block)");
+	add_logged_option(app, "--py-linewidth", py_linewidth, "Linewidth for the ρ-value histogram to be exported from Python.");
+	add_logged_option(app, "--py-fillcol", py_fillcol, "Line col (ARGB) for the ρ-value histogram to be exported from Python. "
+		"By default, taken from original TH1P")
+		->default_str( mnd::to_string(DEFAULT_FILL_COL_EX) );
+	add_logged_option(app, "--py-linecol", py_linecol, "Line col (ARGB) for the ρ-value histogram to be exported from Python. "
+		"If left as none, taken from original TH1P");
+
 
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");
@@ -210,13 +228,15 @@ int main(int argc, char* argv[]) {
 	auto h1_angle_ex = TH1P {
 		Form("#sqrt( #sum_{i=1}^{%s} #theta_{i|heavy}^{2} ) [mrad]@#rho angle",
 			(sum_n_tracks_required>0 && vertex_dist_cut_given) ? std::to_string(sum_n_tracks_required-1).c_str(): "??"),
-		kCyan-9,
+		DEFAULT_FILL_COL_EX,
 		rho_binning[0], rho_binning[1], rho_binning[2]
 	};
 	if(sum_n_tracks_required == 2 and angle_type == AngleType::p)
 		h1_angle_ex->GetXaxis()->SetTitle("#theta(p,frag) [mrad]");
 
 	auto h2_vertex_z = TH2P{"#rho angle [mrad]:Vertex z [mm]@Traced by the FOOT", 160, -80, 80, 100,0,100};
+	auto h2_nlayers_hit = TH2P{"N layers hit in a track:Track Ip@Full FOOT system, smaller x-axis means larger Q particle",
+		10, -0.5, 9.5,   RNFOOTHit::N_PAIRS, 0.5, RNFOOTHit::N_PAIRS+0.5 };
 	
 	auto h1_sci21 = TH1P{"SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000};
 	auto h1_sci22 = TH1P{"SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000};
@@ -249,7 +269,7 @@ int main(int argc, char* argv[]) {
 	auto bar = ProgressBar
 #endif
 		(
-			option::BarWidth{40},
+			option::BarWidth{55},
 			option::Start{"["},
 			option::Fill{"="},
 			option::Lead{">"},
@@ -282,7 +302,7 @@ int main(int argc, char* argv[]) {
 			const auto& sci22 = frs->cal.sci[1];
 			const auto& sci31 = frs->cal.sci[2];
 			
-			if(sci21.hits.size() >= 1) h1_sci21.Fill(sci21.E);
+			if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
 			if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
 			if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
 			
@@ -294,6 +314,8 @@ int main(int argc, char* argv[]) {
 			if(sci21.hits.size() >= 1) h1_sci21_cut->Fill(sci21.E);
 			if(sci22.hits.size() >= 1) h1_sci22_cut->Fill(sci22.E);
 			if(sci31.hits.size() >= 1) h1_sci31_cut->Fill(sci31.E);
+			
+			bool valid_vertex_found = false;
 
 			/* In this case, don't cut on any charges etc,.. just take the whole event and try to do
 			* general vertexing, angles, rho, etc. */
@@ -329,6 +351,8 @@ int main(int argc, char* argv[]) {
 				const double invariant_theta = sqrt(sum2);
 				h1_angle_ex->Fill( invariant_theta );
 				h2_vertex_z->Fill( vertex.z, invariant_theta);
+
+				valid_vertex_found = !vertex.is_null();
 			}
 			else { while(foot->track.size() >= 2) {
 				VertexingResult<RNFOOTTrack> vtr =
@@ -433,16 +457,19 @@ int main(int argc, char* argv[]) {
 
 				for(u32 i=0; i<n_tracks_selected; ++i) {
 					h2_track_distance->Fill( i, tracks[i].DistanceTo(vertex) );
+					h2_nlayers_hit->Fill( i, ftracks[i].n );
 				}
 
 				h1_track_mult->Fill(n_tracks_selected);
+				valid_vertex_found = true;
 
 			} /* while(...) */ } // if(vertex_dist_cut_given)
-
-			h1_sci21_cut2->Fill(sci21.E);
-			h1_sci22_cut2->Fill(sci22.E);
-			h1_sci31_cut2.Fill(sci31.E);
-
+			
+			if(valid_vertex_found) {
+				h1_sci21_cut2->Fill(sci21.E);
+				h1_sci22_cut2->Fill(sci22.E);
+				h1_sci31_cut2.Fill(sci31.E);
+			}
 		} // for(size_t entryId{0}; entryId < nentries; ++entryId )
 
 #ifdef MND_MULTITHREADING_TOGGLE
@@ -456,12 +483,11 @@ int main(int argc, char* argv[]) {
 
 	show_console_cursor(true);
 
-	TCanvas* cm = new TCanvas("Multp", "Recognized tracks", 2150, 1400);
-	cm->Divide(2,2);
+	TCanvas* cm = new TCanvas("Multp", "Different tracks and extra info", 2150, 1400);
+	cm->Divide(3,2);
 	cm->cd(1); h2_q_vs_mult.Draw("COLZ"); gPad->SetLogz();
-	cm->cd(3); h2_score_vs_mult.Draw("COLZ"); gPad->SetLogz();
-	cm->cd(4); h1_track_mult.Draw();
-	cm->cd(2); new PLatex(0.08,
+	cm->cd(2); h2_score_vs_mult.Draw("COLZ"); gPad->SetLogz();
+	cm->cd(3); new PLatex(0.08,
 		"Coefficients: ",
 		Form("Cr = %.1f mm^-2", Cr),
 		Form("Cq = %.1f Q^-2", Cq),
@@ -469,8 +495,10 @@ int main(int argc, char* argv[]) {
 		Form("max cost for candidate: %.1f", max_cost),
 		Form("max cost for whole track: %.1f", max_cost_f)
 	);
+	cm->cd(4); h1_track_mult.Draw();
+	cm->cd(5); h2_nlayers_hit.Draw();
 
-	TCanvas* ct = new TCanvas("TrackDistance", "Recognized tracks distances between each other", 2150, 1400);
+	TCanvas* ct = new TCanvas("Physics", "Recognized tracks and angles", 2150, 1400);
 	ct->Divide(2,2);
 	ct->cd(1); h2_track_distance.Draw();
 	ct->cd(2); h1_track_angle.Draw();
@@ -493,17 +521,27 @@ int main(int argc, char* argv[]) {
 
 	canvas::save_all<canvas::Exe>( save, mnd::to_views(info) );
 
-	namespace fs = std::filesystem;
+	auto py_histstyle = mnd::plot::HistStyle{}.stairs();
+	if(py_fillcol.is_some()) {
+		py_histstyle = std::move(py_histstyle)
+			.fill()
+			.facecolor(py_fillcol.unwrap());
+	}
+	if(py_linewidth.is_some()) {
+		py_histstyle = std::move(py_histstyle)
+			.line_width(py_linewidth.unwrap());
+	}
+	if(py_linecol.is_some()) {
+		py_histstyle = std::move(py_histstyle)
+			.edgecolor(py_linecol.unwrap());
+	}
+
 	mnd::plot::Figure {}
-		.plot(
-			*h1_angle_ex, mnd::plot::HistStyle{}
-				.stairs()
-				.fill()
-				.line_width(2.2)
-		).xlabel(
+		.plot(*h1_angle_ex, py_histstyle)
+		.xlabel(
 			 !rho_xlabel.empty()
 			? rho_xlabel
-			: R"($\theta(p, \mathrm{frag})\,[\mathrm{mrad}]$)")
+			: R"($\rho\,[\mathrm{mrad}]$)")
 		.ylabel(&h1_angle_ex.h)
 		.grid()
 		.title(
@@ -511,7 +549,7 @@ int main(int argc, char* argv[]) {
 			? rho_title
 			: R"($\rho = \sqrt{\sum_{i} \theta_{i|\mathrm{frag}}^2}$)")
 		.save(
-			  fs::path{"autosave"}
+			fs::path{"autosave"}
 			/ mnd::fs::current_executable_name()
 			/ "py"
 			/ mnd::fs::path_sequence(info)

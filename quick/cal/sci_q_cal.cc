@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
     u32 niter = 2;
     unsigned short line_size = 4;
     double sratio = 1.4;
-    MaybePed ped = MaybePed::No;
+    MaybePed ped{mnd::None};
     bool ped_from_file = false;
 	auto save = canvas::Extension::nil;
 
@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
         if(cvt->pedestal.left == 0 || cvt->pedestal.right == 0)
             ERROR("Requsted parameter from file \'%s\' itself, but parameter is left defaulted? Run without the flag first.\n",
                 fileName.c_str());
-        ped = MaybePed::Yes {
+        ped = std::array{
             cvt->pedestal.left,
             cvt->pedestal.right
         };

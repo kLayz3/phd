@@ -1,6 +1,9 @@
 #pragma once
 
 #include <iostream>
+#include <istream>
+#include <optional>
+#include <ostream>
 #include <string_view>
 #include <variant>
 #include <filesystem>
@@ -19,6 +22,7 @@
 #include "../monad/monad.hxx"
 #include "../magic_enum/magic_enum.hpp"
 #include "CLI.h"
+#include "cli/CLI11.hpp"
 
 namespace _detail {
 inline TFile* file_ptr(TFile* f) noexcept {
@@ -228,6 +232,25 @@ inline std::ostream& operator<<(std::ostream& os, DoSave e) {
 }
 
 namespace mnd {
+namespace type_traits {
+
+template<typename T, typename S = std::istream>
+using is_istreamable = CLI::detail::is_istreamable<T, S>;
+template<typename T, typename S = std::ostream>
+using is_ostreamable = CLI::detail::is_ostreamable<T, S>;
+
+} // namespace type_traits
+
+template<typename T>
+std::string to_string(const T& val) {
+	static_assert(type_traits::is_istreamable<T>::value,
+		"Type T must be input-streamable to stringstream. AKA: there must be at least "
+		"istream& operator>>(..) overload (works also for std::stringstream).");
+	
+	std::stringstream ss{};
+	ss << val;
+	return ss.str();
+}
 
 /* Nicer API to allow strong typing.
  * This is basically a zero-cost abstraction that allows really
@@ -248,60 +271,116 @@ struct InputWrapper {
     T&&      get() &&      noexcept { return std::move(value); }
 };
 
-template<typename T, typename = void>
-struct is_istreamable : std::false_type {};
-template<typename T>
-struct is_istreamable<T,
-    std::void_t <
-        decltype(std::declval<std::istream&>() >> std::declval<T&>())
-    >
-> : std::true_type {};
-
-template<typename T, typename = void>
-struct is_ostreamable : std::false_type {};
-template<typename T>
-struct is_ostreamable<T,
-    std::void_t<
-        decltype(std::declval<std::ostream&>() << std::declval<T const&>())
-    >
-> : std::true_type {};
-
-/* Why is Rust amazing? Well, simple:
+/* Rust fanboy? Well, simple:
  * enum Option<T> {
  *   Some(T),
  *   None
  * }
  * A true algebraic sum type! Nullability isn't tied to
- * a self-defined `nil` subset within `T` itself. */
+ * a self-defined `nil` subset within `T` itself.
+ *
+ * NOTE: this type shouldn't be used as direct replacement of std::optional. */
+
+template<typename T>
+struct Some {
+	T value;
+};
+template<typename T>
+Some(T) -> Some<T>;
 
 template<typename T>
 class Option {
-	struct NoTag {};
-
 public:
 	using value_type = T; // needed for CLI11
 
-	struct Yes { T value; };
-
-	static constexpr NoTag No{};
-
-	Option(Yes y) : data(std::move(y)) {}
-	Option(NoTag) : data(std::monostate{}) {};
+	constexpr Option()      : data(None) {};
+	constexpr Option(std::nullopt_t) : data(None) {};
 	
-	bool is_some() const noexcept { return data.index() == 0; }
-	bool is_none() const noexcept { return data.index() == 1; }
+	template<typename U>
+	constexpr Option(Some<U> some) : data( T{ std::move(some.value) } ) {}
+
+	constexpr bool is_some() const noexcept { return data.has_value(); }
+	constexpr bool is_none() const noexcept { return !is_some(); }
 
 	/* May panic (throw). Unlike rust, returns back a reference when called on lvalue. */
-	T const& unwrap() const& { return std::get<0>(data).value; }
-	T&       unwrap() &      { return std::get<0>(data).value; }
-	T        unwrap() &&     { return std::get<0>(data).value; }
+	constexpr T const& unwrap() const& { return data.value(); }
+	constexpr T&       unwrap() &      { return data.value(); }
+	constexpr T&&      unwrap() &&     { return std::move(data.value()); }
 
-	decltype(auto) get() const noexcept { return (data); }
-	decltype(auto) get() noexcept { return (data); }
+	constexpr decltype(auto) get() const noexcept { return (data); }
+	constexpr decltype(auto) get() noexcept { return (data); }
+
+	/* Normally in STL, the functor type `F` is constrained by different concepts. */
+	template<typename F>
+	constexpr auto and_then(F&& f) & {
+		if(is_some())
+			return std::invoke(std::forward<F>(f), data.value());
+		else
+			return mnd::remove_cvref_t<std::invoke_result_t<F, T&>>{};
+	}
+	template<typename F>
+	constexpr auto and_then(F&& f) const& {
+		if(is_some())
+			return std::invoke(std::forward<F>(f), data.value());
+		else
+			return mnd::remove_cvref_t<std::invoke_result_t<F, T const&>>{};
+	}
+	template<typename F>
+	constexpr auto and_then(F&& f) && {
+		if(is_some())
+			return std::invoke(std::forward<F>(f), std::move(data.value()));
+		else
+			return mnd::remove_cvref_t<std::invoke_result_t<F, T>>{};
+	}
+	template<typename F>
+	constexpr auto and_then(F&& f) const&& {
+		if(is_some())
+			return std::invoke(std::forward<F>(f), std::move(data.value()));
+		else
+			return mnd::remove_cvref_t<std::invoke_result_t<F, T const>>{};
+	}
+	template<typename F>
+	constexpr Option or_else( F&& f ) const& {
+		return *this ? *this : std::forward<F>(f)();
+	};
+	template<typename F>
+	constexpr Option or_else( F&& f ) && {
+		return *this ? std::move(*this) : std::forward<F>(f)();
+	};
+
+	/* Reset the state back to the `No` variant. */
+	constexpr void reset() noexcept { data.reset(); }
+	
+	template<typename U>
+	Option& operator=(U&& rhs) {
+		data = std::forward<U>(rhs);
+		return *this;
+	}
 
 protected:
-	std::variant<Yes, std::monostate> data;
+	std::optional<T> data;
 };
+
+/* Predicate if the value is inside a range spanned by last 2 elements of some array.
+ * Note, variant state is *assumed* to be valued here, and isn't checked! */
+template<typename T, typename U, std::size_t N>
+bool IsInside(const T& value, const Option<std::array<U,N>>& bounds) {
+	static_assert(N >= 2, "Array size must be >= 2");
+	static_assert (
+		std::is_convertible_v<decltype(std::declval<const U&>() <= std::declval<const T&>()), bool> &&
+		std::is_convertible_v<decltype(std::declval<const T&>() <  std::declval<const U&>()), bool>,
+		"T and U must support comparison operators U <= T and T < U."
+	);
+	const auto& bval = bounds.unwrap();
+	return bval[N-2] <= value and value < bval[N-1];
+}
+
+/* This option is nullable by value type not by NAN boundary. */
+template<typename T, std::size_t N>
+bool IsValid(const Option<std::array<T,N>>& bounds) {
+	static_assert(N >= 2, "Array size must be >= 2");
+	return bounds.is_some();
+}
 
 } // namespace mnd
 
@@ -316,6 +395,12 @@ extern std::string ParseFileToString(const std::string& );
 
 /* For the Option<T> wrapper, also expose a CLI tool template specialization
  * to parse it properly, otherwise boilerplate reeks through the code. */
+namespace mnd::cli::detail {
+
+inline constexpr char empty_sym = '@';
+inline constexpr char reset_sym = '~';
+}
+
 template <
 	typename T
 > CLI::Option* add_logged_option (
@@ -324,39 +409,123 @@ template <
 	mnd::Option<T>& variable,
 	const std::string& description
 ) {
-	auto state = std::make_shared<mnd::cli::detail::State>();
-	auto* opt = app.add_option_function<T>(
-			name,
-			[&variable, name, state](const T& match) {
-				if(state->current_is_authoritative) { // Respect my authoritah.
-					variable = typename mnd::Option<T>::Yes{ .value = match };
-					state->authoritative_seen = true;
-					WARN("Parsed %sauthoritative%s sum-type option ", BOLD, KNRM);
-					std::cerr << KBH_YEL << name << KNRM << " as "
-						<< KBH_CYN << match << KNRM << '\n';
-				} else if(!state->authoritative_seen) {
-					variable = typename mnd::Option<T>::Yes{ .value = match };
-					WARN("Parsed sum-type option ");
-					std::cerr << KBH_YEL << name << KNRM << " as "
-						<< KBH_CYN << match << KNRM << '\n';
-				}
-				state->current_is_authoritative = false;
-			},
-			description
-		)
-		->transform([state](std::string input) -> std::string {
-			if(input == "@") return "{}";
-			if(!input.empty() && input.front() == mnd::cli::detail::auth_sym) {
-				state->current_is_authoritative = true;
-				input.erase(input.begin());	
-			}
-			return input;
-        }, "@ means an explicitly empty (but in the value variant)")
-		->expected(0,-1)
-		->trigger_on_parse()
-		->default_str("none");
+	static_assert(
+		std::is_default_constructible_v<T>,
+		"mnd::Option<T> CLI parsing requires default-constructible T"
+	);
+	/* God I love undocumented API. So basically the tokenising begins *before*
+	 * transformers take place. E.g. `--flag=!@` cannot be parsed for Option<array> ...
+	 * Just had to dissect the library like usual. HINT: people please write your docs. */
+	 
+	/* Inside CLI11.hpp:
+	 *   using results_t = std::vector<std::string>;
+	 *   using callback_t = std::function<bool(const results_t &)>;
+	 */
 
-	return opt;
+	auto state = std::make_shared<mnd::cli::detail::State>();
+	
+	CLI::callback_t callback =
+	[&variable, name, state](const CLI::results_t& raw) -> bool {
+		if(raw.empty())
+			return false;
+
+		/* Copy because we're going to strip the authoritative prefix
+		 * from the first vector's element before delegating to CLI11. */
+		auto input = raw;
+		auto& first = input.front();
+	
+		/* Problem is that for containers, passing a single flag e.g. '~' will result 
+		 * in its results vector being padded by empty strings... */
+		auto is_magic = [&input, &first](char symbol) {
+			return first.size() == 1 &&
+			first.front() == symbol &&
+			std::all_of(
+				std::next(input.begin()),
+				input.end(),
+				[](const std::string& s) { return s.empty(); }
+			);
+		};
+
+		const bool authoritative =
+			!first.empty() &&
+			first.front() == mnd::cli::detail::auth_sym;
+
+		if(authoritative)
+			first.erase(first.begin());
+
+		/* A lone '!' isn't a valid value. */
+		if(first.empty())
+			return false;
+
+		const bool reset = is_magic(mnd::cli::detail::reset_sym);
+		const bool empty = is_magic(mnd::cli::detail::empty_sym);
+
+		T match{}; // local placeholder for value
+
+		/* '@' and '~' both yield T{},
+		 * otherwise use CLI11's normal conversion for T. */
+		if(!reset && !empty) {
+			if(!CLI::detail::lexical_conversion<T,T>(input, match))
+				return false;
+			/* On successful conversion, keep going. */
+		}
+
+		/* '!x' always wins
+		 * ordinary x is ignored after any !x
+		 * a later !x can replace an earlier !x */
+		if(!authoritative && state->authoritative_seen)
+			return true;
+
+		if(authoritative)
+			state->authoritative_seen = true;
+
+		variable = std::move(match);
+
+		if(reset) {
+			variable.reset();
+
+			WARN("Parsed %ssum-type reset%s option ",
+				authoritative ?  BOLD "authoritative ": "",
+				authoritative ? KNRM : ""
+			);
+
+			std::cerr << KBH_YEL << name << KNRM << " as "
+				<< MND_RGB_COL(204,102,0) << "none" << KNRM << '\n';
+
+			return true;
+		}
+
+		if(authoritative) {
+			WARN("Parsed %sauthoritative%s sum-type option ", BOLD, KNRM);
+		} else {
+			WARN("Parsed sum-type option ");
+		}
+
+		std::cerr << KBH_YEL << name << KNRM << " as "
+			<< (empty ? MND_RGB_COL(255,102,255) "defaulted value: " : "")
+			<< KBH_CYN << variable.unwrap() << KNRM << '\n';
+
+		return true;
+	};
+	
+	return app.add_option(
+		name,
+		std::move(callback),
+		description
+		 + mnd::msg("\n%s\'%c\'%s flag requests an explicitly empty object (but in the value-given variant), "
+			        "\n%s\'%c\'%s requests a reset back to the no-value-given variant.",
+		            MND_RGB_COL(255,102,255), mnd::cli::detail::empty_sym, KNRM,
+		            MND_RGB_COL(204,102,0  ), mnd::cli::detail::reset_sym, KNRM)
+	)
+	->type_name(CLI::detail::type_name<T>())
+	->type_size(
+		1, CLI::detail::type_count<T>::value
+	)
+	->expected(
+		CLI::detail::expected_count<T>::value
+	)
+	->trigger_on_parse()
+	->default_str("none");
 }
 
 /* Custom char buffer streaming operations for the phantom wrapper types, if the underlying type
@@ -366,13 +535,13 @@ template <
  *
  * Non-templated specialized overloads can still be defined and compiler will like them more. Obviously. */
 template<typename T, typename Tag,
-    typename = std::enable_if_t<mnd::is_istreamable<T>::value>
+    typename = std::enable_if_t<mnd::type_traits::is_istreamable<T>::value>
 > std::istream& operator>>(std::istream& in, mnd::InputWrapper<T, Tag>& value) {
     return in >> value.get();
 }
 
 template<typename T, typename Tag,
-    typename = std::enable_if_t<mnd::is_ostreamable<T>::value>
+    typename = std::enable_if_t<mnd::type_traits::is_ostreamable<T>::value>
 > std::ostream& operator<<(std::ostream& out, mnd::InputWrapper<T, Tag> const& value) {
     return out << value.get();
 }

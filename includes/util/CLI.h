@@ -16,7 +16,7 @@ namespace mnd::cli::detail {
 		bool authoritative_seen = false;
 		bool current_is_authoritative = false;
 	};
-	static constexpr char auth_sym = '!';
+	inline constexpr char auth_sym = '!';
 }
 
 /* Overload for non-enum types. */

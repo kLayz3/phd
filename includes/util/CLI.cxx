@@ -20,7 +20,7 @@ mnd::Maybe<std::string_view> mnd::extract_text_body (
 	while(true) {
 		pos = text.find(needle, pos);
 		if(pos == std::string_view::npos)
-			return mnd::None;
+			return std::nullopt;
 
 		std::size_t brace = text.find('{', pos + needle.size());
 		if(brace == std::string_view::npos)

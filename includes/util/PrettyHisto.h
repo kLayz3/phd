@@ -108,50 +108,82 @@ inline std::string nonalnum_to_underscore(std::string_view s) noexcept {
 
 namespace mnd::col {
 
+std::string ansi_rgb(uint8_t , uint8_t , uint8_t );
+
 struct RGBA {
+	constexpr static double MAX_V
+		= static_cast<double>( std::numeric_limits<uint8_t>::max() );
+	
 	double r = 0.0;
 	double g = 0.0;
 	double b = 0.0;
-	double a = 1.0;
+	double a = 1.0; // opacity or visibility, 0% to 100%
+	/* transparency = 1 - opacity */
 
-	RGBA() = default;
-	RGBA(double r_, double g_, double b_, double a_ = 1.0) :
+	constexpr RGBA() = default;
+	constexpr RGBA(double r_, double g_, double b_, double a_ = 1.0) :
 		r(r_), g(g_), b(b_), a(a_) {}
+	
+	constexpr RGBA(uint8_t r_, uint8_t g_, uint8_t b_, double a_ = 1.0) :
+		r( r_ / MAX_V ), g( g_ / MAX_V ), b( b_ / MAX_V ), a(a_) {}
 
 	/* ROOT palette/index color, e.g. kRed+1. */
 	RGBA(Color_t );
 	/* No RBGA(uint32_t ) ctor, as that would be ambiguous. */
 
 	/* Preserve the old ORGB packed representation: 0xTTRRGGBB, where
-	 * TT is transparency (00 = opaque, ff = fully transparent). */
-	static RGBA from_packed(uint32_t value) noexcept;
+	 * TT is transparency (0 = opaque, ff = fully transparent). */
+	inline constexpr static RGBA from_packed(uint32_t value) noexcept {
+		const double b = (value & 0xffu) / MAX_V; value >>= 8;
+		const double g = (value & 0xffu) / MAX_V; value >>= 8;
+		const double r = (value & 0xffu) / MAX_V; value >>= 8;
+		const double a = std::max(1.0 - (value & 0xffu) / MAX_V, 0.0);
+		return {r, g, b, a};
+	}
+	static Color_t hex_to_col(uint32_t val) noexcept;
 
+	uint32_t pack() const noexcept;
 	Int_t GetColorCode() const;
 	void ApplyFill(TH1* h) const;
 };
+/* Either format supported: 'r,g,b,a' as decimals or 0xTTRRGGBB,
+ * where by default 'a' is 1.0 */
+std::istream& operator>>(std::istream&, RGBA& );
+template<bool = true>
+std::ostream& operator<<(std::ostream&, const RGBA& );
+
+struct Opacity {
+	double value;
+};
+std::istream& operator>>(std::istream&, Opacity& );
+
 namespace literals {
-	RGBA operator""_c(unsigned long long int );
+inline constexpr RGBA operator""_c(unsigned long long int value) noexcept {
+	return mnd::col::RGBA::from_packed(static_cast<uint32_t>(value));
+}
+inline constexpr Opacity operator""_o(long double value) noexcept {
+	return { static_cast<double>(value) };
 }
 
-static inline Int_t hex_to_col(uint32_t val) {
-	Float_t b = (val & 0xff) / 255.0; val >>= 8;
-	Float_t g = (val & 0xff) / 255.0; val >>= 8;
-	Float_t r = (val & 0xff) / 255.0; val >>= 8;
-	return TColor::GetColor(r,g,b);
+/* ^^^^ fun and obvious fact (often forgotten): to be used at compile-time, a constexpr
+ * function MUST be inline, otherwise the callsite can only be resolved at link time, when it's
+ * already too late. */
+
+} // namespace literals
+
+/* Resets the previous opacity of the color object. */
+inline constexpr RGBA operator+(RGBA col, Opacity opacity) {
+	col.a = std::clamp(opacity.value, 0.0, 1.0);
+	return col;
 }
 
-inline Int_t Col(uint32_t i) {
-	static uint32_t cols[] = {
-		0xC41E3A, 0xA330C9, 0xFF7C0A, 0x33937F,
-		0xAAD372, 0x3FC7EB, 0x00FF98, 0xF48CBA,
-		0xFFF468, 0x0070DD, 0x8788EE, 0xC69B6D
-	};
-	constexpr static size_t Ncols = sizeof cols / sizeof *cols;
-	
-	return hex_to_col( cols[i % Ncols] );
-}
+/* Get a sequential color code back */
+Color_t Col(uint32_t );
 
 } // namespace mnd::col
+
+extern template std::ostream& mnd::col::operator<< <true >(std::ostream&, const mnd::col::RGBA& );
+extern template std::ostream& mnd::col::operator<< <false>(std::ostream&, const mnd::col::RGBA& );
 
 namespace mnd::hist {
 
