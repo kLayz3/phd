@@ -149,10 +149,10 @@ struct RNTrigMap {
 	Scaler<32> wr; // Nullable according to the tpat field.
 
 	inline mnd::Maybe<u32> Wr() const {
-		return ((tpat != INVALID_TPAT and wr.initialized_) ? mnd::Maybe<u32>{wr.curr_data} : mnd::None);
+		return ((tpat != INVALID_TPAT and wr.initialized_) ? mnd::Maybe<u32>{wr.curr_data} : std::nullopt);
 	}
 	inline mnd::Maybe<u32> DeltaT() const {
-		return ((tpat != INVALID_TPAT and wr.initialized_) ? mnd::Maybe<u32>{wr.increment} : mnd::None);
+		return ((tpat != INVALID_TPAT and wr.initialized_) ? mnd::Maybe<u32>{wr.increment} : std::nullopt);
 	}
 	inline void Clean() noexcept {
 		tpat = INVALID_TPAT;

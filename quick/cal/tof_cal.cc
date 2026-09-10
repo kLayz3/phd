@@ -16,7 +16,7 @@
 #include "util/Tracking.h"
 #include "common/MacroCommon.hxx"
 
-#include "IonOptics.hxx"
+#include "MPhysics.hxx"
 
 #include "TApplication.h"
 #include "TFRSCalCont.h"

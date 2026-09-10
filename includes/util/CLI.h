@@ -10,14 +10,28 @@
 #define CLI11_ENABLE_EXTRA_VALIDATORS 1
 #include "../cli/CLI11.hpp"
 
+#include "Option.hxx"
+
 using DisplayDefault = mnd::BinaryOpt;
+
 namespace mnd::cli::detail {
-	struct State {
-		bool authoritative_seen = false;
-		bool current_is_authoritative = false;
-	};
-	inline constexpr char auth_sym = '!';
-}
+
+struct State {
+	bool authoritative_seen = false;
+	bool current_is_authoritative = false;
+};
+
+inline constexpr char auth_sym = '!';
+} //namespace mnd::cli::detail
+
+namespace mnd::type_traits {
+
+template<typename T, typename S = std::istream>
+using is_istreamable = CLI::detail::is_istreamable<T, S>;
+template<typename T, typename S = std::ostream>
+using is_ostreamable = CLI::detail::is_ostreamable<T, S>;
+
+} // namespace mnd::type_traits
 
 /* Overload for non-enum types. */
 template <
@@ -185,6 +199,152 @@ template <
 	return opt;
 }
 
+/* For the Option<T> wrapper, also expose a CLI tool template specialization
+ * to parse it properly, otherwise boilerplate reeks through the code. */
+namespace mnd::cli::detail {
+
+inline constexpr char empty_sym = '@';
+inline constexpr char reset_sym = '~';
+
+} // namespace mnd::cli::detail
+
+template <
+	DisplayDefault d = DisplayDefault::Yes,
+	typename T
+> CLI::Option* add_logged_option (
+	CLI::App& app,
+	const std::string& name,
+	mnd::Option<T>& variable,
+	const std::string& description
+) {
+	static_assert(
+		std::is_default_constructible_v<T>,
+		"mnd::Option<T> CLI parsing requires default-constructible T"
+	);
+	/* God I love undocumented API. So basically the tokenising begins *before*
+	 * transformers take place. E.g. `--flag=!@` cannot be parsed for Option<array> ...
+	 * Just had to dissect the library like usual. HINT: people please write your docs. */
+	 
+	/* Inside CLI11.hpp:
+	 *   using results_t = std::vector<std::string>;
+	 *   using callback_t = std::function<bool(const results_t &)>;
+	 */
+
+	auto state = std::make_shared<mnd::cli::detail::State>();
+	
+	CLI::callback_t callback =
+	[&variable, name, state](const CLI::results_t& raw) -> bool {
+		if(raw.empty())
+			return false;
+
+		/* Copy because we're going to strip the authoritative prefix
+		 * from the first vector's element before delegating to CLI11. */
+		auto input = raw;
+		auto& first = input.front();
+	
+		/* Problem is that for containers, passing a single flag e.g. '~' will result 
+		 * in its results vector being padded by empty strings... */
+		auto is_magic = [&input, &first](char symbol) {
+			return first.size() == 1 &&
+			first.front() == symbol &&
+			std::all_of(
+				std::next(input.begin()),
+				input.end(),
+				[](const std::string& s) { return s.empty(); }
+			);
+		};
+
+		const bool authoritative =
+			!first.empty() &&
+			first.front() == mnd::cli::detail::auth_sym;
+
+		if(authoritative)
+			first.erase(first.begin());
+
+		/* A lone '!' isn't a valid value. */
+		if(first.empty())
+			return false;
+
+		const bool reset = is_magic(mnd::cli::detail::reset_sym);
+		const bool empty = is_magic(mnd::cli::detail::empty_sym);
+
+		T match{}; // local placeholder for value
+
+		/* '@' and '~' both yield T{},
+		 * otherwise use CLI11's normal conversion for T. */
+		if(!reset && !empty) {
+			if(!CLI::detail::lexical_conversion<T,T>(input, match))
+				return false;
+			/* On successful conversion, keep going. */
+		}
+
+		/* '!x' always wins
+		 * ordinary x is ignored after any !x
+		 * a later !x can replace an earlier !x */
+		if(!authoritative && state->authoritative_seen)
+			return true;
+
+		if(authoritative)
+			state->authoritative_seen = true;
+
+		variable = std::move(match);
+
+		if(reset) {
+			variable.reset();
+
+			WARN("Parsed %ssum-type reset%s option ",
+				authoritative ?  BOLD "authoritative ": "",
+				authoritative ? KNRM : ""
+			);
+
+			std::cerr << KBH_YEL << name << KNRM << " as "
+				<< MND_RGB_COL(204,102,0) << "none" << KNRM << '\n';
+
+			return true;
+		}
+
+		if(authoritative) {
+			WARN("Parsed %sauthoritative%s sum-type option ", BOLD, KNRM);
+		} else {
+			WARN("Parsed sum-type option ");
+		}
+
+		std::cerr << KBH_YEL << name << KNRM << " as "
+			<< (empty ? MND_RGB_COL(255,102,255) "defaulted value: " : "")
+			<< KBH_CYN << variable.unwrap() << KNRM << '\n';
+
+		return true;
+	};
+	
+	auto* opt = app.add_option(
+		name,
+		std::move(callback),
+		description
+		 + mnd::msg("\n%s\'%c\'%s flag requests an explicitly empty object (but in the value-given variant), "
+			        "\n%s\'%c\'%s requests a reset back to the no-value-given variant.",
+		            MND_RGB_COL(255,102,255), mnd::cli::detail::empty_sym, KNRM,
+		            MND_RGB_COL(204,102,0  ), mnd::cli::detail::reset_sym, KNRM)
+	)
+	->type_name(CLI::detail::type_name<T>())
+	->type_size(
+		1, CLI::detail::type_count<T>::value
+	)
+	->expected(
+		CLI::detail::expected_count<T>::value
+	)
+	->trigger_on_parse();
+
+	if constexpr(d == DisplayDefault::Yes) {
+		opt->default_str(
+			variable.map([](const auto& value) {
+				return CLI::detail::to_string(value);
+			}).value_or("none")
+		);
+	}
+
+	return opt;
+}
+
 inline CLI::Option* add_logged_flag (
 	CLI::App& app,
 	std::string name,
@@ -204,7 +364,7 @@ inline CLI::Option* add_logged_flag (
 namespace mnd {
 
 /* A small wrapper to parse out the sections in the config file block. */
-Maybe<std::string_view> extract_text_body(std::string_view , std::string_view , std::string_view );
+mnd::Option<std::string_view> extract_text_body(std::string_view , std::string_view , std::string_view );
 
 /* Split a string into smaller substrings. */
 std::vector<std::string> split(const std::string& , char );
@@ -217,7 +377,7 @@ std::vector<std::string_view> to_views(const std::vector<std::string>& );
 std::vector<std::string_view> split_view(std::string_view , char );
 std::vector<std::string_view> split_view(std::string&& , char ) = delete;
 
-template<typename T> 
+template<typename T>
 bool parse(std::string_view v, T& out) {
 	static_assert(std::is_integral_v<T> || std::is_floating_point_v<T>,
 		"Type T must either be integral or floating point.");

@@ -57,15 +57,15 @@ struct RNFOOTMap {
 
 	inline bool HasData() const noexcept { return std::isfinite(FOOTE[0]); }
 	inline mnd::Maybe<u32> T() const noexcept {
-		return (HasData() and timing.initialized_) ? mnd::Maybe<u32>{timing.curr_data} : mnd::None;
+		return (HasData() and timing.initialized_) ? mnd::Maybe<u32>{timing.curr_data} : std::nullopt;
 	}
 	
 	inline mnd::Maybe<u64> TotalT() const noexcept {
-		return HasData() ? mnd::Maybe<u64>{timing.cumulative} : mnd::None;
+		return HasData() ? mnd::Maybe<u64>{timing.cumulative} : std::nullopt;
 	}
 
 	inline mnd::Maybe<u32> DeltaT() const noexcept {
-		return (HasData() and timing.initialized_) ? mnd::Maybe<u32>{timing.increment} : mnd::None;
+		return (HasData() and timing.initialized_) ? mnd::Maybe<u32>{timing.increment} : std::nullopt;
 	}
 
 	RNFOOTMap() = default;

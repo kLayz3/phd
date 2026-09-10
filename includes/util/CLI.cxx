@@ -3,10 +3,10 @@
 #include <string>
 #include <type_traits>
 
-mnd::Maybe<std::string_view> mnd::extract_text_body (
-		std::string_view block_name,
-		std::string_view text, 
-		std::string_view label
+mnd::Option<std::string_view> mnd::extract_text_body (
+	std::string_view block_name,
+	std::string_view text, 
+	std::string_view label
 ) {
 	std::string needle;
 	needle.reserve(block_name.size() + label.size() + 2);
@@ -20,11 +20,11 @@ mnd::Maybe<std::string_view> mnd::extract_text_body (
 	while(true) {
 		pos = text.find(needle, pos);
 		if(pos == std::string_view::npos)
-			return std::nullopt;
+			return None;
 
 		std::size_t brace = text.find('{', pos + needle.size());
 		if(brace == std::string_view::npos)
-			return std::nullopt;
+			return None;
 
 		size_t body_start = brace + 1; // where the slice will start
 		size_t depth = 1;
@@ -36,12 +36,14 @@ mnd::Maybe<std::string_view> mnd::extract_text_body (
 				--depth;
 
 				if(depth == 0) {
-					return text.substr(body_start, i - body_start);
+					return Some{text.substr(body_start, i - body_start)};
 				}
 			}
 		}
 
-		ERROR("unterminated section \'%s(%s)\'\n", std::string(block_name).c_str(), std::string(label).c_str());
+		ERROR("mnd::extract_text_body: "
+			"Parse error: unterminated section \'%s(%s)\'\n",
+			std::string(block_name).c_str(), std::string(label).c_str());
 	}
 }
 

@@ -1,4 +1,6 @@
 #include "MacroHelpers.h"
+#include "FromChars.h"
+#include <string_view>
 
 using PipeDeleter = int (*)(FILE*);
 
@@ -43,7 +45,7 @@ std::vector<TH1*> canvas::GetHistograms(TVirtualPad* pad) {
 	return out;
 }
 
-std::vector<std::string> ParseFile(const std::string& fileName) {
+std::vector<std::string> mnd::ParseFile(const std::string& fileName) {
 #ifndef _POSIX_VERSION
 #	error "Cannot compile in this function for non- UNIX operating systems!"
 #endif
@@ -89,7 +91,7 @@ std::vector<std::string> ParseFile(const std::string& fileName) {
 	return lines;
 }
 
-std::string ParseFileToString(const std::string& fileName) {
+std::string mnd::ParseFileToString(const std::string& fileName) {
 #ifndef _POSIX_VERSION
 #	error "Cannot compile in this function for non- UNIX operating systems!"
 #endif
@@ -129,87 +131,66 @@ std::string ParseFileToString(const std::string& fileName) {
 
 using namespace std::literals;
 
-static bool ends_with(std::string_view name, std::string_view extension) {
-    if(name.size() < extension.size() ||
-       name.substr(name.size() - extension.size()) != extension)
-    {
-        return false;
-    }
-    return true;
-}
+static const std::regex re {mnd::fs::filename_pattern};
 
-static bool starts_with(std::string_view name, std::string_view prefix) {
-    if(name.size() < prefix.size() ||
-       name.substr(0, prefix.size()) != prefix)
-    {
-        return false;
-    }
-    return true;
-}
-
-std::pair<std::string_view, std::string_view>
-mnd::fs::file_number_bounds(const std::string& file) {
+std::tuple<std::string, u32, u32>
+mnd::fs::file_info(std::string_view file) {
     namespace fs = std::filesystem;
 
-    /*
-     * Important: get the location of the filename inside the original string,
-     * because the returned string_views must refer to `file`, not to some
-     * temporary string produced by std::filesystem.
-     */
+    /* Important: get the location of the filename inside the original string,
+     * because the returned string_view must refer to `file`, not to some
+     * temporary string produced by std::filesystem. */
     const fs::path path{file};
-    const auto filename = path.filename().string();
+    const std::string name = path.filename().string();
 
-    if(filename.size() > file.size())
-        throw std::invalid_argument("Invalid file path: " + file);
+    if(name.size() > file.size()) {
+        MND_THROW("Invalid file path? %*s", (int)file.size(), file.data());
+	}
 
-    const std::size_t filename_pos = file.size() - filename.size();
+	std::smatch match;
+    if(!std::regex_match(name, match, re)) {
+		MND_THROW("mnd::fs::file_info: provided file name %s%s%s does not "
+			"match the regular expression: %s%s%s",
+			BOLD, name.c_str(), KNRM,
+			BOLD, filename_pattern, KNRM);
+	}
+	
+	const std::string basename = match[1];
+	std::string_view run_n_start_view = {
+		name.data() + match.position(3), (size_t)match.length(3)
+	};
+	Option<u32> maybe_n_start = mnd::stou(run_n_start_view);
+	Option<u32> maybe_n_end   = maybe_n_start;
+	if(maybe_n_start.is_none()) {
+        MND_THROW("mnd::fs:file_info: In file name: %*s , "
+			"expected `<start>` run number to be "
+			"parsable to uint32_t", name.c_str());
+	}
 
-    std::string_view name {
-        file.data() + filename_pos,
-        filename.size()
-    };
+	if(match[3].matched) {
+		std::string_view run_n_end_view = {
+			name.data() + match.position(3), (size_t)match.length(3)
+		};
+		maybe_n_end = mnd::stou(run_n_end_view);
+        if(maybe_n_end.is_none()) {
+			MND_THROW("mnd::fs:file_info: In file name: %*s , "
+				"expected `<end>` run number to be "
+				"parsable to uint32_t", name.c_str());
+		}
+	}
 
-    // Strip ".root".
-
-    if(! ::ends_with(name, FILE_EXTENSION))
-        throw std::invalid_argument(
-            mnd::msg("Unexpected file extension: expected: \'%s\', received file name: ", FILE_EXTENSION.data(), file.c_str())
-        );
-    name.remove_suffix(FILE_EXTENSION.size());
-
-    if(! ::starts_with(name, FILE_PREFIX))
-        throw std::invalid_argument(
-            mnd::msg("Unexpected file prefix, expected: \'%s\', received file name: %s ", FILE_PREFIX.data(), file.c_str())
-        );
-    name.remove_prefix(FILE_PREFIX.size());
-
-    const auto sep = name.find('_');
-
-    if(sep == std::string_view::npos)
-        throw std::invalid_argument(
-            mnd::msg("Expected %s_<start>_<end>%s: %s", FILE_PREFIX.data(), FILE_EXTENSION.data(), file.c_str())
-        );
-
-    const auto start = name.substr(0, sep);
-    const auto end   = name.substr(sep + 1);
-
-    if(start.empty() || end.empty())
-        throw std::invalid_argument (
-            "Empty file sequence number: " + file
-        );
-
-    return {start, end};
+    return { std::move(basename), maybe_n_start.unwrap(), maybe_n_end.unwrap()};
 }
 
-std::string_view mnd::fs::file_start_number(const std::string& file) {
-    return file_number_bounds(file).first;
+u32 mnd::fs::file_start_number(std::string_view file) {
+    return std::get<1>( file_info(file) );
 }
 
-std::string_view mnd::fs::file_end_number(const std::string& file) {
-    return file_number_bounds(file).second;
+u32 mnd::fs::file_end_number(std::string_view file) {
+    return std::get<2>( file_info(file) );
 }
 
-std::pair<std::string_view, std::string_view>
+std::pair<u32, u32>
 mnd::fs::file_number_bounds(const std::vector<std::string>& files) {
     if(files.empty())
         throw std::invalid_argument("Cannot determine bounds of an empty file sequence");
@@ -223,9 +204,9 @@ mnd::fs::file_number_bounds(const std::vector<std::string>& files) {
 std::string mnd::fs::file_names_concatenated(const std::vector<std::string>& files) {
     auto bounds = file_number_bounds(files);
 
-    return std::string{FILE_PREFIX}
+    return std::string{file_prefix}
         + "_"
-        + std::string{bounds.first}
+        + mnd::utos(bounds.first, nchars_run_number)
         + "_"
-        + std::string{bounds.second};
+        + mnd::utos(bounds.second, nchars_run_number);
 }

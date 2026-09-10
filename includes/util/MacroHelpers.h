@@ -10,19 +10,20 @@
 #include <sstream>
 #include <cmath>
 #include <stdexcept>
+#include <regex>
 
 #include "TROOT.h"
 #include "TCanvas.h"
 #include "TInterpreter.h"
 #include "TSystem.h"
 #include "TImage.h"
-
 #include "TFile.h"
 
 #include "../monad/monad.hxx"
 #include "../magic_enum/magic_enum.hpp"
 #include "CLI.h"
-#include "cli/CLI11.hpp"
+
+#include "Option.hxx"
 
 namespace _detail {
 inline TFile* file_ptr(TFile* f) noexcept {
@@ -59,8 +60,6 @@ using A3 = std::array<double, 3>;
 template<typename T, size_t M, size_t N>
 using Arr2 = std::array<std::array<T,N>, M>;
 
-enum class DoSave { yes, no };
-
 /* File names are often of the form: `main_0XXX_0YYY.root`, as such
  * metadata'ing multiple files can be concatenated e.g.:
  * => main_0123_0144.root
@@ -72,27 +71,34 @@ enum class DoSave { yes, no };
 
 namespace mnd::fs {
 
-constexpr std::string_view FILE_PREFIX    = "main";
-constexpr std::string_view FILE_EXTENSION = ".root";
+using namespace std::literals;
 
-/* If `main_0023_0144.root` => "0023"sv */
-std::string_view file_start_number(const std::string& );
+inline constexpr const char* file_prefix = "main";
+inline constexpr u32 nchars_run_number = 4;
 
-/* If `main_0023_0144.root` => "0023"sv */
-std::string_view file_end_number(const std::string& );
+/* Generally, we expect files to be called with this format. */
+inline constexpr const char* filename_pattern
+	= R"(^(\w.+)_(\d+)(?:_(\d+)?)\.root$)";
 
-/* If `main_0023_0144.root` => { "0023"sv, "0144"sv } */
-std::pair <
-    std::string_view,
-    std::string_view
-> file_number_bounds(const std::string& );
+/* If "main_0023_0144.root" => "main"s */
+std::string run_name(std::string_view );
 
-/* If `{ main_0023_0144.root, main_0145_0174.root }` => { "0023"sv, "0174"sv }.
+/* If "main_0023_0144.root" => 23 */
+u32 file_start_number(std::string_view );
+
+/* If "main_0023_0144.root" => 144 */
+u32 file_end_number(std::string_view );
+
+/* If "main_0023_0144.root" => { 23, 144 } */
+std::pair<u32, u32> file_number_bounds(std::string_view );
+
+/* If "main_0023_0144.root" => { "main"s, 23, 144 } */
+std::tuple<std::string, u32, u32>
+file_info(std::string_view );
+
+/* If { "main_0023_0144.root", "main_0145_0174.root" } => { 23, 174 }.
  * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
-std::pair <
-    std::string_view,
-    std::string_view
-> file_number_bounds(const std::vector<std::string>& );
+std::pair<u32, u32> file_number_bounds(const std::vector<std::string>& );
 
 /* If `{ main_0023_0144.root, main_0145_0174.root }` => "main_0023_0174". Doesn't have the extension.
  * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
@@ -218,28 +224,18 @@ void save_all (
 /* All vectors passed by value, but it's small so overhead is whatever,
  * and this fnc won't ever get called in a loop. */
 
+inline std::ostream& operator<<(std::ostream& os, canvas::Extension e) {
+	return os << magic_enum::enum_name(e);
+}
+
 }; // namespace canvas
+
 extern template void canvas::save_all<canvas::Macro>(canvas::Extension , std::vector<std::string_view> );
 extern template void canvas::save_all<canvas::Exe  >(canvas::Extension , std::vector<std::string_view> );
 extern template void canvas::save_all<canvas::Macro>(std::vector<canvas::Extension> , std::vector<std::string_view> );
 extern template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extension> , std::vector<std::string_view> );
 
-inline std::ostream& operator<<(std::ostream& os, canvas::Extension e) {
-	return os << magic_enum::enum_name(e);
-}
-inline std::ostream& operator<<(std::ostream& os, DoSave e) {
-	return os << magic_enum::enum_name(e);
-}
-
 namespace mnd {
-namespace type_traits {
-
-template<typename T, typename S = std::istream>
-using is_istreamable = CLI::detail::is_istreamable<T, S>;
-template<typename T, typename S = std::ostream>
-using is_ostreamable = CLI::detail::is_ostreamable<T, S>;
-
-} // namespace type_traits
 
 template<typename T>
 std::string to_string(const T& val) {
@@ -251,115 +247,6 @@ std::string to_string(const T& val) {
 	ss << val;
 	return ss.str();
 }
-
-/* Nicer API to allow strong typing.
- * This is basically a zero-cost abstraction that allows really
- * pretty API's to directly name the positional arguments. */
-template<typename T, typename Tag = void>
-struct InputWrapper {
-	using value_type = T;
-	T value;
-
-	InputWrapper() = default;
-	InputWrapper(T v) : value(std::move(v)) {}
-
-	operator T&() noexcept { return value; }
-	operator const T&() const noexcept { return value; }
-
-    T&       get() &       noexcept { return value; }
-    T const& get() const & noexcept { return value; }
-    T&&      get() &&      noexcept { return std::move(value); }
-};
-
-/* Rust fanboy? Well, simple:
- * enum Option<T> {
- *   Some(T),
- *   None
- * }
- * A true algebraic sum type! Nullability isn't tied to
- * a self-defined `nil` subset within `T` itself.
- *
- * NOTE: this type shouldn't be used as direct replacement of std::optional. */
-
-template<typename T>
-struct Some {
-	T value;
-};
-template<typename T>
-Some(T) -> Some<T>;
-
-template<typename T>
-class Option {
-public:
-	using value_type = T; // needed for CLI11
-
-	constexpr Option()      : data(None) {};
-	constexpr Option(std::nullopt_t) : data(None) {};
-	
-	template<typename U>
-	constexpr Option(Some<U> some) : data( T{ std::move(some.value) } ) {}
-
-	constexpr bool is_some() const noexcept { return data.has_value(); }
-	constexpr bool is_none() const noexcept { return !is_some(); }
-
-	/* May panic (throw). Unlike rust, returns back a reference when called on lvalue. */
-	constexpr T const& unwrap() const& { return data.value(); }
-	constexpr T&       unwrap() &      { return data.value(); }
-	constexpr T&&      unwrap() &&     { return std::move(data.value()); }
-
-	constexpr decltype(auto) get() const noexcept { return (data); }
-	constexpr decltype(auto) get() noexcept { return (data); }
-
-	/* Normally in STL, the functor type `F` is constrained by different concepts. */
-	template<typename F>
-	constexpr auto and_then(F&& f) & {
-		if(is_some())
-			return std::invoke(std::forward<F>(f), data.value());
-		else
-			return mnd::remove_cvref_t<std::invoke_result_t<F, T&>>{};
-	}
-	template<typename F>
-	constexpr auto and_then(F&& f) const& {
-		if(is_some())
-			return std::invoke(std::forward<F>(f), data.value());
-		else
-			return mnd::remove_cvref_t<std::invoke_result_t<F, T const&>>{};
-	}
-	template<typename F>
-	constexpr auto and_then(F&& f) && {
-		if(is_some())
-			return std::invoke(std::forward<F>(f), std::move(data.value()));
-		else
-			return mnd::remove_cvref_t<std::invoke_result_t<F, T>>{};
-	}
-	template<typename F>
-	constexpr auto and_then(F&& f) const&& {
-		if(is_some())
-			return std::invoke(std::forward<F>(f), std::move(data.value()));
-		else
-			return mnd::remove_cvref_t<std::invoke_result_t<F, T const>>{};
-	}
-	template<typename F>
-	constexpr Option or_else( F&& f ) const& {
-		return *this ? *this : std::forward<F>(f)();
-	};
-	template<typename F>
-	constexpr Option or_else( F&& f ) && {
-		return *this ? std::move(*this) : std::forward<F>(f)();
-	};
-
-	/* Reset the state back to the `No` variant. */
-	constexpr void reset() noexcept { data.reset(); }
-	
-	template<typename U>
-	Option& operator=(U&& rhs) {
-		data = std::forward<U>(rhs);
-		return *this;
-	}
-
-protected:
-	std::optional<T> data;
-};
 
 /* Predicate if the value is inside a range spanned by last 2 elements of some array.
  * Note, variant state is *assumed* to be valued here, and isn't checked! */
@@ -382,171 +269,11 @@ bool IsValid(const Option<std::array<T,N>>& bounds) {
 	return bounds.is_some();
 }
 
-} // namespace mnd
-
 /* Parse a file first thru the GCC preprocessor, and then
  * try to parse the output as a sequence of lines.
  * Is not thread safe! */
 std::vector<std::string> ParseFile(const std::string& );
-extern std::vector<std::string> ParseFile(const std::string& );
-
 std::string ParseFileToString(const std::string& );
-extern std::string ParseFileToString(const std::string& );
-
-/* For the Option<T> wrapper, also expose a CLI tool template specialization
- * to parse it properly, otherwise boilerplate reeks through the code. */
-namespace mnd::cli::detail {
-
-inline constexpr char empty_sym = '@';
-inline constexpr char reset_sym = '~';
-}
-
-template <
-	typename T
-> CLI::Option* add_logged_option (
-	CLI::App& app,
-	const std::string& name,
-	mnd::Option<T>& variable,
-	const std::string& description
-) {
-	static_assert(
-		std::is_default_constructible_v<T>,
-		"mnd::Option<T> CLI parsing requires default-constructible T"
-	);
-	/* God I love undocumented API. So basically the tokenising begins *before*
-	 * transformers take place. E.g. `--flag=!@` cannot be parsed for Option<array> ...
-	 * Just had to dissect the library like usual. HINT: people please write your docs. */
-	 
-	/* Inside CLI11.hpp:
-	 *   using results_t = std::vector<std::string>;
-	 *   using callback_t = std::function<bool(const results_t &)>;
-	 */
-
-	auto state = std::make_shared<mnd::cli::detail::State>();
-	
-	CLI::callback_t callback =
-	[&variable, name, state](const CLI::results_t& raw) -> bool {
-		if(raw.empty())
-			return false;
-
-		/* Copy because we're going to strip the authoritative prefix
-		 * from the first vector's element before delegating to CLI11. */
-		auto input = raw;
-		auto& first = input.front();
-	
-		/* Problem is that for containers, passing a single flag e.g. '~' will result 
-		 * in its results vector being padded by empty strings... */
-		auto is_magic = [&input, &first](char symbol) {
-			return first.size() == 1 &&
-			first.front() == symbol &&
-			std::all_of(
-				std::next(input.begin()),
-				input.end(),
-				[](const std::string& s) { return s.empty(); }
-			);
-		};
-
-		const bool authoritative =
-			!first.empty() &&
-			first.front() == mnd::cli::detail::auth_sym;
-
-		if(authoritative)
-			first.erase(first.begin());
-
-		/* A lone '!' isn't a valid value. */
-		if(first.empty())
-			return false;
-
-		const bool reset = is_magic(mnd::cli::detail::reset_sym);
-		const bool empty = is_magic(mnd::cli::detail::empty_sym);
-
-		T match{}; // local placeholder for value
-
-		/* '@' and '~' both yield T{},
-		 * otherwise use CLI11's normal conversion for T. */
-		if(!reset && !empty) {
-			if(!CLI::detail::lexical_conversion<T,T>(input, match))
-				return false;
-			/* On successful conversion, keep going. */
-		}
-
-		/* '!x' always wins
-		 * ordinary x is ignored after any !x
-		 * a later !x can replace an earlier !x */
-		if(!authoritative && state->authoritative_seen)
-			return true;
-
-		if(authoritative)
-			state->authoritative_seen = true;
-
-		variable = std::move(match);
-
-		if(reset) {
-			variable.reset();
-
-			WARN("Parsed %ssum-type reset%s option ",
-				authoritative ?  BOLD "authoritative ": "",
-				authoritative ? KNRM : ""
-			);
-
-			std::cerr << KBH_YEL << name << KNRM << " as "
-				<< MND_RGB_COL(204,102,0) << "none" << KNRM << '\n';
-
-			return true;
-		}
-
-		if(authoritative) {
-			WARN("Parsed %sauthoritative%s sum-type option ", BOLD, KNRM);
-		} else {
-			WARN("Parsed sum-type option ");
-		}
-
-		std::cerr << KBH_YEL << name << KNRM << " as "
-			<< (empty ? MND_RGB_COL(255,102,255) "defaulted value: " : "")
-			<< KBH_CYN << variable.unwrap() << KNRM << '\n';
-
-		return true;
-	};
-	
-	return app.add_option(
-		name,
-		std::move(callback),
-		description
-		 + mnd::msg("\n%s\'%c\'%s flag requests an explicitly empty object (but in the value-given variant), "
-			        "\n%s\'%c\'%s requests a reset back to the no-value-given variant.",
-		            MND_RGB_COL(255,102,255), mnd::cli::detail::empty_sym, KNRM,
-		            MND_RGB_COL(204,102,0  ), mnd::cli::detail::reset_sym, KNRM)
-	)
-	->type_name(CLI::detail::type_name<T>())
-	->type_size(
-		1, CLI::detail::type_count<T>::value
-	)
-	->expected(
-		CLI::detail::expected_count<T>::value
-	)
-	->trigger_on_parse()
-	->default_str("none");
-}
-
-/* Custom char buffer streaming operations for the phantom wrapper types, if the underlying type
- * implements them. If underlying type's definitions are not found at this point, then this
- * template is sfinae'd out. E.g. vector|array overload is in `json_struct_def.hh`, and won't be
- * automatically detected here, if that header is included *after* this one.
- *
- * Non-templated specialized overloads can still be defined and compiler will like them more. Obviously. */
-template<typename T, typename Tag,
-    typename = std::enable_if_t<mnd::type_traits::is_istreamable<T>::value>
-> std::istream& operator>>(std::istream& in, mnd::InputWrapper<T, Tag>& value) {
-    return in >> value.get();
-}
-
-template<typename T, typename Tag,
-    typename = std::enable_if_t<mnd::type_traits::is_ostreamable<T>::value>
-> std::ostream& operator<<(std::ostream& out, mnd::InputWrapper<T, Tag> const& value) {
-    return out << value.get();
-}
-
-namespace mnd {
 
 /* Invoke a function `func` over a range of objects, over nthreads.
  * `Range` here binds here to any type anything that is indexable such as array/vector/span.

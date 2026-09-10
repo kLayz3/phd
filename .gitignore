@@ -48,3 +48,7 @@ sim/build
 exec/*.txt
 autosave
 randomstuff
+
+scripts/helpers/*
+!scripts/helpers/*.cc
+!scripts/helpers/Makefile

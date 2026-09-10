@@ -63,14 +63,14 @@ int main(int argc, char* argv[]) {
     }
 
 	/* Parse the config file. */
-	const std::string cfg_contents = ParseFileToString(config);
+	const std::string cfg_contents = mnd::ParseFileToString(config);
 
 	/* Global contents, in the GLOBAL() block. */
 	auto g_contents = mnd::extract_text_body("GLOBAL", cfg_contents, "");
 	std::string_view sec_contents;
 	if(!section.empty()) {
 		try {
-			sec_contents = mnd::extract_text_body("SECTION", cfg_contents, section).value();
+			sec_contents = mnd::extract_text_body("SECTION", cfg_contents, section).unwrap();
 		} catch(const std::exception& e) {
 			ERROR("Contents empty, invalid or not section not found? Section name: \'%s\'\n", section.c_str());
 		}

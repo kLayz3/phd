@@ -1,5 +1,6 @@
 #include "JSONParser.h"
 
+#include <iostream>
 #include <cstdlib>
 #include <stdexcept>
 #include <unistd.h>
@@ -41,14 +42,14 @@ json ParseJSON(const std::string& fileName) {
 #ifndef _POSIX_VERSION
 #	error "Cannot compile in this function for non- UNIX operating systems!"
 #endif
-	static constexpr int MAX_BUF_SIZE   = 4096;
+	static constexpr int MAX_BUF_SIZE = 4096;
 
-	std::string cmd = 
+	std::string cmd =
 		"gcc -E -P -Werror -undef -x c++ "
 		"-fdiagnostics-color=always "
 		"-fdiagnostics-show-caret "
-		"-ftrack-macro-expansion=0 " 
-		"\"" + fileName + "\" " 
+		"-ftrack-macro-expansion=0 "
+		"\"" + fileName + "\" "
 		"-o - 2>&1";
 
 	std::unique_ptr<FILE, PipeDeleter> pipe {popen(cmd.c_str(), "r"), pclose};

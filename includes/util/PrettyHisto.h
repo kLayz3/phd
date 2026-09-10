@@ -41,8 +41,6 @@
 #endif
 #endif // MND_INCLUDE_SPAN_IS_DEFINED
 
-struct ORGB { uint32_t v; };
-
 namespace mnd::detail {
 
 inline const char* skip_whitespace(const char* str) noexcept {
@@ -50,13 +48,6 @@ inline const char* skip_whitespace(const char* str) noexcept {
 		++str;
 	}
 	return str;
-}
-
-inline std::string trim(std::string_view s) noexcept {
-	std::stringstream ss{};
-	auto is_ws = [](const char c) -> bool { return std::isspace(c); };
-	while(!s.empty() && !is_ws(s.front())) ss << s;
-	return ss.str();
 }
 
 inline std::string strip_square_brackets(std::string_view s) noexcept {
