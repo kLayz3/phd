@@ -9,10 +9,12 @@
 #include "util/Geometry.h"
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.h"
+#include "util/RunsheetParser.h"
+#include "MPhysics.hxx"
+#include "ExperimentAssumptions.hh"
 
 #include "TFOOTHitCont.h"
 #include "TFRSHitCont.h"
-#include "TFRSCalCont.h"
 #include <cassert>
 #include <cmath>
 
@@ -38,7 +40,7 @@ constexpr A2 elem_to_a2(AtomicNumber e) {
 		case AtomicNumber::Li: return A2{2.5, 3.5};
 		case AtomicNumber::Be: return A2{3.5, 4.5};
 		case AtomicNumber::B:  return A2{4.5, 5.4};
-		case AtomicNumber::C:  return A2{5.4, 6.8};
+		case AtomicNumber::C:  return A2{5.4, 6.6};
 	}
 	return A2{};
 }
@@ -68,6 +70,7 @@ int main(int argc, char* argv[]) {
 	u32 nthreads = 1;
 
 	Select selected{};
+	bool do_scaling = false;
 	auto angle_type = AngleType::all;
 	std::vector<canvas::Extension> save = {};
 
@@ -104,6 +107,8 @@ int main(int argc, char* argv[]) {
 		"[he] : sqrt(Σ θ_i^2) angles between all heavy tracks and a single light one, (N-1) angles.\n"
 		"[p]  : sqrt(Σ θ_i^2) angles between all light tracks and a single heavy one, (N-1) angles.\n"
 		"[all]: sqrt(Σ θ_i^2) combination of all the angles between all the tracks, N*(N-1)/2 angles.");
+	add_logged_flag(app, "--scaling", do_scaling, "Rescale the ρ angle based on the "
+		"calculated kinetic energy of the reaction inside the target");
 	add_logged_option(app, "-o,--save", save, "Save the resulting canvases as one or more extensions.")
 		->delimiter(',');
 	add_logged_option(app, "-i,--info", info,
@@ -136,6 +141,52 @@ int main(int argc, char* argv[]) {
 	if(fileName.size() == 0)
 		ERROR("To continue, must supply at least one file name!\n");
 
+	mnd::fs::load_runsheet();
+	std::unique_ptr<mnd::RunsheetState> run_info;
+	{
+		auto sFront = std::make_unique<mnd::RunsheetState>( mnd::QueryRunsheet(fileName.front()) );
+		auto sBack  = std::make_unique<mnd::RunsheetState>( mnd::QueryRunsheet(fileName.back()) );
+		/* I "trust" the OS that the allocation won't fail, e.g. I'm not dereffing a null here :-) */
+		if(*sFront != *sBack) {
+			WARN("Runsheet status for initial file '%s' is: \n", fileName.front().c_str());
+			std::cerr << *sFront << std::endl;
+			fprintf(stderr, ".. and for the final file '%s' is: \n", fileName.back().c_str());
+			std::cerr << *sBack << "\n" KBH_RED ">> does not match!\n" KNRM;
+		}
+		run_info = std::move(sFront);
+	}
+	WARN("Run-info successfully parsed as: "); std::cerr << *run_info << std::endl;
+	const double ekin_s2 = phy::EKin(
+		run_info->secondary.A,
+		run_info->secondary.Z,
+		phy::Brho_t{run_info->brho.s1_s2}
+	); // per nucleon.
+	WARN("Primary beam: "); std::cerr << run_info->primary << std::endl;
+	WARN("Secondary beam: "); std::cerr << run_info->secondary << std::endl;
+
+	const double avg_ekin_before_target =
+		ekin_s2 - mnd::assume::s2::loss_upto_target;
+	const double avg_ekin_after_target =
+		ekin_s2 - mnd::assume::s2::loss_upto_target - mnd::assume::s2::loss_in_target;
+	const double avg_ekin_reaction = (avg_ekin_before_target + avg_ekin_after_target) / 2.0;
+	const double beta_nominal = phy::Beta(
+		run_info->secondary.A,
+		run_info->secondary.Z,
+		phy::EKin_t{avg_ekin_reaction}
+	);
+	WARN("Assumed values for just before/after 9Be target: "
+		MND_RGB_COL(250, 250,  70) "%.2f MeV/u" KNRM
+		" and "
+		MND_RGB_COL( 70, 160, 250) "%.2f MeV/u\n" KNRM,
+		avg_ekin_before_target, avg_ekin_after_target);
+
+	if(do_scaling) {
+		WARN("Normalising will slightly scale every to the "
+			"average energy in the center of the 9Be target: "
+			KBH_CYN "%.3f" KNRM " , which means: "
+			KBH_BLU " beta = %.5f" KNRM "\n", avg_ekin_reaction, beta_nominal);
+	}
+
 	mnd::python::poke();
 	ROOT::EnableThreadSafety();
 
@@ -148,7 +199,7 @@ int main(int argc, char* argv[]) {
 		const auto& fname = fileName.front();
 		std::array<double, 3>* c;
 		TParameter<double>* m;
-		std::unique_ptr<TFile> f = std::make_unique<TFile>(fname.c_str(), "READ");
+		auto f = std::make_unique<TFile>(fname.c_str(), "READ");
 		get_obj(f, c, "FOOT_cost_coeff");
 		get_obj(f, m, "FOOT_max_cost");
 		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2);

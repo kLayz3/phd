@@ -11,7 +11,7 @@
  * A true algebraic sum type! Nullability isn't tied to
  * a self-defined `nil` subset within `T` itself.
  *
- * ~~ Keep wearing your programming socks ~~~
+ * ~~ Keep wearing your programming socks ~~
  * ⣇⣿⠘⣿⣿⣿⡿⡿⣟⣟⢟⢟⢝⠵⡝⣿⡿⢂⣼⣿⣷⣌⠩⡫⡻⣝⠹⢿⣿⣷
  * ⡆⣿⣆⠱⣝⡵⣝⢅⠙⣿⢕⢕⢕⢕⢝⣥⢒⠅⣿⣿⣿⡿⣳⣌⠪⡪⣡⢑⢝⣇
  * ⡆⣿⣿⣦⠹⣳⣳⣕⢅⠈⢗⢕⢕⢕⢕⢕⢈⢆⠟⠋⠉⠁⠉⠉⠁⠈⠼⢐⢕⢽
@@ -35,6 +35,9 @@
 /* NOTE: No deref/bool operator, unlike STL optional. This is to keep the intent very explicit in the code. */
 
 namespace mnd {
+
+template<typename T> class Option;
+
 namespace type_traits {
 #if __cplusplus >= 202002L /* Mirrors STL-terminology */
 
@@ -56,7 +59,6 @@ using remove_cvref_t = typename remove_cvref<T>::type;
 
 template<typename L, typename R, typename = void>
 struct is_comparable : std::false_type {};
-
 template<typename L, typename R>
 struct is_comparable<L, R, std::void_t<
 	decltype(std::declval<L>() == std::declval<R>())
@@ -64,6 +66,11 @@ struct is_comparable<L, R, std::void_t<
 	decltype(std::declval<L>() == std::declval<R>()),
 	bool
 > {};
+
+template<typename>
+struct is_option : std::false_type {};
+template<typename T>
+struct is_option<Option<T>> : std::true_type {};
 
 } // namespace type_traits
 
@@ -83,7 +90,7 @@ public:
 	using value_type = T; // needed for CLI11
 
 	constexpr Option() : data(None) {};
-	constexpr Option(std::nullopt_t) : data(None) {};
+	constexpr Option(None_t) : data(None) {};
 	
 	template<typename U>
 	constexpr Option(Some<U> some) : data( T{ std::move(some.value) } ) {}
@@ -111,35 +118,51 @@ public:
 	}
 	template<typename F>
 	constexpr auto and_then(F&& f) & {
-		return is_some()
-			? std::invoke(std::forward<F>(f), data.value())
-			: type_traits::remove_cvref_t<std::invoke_result_t<F, T&>>{};
+		using R = type_traits::remove_cvref_t<
+			std::invoke_result_t<F, T&>
+		>;
+		static_assert(type_traits::is_option<R>::value,
+			"mnd::Option<T>::and_then : callback function must return an mnd::Option<U> type"
+		);
+		return is_some() ? std::invoke(std::forward<F>(f), data.value()) : R{};
 	}
 	template<typename F>
 	constexpr auto and_then(F&& f) const& {
-		return is_some()
-			? std::invoke(std::forward<F>(f), data.value())
-			: type_traits::remove_cvref_t<std::invoke_result_t<F, T const&>>{};
+		using R = type_traits::remove_cvref_t<
+			std::invoke_result_t<F, T const&>
+		>;
+		static_assert(type_traits::is_option<R>::value,
+			"mnd::Option<T>::and_then : callback function must return an mnd::Option<U> type"
+		);
+		return is_some() ? std::invoke(std::forward<F>(f), data.value()) : R{};
 	}
 	template<typename F>
 	constexpr auto and_then(F&& f) && {
-		return is_some()
-			? std::invoke(std::forward<F>(f), std::move(data.value()))
-			: type_traits::remove_cvref_t<std::invoke_result_t<F, T>>{};
+		using R = type_traits::remove_cvref_t<
+			std::invoke_result_t<F, T&&>
+		>;
+		static_assert(type_traits::is_option<R>::value,
+			"mnd::Option<T>::and_then : callback function must return an mnd::Option<U> type"
+		);
+		return is_some() ? std::invoke(std::forward<F>(f), std::move(data.value())) : R{};
 	}
 	template<typename F>
 	constexpr auto and_then(F&& f) const&& {
-		return is_some()
-			? std::invoke(std::forward<F>(f), std::move(data.value()))
-			: type_traits::remove_cvref_t<std::invoke_result_t<F, T const>>{};
+		using R = type_traits::remove_cvref_t<
+			std::invoke_result_t<F, T const&&>
+		>;
+		static_assert(type_traits::is_option<R>::value,
+			"mnd::Option<T>::and_then : callback function must return an mnd::Option<U> type"
+		);
+		return is_some() ? std::invoke(std::forward<F>(f), std::move(data.value())) : R{};
 	}
 	template<typename F>
 	constexpr Option or_else( F&& f ) const& {
-		return is_some() ? *this : std::forward<F>(f)();
+		return is_some() ? *this : std::invoke(std::forward<F>(f));
 	};
 	template<typename F>
 	constexpr Option or_else( F&& f ) && {
-		return is_some() ? std::move(*this) : std::forward<F>(f)();
+		return is_some() ? std::move(*this) : std::invoke(std::forward<F>(f));
 	};
 
 	/* fn map<U, F>(self, f: F) -> Option<U> */

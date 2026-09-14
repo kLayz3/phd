@@ -1,3 +1,8 @@
+/* This program is used to initialise a lookup table for nuclear masses.
+ * I don't understand why neither G4 nor ROOT expose a static lookup table for this.
+ * Or at least, something that runs in O(1) time and space, not creating some heap-allocated runtime 
+ * for a single query.. */
+
 #include "TGeoManager.h"
 #include "TGeoElement.h"
 
@@ -22,6 +27,7 @@ void dump_masses(std::ostream& os, int maxZ = 7, int maxA = 14) {
 			"%H:%M:%S %d %b %Y"
 		) << " */\n"
 		<< "namespace phy {\n\n"
+		"/* Return the nuclear mass in units of MeV/c^2 */\n"
 		"template<std::uint32_t A, std::uint32_t Z>\n"
 		"constexpr double mass() noexcept {\n"
 		"  static_assert(A == A+1,\n"

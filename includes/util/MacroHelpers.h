@@ -276,9 +276,9 @@ std::vector<std::string> ParseFile(const std::string& );
 std::string ParseFileToString(const std::string& );
 
 /* Invoke a function `func` over a range of objects, over nthreads.
- * `Range` here binds here to any type anything that is indexable such as array/vector/span.
+ * `Range` here binds to any type that is indexable such as array/vector/span.
  * Function invocation can carry mutable (outside) state, and each thread
- * gets a copy of the functor. */
+ * gets a copy of the functor. This was a fucking nightmare to get right.. */
 template<typename Range, typename F>
 void parallel_process(
 	Range& objects,
@@ -289,7 +289,7 @@ void parallel_process(
 	 * by value and each thread gets its own copy, invokes the functor over the state of its given objects,
 	 * and then merges its copy's mutated objects back to the original one which is sitting in the main thread.
 	 *
-	 * How we achieve this, is that the objects that are explicitly mutated in the lambda must have
+	 * How to achieve this, is that the objects that are explicitly mutated in the lambda must have
 	 * structure similar to TH1P/TH2P, where each cloned object (via T(const T&) copy-ctor) 'remembers' its parent
 	 * as a simple pointer, and during destruction gives its acquired contents back to the parent. */
 	if(objects.empty() || nthreads == 0)
@@ -311,7 +311,7 @@ void parallel_process(
 
 	nthreads = std::min(nthreads, objects.size());
 
-	/* Stable copies that live in this stack frame.
+	/* Stable copies live in this stack frame.
 	 * In particular, these functors will NOT be owned by the
 	 * std::thread/jthread callable objects. Inside, the threads just
 	 * touch the underlying raw ptr. */
@@ -319,8 +319,8 @@ void parallel_process(
 	worker_funcs.reserve(nthreads);
 
     /* Materialize here *exactly* one callable object first.
-     * Each worker below gets a COPY of this object. This original
-	 * functors is to be pinned to this stack frame and does not move. */
+     * Each worker below gets a COPY of this object. The original
+	 * functor is to be pinned to this stack frame and shall not be moved. */
     worker_funcs.emplace_back(
 		std::make_unique<Fn>( std::forward<F>(func) )
 	);

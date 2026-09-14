@@ -149,20 +149,19 @@ mnd::fs::file_info(std::string_view file) {
 
 	std::smatch match;
     if(!std::regex_match(name, match, re)) {
-		MND_THROW("mnd::fs::file_info: provided file name %s%s%s does not "
-			"match the regular expression: %s%s%s",
-			BOLD, name.c_str(), KNRM,
-			BOLD, filename_pattern, KNRM);
+		MND_THROW("mnd::fs::file_info: provided file name \'%s\' does not "
+			"match the regular expression: %s\n",
+			name.c_str(), filename_pattern);
 	}
 	
 	const std::string basename = match[1];
 	std::string_view run_n_start_view = {
-		name.data() + match.position(3), (size_t)match.length(3)
+		name.data() + match.position(2), (size_t)match.length(2)
 	};
-	Option<u32> maybe_n_start = mnd::stou(run_n_start_view);
+	const Option<u32> maybe_n_start = mnd::stou(run_n_start_view);
 	Option<u32> maybe_n_end   = maybe_n_start;
 	if(maybe_n_start.is_none()) {
-        MND_THROW("mnd::fs:file_info: In file name: %*s , "
+        MND_THROW("mnd::fs:file_info: In file name: %s , "
 			"expected `<start>` run number to be "
 			"parsable to uint32_t", name.c_str());
 	}
@@ -173,7 +172,7 @@ mnd::fs::file_info(std::string_view file) {
 		};
 		maybe_n_end = mnd::stou(run_n_end_view);
         if(maybe_n_end.is_none()) {
-			MND_THROW("mnd::fs:file_info: In file name: %*s , "
+			MND_THROW("mnd::fs:file_info: In file name: %s , "
 				"expected `<end>` run number to be "
 				"parsable to uint32_t", name.c_str());
 		}

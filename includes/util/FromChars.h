@@ -8,11 +8,32 @@
 
 namespace mnd {
 
+/* Nicer repr of std::stoi, that will parse a character sequence
+ * to int/unsigned int (stou), it will match the whole sequence to be parsable.
+ * Is currenly accepting only standard C locale, as shown in example [3]
+ * [1]: stoi("1234") -> Some{1234}
+ * [2]: stoi(" 123") -> None
+ * [3]: stoi("123'456") -> None
+ * [4]: stoi("123text") -> None
+ * [5]: stoi("-12")  -> Some{-12}
+ * [6]: stoi("3294967295") -> None
+ * [7]: stou("3294967295") -> Some{3294967295}
+ * [8]: stou("-12") -> None
+ */
 Option<int32_t> stoi(std::string_view );
 Option<uint32_t> stou(std::string_view );
 
-std::string itos(int32_t, uint32_t, char = '0');
-std::string utos(uint32_t, uint32_t, char = '0');
+/* Convert int to string:
+ * arg #1: value
+ * arg #2: padding spaces, will pad to at least this size
+ * arg #3: padding char */
+std::string itos(int32_t, uint32_t = 0, char = '0');
+
+/* Convert unsigned int to string:
+ * arg #1: value
+ * arg #2: padding spaces, will pad to at least this size
+ * arg #3: padding char */
+std::string utos(uint32_t, uint32_t = 0, char = '0');
 
 /* Case where we wish to consume as many chars as possible.
  * On success, removes the parsed prefix and returns its value.
