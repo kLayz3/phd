@@ -4,13 +4,13 @@
 #include "../monad/monad.hxx"
 
 #include <string_view>
-#include <charconv>
 #include <type_traits>
 
 #define CLI11_ENABLE_EXTRA_VALIDATORS 1
 #include "../cli/CLI11.hpp"
 
 #include "Option.hxx"
+#include "FromChars.h"
 
 using DisplayDefault = mnd::BinaryOpt;
 
@@ -219,7 +219,7 @@ template <
 ) {
 	static_assert(
 		std::is_default_constructible_v<T>,
-		"mnd::Option<T> CLI parsing requires default-constructible T"
+		"mnd::Option<T> CLI parsing requires default-constructible type T."
 	);
 	/* God I love undocumented API. So basically the tokenising begins *before*
 	 * transformers take place. E.g. `--flag=!@` cannot be parsed for Option<array> ...
@@ -242,7 +242,7 @@ template <
 		auto input = raw;
 		auto& first = input.front();
 	
-		/* Problem is that for containers, passing a single flag e.g. '~' will result 
+		/* Problem is that for containers, passing a single flag e.g. '~' will result
 		 * in its results vector being padded by empty strings... */
 		auto is_magic = [&input, &first](char symbol) {
 			return first.size() == 1 &&
@@ -261,7 +261,7 @@ template <
 		if(authoritative)
 			first.erase(first.begin());
 
-		/* A lone '!' isn't a valid value. */
+		/* A lone '!' token isn't a valid value. */
 		if(first.empty())
 			return false;
 
@@ -278,8 +278,8 @@ template <
 			/* On successful conversion, keep going. */
 		}
 
-		/* '!x' always wins
-		 * ordinary x is ignored after any !x
+		/* '!x' parse always wins.
+		 * Ordinary x is ignored after any !x
 		 * a later !x can replace an earlier !x */
 		if(!authoritative && state->authoritative_seen)
 			return true;
@@ -377,22 +377,6 @@ std::vector<std::string_view> to_views(const std::vector<std::string>& );
 std::vector<std::string_view> split_view(std::string_view , char );
 std::vector<std::string_view> split_view(std::string&& , char ) = delete;
 
-template<typename T>
-bool parse(std::string_view v, T& out) {
-	static_assert(std::is_integral_v<T> || std::is_floating_point_v<T>,
-		"Type T must either be integral or floating point.");
-	T value{};
-
-	auto [ptr,ec] = std::from_chars(v.data(), v.data() + v.size(), value);
-
-	if(ec != std::errc{} || ptr != v.data() + v.size()) 
-		return false;
-
-	out = value;
-	return true;
-}
-bool parse(std::string_view, bool& );
-
 class Argv {
 	std::vector<std::string> storage;
 	std::vector<char*> argv;
@@ -481,7 +465,7 @@ std::istream& operator>>(std::istream& in, std::vector<T>& out) {
 		}
 		out.push_back(std::move(value));
 	}
-	return in;	
+	return in;
 }
 
 } // namespace mnd

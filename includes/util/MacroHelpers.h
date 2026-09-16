@@ -14,6 +14,7 @@
 
 #include "TROOT.h"
 #include "TCanvas.h"
+#include "TColor.h"
 #include "TInterpreter.h"
 #include "TSystem.h"
 #include "TImage.h"
@@ -180,6 +181,9 @@ void save_all (
 	if(cs.empty()) return;
 	WARN("Will stash %zu canvases as *.%s in path: \'%s\'\n", cs.size(), ext, p.c_str());
 
+	if(extension == Extension::root)
+		TColor::DefinedColors(1); // Save color table with the canvas object(s)
+	
 	for(auto* c : cs) {
 		auto name = std::string(c->GetName());
 		auto outfile = p / (name + "." + ext);

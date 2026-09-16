@@ -199,18 +199,22 @@ public:
 	constexpr void reset() noexcept { data.reset(); }
 	
 	template<typename U>
-	Option& operator=(U&& rhs) {
+	constexpr Option& operator=(U&& rhs) {
 		data = std::forward<U>(rhs);
 		return *this;
 	}
 	template<typename U>
-	Option& operator=(Some<U>&& rhs) {
+	constexpr Option& operator=(Some<U>&& rhs) {
 		data = std::move( rhs.value );
 		return *this;
 	}
 	template<typename U>
-	Option& operator=(const Some<U>& rhs) {
+	constexpr Option& operator=(const Some<U>& rhs) {
 		data = rhs.value;
+		return *this;
+	}
+	constexpr Option& operator=(None_t ) noexcept {
+		reset();
 		return *this;
 	}
 

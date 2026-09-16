@@ -7,7 +7,7 @@
 
 #include "util/MacroHelpers.h"
 #include "util/Option.hxx"
-#include "MPhysics.hxx"
+#include "util/MPhysics.h"
 
 #include "nlohmann/json.hpp"
 
@@ -63,7 +63,6 @@ struct RunsheetState {
 	bool operator!=(const RunsheetState& rhs) const noexcept;
 
 	static RunsheetState from(const nlohmann::json &);
-	static ::phy::Nucleus get_ion(const std::string& , const char* = "");
 };
 std::ostream& operator<<(std::ostream& , const RunsheetState& );
 
@@ -85,9 +84,3 @@ template<> RunsheetState QueryRunsheet<true, RunsheetState>(std::string_view );
 template<> OptRunsheetStatePair QueryRunsheet<false, OptRunsheetStatePair>(std::string_view );
 
 } // namespace mnd
-
-namespace phy {
-
-std::istream& operator>>(std::istream& , Nucleus& );
-
-} // namespace phy

@@ -1,4 +1,5 @@
 /* pybind11 stuff must be first to be included. */
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <pybind11/numpy.h>
@@ -13,6 +14,8 @@
 #include "RtypesCore.h"
 #include "TGraph.h"
 #include "TGraphErrors.h"
+#include <TGaxis.h>
+#include <TVirtualPad.h>
 #include "TROOT.h"
 
 /* First histogramming API thta we left undefined.. */
@@ -104,6 +107,64 @@ TH2P::~TH2P() {
 		parent_dc->h.Add( &this->h );
 	}
 }
+
+void TH1P::Draw(
+	std::function<double(double)> fwd,  // x'= f(x) , lower x  → upper x'
+	std::function<double(double)> bck,  // x = g(x'), upper x' → lower x
+	const char* top_title,
+	Option_t* options
+) {
+	h.Draw(options);
+	gPad->SetGrid();
+	gPad->SetTopMargin(0.15);
+	gPad->Update();
+
+	const double xmin = gPad->GetUxmin();
+	const double xmax = gPad->GetUxmax();
+	double fmin_ = fwd(xmin), fmax_ = fwd(xmax);
+	const double xprime_min = std::min(fmin_, fmax_);
+	const double xprime_max = std::max(fmin_, fmax_);
+
+	const double ytop = gPad->GetUymax();
+	
+	/* Function input is the TOP-axis value; output is the original x. 
+	 * So: x = g(x') , aka the `bck` function. */
+	auto* mapping = new TF1(
+		Form("_t_axis_inv_%s", h.GetName()),
+		[f = std::move(bck)](double *xprime, double* _) -> double {
+			(void)_;
+			return f(*xprime);
+		},
+		xprime_min, xprime_max,
+		0
+	);
+	mapping->SetBit(TF1::kNotDraw);
+	mapping->AddToGlobalList(true);
+	mapping->SetNpx(10000);
+	h.GetListOfFunctions()->Add(mapping);
+
+	auto top = new TGaxis(
+		xmin, ytop,
+		xmax, ytop,
+		mapping->GetName(),
+		510, "-"
+	);
+
+	top->SetTitle(top_title);
+	
+	const auto* xaxis = h.GetXaxis();
+	top->SetLabelFont(xaxis->GetLabelFont());
+	top->SetTitleFont(xaxis->GetTitleFont());
+	top->SetLabelSize(xaxis->GetLabelSize());
+	top->SetTitleSize(xaxis->GetTitleSize());
+	top->SetLabelOffset(0.0);
+	top->SetTitleOffset(1.35);
+
+	top->Draw();
+	gPad->SetGrid();
+	gPad->Modified();
+	gPad->Update();
+};
 
 namespace py = pybind11;
 using namespace pybind11::literals;
@@ -868,14 +929,25 @@ auto Figure::title(const TObject* obj) && -> Figure {
 		title_ = obj->GetTitle();
 	return std::move(*this);
 }
-auto Figure::legend(bool enabled) && -> Figure {
-	legend_ = enabled;
+auto Figure::figsize(double x, double y) && -> Figure {
+	if(!std::isfinite(x) || x <= 0 || !std::isfinite(y) || y <= 0) {
+		fprintf(stderr, "Figure::figsize(double,double): passed invalid (%.2f,%.2f) values. Ignoring this request.\n",
+			x,y);
+	} else {
+		figsize_ = {x,y};
+	}
 	return std::move(*this);
 }
-auto Figure::logy(bool enabled) && -> Figure {
-	logy_ = enabled;
+auto Figure::save_dpi(double value) && -> Figure {
+	if(!std::isfinite(value) || value <= 0) {
+		fprintf(stderr, "Figure::save_dpi(double): passed invalid (%.2f) value. Ignoring this request.\n",
+			value);
+	} else {
+		save_dpi_ = value;
+	}
 	return std::move(*this);
 }
+
 auto Figure::xlim(double lo, double hi) && -> Figure {
 	xlim_ = {lo, hi};
 	return std::move(*this);
@@ -888,12 +960,20 @@ auto Figure::logx(bool v) && -> Figure {
 	logx_ = v;
 	return std::move(*this);
 }
+auto Figure::logy(bool enabled) && -> Figure {
+	logy_ = enabled;
+	return std::move(*this);
+}
 auto Figure::grid(bool v) && -> Figure {
 	grid_ = v;
 	return std::move(*this);
 }
 auto Figure::enable_right_top_spline(bool v) && -> Figure {
 	hide_right_and_top_spline_ = !v;
+	return std::move(*this);
+}
+auto Figure::legend(bool enabled) && -> Figure {
+	legend_ = enabled;
 	return std::move(*this);
 }
 
@@ -1035,10 +1115,24 @@ void Figure::save(const std::filesystem::path& path) const {
 	 * the one which initialized Python. */
 	py::gil_scoped_acquire gil;
 
+	py::dict kwargs;
+
+	if(figsize_) {
+		auto mpl = py::module_::import("matplotlib");
+		const double dpi = save_dpi_.value_or(
+			mpl.attr("rcParams")["figure.dpi"].cast<double>()
+		);
+
+		const auto [width, height] = *figsize_; // Asserted positive in the setter
+
+		kwargs["figsize"] = py::make_tuple(width / dpi, height / dpi);
+		kwargs["dpi"] = dpi;
+	}
+
 	auto plt = py::module_::import("matplotlib.pyplot");
 
 	auto result =
-		plt.attr("subplots")().cast<py::tuple>();
+		plt.attr("subplots")(**kwargs).cast<py::tuple>();
 
 	py::object fig = result[0];
 	py::object ax  = result[1];
@@ -1105,10 +1199,13 @@ void Figure::save(const std::filesystem::path& path) const {
 
 		fig.attr("tight_layout")();
 
-		/*
-		 * matplotlib infers PDF/PNG/SVG/etc. from the extension.
-		 */
-		fig.attr("savefig")(path.string());
+		/* matplotlib infers PDF/PNG/SVG/etc. from the extension. */
+		py::dict save_kwargs;
+
+		if(save_dpi_) save_kwargs["dpi"] = *save_dpi_;
+		else          save_kwargs["dpi"] = "figure";
+
+		fig.attr("savefig")(path.string(), **save_kwargs);
 
 		plt.attr("close")(fig);
 	}

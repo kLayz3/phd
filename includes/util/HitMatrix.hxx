@@ -74,21 +74,21 @@ struct Cached {
 	decltype(auto) operator()(size_t i, size_t j) const noexcept { return ( cache(i,j) ); }
 	decltype(auto) operator()(size_t i, size_t j)       noexcept { return ( cache(i,j) ); }
 
-	inline void resize(size_t nx, size_t ny) __attribute__((always_inline)) {
+	MND_FORCE_INLINE void resize(size_t nx, size_t ny) noexcept {
 		cache.resize(static_cast<Eigen::Index>(nx),
 		             static_cast<Eigen::Index>(ny));
 	}
-	inline void clear() __attribute__((always_inline)) {
+	MND_FORCE_INLINE void clear() noexcept {
 		for(auto j = 0; j < cache.cols(); ++j)
 			for(auto i = 0; i < cache.rows(); ++i) {
-				cache(i,j).reset(); 
+				cache(i,j).reset();
 			}
 	}
-	inline void resize_and_clear(size_t nx, size_t ny) { 
+	MND_FORCE_INLINE void resize_and_clear(size_t nx, size_t ny) noexcept {
 		this->resize(nx, ny);
 		this->clear();
 	}
-	
+
 private:
 	Storage cache;
 };

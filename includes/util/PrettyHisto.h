@@ -190,9 +190,8 @@ protected:
 } // namespace mnd::hist
 
 #define MND_FWD_DRAW(inner) \
-	template<typename... Ts> \
-	auto Draw(Ts&&... args) { \
-		h.Draw( std::forward<Ts>(args)... ); \
+	void Draw(Option_t* options = "") { \
+		h.Draw(options); \
 		if(gPad) gPad->SetGrid(); \
 	}
 
@@ -269,6 +268,18 @@ struct TH1P : public mnd::hist::TH1B {
 	MND_FWD_DRAW(h);
 	MND_FWD_FCN(Fill, h);
 
+	/* Special Draw method. To also allow for the upper transformed x-axis.
+	 * First argument is the mapping x' = f(x),
+	 * Second argument is the inverse mapping x = g(x') ,
+	 * where x is the standard lower x-axis,
+	 * and x' is the transformed upper axis. Mapping f(x) must be monotonic and invertible. */
+	void Draw(
+		std::function<double(double)> fwd, // x'= f(x) , lower x  → upper x'
+		std::function<double(double)> bck, // x = g(x'), upper x' → lower x
+		const char* top_title = "",
+		Option_t* options = ""
+	);
+
 	/* Draw while also fitting a small gauss-chan 🥺 👉👈 around the peak value. */
 	inline auto DrawAndFit (
 		double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
@@ -305,8 +316,7 @@ struct TH1P : public mnd::hist::TH1B {
 		return fitresult;
 	}
 
-	inline __attribute__((always_inline))
-	bool IsInside(double x) const noexcept {
+	inline bool IsInside(double x) const noexcept {
 		return (
 			x >= h.GetXaxis()->GetXmin() &&
 			x <  h.GetXaxis()->GetXmax()
@@ -416,8 +426,7 @@ struct TH2P : public mnd::hist::TH1B {
 	MND_FWD_DRAW(h);
 	MND_FWD_FCN(Fill, h);
 
-	inline __attribute__((always_inline))
-	bool IsInside(double x, double y) const noexcept {
+	inline bool IsInside(double x, double y) const noexcept {
 		return (
 			x >= h.GetXaxis()->GetXmin() &&
 			x <  h.GetXaxis()->GetXmax() &&
@@ -744,7 +753,9 @@ struct Figure {
 	auto ylabel(std::string ) && -> Figure;
 	auto ylabel(const TObject* ) && -> Figure;
 	auto title(std::string ) && -> Figure;
-	auto title(const TObject*) && -> Figure;
+	auto title(const TObject* ) && -> Figure;
+	auto figsize(double , double ) && -> Figure;
+	auto save_dpi(double ) && -> Figure;
 
 	auto xlim(double , double ) && -> Figure;
 	auto ylim(double , double ) && -> Figure;
@@ -763,6 +774,9 @@ private:
 	std::string xlabel_;
 	std::string ylabel_;
 	std::string title_;
+	
+	Maybe<std::pair<uint32_t, uint32_t>> figsize_;
+	Maybe<double> save_dpi_;
 
 	Maybe<std::pair<double, double>> xlim_;
 	Maybe<std::pair<double, double>> ylim_;
@@ -781,4 +795,4 @@ namespace mnd::python {
 /* Poke the embedded Python interpreter. */
 void poke(bool verbose = false);
 
-}
+} // namespace mnd::python

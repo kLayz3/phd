@@ -1,11 +1,10 @@
 #include "CLI.h"
 #include <cstring>
 #include <string>
-#include <type_traits>
 
 mnd::Option<std::string_view> mnd::extract_text_body (
 	std::string_view block_name,
-	std::string_view text, 
+	std::string_view text,
 	std::string_view label
 ) {
 	std::string needle;
@@ -91,12 +90,12 @@ mnd::Argv mnd::parse_argv(std::string_view text, std::string program_name) {
 					break;
 				};
 
-				case '\'': { 
+				case '\'': {
 					++i;
 					while(i < text.size() && text[i] != '\'')
 						arg.push_back(text[i++]);
 
-					if(i == text.size()) ERROR("unterminated single quote\n"); 
+					if(i == text.size()) ERROR("unterminated single quote\n");
 					// At this point: text[i] == '\'';
 					++i;
 					break;
@@ -106,7 +105,7 @@ mnd::Argv mnd::parse_argv(std::string_view text, std::string program_name) {
 					++i;
 					while(i < text.size() && text[i] != '"') {
 						if(text[i] == '\\') {
-							++i; 
+							++i;
 							if(i == text.size()) ERROR("dangling backslash in double quote\n");
 							// Will directly encode the i+1 char.
 						}
@@ -159,18 +158,6 @@ std::vector<std::string_view> mnd::split_view(std::string_view text, char sep) {
 	}
 	tokens.emplace_back(text.substr(start));
 	return tokens;
-}
-
-bool mnd::parse(std::string_view v, bool& b) {
-	if(v == "true" || v == "True" || v == "TRUE" || v == "1") {
-		b = true;
-		return true;
-	}
-	if(v == "false" || v == "False" || v == "FALSE" || v == "0") {
-		b = false;
-		return true;
-	}
-	return false;
 }
 
 #ifdef __linux__

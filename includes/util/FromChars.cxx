@@ -2,7 +2,6 @@
 
 #include <iterator>
 #include <sstream>
-#include <charconv>
 #include <iomanip>
 
 using i32 =  int32_t;
@@ -77,3 +76,16 @@ mnd::Option<i32> mnd::stoi_munch(std::string_view& sv) {
 mnd::Option<u32> mnd::stou_munch(std::string_view& sv) {
 	return string_to_i_helper_<u32, false, true>(sv);
 }
+
+bool mnd::parse(std::string_view v, bool& b) {
+	if(v == "true" || v == "True" || v == "TRUE" || v == "1") {
+		b = true;
+		return true;
+	}
+	if(v == "false" || v == "False" || v == "FALSE" || v == "0") {
+		b = false;
+		return true;
+	}
+	return false;
+}
+

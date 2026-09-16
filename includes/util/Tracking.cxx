@@ -3,7 +3,7 @@
 #include "TH2D.h"
 
 void FillTrack (
-	TH2D* hist, 
+	TH2D* hist,
 	const std::array<double, 2>& a,
 	double z_lo,
 	double z_hi

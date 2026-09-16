@@ -14,9 +14,8 @@
 #include "util/Geometry.h"
 #include "util/FitDrawer.hxx"
 #include "util/Tracking.h"
+#include "util/MPhysics.h"
 #include "common/MacroCommon.hxx"
-
-#include "MPhysics.hxx"
 
 #include "TApplication.h"
 #include "TFRSCalCont.h"
@@ -137,8 +136,8 @@ int main(int argc, char* argv[]) {
         auto model = RNTupleModel::Create();
         auto frs = model->MakeField<RNFRSCal>("FRS");
         auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
-        const double beta_inc = phy::Beta(Q0, A0, brho.s2_incoming());
-        const double beta_out = phy::Beta(Q0, A0, brho.s2_outgoing());
+        const double beta_inc = phy::Beta(Q0, A0, phy::Brho_t{brho.s2_incoming()});
+        const double beta_out = phy::Beta(Q0, A0, phy::Brho_t{brho.s2_outgoing()});
 
         /* Containers for TPC extrapolation. */
         std::vector<double> xe, ye, ze;

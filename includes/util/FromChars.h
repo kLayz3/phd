@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string_view>
 #include <string>
+#include <charconv>
 
 #include "util/Option.hxx"
 
@@ -40,6 +41,22 @@ std::string utos(uint32_t, uint32_t = 0, char = '0');
  * On invalid input or overflow, returns None and leaves the view unchanged. */
 Option<int32_t> stoi_munch(std::string_view& );
 Option<uint32_t> stou_munch(std::string_view& );
+
+template<typename T>
+bool parse(std::string_view v, T& out) {
+	static_assert(std::is_integral_v<T> || std::is_floating_point_v<T>,
+		"Type T must either be integral or floating point.");
+	T value{};
+
+	auto [ptr,ec] = std::from_chars(v.data(), v.data() + v.size(), value);
+
+	if(ec != std::errc{} || ptr != v.data() + v.size())
+		return false;
+
+	out = value;
+	return true;
+}
+bool parse(std::string_view, bool& );
 
 /* Remove leading and trailing whitespaces from a view. Doesn't mutate the underlying buffer,
  * only returns the trimmed view object. */

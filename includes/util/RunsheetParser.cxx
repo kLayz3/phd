@@ -1,7 +1,6 @@
-#include "RunsheetParser.h"
-#include "JSONParser.h"
-#include "FromChars.h"
-#include "MPhysics.hxx"
+#include "util/RunsheetParser.h"
+#include "util/JSONParser.h"
+#include "util/FromChars.h"
 #include <string>
 
 nlohmann::json mnd::fs::runsheet_obj {};
@@ -51,49 +50,6 @@ bool mnd::RunsheetState::operator!=(const RunsheetState& rhs) const noexcept {
 	return !(*this == rhs);
 }
 
-/* Parse an nucleus string to the phy::Nucleus state.
- * get_ion("16O6+") => Nucleus{ .A = 16, .Z = 8, .N_electrons = Some{2} }
- * get_ion("")      => Nucleus{ .A = DEFAULT_A_PRIMARY, .Z = DEFAULT_Z_PRIMARY, .N_electrons = None }
- * Second argument is only a description string for possible error message. */
-::phy::Nucleus mnd::RunsheetState::get_ion(const std::string& str, const char* desc) {
-	std::string_view view = mnd::trim(str);
-
-	Option<u32> A = mnd::stou_munch(view);
-	if(A.is_none()) {
-		WARN("mnd::RunsheetState::get_ion(\"%s\") for input string \'%s\', "
-			"couldn't parse out the mass number (A). Got `None`. "
-			"Setting the value to default: %u\n", desc, str.c_str(), DEFAULT_A_PRIMARY);
-		A = Some{DEFAULT_A_PRIMARY};
-	}
-
-	Option<u32> Z = phy::Z(view);
-	if(Z.is_none()) {
-		WARN("mnd::RunsheetState::get_ion(\"%s\") for input string \'%s\' "
-			"(current view: \'%*s\'), "
-			"couldn't parse out the atomic number (Z). Got `None`. "
-			"Setting the value to default: %u\n", desc, str.c_str(),
-			(int)view.length(), view.data(), DEFAULT_A_PRIMARY);
-		Z = Some{DEFAULT_Z_PRIMARY};
-	}
-	
-	/* Possible whitespaces before charge state */
-	view = mnd::trim(view);
-	
-	/* Try to also parse the atomic charge.. Maybe not given. */
-	Option<u32> Q = mnd::stou_munch(view);
-	if(view.empty() or view[0] != '+')
-		Q.reset();
-
-	return ::phy::Nucleus {
-		.A = A.unwrap(),
-		.Z = Z.unwrap(),
-		.N_electrons = Q.and_then([&Z](const u32 q) -> Option<u16> {
-			return (Z.unwrap() >= q) ? Some{(u16)(Z.unwrap() - q)} : Some{u16{0}};
-		})
-	};
-	/* There can be more junk after the parse, but that's fine. */
-}
-
 mnd::RunsheetState mnd::RunsheetState::from(const nlohmann::json& j) {
 	return RunsheetState {
 		.brho = {
@@ -102,11 +58,11 @@ mnd::RunsheetState mnd::RunsheetState::from(const nlohmann::json& j) {
 			.s3_s4 = j_value<double>(j, fs::brho::s3_s4).value_or(NAN)
 		},
 		.e0 = j_value<double>(j, fs::e_primary).value_or(NAN),
-		.primary  = get_ion(
-			j_value<std::string>(j, fs::i_primary).value_or(""), fs::i_primary
+		.primary  = phy::Nucleus::get_ion(
+			j_value<std::string>(j, fs::i_primary).value_or(""), false, fs::i_primary
 		),
-		.secondary = get_ion(
-			j_value<std::string>(j, fs::i_secondary).value_or(""), fs::i_secondary
+		.secondary = phy::Nucleus::get_ion(
+			j_value<std::string>(j, fs::i_secondary).value_or(""), false, fs::i_secondary
 		)
 	};
 }
@@ -197,12 +153,4 @@ mnd::RunsheetState mnd::QueryRunsheet<
 	}
 	
 	return start_info.unwrap();
-}
-
-std::istream& phy::operator>>(std::istream& is, Nucleus& nucleus) {
-	std::string token;
-	if(is >> token)
-		nucleus = mnd::RunsheetState::get_ion(token);
-
-	return is;
 }

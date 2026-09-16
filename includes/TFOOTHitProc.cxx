@@ -97,7 +97,7 @@ bool operator>(const TrackCost& c, double max_cost) {
 		case 1: return c.sum() > max_cost * 1.4; // kq             + kt       
 		case 2: return c.sum() > max_cost * 1.2; // kq + kr        + kt(3 pts)
 		case 3: return c.sum() > max_cost * 1.0; // kq + kr(3 pts) + kt(4 pts)
-		default: __builtin_unreachable();
+		default: mnd::unreachable();
 	}
 }
 inline bool operator<(const TrackCost& c, double max_cost) noexcept { return !(c > max_cost); } 
@@ -282,7 +282,7 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 				this->ProcessPair(PairRef{f2,f1}, ipair);
 				break;
 			default:
-				__builtin_unreachable();
+				mnd::unreachable();
 		}
 		++ipair;
 	});
