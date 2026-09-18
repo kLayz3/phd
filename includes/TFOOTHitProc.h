@@ -32,10 +32,10 @@ struct TrackCost {
 
 	// For k==3 degrees of freedom: total Chi^2 of about 12 is 99% confidence. 
 	// In ideal world... but both `kt` and `kq` can dance like crazy. */
-	constexpr static double DEFAULT_MAX_CANDIDATE_COST = 500;
-	constexpr static double DEFAULT_MAX_FINAL_COST = 20;
+	static constexpr double DEFAULT_MAX_CANDIDATE_COST = 500;
+	static constexpr double DEFAULT_MAX_FINAL_COST = 20;
 
-	constexpr static double NIL_VALUE = NAN;
+	static constexpr double NIL_VALUE = NAN;
 	
 	enum F { KR, KQ, KT };
 
@@ -110,15 +110,18 @@ struct TFOOTHitProc : TProcessor <
 	( BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (,) ) )
 > {
 	using Base = TProcessor<TFOOTHitCont( BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (,) ) )>;
-	constexpr static u32 N_PAIRS = TFOOTHitCont::N_PAIRS;
+	static constexpr u32 N_PAIRS = TFOOTHitCont::N_PAIRS;
 
 	using FHitMatrix = HitMatrix<RNFOOTPair>;
 	using FTrackOnline = Track<N_PAIRS, RNFOOTPair>;
 
-	constexpr static float CLUSTER_SIZE_ONE_Q_CUTOFF = 1.3; // when cluster size == 1 doesn't make sense anymore.
-	constexpr static double TARGET_Z = 0.0; // by convention. In Kalman coordinates, place target nominally at 0.0
-	                                        // Will be shifted back to "real" FRS coordinates later.
-	constexpr static u32 MAX_CANDIDATES = 10; // To how many paths can a node branch to (at most)
+	static constexpr float CLUSTER_SIZE_ONE_Q_CUTOFF = 1.3; // when cluster size == 1 doesn't make sense anymore.
+
+	/* Convention. In Kalman coordinates, place target's FOOT-facing edge nominally at 0.0.
+	 * Will be shifted back to "real" FRS coordinates later. */
+	static constexpr double TARGET_Z = TFOOTHitCont::TARGET_Z;
+
+	static constexpr u32 MAX_CANDIDATES = 10; // To how many paths can a node branch to (at most)
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
 	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ),
@@ -129,7 +132,7 @@ struct TFOOTHitProc : TProcessor <
 		Verbosity = Verbosity::SILENT);
 	TFOOTHitProc() = default;
 	
-	static Verbosity v;	
+	static Verbosity v;
 	static bool requires_valid_upstream_track;
 
 	double kr(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;

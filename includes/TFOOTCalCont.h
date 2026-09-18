@@ -10,6 +10,7 @@
 #include "util/json_struct_def.hh"
 #include "util/PolyFitter.h"
 #include "util/Tracking.h"
+#include "ExperimentAssumptions.hh"
 
 #include "TGraph.h"
 #include "TH1D.h"
@@ -477,6 +478,12 @@ struct ExpertTarget {
 	ADD_SERIALIZABLE_FIELD(double, dx,        0.0, 3)
 	ADD_SERIALIZABLE_FIELD(double, dy,        0.0, 4)
 	ADD_SERIALIZABLE_FIELD(double, dz,        0.0, 5)
+
+	/* Target width in units of [mm] */
+	double Width() const noexcept {
+		return 10.0 * thickness / mnd::assume::s2::target_density;
+	}
+
 	virtual ~ExpertTarget() = default;
 	ClassDef(ExpertTarget, 1);
 };
@@ -524,7 +531,7 @@ struct FOOTBoxParam {
 	inline double GetFOOTZRel(const int n, const FOOTParam* p = nullptr) const noexcept {
 		return GetFOOTZ(n, p) - GetTargetZ();
 	}
-	inline double GetFOOTZRel(const FOOTParam* p) const noexcept { 
+	inline double GetFOOTZRel(const FOOTParam* p) const noexcept {
 		return GetFOOTZ(p) - GetTargetZ();
 	}
 	

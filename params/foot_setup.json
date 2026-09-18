@@ -1,22 +1,23 @@
 {
-	// Common FOOT box parameters. 
-	// Taken from Chamber_ASM_dwg_v3_1
+	// Common FOOT box parameters.
+	// Some from Chamber_ASM_dwg_v3_1, some from more thorough calibration.
 	"box" : {
-		"z0": 3355, // Nominal placement of the center of the box.
+		"z0": 3355, // Nominal placement of the center of the box, as in 'FRS Abstaende'
 		"width_outer": 435.5,
-		// FOOT detector nominal `z` positions, relative to the box' outer edge (edge with smaller z)
-		"det_pos": [31.45, 43.40, 150.30, 162.25, 281.60, 293.55, 400.45, 412.40], // <--- very good, dx=5.5
-		"dx": 0.0, // Small offset in x- direction 
-		"dy": 0.0, // Small offset in y- direction
-		"da": 0.0, // Small offset in x- angle relative to the TPCs' defined axis.
-		"db": 0.0, // Small offset in y- angle relative to the TPCs' defined axis.
+		// FOOT detector nominal `z` positions, relative to the box' outer-outer edge (edge with smaller z)
+		"det_pos": [31.45, 43.40, 150.30, 162.25, 281.60, 293.55, 400.45, 412.40], // <--- very good, dx=5.5 in script
+		"dx": 0.0, // Small [mm] offset in x- direction
+		"dy": 0.0, // Small [mm] offset in y- direction
+		"da": 0.0, // Small [deg] offset in x- angle relative to the TPCs' defined axis.
+		"db": 0.0, // Small [deg] offset in y- angle relative to the TPCs' defined axis.
 		"target": {
-			"thickness": 7450, // mg/cm
-			"width_x": 200.0,  // mm
-			"width_y": 20.0,   // mm
-			"dx": 0.0,         // mm 
-			"dy": 0.0,         // mm
-			"dz": -10.1        // mm; distance relative to the box' inner outer edge (i.e: without the metal frame)
+			"thickness": 7.426, // [g/cm^2]
+			"width_x": 200.0,   // [mm]
+			"width_y": 20.0,    // [mm]
+			"dx": 0.0,          // [mm]
+			"dy": 0.0,          // [mm]
+			"dz": -8.1          // [mm]; distance relative to the box' inner-outer edge (i.e: without the metal frame)
+			                    // This is also the nominal position of the outer edge (edge with larger z) of the target.
 		}
 	},
 	"FOOT10": {  // Per detector parameters
@@ -27,7 +28,7 @@
 		"c_threshold": 3.0, //      Central Threshold (sigma units)
 		"n_threshold": 1.5, // Neighbouring Threshold (sigma units)
 		"delta_p": -1.8896, // Offset in its measuring dimension [mm] (reminder: strip units == 150 um)
-		"delta_a": 0.0,     // Offset in angle [degrees], around the z-axis. 
+		"delta_a": 0.0,     // Offset in angle [degrees], around the z-axis.
 		"gain": {
 			"fit": [
 				{

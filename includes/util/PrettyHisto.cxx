@@ -18,7 +18,7 @@
 #include <TVirtualPad.h>
 #include "TROOT.h"
 
-/* First histogramming API thta we left undefined.. */
+/* First histogramming API that we left undefined.. */
 
 #define APPEND_TO_TITLE_IMPL(THXP) \
 void THXP::AppendToTitle(std::string_view v) { \
@@ -44,9 +44,27 @@ void THXP::AppendToTitle(std::string_view v) { \
 	} \
 	h.SetTitle( current_title.c_str() ); \
 }
-
 APPEND_TO_TITLE_IMPL(TH1P);
 APPEND_TO_TITLE_IMPL(TH2P);
+
+template<TH2P::EOrientation_ o>
+static void append_axis_title_(TH1& h, std::string_view v) {
+	auto title = std::string{ h.GetXaxis()->GetTitle() };
+	title += std::string{v};
+	h.GetXaxis()->SetTitle(title.c_str());
+}
+
+void TH1P::AppendToAxisTitle(std::string_view v) {
+	append_axis_title_<TH2P::X>(h,v);
+}
+template<>
+void TH2P::AppendToAxisTitle<TH2P::X>(std::string_view v) {
+	append_axis_title_<TH2P::X>(h,v);
+}
+template<>
+void TH2P::AppendToAxisTitle<TH2P::Y>(std::string_view v) {
+	append_axis_title_<TH2P::Y>(h,v);
+}
 
 /* This part is so hacked. There must be a nicer way, not to abuse
  * const cast haha. */
@@ -64,7 +82,7 @@ TH1P& TH1P::operator=(const TH1P& rhs) {
 	return *this;
 }
 TH1P::~TH1P() {
-	/* If parent exists then `Add` all of its contents to it. */
+	/* If parent exists then TH1::Add all of its contents to it. */
 	if(_parent) {
 		TH1P* parent_dc = dynamic_cast<TH1P*>(_parent);
 		/* Can't throw an exception in dtor. Dangerous stuff.
@@ -108,63 +126,146 @@ TH2P::~TH2P() {
 	}
 }
 
-void TH1P::Draw(
-	std::function<double(double)> fwd,  // x'= f(x) , lower x  → upper x'
-	std::function<double(double)> bck,  // x = g(x'), upper x' → lower x
+template<TH2P::EOrientation_ o>
+static void draw_base_(
+	TH1& h,
+	std::function<double(double)>&& fwd,  // x'= f(x) , lower x  → upper x'
+	std::function<double(double)>&& bck,  // x = g(x'), upper x' → lower x
 	const char* top_title,
 	Option_t* options
 ) {
-	h.Draw(options);
+	constexpr double right_axis_position_ratio = 0.91;
+	constexpr double margin_offset_top   = 0.15;
+	constexpr double margin_offset_right = 0.15;
+	const char* label_ = "";
+	if constexpr(o == TH2P::X) {
+		label_ = "x";
+	} else {
+		label_ = "y";
+	}
+	const std::string tf1_label = std::string{Form("_t_axis_%s_inv_%s", label_, h.GetName())};
+
+	if(h.GetListOfFunctions()->FindObject(tf1_label.c_str()) != nullptr)
+		throw std::runtime_error( Form("THXP::Draw(<func>, <func>, ...): object with the name '%s' "
+			"already found. Not allowed to redraw a same histogram with this call.", tf1_label.c_str()));
+
+	const bool already_drawn =
+		gPad && gPad->GetListOfPrimitives()->FindObject(&h);
+
+	if(!already_drawn)
+		h.Draw(options); // will force gPad object now.
+	
 	gPad->SetGrid();
-	gPad->SetTopMargin(0.15);
+
+	if constexpr(o == TH2P::X) {
+		gPad->SetTopMargin(margin_offset_top);
+	} else {
+		gPad->SetRightMargin(margin_offset_right);
+	}
+	gPad->Modified();
 	gPad->Update();
 
-	const double xmin = gPad->GetUxmin();
-	const double xmax = gPad->GetUxmax();
-	double fmin_ = fwd(xmin), fmax_ = fwd(xmax);
+	double xmin, xmax, ytop;
+	
+	if constexpr(o == TH2P::X) {
+		xmin = gPad->GetUxmin();
+		xmax = gPad->GetUxmax();
+		ytop = gPad->GetUymax();
+	} else { // o == TH2P::Y
+		xmin = gPad->GetUymin();
+		xmax = gPad->GetUymax();
+		ytop = right_axis_position_ratio
+			*(gPad->GetUxmax() - gPad->GetUxmin())
+			+ gPad->GetUxmin();
+	}
+	const double fmin_ = fwd(xmin), fmax_ = fwd(xmax);
 	const double xprime_min = std::min(fmin_, fmax_);
 	const double xprime_max = std::max(fmin_, fmax_);
 
-	const double ytop = gPad->GetUymax();
-	
-	/* Function input is the TOP-axis value; output is the original x. 
+	/* Function input is the TOP-axis value; output is the original x.
 	 * So: x = g(x') , aka the `bck` function. */
 	auto* mapping = new TF1(
-		Form("_t_axis_inv_%s", h.GetName()),
+		tf1_label.c_str(),
 		[f = std::move(bck)](double *xprime, double* _) -> double {
 			(void)_;
 			return f(*xprime);
 		},
-		xprime_min, xprime_max,
-		0
+		xprime_min, xprime_max, 0
 	);
 	mapping->SetBit(TF1::kNotDraw);
 	mapping->AddToGlobalList(true);
 	mapping->SetNpx(10000);
 	h.GetListOfFunctions()->Add(mapping);
 
-	auto top = new TGaxis(
-		xmin, ytop,
-		xmax, ytop,
-		mapping->GetName(),
-		510, "-"
-	);
+	TGaxis* top;
+	if constexpr(o == TH2P::X) {
+		top = new TGaxis(
+			xmin, ytop,
+			xmax, ytop,
+			mapping->GetName(),
+			50510, "-"
+		);
+	} else {
+		top = new TGaxis(
+			ytop, xmin,
+			ytop, xmax,
+			mapping->GetName(),
+			50510, "+L"
+		);
+	}
 
 	top->SetTitle(top_title);
 	
-	const auto* xaxis = h.GetXaxis();
-	top->SetLabelFont(xaxis->GetLabelFont());
-	top->SetTitleFont(xaxis->GetTitleFont());
-	top->SetLabelSize(xaxis->GetLabelSize());
-	top->SetTitleSize(xaxis->GetTitleSize());
-	top->SetLabelOffset(0.0);
-	top->SetTitleOffset(1.35);
-
+	const TAxis* axis; // current stable referent axis
+	if constexpr(o == TH2P::X) {
+		axis = h.GetXaxis();
+	} else {
+		axis = h.GetYaxis();
+	}
+	top->SetLabelFont(axis->GetLabelFont());
+	top->SetTitleFont(axis->GetTitleFont());
+	top->SetLabelSize(axis->GetLabelSize());
+	top->SetTitleSize(axis->GetTitleSize());
+	if constexpr(o == TH2P::X) {
+		top->SetLabelOffset(0.0);
+		top->SetTitleOffset(1.35);
+	} else {
+		top->SetTitleOffset(0.5);
+	}
+	
 	top->Draw();
 	gPad->SetGrid();
 	gPad->Modified();
 	gPad->Update();
 };
+
+void TH1P::Draw(
+	std::function<double(double)> fwd, // x'= f(x) , lower x  → upper x'
+	std::function<double(double)> bck, // x = g(x'), upper x' → lower x
+	const char* top_title,
+	Option_t* options
+) {
+	draw_base_<TH2P::X>(h, std::move(fwd), std::move(bck), top_title, options);
+}
+
+template<>
+void TH2P::Draw<TH2P::X>(
+	std::function<double(double)> fwd, // x'= f(x) , lower x  → upper x'
+	std::function<double(double)> bck, // x = g(x'), upper x' → lower x
+	const char* top_title,
+	Option_t* options
+) {
+	draw_base_<TH2P::X>(h, std::move(fwd), std::move(bck), top_title, options);
+}
+template<>
+void TH2P::Draw<TH2P::Y>(
+	std::function<double(double)> fwd, // x'= f(x) , lower x  → upper x'
+	std::function<double(double)> bck, // x = g(x'), upper x' → lower x
+	const char* top_title,
+	Option_t* options
+) {
+	draw_base_<TH2P::Y>(h, std::move(fwd), std::move(bck), top_title, options);
+}
 
 namespace py = pybind11;
 using namespace pybind11::literals;
@@ -401,7 +502,7 @@ std::istream& mnd::col::operator>>(std::istream& in, RGBA& out) {
 	return in;
 }
 
-template<bool PrettyPrint>
+template<bool pretty>
 std::ostream& mnd::col::operator<<(std::ostream& os, const RGBA& o) {
 	const uint32_t packed = o.pack();
 	
@@ -411,7 +512,7 @@ std::ostream& mnd::col::operator<<(std::ostream& os, const RGBA& o) {
 
 	os << ansi_rgb(r,g,b);
 	
-	if constexpr(PrettyPrint) {
+	if constexpr(pretty) {
 		std::stringstream opacity {};
 		if(o.a != 1.0) {
 			int opacity_percentage = static_cast<int>(100*o.a + 0.5);

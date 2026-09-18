@@ -35,7 +35,7 @@ void dump_masses(std::ostream& os, int maxZ = 7, int maxA = 14) {
 		"  return 0;\n"
 		"};\n\n"
 	;
-	for(int Z = 1; Z <= maxZ; ++Z) {
+	for(int Z = 0; Z <= maxZ; ++Z) {
 		for(int A = Z; A <= maxA; ++A) {
 			const auto* nuclide = table->GetElementRN(A, Z);
 			if(!nuclide)
@@ -59,7 +59,7 @@ void dump_masses(std::ostream& os, int maxZ = 7, int maxA = 14) {
 			") noexcept {\n"
 			"  switch(nuclide_key(A,Z)) {\n";
 			
-	for(int Z = 1; Z <= maxZ; ++Z) {
+	for(int Z = 0; Z <= maxZ; ++Z) {
 		for(int A = Z; A <= maxA; ++A) {
 			const auto* nuclide = table->GetElementRN(A, Z);
 			if(!nuclide)

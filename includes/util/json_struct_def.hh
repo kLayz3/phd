@@ -161,8 +161,7 @@ std::ostream& mnd_output_homogeneous_range_(std::ostream& os, const T* p, const 
 	for(std::size_t i = 1; i < N; ++i) {
 		os << ", " << p[i];
 	}
-	os << ']';
-	return os;
+	return os << ']';
 }
 
 template<typename T>

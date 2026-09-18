@@ -67,7 +67,7 @@ std::string Nucleus::chem_to_string(
 				if(repr == Represent::Pythex)
 					return R"(\mathrm{p})";
 				else
-					return "d";
+					return "p";
 			}
 			if(z == AtomicNumber::H && A == 2) { // deuteron
 				if(repr == Represent::Pythex)
@@ -81,13 +81,15 @@ std::string Nucleus::chem_to_string(
 				? mnd::sstrcat("{}^{", mnd::utos(A), '}')
 				: "");
 
-			if(repr == Represent::Rootex) // "{}^{7}Be" | "Be"
-				return std::move(extra) + std::string{symbol};
-			else if(repr == Represent::Pythex) // "\mathrm{{}^{7}Be}" | "\mathrm{Be}"
-				return mnd::sstrcat(
-					R"(\mathrm{)", std::move(extra), symbol, '}');
-			else
-				return std::string{symbol};
+			switch(repr) {
+				case(Represent::Rootex):
+					return std::move(extra) + std::string{symbol};
+				case(Represent::Pythex):
+					return mnd::sstrcat(
+						R"(\mathrm{)", std::move(extra), symbol, '}');
+				case(Represent::Normal):
+					return (add_nucleon_number? extra: std::string{}) + std::string{symbol};
+			}
 		})
 		.value_or("");
 }
@@ -201,6 +203,58 @@ Nucleus& Nucleus::operator&=(Nucleus const& rhs) {
 	return *this;
 }
 
+std::string phy::format_reaction(
+	Nucleus::Represent repr,
+	std::vector<const Nucleus*> const& input,
+	std::vector<const Nucleus*> const& output,
+	std::vector<std::string_view> extra_input,
+	std::vector<std::string_view> extra_output
+) {
+	if(input.empty() or output.empty()) {
+		ERROR("phy::format_reaction: either input or output vector of nuclei handles are empty!\n");
+	}
+	std::string text;
+
+#define FMT_HELPR(ARG) \
+	text += ARG.front()->chem_to_string(repr, true); \
+	for(size_t i=1; i<ARG.size(); ++i) { \
+		const Nucleus* n = ARG[i]; \
+		if(!n) { ERROR("phy::format_reaction: some " #ARG " nucleus handle is nullptr?\n"); } \
+		\
+		text += std::string{" + "} + n->chem_to_string(repr, true); \
+	} \
+	for(auto view: extra_##ARG ) { \
+		text += std::string{" + "} + std::string{view}; \
+	}
+
+	FMT_HELPR(input)
+	text += ((repr == Nucleus::Represent::Rootex)? " \\rightarrow "
+	       : (repr == Nucleus::Represent::Rootex)? " #rightarrow "
+	       : " => ");
+	FMT_HELPR(output)
+
+	return text;
+}
+#undef FMT_HELPR
+std::string phy::format_reaction(
+	Nucleus::Represent repr,
+	std::vector<Nucleus> const& input,
+	std::vector<Nucleus> const& output,
+	std::vector<std::string_view> extra_input,
+	std::vector<std::string_view> extra_output
+) {
+	std::vector<const Nucleus*> ptr_input, ptr_output;
+	for(const Nucleus& in : input)
+		ptr_input.push_back(&in);
+	for(const Nucleus& o : output)
+		ptr_output.push_back(&o);
+	
+	return format_reaction(repr,
+		ptr_input, ptr_output,
+		extra_input, extra_output
+	);
+}
+
 template<>
 double phy::rho<phy::RhoExpressionType::full>(
 	mnd::span<const Nucleus> daughters,
@@ -308,13 +362,28 @@ double phy::rho<phy::RhoExpressionType::equinuclear>(
 	);
 }
 
+/* In this case, the daughters are not clearly selected
+ * and are probably unknown (only their charges, but not masses).
+ * In this case, just take rho as the RMS of the angles w.r.t
+ * the heavy-ion which is the first one... */
 template<>
 double phy::rho<phy::RhoExpressionType::unknown>(
 	mnd::span<const Nucleus> daughters,
 	mnd::span<const mnd::geom::Line3D> tracks
 ) {
-	(void)daughters, (void)tracks;
-	MND_THROW("Bad enum argument given to the template. Try again.");
+	(void)daughters;
+	/* As per RNFOOTTrack convention. Heavy Ion (HI) must be at the front.
+	 * The validity of the view we don't check here. Must be verified by the caller. */
+	const u32 N = (u32)tracks.size() - 1; /* Number of protons. */
+	const mnd::geom::Line3D& heavy_track = tracks.front();
+
+	double rho2 = 0; /* [mrad]^2 */
+	for(u32 i=1; i <= N; ++i) {
+		double theta_i = MRAD_CVT * heavy_track.AngleRelativeTo(tracks[i]);
+		rho2 += theta_i * theta_i;
+	}
+
+	return std::sqrt(rho2);
 }
 
 double phy::rho(

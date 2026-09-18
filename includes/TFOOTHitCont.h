@@ -211,6 +211,10 @@ struct RNFOOTHit {
 
 struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	static constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
+
+	/* Convention. In Kalman coordinates, place target's FOOT-facing edge nominally at 0.0.
+	 * Will be shifted back to "real" FRS coordinates later. */
+	static constexpr double TARGET_Z = 0.0;
 	
 	FOOTBoxParam* box;
 	std::array<FOOTParam, 2>* foot_param[N_PAIRS];

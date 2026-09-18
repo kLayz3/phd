@@ -7,6 +7,7 @@
 #include "TROOT.h"
 #include "TApplication.h"
 #include "TParameter.h"
+#include "TPaveText.h"
 #include "util/Geometry.h"
 #include "util/MacroHelpers.h"
 #include "util/Option.hxx"
@@ -31,6 +32,7 @@ using namespace mnd::col::literals;
 using namespace phy::literals;
 
 namespace fs = std::filesystem;
+using namespace std::string_view_literals;
 
 //#define MND_PHYSICS_PARANOIA
 #define MND_MULTITHREADING_TOGGLE
@@ -50,6 +52,17 @@ constexpr A2 elem_to_a2(AtomicNumber e) {
 	}
 	return A2{};
 }
+
+using rho_pad_config_t = std::tuple<
+	uint32_t, // Font-type
+	double,   // Font-size [inches]
+	bool      // Hide statistics box
+>;
+using decay_text_config_t = std::tuple<
+	double,  //  Font-size [inches]
+	bool,    // True = do fill, No = false
+	uint32_t // Fill color in hex
+>;
 
 struct SingleSelect {
 	Nucleus fragment;
@@ -87,6 +100,7 @@ int main(int argc, char* argv[]) {
 	A3 theta_binning = {200,0,200};
 	A3 rho_binning = {300,0,300};
 	
+	rho_pad_config_t rho_config{ 132, 0.045, false };
 	/* Few params really only related to the pyplot histogram. */
 	std::string rho_title, rho_xlabel;
 	Option<double> py_linewidth;
@@ -131,6 +145,9 @@ int main(int argc, char* argv[]) {
 		->delimiter(',');
 	add_logged_option(app, "--rho-title", rho_title, "Title of the ρ-value histogram. Can be latex'ed (inside \'\' block)");
 	add_logged_option(app, "--rho-xlabel", rho_xlabel, "X-axis label of the ρ-value histogram. Can be latex'ed (inside \'\' block)");
+	add_logged_option(app, "--rho-tstyle", rho_config, "Configure the ROOT style of ρ-value 1D histogram.\n"
+		"Arg[0]: font style.\nArg[1]: font width (in inches).\nArg[2]: true => show statistics box.")
+		->delimiter(',');
 	add_logged_option(app, "--py-linewidth", py_linewidth, "Linewidth for the ρ-value histogram to be exported from Python.");
 	add_logged_option(app, "--py-fillcol", py_fillcol, "Line col (ARGB) for the ρ-value histogram to be exported from Python. "
 		"By default, taken from original TH1P")
@@ -163,39 +180,42 @@ int main(int argc, char* argv[]) {
 		}
 		run_info = std::move(sFront);
 	}
-	WARN("Run-info successfully parsed as: "); std::cerr << *run_info << std::endl;
-	const double ekin_s2 = phy::EKin(
-		run_info->secondary.A,
-		run_info->secondary.Z,
-		phy::Brho_t{run_info->brho.s1_s2}
-	); // per nucleon.
+	WARN("Run-info parsed as: "); std::cerr << *run_info << std::endl;
 	WARN("Primary beam: "); std::cerr << run_info->primary << std::endl;
 	WARN("Secondary beam: "); std::cerr << run_info->secondary << std::endl;
+	if(!run_info->primary.valid() or !run_info->secondary.valid())
+		ERROR("Either primary or secondary beam is invalid. Parse from runsheet was unsuccessful.\n");
+	
+	const double A_beam = run_info->secondary.A;
+	const double Z_beam = run_info->secondary.Z;
 
+	/* Average kinetic energy per nucleon, as beam enters the S2. */
+	const double ekin_s2 = phy::EKin(
+		A_beam, Z_beam,
+		phy::Brho_t{run_info->brho.s1_s2}
+	);
+	/* Average kinetic energy per nucleon, just before the target. */
 	const double avg_ekin_before_target =
 		ekin_s2 - mnd::assume::s2::loss_upto_target;
+	/* Average kinetic energy per nucleon, just after the target. */
 	const double avg_ekin_after_target =
 		ekin_s2 - mnd::assume::s2::loss_upto_target - mnd::assume::s2::loss_in_target;
+
+	/* Average kinetic energy at the centre of the target. */
 	const double avg_ekin_reaction = (avg_ekin_before_target + avg_ekin_after_target) / 2.0;
+	/* Average beta corresponding to this energy. */
 	const double beta_nominal = phy::Beta(
-		run_info->secondary.A,
-		run_info->secondary.Z,
+		A_beam, Z_beam,
 		phy::EKin_t{avg_ekin_reaction}
 	);
 	const double gamma_nominal = phy::Gamma(beta_nominal);
+	const double beta_gamma_n = beta_nominal * gamma_nominal;
 
 	WARN("Assumed values for just before/after 9Be target: "
 		MND_RGB_COL(250, 250,  70) "%.2f MeV/u" KNRM
 		" and "
 		MND_RGB_COL( 70, 160, 250) "%.2f MeV/u\n" KNRM,
 		avg_ekin_before_target, avg_ekin_after_target);
-
-	if(do_scaling) {
-		WARN("Normalising will slightly scale every to the "
-			"average energy in the center of the 9Be target: "
-			KBH_CYN "%.3f" KNRM " , which means: "
-			KBH_BLU "beta = %.5f" KNRM "\n", avg_ekin_reaction, beta_nominal);
-	}
 
 	mnd::python::poke();
 	ROOT::EnableThreadSafety();
@@ -205,6 +225,7 @@ int main(int argc, char* argv[]) {
 	using namespace mnd::geom;
 
 	double Cr, Cq, Ct, max_cost, max_cost_f;
+	double target_depth = 0.0;
 	{
 		const auto& fname = fileName.front();
 		std::array<double, 3>* c;
@@ -216,6 +237,30 @@ int main(int argc, char* argv[]) {
 		max_cost = m->GetVal();
 		get_obj(f, m, "FOOT_max_cost_f");
 		max_cost_f = m->GetVal();
+		FOOTBoxParam* box;
+		get_obj(f, box, "FOOT_box");
+		target_depth = box->target.Width();
+	}
+	constexpr auto TARGET_Z = TFOOTHitCont::TARGET_Z;
+	WARN("9Be S2 target's outer edge placed nominally at " MND_RGB_COL(255,128,0)
+		"z₀ = %.2f mm" KNRM " with width " MND_RGB_COL(255,128,0)
+		"w = %.2f mm" KNRM"\n", TARGET_Z, target_depth);
+	
+	const double loss_rate_per_depth =
+		(avg_ekin_after_target - avg_ekin_before_target) / target_depth;
+
+	if(do_scaling) {
+		if(target_depth <= 0.0)
+			ERROR("Scaling requested (-s,--scaling) but target width "
+				"calculated as %.2f <= 0.0 ? Not allowed!\n", target_depth);
+
+		WARN("Normalising will slightly scale ρ-value, per entry, to the "
+			"average energy in the center of the 9Be target: "
+			KBH_CYN "%.3f" KNRM " , which means: "
+			KBH_BLU "beta = %.5f. " KNRM "\nEnergy loss rate per depth calculated as: "
+			MND_RGB_COL(255,128,0) "%.2f AMeV/mm" KNRM " while per x distance: "
+			MND_RGB_COL(128,255,0) "%.3f AMeV/mm" KNRM "\n",
+			avg_ekin_reaction, beta_nominal, loss_rate_per_depth, mnd::assume::s2::e_dispersion[1]);
 	}
 
 	/* Sanitize some CLI passed in arguments... */
@@ -300,17 +345,12 @@ int main(int argc, char* argv[]) {
 	}
 
 	if(mother.valid() and nuclei.size() > 1) {
-		WARN(BOLD "The complete requested reaction deduced as: " KNRM
-			MND_RGB_COL(255,65,224) "%s => %s\n" KNRM,
-			mother.to_string().c_str(), [&]{
-				std::ostringstream oss{};
-				oss << nuclei.front().to_string();
-				for(size_t i=1; i<nuclei.size(); ++i) {
-					oss << " + " << nuclei[i].to_string();
-				}
-				return oss.str();
-			}().c_str()
+		WARN(BOLD "The complete requested reaction deduced as: "
+			KNRM "%s" MND_RGB_COL(255,65,224) "\n",
+			phy::format_reaction(phy::Nucleus::Represent::Normal,
+				std::vector{mother}, nuclei ).c_str()
 		);
+		WARN("Daughter nuclei: "); std::cerr << nuclei << std::endl;
 	}
 	else if(!mother.valid() and nuclei.size() > 1) {
 		ERROR("Requesting a reaction channel for mother nucleus: %s , but "
@@ -332,29 +372,38 @@ int main(int argc, char* argv[]) {
 			const auto heavy_ion_label_rootex = heavy.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope);
 			const auto heavy_ion_label_pythex = heavy.chem_to_string(phy::Nucleus::Represent::Pythex, fmt_isotope);
 			if(nprotons > 1) {
-				rho_expression_rootex += mnd::msg("#frac{1}{#sqrt{1 + %u m[p] m[%s]}}"
+				rho_expression_rootex += mnd::msg("#frac{1}{#sqrt{1 + %u m[p] / m[%s]}}"
 					" #sqrt{", nprotons, heavy_ion_label_rootex.c_str());
 				rho_expression_pythex += mnd::msg("\\frac{1}{ \\sqrt{1 + %u \\frac{ m_{\\mathrm{p}} }{ m_{%s} } } }"
 					" \\sqrt{", nprotons, heavy_ion_label_pythex.c_str());
 
 				for(u32 i=1; i <= nprotons; ++i) {
-					rho_expression_rootex += Form("%s#theta_{%s-p_%u}^2", (i==1)? "": "+",
+					rho_expression_rootex += Form("%s#theta_{%s-p_{%u}}^{2} ", (i==1)? "": "+ ",
 						heavy_ion_label_rootex.c_str(), i);
 					rho_expression_pythex += Form("%s\\theta_{%s-\\mathrm{p}_%u}^2", (i==1)? "": "+",
 						heavy_ion_label_pythex.c_str(), i);
 				}
-				rho_expression_rootex += mnd::msg("+ (#frac{m[p]}{m[%s]}) (", heavy_ion_label_rootex.c_str());
-				rho_expression_pythex += mnd::msg("+ \\left(\\frac{m_\\mathrm{p}}{m_{%s}}\\right) \\big(", heavy_ion_label_pythex.c_str());
+				rho_expression_rootex += mnd::msg("+ #frac{m[p]}{m[%s]} ", heavy_ion_label_rootex.c_str());
+				rho_expression_pythex += mnd::msg("+ \\left(\\frac{m_\\mathrm{p}}{m_{%s}}\\right)", heavy_ion_label_pythex.c_str());
+				if(nprotons > 2) {
+					rho_expression_rootex += '(';
+					rho_expression_pythex += "\\left(";
+
+				}
 				for(u32 i=1; i <= nprotons; ++i) {
 					for(u32 j=i+1; j <= nprotons; ++j) {
-						rho_expression_rootex += mnd::msg("%s#theta_{p_{%u} - p_{%u}}^2",
-							(i==1 && j==2)? "": "+", i, j);
+						rho_expression_rootex += mnd::msg("%s#theta_{p_{%u} - p_{%u}}^{2} ",
+							(i==1 && j==2)? "": "+ ", i, j);
 						rho_expression_pythex += mnd::msg("%s\\theta_{\\mathrm{p}_{%u} - \\mathrm{p}_{%u}}^2",
 							(i==1 && j==2)? "": "+", i, j);
 					}
 				}
-				rho_expression_rootex += ")}";
-				rho_expression_pythex += "\\big)}";
+				if(nprotons > 2) {
+					rho_expression_pythex += "\\big)";
+					rho_expression_rootex += ")";
+				}
+				rho_expression_pythex += '}';
+				rho_expression_rootex += '}';
 			}
 			else {
 				rho_expression_rootex += mnd::msg("#frac{1}{#sqrt{1 + m[p]/m[%s]}}"
@@ -378,7 +427,7 @@ int main(int argc, char* argv[]) {
 
 			for(u32 i=1; i<=nitems; ++i) {
 				for(u32 j=i+1; j<=nitems; ++j) {
-					rho_expression_rootex +=  mnd::msg("%s#theta_{%s(%u) - %s(%u)}^2",
+					rho_expression_rootex +=  mnd::msg("%s#theta_{%s(%u) - %s(%u)}^{2}",
 						(i==1 && j==2)? "": "+",
 						nuc_label_rootex.c_str(), i, nuc_label_rootex.c_str(), j);
 					rho_expression_pythex +=  mnd::msg("%s\\theta_{%s(%u) - %s(%u)}^2",
@@ -386,15 +435,15 @@ int main(int argc, char* argv[]) {
 						nuc_label_pythex.c_str(), i, nuc_label_pythex.c_str(), j);
 				}
 			}
-			rho_expression_rootex += '}';
 			rho_expression_pythex += '}';
+			rho_expression_rootex += '}';
 			break;
 		}
 		case(RhoExpressionType::full): {
 			const auto mother_label_rootex = mother.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope);
 			const auto mother_label_pythex = mother.chem_to_string(phy::Nucleus::Represent::Pythex, fmt_isotope);
 			rho_expression_rootex += mnd::msg(
-				"#sqrt{#sum_{i=1}^{%u} #sum_{j=i+1}^{%u} #frac{m_i m_j}{ M[%s] m[p] } #theta_{ij}^2 }",
+				"#sqrt{#sum_{i=1}^{%u} #sum_{j=i+1}^{%u} #frac{m_{i} m_{j}{ M[%s] m[p] } #theta_{ij}^{2} }",
 					sum_n_tracks_required, sum_n_tracks_required, mother_label_rootex.c_str());
 			rho_expression_pythex += mnd::msg(
 				"\\sqrt{\\sum_{i=1}^{%u} \\sum_{j=i+1}^{%u} \\frac{m_i m_j}{ M_{%s} m_{\\mathrm{p}} } \\theta_{ij}^2 }",
@@ -402,8 +451,8 @@ int main(int argc, char* argv[]) {
 			break;
 		}
 		case(RhoExpressionType::unknown): {
-			rho_expression_rootex += "#rho";
-			rho_expression_pythex += "\\rho";
+			rho_expression_rootex += "#rho^{2} #approx #sum_{i=1}^{N} #theta_{HI, i}^{2}";
+			rho_expression_pythex += "\\rho \\simeq \\sqrt{\\sum_{i=1}^{N} \\theta_{\\mathrm{HI}, \\mathrm{p}}^2}";
 			break;
 		}
 	}
@@ -430,20 +479,31 @@ int main(int argc, char* argv[]) {
 		(vertex_dist_cut_given && sum_n_tracks_required>0)? sum_n_tracks_required-0.5: 9.5,
 		600, 0, vertex_dist_cut_given? (2*distance_cut): 30.0};
 
-	auto h1_track_angle = TH1P{"Track angles [mrad]@Between all tracks selected", kMagenta+1, 200, 0, 100};
-	auto h1_angle_ex = TH1P{"((h1_angle_ex)) #rho [mrad]@#rho angle", DEFAULT_FILL_COL_EX,
+	auto h1_track_angle = TH1P{"#theta(HI,LI) [mrad]@Between one heavy and all lighter tracks", kMagenta+1, 200, 0, 100};
+	auto h1_angle_ex = TH1P{"((h1_angle_ex)) #rho [mrad]@#rho value", DEFAULT_FILL_COL_EX,
 		rho_binning[0], rho_binning[1], rho_binning[2]
 	};
 	h1_angle_ex->SetTitle( rho_expression_rootex.c_str() );
-	if(sum_n_tracks_required == 2)
-		h1_angle_ex->GetXaxis()->SetTitle("#theta(p,frag) [mrad]");
-
-	auto h2_vertex_z = TH2P{"#rho angle [mrad]:Vertex z [mm]@Traced by the FOOT", 160, -80, 80, 100,0,100};
+	auto h2_vertex_z = TH2P{"#rho [mrad]:Vertex z [mm]@Traced by the FOOT", 140, -80, 80,
+		rho_binning[0], rho_binning[1], rho_binning[2]};
+	auto h2_vertex_x = TH2P{"#rho [mrad]:Vertex x [mm]@Traced by the FOOT", 140, -60, 60,
+		rho_binning[0], rho_binning[1], rho_binning[2]};
+	if(do_scaling) {
+		h1_angle_ex.AppendToAxisTitle(" (beta corrected)"sv);
+		h2_vertex_z.AppendToAxisTitle(" (beta corrected)"sv);
+		h2_vertex_x.AppendToAxisTitle(" (beta corrected)"sv);
+	}
 	auto h2_nlayers_hit = TH2P{"N layers hit in a track:Track Ip@Full FOOT system, smaller x-axis means larger Q particle",
 		10, -0.5, 9.5,   RNFOOTHit::N_PAIRS, 0.5, RNFOOTHit::N_PAIRS+0.5 };
-	auto h2_rho_vs_theta = TH2P{"#rho angle [mrad]:#theta(p,HI) [mrad]@Traced by the FOOT",
+	auto h2_rho_vs_theta = TH2P{"#rho [mrad]:#theta(p,HI) [mrad]@Traced by the FOOT",
 		theta_binning[0], theta_binning[1], theta_binning[2],
 		rho_binning[0], rho_binning[1], rho_binning[2]};
+	if(rho_ex_type ==  RhoExpressionType::p) {
+		const Nucleus& hi = nuclei.front();
+		h2_rho_vs_theta->GetXaxis()->SetTitle(
+			Form("#theta(p, %s)", hi.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope).c_str())
+		);
+	}
 	auto h1_sci21 = TH1P{"SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000};
 	auto h1_sci22 = TH1P{"SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000};
 	auto h1_sci31 = TH1P{"SCI31 QDC mean [QDC units]", 0x009B2F_c, 500, 300, 4000};
@@ -550,13 +610,14 @@ int main(int argc, char* argv[]) {
 				double theta;
 				const Line3D heavy_track = tracks.front();
 				for(size_t i=1; i < N; ++i) {
-					theta = 1000.0 * tracks[i].AngleRelativeTo( heavy_track );
+					theta = phy::MRAD_CVT * tracks[i].AngleRelativeTo( heavy_track );
 					sum2 += theta*theta;
 					h1_track_angle->Fill( theta );
 				}
 				const double invariant_theta = sqrt(sum2);
 				h1_angle_ex->Fill( invariant_theta );
 				h2_vertex_z->Fill( vertex.z, invariant_theta);
+				h2_vertex_x->Fill( vertex.x, invariant_theta);
 
 				valid_vertex_found = !vertex.is_null();
 			}
@@ -617,33 +678,54 @@ int main(int argc, char* argv[]) {
 					tracks.push_back(*ft);
 				}
 				
-				double const rho_val = phy::rho(
+				double rho_val = phy::rho(
 					rho_ex_type,
 					nuclei,
 					tracks
 				);
+				if(do_scaling) {
+					double depth = std::clamp(
+						vertex.z,
+						TARGET_Z - target_depth,
+						TARGET_Z
+					) - (TARGET_Z - target_depth);
+					double x_ = mnd::clamp(
+						vertex.x,
+						mnd::assume::s2::x_bound
+					);
+					const double ekin_per_n = avg_ekin_before_target
+						+ loss_rate_per_depth * depth
+						+ mnd::assume::s2::e_dispersion[0]
+						+ mnd::assume::s2::e_dispersion[1] * x_;
+
+					const double beta_gamma = phy::BetaGamma(
+						A_beam, Z_beam, // secondary beam runinfo asserted to be valid
+						phy::EKin_t{ekin_per_n}
+					);
+					rho_val *= (beta_gamma / beta_gamma_n);
+				}
 				
 				h1_angle_ex->Fill( rho_val );
 				h2_vertex_z->Fill( vertex.z, rho_val );
+				h2_vertex_x->Fill( vertex.x, rho_val );
 
 				for(u32 i=0; i<n_tracks_selected; ++i) {
 					h2_track_distance->Fill( i, tracks[i].DistanceTo(vertex) );
 					h2_nlayers_hit->Fill( i, ftracks[i].n );
 				}
 
-				if(rho_ex_type == RhoExpressionType::p) {
-					const mnd::geom::Line3D& heavy_track = tracks.front();
-					for(u32 i=1; i < n_tracks_selected; ++i) {
-						double theta = 1000.0 * tracks[i].AngleRelativeTo( heavy_track );
-						h2_rho_vs_theta->Fill(theta, rho_val);
-					}
+				const mnd::geom::Line3D& heavy_track = tracks.front();
+				for(u32 i=1; i < n_tracks_selected; ++i) {
+					double theta = phy::MRAD_CVT * tracks[i].AngleRelativeTo( heavy_track );
+					h1_track_angle->Fill( theta );
+					h2_rho_vs_theta->Fill(theta, rho_val);
 				}
 				h1_track_mult->Fill(n_tracks_selected);
 				valid_vertex_found = true;
 
 			} /* while(...) */ } // if(vertex_dist_cut_given)
 			
-			if(valid_vertex_found) {
+			if(valid_vertex_found and vertex_dist_cut_given) {
 				h1_sci21_cut2->Fill(sci21.E);
 				h1_sci22_cut2->Fill(sci22.E);
 				h1_sci31_cut2.Fill(sci31.E);
@@ -665,7 +747,7 @@ int main(int argc, char* argv[]) {
 	cm->Divide(3,2);
 	cm->cd(1); h2_q_vs_mult.Draw("COLZ"); gPad->SetLogz();
 	cm->cd(2); h2_score_vs_mult.Draw("COLZ"); gPad->SetLogz();
-	cm->cd(3); h2_rho_vs_theta.Draw("COLZ");
+	cm->cd(3); h2_track_distance.Draw();
 	cm->cd(4); h1_track_mult.Draw();
 	cm->cd(5); h2_nlayers_hit.Draw("COLZ");
 	cm->cd(6); new PLatex(0.06,
@@ -682,30 +764,54 @@ int main(int argc, char* argv[]) {
 	 *   ρ(T⟂) = 1/(beta*gamma) sqrt(2*T⟂ / (mp*c^2))
 	 *   T⟂(ρ) = mp*c^2 / 2 * (beta*gamma)^2 * ρ^2
 	 */
-	const double beta_gamma_n = beta_nominal*gamma_nominal;
 	const double C_Tl_to_rho = /* Units [rad / sqrt(MeV)] */
 		1.0 / beta_gamma_n * sqrt(2.0 / (phy::mp * phy::nuc::c*phy::nuc::c ));
 	const double C_rho_to_Tl = /* Units [MeV / rad^2] */
 		(phy::mp * phy::nuc::c*phy::nuc::c )/2 * (beta_gamma_n * beta_gamma_n);
 
+	auto f_rho_to_Tl =
+	[C = C_rho_to_Tl](double rho /* [mrad] */) -> double /* [MeV] */ {
+		double rho_rad = rho / phy::MRAD_CVT;
+		return C * rho_rad * rho_rad;
+	};
+	auto f_Tl_to_rho =
+	[C = C_Tl_to_rho](double Tl /* [MeV] */) -> double /* [mrad] */ {
+		return phy::MRAD_CVT * C * std::sqrt(Tl);
+	};
 	TCanvas* ct = new TCanvas("Physics", "Recognized tracks and angles", 2150, 1400);
 	ct->Divide(2,2);
-	ct->cd(1); h2_track_distance.Draw();
-	ct->cd(2); h1_track_angle.Draw();
-	ct->cd(3);
-	h1_angle_ex.Draw(
-		[C = C_rho_to_Tl](double rho /* [mrad] */) -> double /* [MeV] */
-		{
-			double rho_rad = rho / phy::MRAD_CVT;
-			return C * rho_rad * rho_rad;
-		},
-		[C = C_Tl_to_rho](double Tl /* [MeV] */) -> double /* [mrad] */
-		{
-			return phy::MRAD_CVT * C * std::sqrt(Tl);
-		},
-		"Q_{#perp}  [MeV]"
+	ct->cd(1); h2_rho_vs_theta.Draw("COLZ");
+	ct->cd(2); h2_vertex_x.Draw<TH2P::Y>(
+		f_rho_to_Tl,
+		f_Tl_to_rho,
+		"Q_{#perp}  [MeV]",
+		"COLZ"
 	);
-	ct->cd(4); h2_vertex_z.Draw("COLZ");
+	ct->cd(3); h1_angle_ex.Draw(
+		f_rho_to_Tl,
+		f_Tl_to_rho,
+		"Q_{#perp}  [MeV]",
+		"HIST"
+	);
+	h1_angle_ex->SetStats(std::get<2>(rho_config));
+	if(auto* title = dynamic_cast<TPaveText*>(gPad->GetPrimitive("title"))) {
+		title->SetTextFont( std::get<0>(rho_config) );
+		title->SetTextSize( std::get<1>(rho_config) );
+		title->SetBorderSize(6);
+		title->SetShadowColor( (0x343434_c).GetColorCode() );
+	}
+	ct->cd(4); h2_vertex_z.Draw<TH2P::Y>(
+		f_rho_to_Tl,
+		f_Tl_to_rho,
+		"Q_{#perp}  [MeV]",
+		"COLZ"
+	);
+
+	TCanvas* ct2 = new TCanvas("Physics2", "Recognized tracks and more", 2150, 1400);
+	ct2->Divide(2,2);
+	ct2->cd(1); h1_track_angle.Draw();
+	ct2->cd(2); h2_track_distance.Draw("COLZ");
+	/* TODO: 2 more slots here.. */
 
 	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2150, 1400);
 	cs->Divide(3,3);
@@ -719,7 +825,7 @@ int main(int argc, char* argv[]) {
 	cs->cd(8); h1_sci22_cut2.Draw();
 	cs->cd(9); h1_sci31_cut2.Draw();
 
-	WARN("Info: "); std::cerr << info << std::endl;
+	WARN("Info: "); std::cerr << MND_RGB_COL(140,85,255) << info << KNRM "\n";
 
 	canvas::save_all<canvas::Exe>( save, mnd::to_views(info) );
 
@@ -740,7 +846,7 @@ int main(int argc, char* argv[]) {
 
 	mnd::plot::Figure {}
 		.plot(*h1_angle_ex, py_histstyle)
-		.save_dpi(150)
+		.save_dpi(200)
 		.xlabel(
 			 !rho_xlabel.empty()
 			? rho_xlabel

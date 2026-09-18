@@ -9,17 +9,28 @@
 namespace mnd::assume {
 namespace s2 {
 
-/* Kinetic energy loss [MeV/u] from the entrance of S2 to the Be target. */
+/* Kinetic energy loss [AMeV] from the entrance of S2 to the Be target. */
 inline constexpr double loss_upto_target = 11.3;
 
-/* Kinetic energy loss [MeV/u] from the entrance of S2 Be target up to the exit. */
+/* Kinetic energy loss [AMeV] from the entrance of S2 Be target up to the exit. */
 inline constexpr double loss_in_target = 59.0;
 
+/* 9Be target density. */
+inline constexpr double target_density = 1.845; // [g/cm^3]
+
 /* S2 is dispersive, so the incoming energy before an element slightly depends on the x- position.
- * dE = f(x), where f(0) = 0. */
-inline constexpr auto s2_dispersion_de_per_x = std::array{
-	0.0           // by definition
-	-14.0 / 80.0  // MeV / mm
+ * dE = f(x), where f(0) = 0. This linear interpolation is eye-balled from LISE++ , minding the
+ * fact we use Go4 convention of left-right, which is reversed compared to LISE! */
+inline constexpr auto e_dispersion = std::array{
+	0.0,          // [MeV] ; 0 by definition
+	+14.0 / 80.0  // [MeV / mm]
+};
+
+/* Sometime vertex calculation could blow up. In this case,
+ * just clamp the value into this `x_bound`. */
+inline constexpr auto x_bound = std::array{
+	-40.0, // [mm]
+	40.0   // [mm]
 };
 
 } // namespace s2

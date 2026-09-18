@@ -164,7 +164,6 @@ void TFOOTHitCont::Setup() {
 			1000, 0, 200);
 		h1_acc_t[i] = RegisterObject<TH1I>(Form("acc_t_%u", i), Form("Difference in kt [mm^m] of candidates after layer %u, for acc tracks", i),
 			1000, 0, 200);
-
 #endif
 	}
 }

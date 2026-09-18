@@ -1,5 +1,8 @@
 #pragma once
 
+/* Here when referring to MeV/u, it is conventionally taken
+ * as identical to MeV/A or AMeV. It is *never* total energy per 1u of mass. */
+
 #include <cstdint>
 #include <cmath>
 #include <cstring>
@@ -40,10 +43,12 @@ inline constexpr double me = 0.51099895069; // MeV/c^2
 inline constexpr double be = 13.6e-6;       // MeV, binding energy of electron in 1H atom
 inline constexpr double Tm = 299.792458;    // MeV/(e*c) , conversion for tesla-meter
 inline constexpr double mp = mass<1,1>();   // MeV/c^2, proton mass
+inline constexpr double mn = mass<1,0>();   // MeV/c^2, neutron mass
 
 } // namespace nuc
 
 inline constexpr double mp = nuc::mp;
+inline constexpr double mn = nuc::mn;
 
 namespace detail {
 /* Allow doing runtime asserts for calulcations.
@@ -54,14 +59,16 @@ inline constexpr bool debug_ = false;
 template<typename T>
 using Option = mnd::Option<T>;
 
+/* Magnetic rigidity in [Tm]. */
 struct Brho_t {
 	double value;
 };
 struct Beta_t {
 	double value;
 };
+/* Kinetic energy per nucleon [AMeV]. */
 struct EKin_t {
-	double value; // Kinetic energy per nucleon.
+	double value;
 };
 
 enum class AtomicNumber : uint32_t {
@@ -204,6 +211,22 @@ std::istream& operator>>(std::istream& , Nucleus& );
 /* Perform a "fusion" of two nuclei. */
 Nucleus operator&(Nucleus const& , Nucleus const& );
 
+/* Format a nuclear reaction. */
+std::string format_reaction(
+	Nucleus::Represent,
+	std::vector<const Nucleus*> const& ,
+	std::vector<const Nucleus*> const& ,
+	std::vector<std::string_view> = {},
+	std::vector<std::string_view> = {}
+);
+std::string format_reaction(
+	Nucleus::Represent,
+	std::vector<Nucleus> const&,
+	std::vector<Nucleus> const&,
+	std::vector<std::string_view> = {},
+	std::vector<std::string_view> = {}
+);
+
 namespace literals {
 inline Nucleus operator""_n(const char* text, std::size_t size) {
 	return Nucleus::get_ion(
@@ -245,6 +268,10 @@ inline double BetaGamma2(uint32_t A, uint32_t Q, EKin_t e) noexcept {
 	const double tmp = (e.value * A)/ m + 1;
 	return tmp*tmp - 1;
 }
+inline double BetaGamma(uint32_t A, uint32_t Q, EKin_t e) noexcept {
+	return sqrt( BetaGamma2(A,Q,e) );
+}
+
 /* Sometimes A,Q is known at comptime. */
 template<uint32_t A, uint32_t Q>
 constexpr double BetaGamma(Brho_t brho) noexcept {
@@ -257,6 +284,10 @@ constexpr double BetaGamma2(EKin_t e) noexcept {
 	constexpr double m = mass<A,Q>();
 	const double tmp = (e.value * A)/ m + 1;
 	return tmp*tmp - 1;
+}
+template<uint32_t A, uint32_t Q>
+constexpr double BetaGamma(EKin_t e) noexcept {
+	return sqrt( BetaGamma<A,Q>(e) );
 }
 
 /* Brho is a number corresponding to units of tesla-meter. */

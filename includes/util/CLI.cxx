@@ -14,14 +14,14 @@ mnd::Option<std::string_view> mnd::extract_text_body (
 	needle += label;
 	needle += ")";
 
-	std::size_t pos = 0;
+	size_t pos = 0;
 
 	while(true) {
 		pos = text.find(needle, pos);
 		if(pos == std::string_view::npos)
 			return None;
 
-		std::size_t brace = text.find('{', pos + needle.size());
+		size_t brace = text.find('{', pos + needle.size());
 		if(brace == std::string_view::npos)
 			return None;
 

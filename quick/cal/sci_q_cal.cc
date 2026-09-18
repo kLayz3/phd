@@ -10,8 +10,6 @@ using namespace ROOT::Experimental;
 using namespace indicators;
 using namespace mnd::col::literals;
 
-using MaybePed = mnd::Option<A2>;
-
 int main(int argc, char* argv[]) {
     CLI::App app{"Calibrate the QDC into-charge measurement of SCI21/22/31. "
         "We don't do the velocity dependence correction, as it is anyway close to the minimum "
@@ -23,13 +21,13 @@ int main(int argc, char* argv[]) {
     u32 niter = 2;
     unsigned short line_size = 4;
     double sratio = 1.4;
-    MaybePed ped{mnd::None};
+	mnd::Option<A2> ped = mnd::None;
     bool ped_from_file = false;
 	auto save = canvas::Extension::nil;
 
     add_logged_option(app, "-f,--file", fileName, "Pass a file name.")
         ->check(CLI::ReadPermissions);
-    add_logged_option(app, "-i,--sci", i_sci, 
+    add_logged_option(app, "-i,--sci", i_sci,
         mnd::msg("Scintillator index; %u => SCI21, %u => SCI22, %u => SCI31",
             RNFRSCal::SCI21_I, RNFRSCal::SCI22_I, RNFRSCal::SCI31_I))
         ->check(CLI::Range(0, (int)RNFRSCal::SCI31_I));
@@ -42,7 +40,7 @@ int main(int argc, char* argv[]) {
         ->check(CLI::PositiveNumber);
 	add_logged_option(app, "-l,--line-size", line_size, "Fit curve line size.");
     add_logged_option(app, "-p,--ped", ped, "Do pedestal subtraction. Two numbers represent average pedestals for left and right channel.");
-    add_logged_flag(app, "--ped-from-file", ped_from_file, "Take the pedestal values from the file itself. Will invalidate the --ped option's entered values.");
+    add_logged_flag(app, "--ped-from-file", ped_from_file, "Take the pedestal values from the file itself. Will invalidate the p,--ped entered values.");
     add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
 	bool test = false;
@@ -71,7 +69,7 @@ int main(int argc, char* argv[]) {
                 fileName.c_str());
         const SCIDEIntoQConverter* cvt = par.GetConverter();
         if(cvt->pedestal.left == 0 || cvt->pedestal.right == 0)
-            ERROR("Requsted parameter from file \'%s\' itself, but parameter is left defaulted? Run without the flag first.\n",
+            ERROR("Requsted pedestal parameter from file \'%s\', but parameter is left defaulted? Run without the flag first.\n",
                 fileName.c_str());
         ped = std::array{
             cvt->pedestal.left,
@@ -133,7 +131,7 @@ int main(int argc, char* argv[]) {
         }
         
         if(ped.is_some()) {
-            /* Demand single hit entries. */
+            /* Demand single hit entries only. */
             if(sci.hits.size() != 1) continue;
 
             const f64 de_l = std::max(sci.El - ped.unwrap()[0], 0.0);

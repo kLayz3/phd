@@ -4,6 +4,7 @@
 #include "../monad/monad.hxx"
 
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 
 #define CLI11_ENABLE_EXTRA_VALIDATORS 1
@@ -14,6 +15,9 @@
 
 using DisplayDefault = mnd::BinaryOpt;
 
+template<typename... Ts>
+std::ostream& operator<<(std::ostream& , const std::tuple<Ts...>& );
+
 namespace mnd::cli::detail {
 
 struct State {
@@ -22,6 +26,35 @@ struct State {
 };
 
 inline constexpr char auth_sym = '!';
+
+/* Format tuple elements with indices [first, last>. Handles nested tuples, too! */
+template<typename... Ts>
+std::ostream& print_tuple(
+	std::ostream& os,
+	const std::tuple<Ts...>& tup,
+	size_t first = 0,            // first index to print
+	size_t last  = sizeof...(Ts) // first-after-last index to print.
+) {
+	using Tuple = std::tuple<Ts...>;
+	constexpr size_t N = sizeof...(Ts);
+
+	if(first > last || last > N)
+		ERROR("Invalid tuple '%s' print range? Requested [%zu, %zu>\n",
+			mnd::type_name<Tuple>().c_str(), first, last);
+
+	os << '[';
+
+	mnd::static_for<0, N>([&](auto I) {
+		constexpr size_t i = decltype(I)::value;
+
+		if(i >= first && i < last) {
+			if(i != first) os << ", ";
+			os << std::get<i>(tup);
+		}
+	});
+	return os << ']';
+}
+
 } //namespace mnd::cli::detail
 
 namespace mnd::type_traits {
@@ -32,6 +65,15 @@ template<typename T, typename S = std::ostream>
 using is_ostreamable = CLI::detail::is_ostreamable<T, S>;
 
 } // namespace mnd::type_traits
+
+/* RISKY: add an overload to `ostream& operator<<` to format std::tuple types.
+ * Note, if somebody else defined it, then this will blow up the compiler.
+ * Note, we allow to also format only a slice of the full tuple. */
+template<
+	typename... Ts
+> std::ostream& operator<<(std::ostream& os, const std::tuple<Ts...>& tup) {
+	return mnd::cli::detail::print_tuple(os, tup);
+}
 
 /* Overload for non-enum types. */
 template <
@@ -47,26 +89,26 @@ template <
 	auto state = std::make_shared<mnd::cli::detail::State>();
 	const std::string default_value = CLI::detail::to_string(variable);
 	auto* opt = app.add_option_function<T>(
-		name, 
+		name,
 		[&variable, name, state](const T& match) {
 			if(state->current_is_authoritative) {
 				// The ! occurrence overrides everything.
 				variable = match;
 				state->authoritative_seen = true;
-				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM); 
-				std::cerr << KBH_YEL << name << KNRM << " as " 
+				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM);
+				std::cerr << KBH_YEL << name << KNRM << " as "
 					<< KBH_CYN << match << KNRM << '\n';
 			} else if(!state->authoritative_seen) {
 				variable = match;
-				WARN("Parsed option "); 
-				std::cerr << KBH_YEL << name << KNRM << " as " 
+				WARN("Parsed option ");
+				std::cerr << KBH_YEL << name << KNRM << " as "
 					<< KBH_CYN << match << KNRM << '\n';
 			}
 			state->current_is_authoritative = false;
 		}, description)
 		->transform( [state](std::string input) -> std::string {
 			if(!input.empty() && input.front() == mnd::cli::detail::auth_sym) {
-				state->current_is_authoritative = true;
+				state->current_is_authoritative = true; // Respect my authoritah.
 				input.erase(input.begin());
 			}
 			return input; // RVO
@@ -91,13 +133,13 @@ template <
 	auto state = std::make_shared<mnd::cli::detail::State>();
 	const std::string default_value = std::string{magic_enum::enum_name(variable)};
 	auto* opt = app.add_option_function<std::string>(
-		name, 
+		name,
 		[&variable, name, state](const std::string& s) {
 			auto e = magic_enum::enum_cast<E>(s);
 			if(!e)
-				ERROR("Validation error for enum: \'%s\', "
+				throw CLI::ValidationError(name, mnd::msg("Validation error for enum: \'%s\', "
 					"passed in \'%s\' which is not parsable.",
-					mnd::type_name<E>().c_str(), s.c_str());
+					mnd::type_name<E>().c_str(), s.c_str()));
 			if(state->current_is_authoritative) {
 				// The ! occurrence overrides everything.
 				variable = *e;
@@ -148,6 +190,7 @@ template <
 	for(const auto e : variable)
 		default_values.emplace_back(magic_enum::enum_name(e));
 
+	/* First: parse the whole thing into a vector of strings.., and we go from there. */
 	auto* opt = app.add_option_function<std::vector<std::string>>(
 		name,
 		[&variable, name, state](const std::vector<std::string>& matches) {
@@ -157,9 +200,10 @@ template <
 			for(const auto& s : matches) {
 				auto e = magic_enum::enum_cast<E>(s);
 				if(!e)
-					ERROR("Validation error for enum: \'%s\', "
+					throw CLI::ValidationError(name,
+						mnd::msg("Validation error for enum: \'%s\', "
 						"passed in \'%s\' which is not parsable.",
-						mnd::type_name<E>().c_str(), s.c_str());
+						mnd::type_name<E>().c_str(), s.c_str()));
 
 				parsed.push_back(*e);
 			}
@@ -199,6 +243,93 @@ template <
 	return opt;
 }
 
+template <
+	DisplayDefault d = DisplayDefault::Yes,
+	typename... Ts
+> CLI::Option* add_logged_option (
+	CLI::App& app,
+	const std::string& name,
+	std::tuple<Ts...>& variable,
+	const std::string& description
+) {
+	constexpr size_t N = sizeof...(Ts);
+	static_assert(N > 0, "Add_logged_option for tuples needs at least one tuple element!");
+
+	using Tuple = std::tuple<Ts...>;
+
+	auto state = std::make_shared<mnd::cli::detail::State>();
+
+	/* First: parse the whole thing into a vector of strings.., and we go from there. */
+	auto* opt = app.add_option_function<std::vector<std::string>>(
+		name,
+		[&variable, name, state](const std::vector<std::string>& args) {
+			const bool authoritative = state->current_is_authoritative;
+			state->current_is_authoritative = false;
+
+			/* Copy it, if fails then atleast it leaves the original unmutated. */
+			auto parsed = variable;
+
+			mnd::static_for<0, N>([&](auto I) {
+				constexpr size_t i = decltype(I)::value;
+				if(i >= args.size())
+					return;
+
+				if(!CLI::detail::lexical_cast(args[i], std::get<i>(parsed))) {
+					throw CLI::ValidationError(name, mnd::msg("Arg: %s , invalid tuple "
+						"element index'ed %zu, cannot be parsed from '" EBOLD(%s)
+						"' into underlying type: %s\n", name.c_str(), i, args[i].c_str(),
+						mnd::type_name<std::tuple_element_t<i,Tuple>>().c_str())
+					);
+				}
+			});
+
+			if(state->authoritative_seen && !authoritative)
+				return;
+
+			variable = std::move(parsed);
+			if(authoritative)
+				state->authoritative_seen = true;
+
+			WARN("Parsed %soption ",
+				authoritative ? BOLD "authoritative " KNRM : "");
+
+			std::cerr << KBH_YEL << name << KNRM << " as ";
+			std::cerr << KBH_CYN;
+			mnd::cli::detail::print_tuple(std::cerr, variable, 0, args.size());
+			if(args.size() < N) {
+				std::cerr << KNRM << ", " << KBH_MAG;
+				mnd::cli::detail::print_tuple(std::cerr, variable, args.size());
+			}
+			std::cerr << KNRM "\n";
+		},
+		description
+	)
+	->type_size(1)
+	->expected(1, static_cast<int>(N))
+	->allow_extra_args(false)
+	->transform([state](std::string input) -> std::string {
+		if(!input.empty() &&
+		input.front() == mnd::cli::detail::auth_sym)
+		{
+			state->current_is_authoritative = true;
+			input.erase(input.begin());
+		}
+		return input;
+	})
+	->trigger_on_parse()
+	->type_name(CLI::detail::type_name<Tuple>());
+
+	if constexpr(d == DisplayDefault::Yes) {
+		std::ostringstream ss;
+		ss << variable;
+		opt->default_str(ss.str());
+	}
+
+	return opt;
+}
+
+
+
 /* For the Option<T> wrapper, also expose a CLI tool template specialization
  * to parse it properly, otherwise boilerplate reeks through the code. */
 namespace mnd::cli::detail {
@@ -224,7 +355,7 @@ template <
 	/* God I love undocumented API. So basically the tokenising begins *before*
 	 * transformers take place. E.g. `--flag=!@` cannot be parsed for Option<array> ...
 	 * Just had to dissect the library like usual. HINT: people please write your docs. */
-	 
+	
 	/* Inside CLI11.hpp:
 	 *   using results_t = std::vector<std::string>;
 	 *   using callback_t = std::function<bool(const results_t &)>;
@@ -354,8 +485,8 @@ inline CLI::Option* add_logged_flag (
 	return app.add_flag(name, variable, description)
 		->each (
 			[name](const std::string& match) {
-				WARN("Parsed flag "); 
-				std::cerr << KBH_YEL << name << KNRM << " as " 
+				WARN("Parsed flag ");
+				std::cerr << KBH_YEL << name << KNRM << " as "
 					<< KBH_CYN << match << KNRM << '\n';
 			}
 		);
@@ -417,7 +548,7 @@ std::filesystem::path current_executable_name();
 #endif
 
 /* Parse an array range from a text input by a separator 'c' */
-template<unsigned char c, typename Cont, 
+template<unsigned char c, typename Cont,
 	typename std::enable_if<mnd::is_an_array_v<Cont>>::type* = nullptr
 > std::istream& operator>>(std::istream& in, Cont& out) {
 	constexpr size_t N = mnd::is_an_array<Cont>::size;
@@ -444,7 +575,7 @@ std::istream& operator>>(std::istream& in, std::vector<T>& out) {
 	
 	/* Try fetching an entry. Can immediately fail and be empty.
 	 * In this case, just promptly return. */
-	if(!(in >> value)) 
+	if(!(in >> value))
 		return in;
 	
 	out.push_back(value);

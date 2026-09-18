@@ -222,7 +222,7 @@ TFOOTHitProc::TFOOTHitProc (
 	i = 0;
 	mnd::for_pair_in_tuple(this->in, [this, &i, box](const TFOOTCalCont& f1, const TFOOTCalCont& f2) {
 			::pair_z[i] = (
-				box->GetFOOTZRel(f1.setup->N) + f1.setup->dz + 
+				box->GetFOOTZRel(f1.setup->N) + f1.setup->dz +
 				box->GetFOOTZRel(f2.setup->N) + f2.setup->dz
 			) / 2.0 + TFOOTHitProc::TARGET_Z;
 			Orientation o1 = (f1.setup->orientation[1] == 'x') ? Orientation::X : Orientation::Y;

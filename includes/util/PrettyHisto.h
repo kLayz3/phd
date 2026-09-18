@@ -134,13 +134,15 @@ struct RGBA {
 	static Color_t hex_to_col(uint32_t val) noexcept;
 
 	uint32_t pack() const noexcept;
+
+	/* Get the color code (Color_t) that ROOT color handlers expect. */
 	Int_t GetColorCode() const;
 	void ApplyFill(TH1* h) const;
 };
 /* Either format supported: 'r,g,b,a' as decimals or 0xTTRRGGBB,
  * where by default 'a' is 1.0 */
 std::istream& operator>>(std::istream&, RGBA& );
-template<bool = true>
+template<bool pretty = true>
 std::ostream& operator<<(std::ostream&, const RGBA& );
 
 struct Opacity {
@@ -156,7 +158,7 @@ inline constexpr Opacity operator""_o(long double value) noexcept {
 	return { static_cast<double>(value) };
 }
 
-/* ^^^^ fun and obvious fact (often forgotten): to be used at compile-time, a constexpr
+/* ^^^^ fun and obvious fact (often forgotten): to be used at comptime, a constexpr
  * function MUST be inline, otherwise the callsite can only be resolved at link time, when it's
  * already too late. */
 
@@ -180,7 +182,7 @@ namespace mnd::hist {
 
 struct TH1B {
 protected:
-	/* Only hard-constructed objects are top of the hierarchy */
+	/* Only hard-constructed objects are top of the hierarchy. */
 	TH1B() : _parent(nullptr) {}
 	
 	virtual ~TH1B() = default;
@@ -190,7 +192,7 @@ protected:
 } // namespace mnd::hist
 
 #define MND_FWD_DRAW(inner) \
-	void Draw(Option_t* options = "") { \
+	inline void Draw(Option_t* options = "") { \
 		h.Draw(options); \
 		if(gPad) gPad->SetGrid(); \
 	}
@@ -242,15 +244,14 @@ struct TH1P : public mnd::hist::TH1B {
 		std::string hname = hname_extra + "_"
 			+ mnd::detail::nonalnum_to_underscore(xs);
 		
-		h = inner_type(hname.c_str(), "", std::forward<Ts>(args)...); 
+		h = inner_type(hname.c_str(), "", std::forward<Ts>(args)...);
 		h.SetDirectory(nullptr);
 
 		std::stringstream title;
 		title << xs;
 		if(title_extra.length() > 0)
 			title << " (" << title_extra << ')';
-		auto title_materialied = title.str();
-		h.SetTitle(Form("%s;%s;%s", title_materialied.c_str(), xlabel.c_str(), "Count") );
+		h.SetTitle(Form("%s;%s;%s", title.str().c_str(), xlabel.c_str(), "Count") );
 		h.GetYaxis()->SetTitleOffset(1.0);
 
 		col.ApplyFill(&h);
@@ -333,6 +334,7 @@ struct TH1P : public mnd::hist::TH1B {
 	}
 
 	void AppendToTitle(std::string_view );
+	void AppendToAxisTitle(std::string_view );
 
 	/* Implicit ref cvt */
 	inline operator inner_type&()             noexcept { return h; }
@@ -390,7 +392,7 @@ struct TH2P : public mnd::hist::TH1B {
 
 		ylabel = std::string(label, colon);
 
-		// Possible `@` separator 
+		// Possible `@` separator
 		const char* at = strchr(label, '@');
 		if(at != nullptr) {
 			xlabel = std::string(colon+1, at);
@@ -411,8 +413,7 @@ struct TH2P : public mnd::hist::TH1B {
 		title << ys << " vs. " << xs;
 		if(title_extra.length() > 0)
 			title << " (" << title_extra << ')';
-		auto title_materialied = title.str();
-		h.SetTitle(Form("%s;%s;%s", title_materialied.c_str(), xlabel.c_str(), ylabel.c_str()) );
+		h.SetTitle(Form("%s;%s;%s", title.str().c_str(), xlabel.c_str(), ylabel.c_str()) );
 		h.GetYaxis()->SetTitleOffset(1.0);
 	}
 
@@ -425,6 +426,21 @@ struct TH2P : public mnd::hist::TH1B {
 	/* Forward only Fill and Draw methods. Don't care about others. */
 	MND_FWD_DRAW(h);
 	MND_FWD_FCN(Fill, h);
+
+	enum EOrientation_ { X = 0, Y = 1 };
+	/* Special Draw method. To also allow for the upper transformed x-axis,
+	 * or the right transformed y-axis.
+	 * First argument is the mapping x' = f(x),
+	 * Second argument is the inverse mapping x = g(x') ,
+	 * where x is the standard lower x-axis,
+	 * and x' is the transformed upper axis. Mapping f(x) must be monotonic and invertible. */
+	template<EOrientation_ = X>
+	void Draw(
+		std::function<double(double)> fwd, // x'= f(x) , lower x  → upper x'
+		std::function<double(double)> bck, // x = g(x'), upper x' → lower x
+		const char* title = "",
+		Option_t* options = ""
+	);
 
 	inline bool IsInside(double x, double y) const noexcept {
 		return (
@@ -445,6 +461,9 @@ struct TH2P : public mnd::hist::TH1B {
 	
 	void AppendToTitle(std::string_view );
 
+	template<EOrientation_ = X>
+	void AppendToAxisTitle(std::string_view );
+
 	/* Implicit ref cvt */
 	operator inner_type&()             noexcept { return h; }
     operator const inner_type&() const noexcept { return h; }
@@ -459,6 +478,23 @@ struct TH2P : public mnd::hist::TH1B {
 	const inner_type& operator*()  const noexcept { return h; }
 
 }; // TH2P
+template<>
+void TH2P::Draw<TH2P::X>(
+	std::function<double(double)>,
+	std::function<double(double)>,
+	const char*,
+	Option_t*
+);
+
+template<>
+void TH2P::Draw<TH2P::Y>(
+	std::function<double(double)>,
+	std::function<double(double)>,
+	const char*,
+	Option_t*
+);
+template<> void TH2P::AppendToAxisTitle<TH2P::X>(std::string_view );
+template<> void TH2P::AppendToAxisTitle<TH2P::Y>(std::string_view );
 
 namespace mnd::type_traits {
 
@@ -796,3 +832,4 @@ namespace mnd::python {
 void poke(bool verbose = false);
 
 } // namespace mnd::python
+

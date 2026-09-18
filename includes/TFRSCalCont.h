@@ -255,7 +255,7 @@ struct SCIParam {
     SCIParam() = default;
 
     double Q(const RNSciCal& s) const noexcept;
-    
+
     /* Getting the correct converter depends on which run number
      * we are currently to do correct dE->Q conversion. But monad's TContainers cannot know of the
      * file name, it is passed only explicitly at the initial TAnalysisProcess ctor. */
