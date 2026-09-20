@@ -14,7 +14,6 @@
 #include "RtypesCore.h"
 #include "TGraph.h"
 #include "TGraphErrors.h"
-#include <TGaxis.h>
 #include <TVirtualPad.h>
 #include "TROOT.h"
 
@@ -126,6 +125,9 @@ TH2P::~TH2P() {
 	}
 }
 
+template class ZoomableTGaxis<TH2P::X>;
+template class ZoomableTGaxis<TH2P::Y>;
+
 template<TH2P::EOrientation_ o>
 static void draw_base_(
 	TH1& h,
@@ -143,11 +145,14 @@ static void draw_base_(
 	} else {
 		label_ = "y";
 	}
-	const std::string tf1_label = std::string{Form("_t_axis_%s_inv_%s", label_, h.GetName())};
+	const std::string tf1_label_inv = std::string{Form("_t_axis_%s_inv_%s", label_, h.GetName())};
+	const std::string tf1_label_fwd = std::string{Form("_t_axis_%s_fwd_%s", label_, h.GetName())};
 
-	if(h.GetListOfFunctions()->FindObject(tf1_label.c_str()) != nullptr)
-		throw std::runtime_error( Form("THXP::Draw(<func>, <func>, ...): object with the name '%s' "
-			"already found. Not allowed to redraw a same histogram with this call.", tf1_label.c_str()));
+	if(h.GetListOfFunctions()->FindObject(tf1_label_inv.c_str()) != nullptr ||
+	   h.GetListOfFunctions()->FindObject(tf1_label_inv.c_str()) != nullptr)
+		throw std::runtime_error( Form("THXP::Draw(<func>, <func>, ...): object with the name '%s' or '%s' "
+			"already found. Not allowed to redraw a same histogram with this call.", 
+				tf1_label_inv.c_str(), tf1_label_fwd.c_str()));
 
 	const bool already_drawn =
 		gPad && gPad->GetListOfPrimitives()->FindObject(&h);
@@ -197,22 +202,12 @@ static void draw_base_(
 	mapping->SetNpx(10000);
 	h.GetListOfFunctions()->Add(mapping);
 
-	TGaxis* top;
-	if constexpr(o == TH2P::X) {
-		top = new TGaxis(
-			xmin, ytop,
-			xmax, ytop,
-			mapping->GetName(),
-			50510, "-"
-		);
-	} else {
-		top = new TGaxis(
-			ytop, xmin,
-			ytop, xmax,
-			mapping->GetName(),
-			50510, "+L"
-		);
-	}
+	const char* chopt = (o == TH2P::X) ? "-" : "+L";
+	auto* top = new ZoomableTGaxis<o>(
+		mapping->GetName(),
+		std::move(fwd),
+		50510, chopt
+	);
 
 	top->SetTitle(top_title);
 	

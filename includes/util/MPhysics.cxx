@@ -78,17 +78,20 @@ std::string Nucleus::chem_to_string(
 
 			std::string_view symbol = magic_enum::enum_name(z);
 			std::string extra = (add_nucleon_number
-				? mnd::sstrcat("{}^{", mnd::utos(A), '}')
+				? (repr == Represent::Rootex)
+					? mnd::sstrcat("{}^{", mnd::utos(A), '}')
+					: mnd::utos(A)
 				: "");
 
 			switch(repr) {
+				case(Represent::Normal):
 				case(Represent::Rootex):
 					return std::move(extra) + std::string{symbol};
 				case(Represent::Pythex):
 					return mnd::sstrcat(
 						R"(\mathrm{)", std::move(extra), symbol, '}');
-				case(Represent::Normal):
-					return (add_nucleon_number? extra: std::string{}) + std::string{symbol};
+				default:
+					mnd::unreachable();
 			}
 		})
 		.value_or("");

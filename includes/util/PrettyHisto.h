@@ -17,6 +17,7 @@
 #include "TPad.h"
 #include "TLatex.h"
 #include "TGClient.h"
+#include <TGaxis.h>
 #include "TLine.h"
 #include "TCanvas.h"
 
@@ -833,3 +834,68 @@ void poke(bool verbose = false);
 
 } // namespace mnd::python
 
+template<TH2P::EOrientation_ o = TH2P::X>
+class ZoomableTGaxis final : public TGaxis {
+	TF1 forward_;
+
+public:
+	ZoomableTGaxis(
+		const char* mapping_name,
+		std::function<double(double)>&& forward, // x'= f(x) , lower x  → upper x'
+		const char* tf1_label = "_t_axis_inv_",
+		int divisions = 510,
+		Option_t* chopt = "",
+		Double_t gridlength = 0
+	) :
+		TGaxis(0,0,1,0, mapping_name, divisions, chopt, gridlength),
+		forward_(
+			tf1_label,
+			[f = std::move(forward)](double* x, double*) -> double {
+				return f(*x);
+			},
+			domain_min, domain_max, 0
+		)
+	{}
+
+	void Paint(Option_t* option = "") override {
+		if(!gPad)
+			return;
+		
+		double xmin, xmax, ytop, a, b;
+		if constexpr(o == TH2P::X) {
+			xmin = gPad->GetUxmin();
+			xmax = gPad->GetUxmax();
+			ytop = gPad->GetUymax();
+
+			TGaxis::SetX1(xmin);
+			TGaxis::SetX2(xmax);
+			TGaxis::SetY1(ytop);
+			TGaxis::SetY2(ytop);
+		} else {
+			xmin = gPad->GetUymin();
+			xmax = gPad->GetUymax();
+			ytop = right_axis_position_ratio
+				*(gPad->GetUxmax() - gPad->GetUxmin())
+				+ gPad->GetUxmin();
+
+			TGaxis::SetY1(xmin);
+			TGaxis::SetY2(xmax);
+			TGaxis::SetX1(ytop);
+			TGaxis::SetX2(ytop);
+		}
+
+		a = forward_.Eval(xmin);
+		b = forward_.Eval(xmax);
+
+		TGaxis::SetWmin(std::min(a, b));
+		TGaxis::SetWmax(std::max(a, b));
+
+		TGaxis::Paint(option);
+	}
+
+public:
+	static constexpr double right_axis_position_ratio = 0.91;
+};
+
+extern template class ZoomableTGaxis<TH2P::X>;
+extern template class ZoomableTGaxis<TH2P::Y>;
