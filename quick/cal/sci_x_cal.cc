@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     CLI::App app{"Calibrate the X measuring dimension (roughly) of either SCI21 and SCI22"};
 
     std::string fileName{};
-	std::vector<TPCRef> ref{}; 
+	std::vector<TPCRef> ref{};
 	u32 i_sci = 0;
     bool do_diff = false;
 	A3 binning_ref = {100, -30, 30};
@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
         ->check(CLI::ReadPermissions);
     add_logged_option(app, "-i,--sci", i_sci, "Scintillator index; 0 => SCI21, 1 => SCI22.")
         ->check(CLI::Range(0,1));
-    add_logged_option<DisplayDefault::No>(app, "-r, --ref", ref, 
+    add_logged_option<DisplayDefault::No>(app, "-r, --ref", ref,
 		"Select which TPC's (either with index: 0,1,2, or with a label: 21,22,23) make the reference. \
 		Select by '0/1' which delay lines get included into the measurement. ")
 		->type_name("[INT|LABEL:BOOL,BOOL;...]")
@@ -67,12 +67,12 @@ int main(int argc, char* argv[]) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
 
-	if(ref.size() < 2) 
+	if(ref.size() < 2)
 		ERROR("At least two valid referent TPC's must be given.\n");
     for(const auto& tpc : ref) {
-		if(!tpc) { // operator bool() 
-			std::cerr << tpc << std::endl; 
-			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid."); 
+		if(!tpc) { // operator bool()
+			std::cerr << tpc << std::endl;
+			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid.");
 		}
 	}
     const auto& label = RNFRSCal::sci_label;
@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
 	const auto& sci_param = sci_params->at(i_sci);
 	const double z0 = sci_param.z0;
     constexpr auto N_TPC = TPCParam::N_S2_TPC;
-	const Arr2<double, N_TPC, 2> zDL = TFRSCalCont::z_s2_tpc_delay_lines(tpc_params); 
+	const Arr2<double, N_TPC, 2> zDL = TFRSCalCont::z_s2_tpc_delay_lines(tpc_params);
     const std::array<double, N_TPC> zTPC = TFRSCalCont::z_s2_tpc(tpc_params);
 	
     WARN("TPC positions: \n");
@@ -101,7 +101,7 @@ int main(int argc, char* argv[]) {
         Form("((h1_sci))SCI%s QDC mean [QDC units]@Calibration point", label[i_sci]),
         0xCB00CB_c, 500, 300, 4000
     );
-    auto* histd = new TH2P(Form("SCI%s X -  TPC extr.[mm]:TPC extr. [mm]", label[i_sci]), 
+    auto* histd = new TH2P(Form("SCI%s X -  TPC extr.[mm]:TPC extr. [mm]", label[i_sci]),
         binning_ref[0], binning_ref[1], binning_ref[2],
         binning_sci[0], binning_sci[1], binning_sci[2]);
 
@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) {
         mnd::PrintProgress(bar, entryId, nentries, 500);
 
         const auto& sci = frs->sci[i_sci];
-        
+       
         /* Care only about single-hit events. */
         if(sci.hits.size() != 1) continue;
         h1_sci->Fill(sci.E);
@@ -150,9 +150,9 @@ int main(int argc, char* argv[]) {
                 if(!id.use[d] or tpc.hits[d].size() != 1)
                     continue;
                 const RNTPCCal::Measurement& hit = tpc.hits[d].front();
-                const double x = hit.X(); 
-                const double y = hit.Y(); 
-                if(!std::isfinite(x) or !std::isfinite(y)) 
+                const double x = hit.X();
+                const double y = hit.Y();
+                if(!std::isfinite(x) or !std::isfinite(y))
                     continue;
                 xe.push_back( x );
                 ye.push_back( y );
@@ -162,23 +162,23 @@ int main(int argc, char* argv[]) {
         if(xe.size() < 3 or ye.size() < 3) continue;
         const auto fx = PolyFit<1>(ze, xe);
         const auto fy = PolyFit<1>(ze, ye);
-            
+
         /* Extrapolated positions at the SCI 21/22: */
         const double xRef = fx[1] * z0 + fx[0];
         const double yRef = fy[1] * z0 + fy[0];
 
         /* SCI's just measure the 'x' ... as such should be invariant relative to y.
-            * but keep it anyway.. its w/e */
+         * but keep it anyway.. its w/e */
         FillTrack(*h2_track_x, fx);
         FillTrack(*h2_track_y, fy);
         h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
         h2_xy->Fill(xRef, yRef);
-        
+
         const double measurement = (do_diff)? (sci_hit.x - xRef): sci_hit.x;
-        histd->Fill(xRef, measurement); 
+        histd->Fill(xRef, measurement);
     }
     bar.mark_as_completed();
-    
+
     if(!dont_fit) {
         constexpr int N_PTS_FOR_GRAPH = 30;
         auto [rg, gerr, g] = FitSpline<1, fit_info::GAUSS_MAX> (

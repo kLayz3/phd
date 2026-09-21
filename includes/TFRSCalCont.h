@@ -4,6 +4,8 @@
 #include "util/json_struct_def.hh"
 #include "TFRSMapCont.h"
 
+#include "TGraph.h"
+
 class TH2I;
 
 struct RNSciCal {
@@ -205,7 +207,7 @@ ADD_JSON_TYPE_RESOLUTION(SCIMeanQDC, 1)
 
 struct SCIDEIntoQConverter {
 	GET_HELP_AUX_IMPL
-    constexpr static f64 BELOW_PEDESTAL_VAL = 0.66;
+    constexpr static f64 BELOW_PEDESTAL_VAL = 0.66; // Some random small number
 
     using SCIMeanQDCSeq = std::vector<SCIMeanQDC>;
     ADD_SERIALIZABLE_FIELD(std::string,    regex,    {},  0);
@@ -213,14 +215,23 @@ struct SCIDEIntoQConverter {
     ADD_SERIALIZABLE_FIELD(SCIMeanQDCSeq,  values,   {},  2);
  
     /* Main method: convert SCI energy (E) to nominal charge (Q)
-	 * If the dependence is: Inv(Q) = A * Q^a, where 
-     * Inv = sqrt((Left - Pedestal) * (Right - Pedestal))
+	 * "Energy" is defined as E = sqrt( (E(l) - Ped(l)) * (E(r) - Ped(r)) )
+	 * If the dependence is: E(Q) = A * Q^a,
      * then:
-	 * f = 1/A, c = 1/a <=> Q(Inv) = (f * Inv)^c */
+	 * f = 1/A, c = 1/a <=> Q(E) = (f * E)^c */
 	double Q(const RNSciCal& ) const noexcept;
+	double Q(double ) const noexcept;
+	
 	inline void ResetQ() const noexcept { this->is_initialized_ = false; }
+	void QParamInit(bool verbose = false) const;
 
-    /* Quickly compile the regex, and match a file name against it. */
+	[[ nodiscard ]] std::pair<TGraph*, TGraph*> GetGraph(
+		int ndiv  = 500,
+		double lo = 10,
+		double hi = 4000
+	) const;
+
+    /* Quickly compile the regex, and match a string_view against it. */
     bool matches_file(std::string_view ) const;
 
     SCIDEIntoQConverter() = default;
@@ -232,7 +243,6 @@ protected:
 	mutable double f_ = NAN; //!
     mutable double c_ = NAN; //!
 	mutable bool is_initialized_ = 0; //!
-	void QParamInit() const;
 
 public:
 	virtual ~SCIDEIntoQConverter() = default;
@@ -257,8 +267,8 @@ struct SCIParam {
     double Q(const RNSciCal& s) const noexcept;
 
     /* Getting the correct converter depends on which run number
-     * we are currently to do correct dE->Q conversion. But monad's TContainers cannot know of the
-     * file name, it is passed only explicitly at the initial TAnalysisProcess ctor. */
+     * we are currently, to do the correct dE->Q conversion. But monad's TContainers cannot know of this
+     * filename, it is passed only explicitly at the initial TAnalysisProcess ctor. */
 
     /* Assigns the intrinsic converter from a passed-in file name. Returns how many
      * instances matched. Sequential matches override the previous ones. */

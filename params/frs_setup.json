@@ -94,12 +94,25 @@
 			"z0": 1554.5,            // [ mm ]
             "de_to_q": [ // Energy loss to charge calibrator
                 {
-                    "regex": "main_0193_0202", // Regex that basefile name (w/o .root) must maatch.
+                    "regex": "main_\\d{4}_\\d{4}", // Regex that basefile name (w/o .root) must match.
                     "pedestal": {
-                        "left": 84.51406810852963,  // Left anode pedestal
-                        "right": 184.38140288373455 // Right anode pedestal
+                        "left": 82.17,  // Left anode pedestal
+						"right": 183.32 // Right anode pedestal
                     },
-                    "values": []
+                    "values": [
+						{
+							"Q": 6,              // Ion charge
+							"qdc_mean": 2963.39  // Avg ADC value (after ped. subtraction)
+						},
+						{
+							"Q": 5,
+							"qdc_mean": 2298.64
+						},
+						{
+							"Q": 4,
+							"qdc_mean": 1606.24
+						}
+					]
                 }
             ]
 		},
@@ -107,13 +120,122 @@
 			"x_offset": -23.26287,
 			"x_factor": 1.53948,
 			"cdiff_lim": [-120, 200],
-			"z0": 3790
+			"z0": 3790,
+			"de_to_q": [
+				{
+                    "regex": "main_0193_\\d{4}",
+                    "pedestal": {
+                        "left": 125.17,
+						"right": 108.4
+                    },
+                    "values": [
+						{
+							"Q": 6,
+							"qdc_mean": 3508.23
+						},
+						{
+							"Q": 5,
+							"qdc_mean": 2669.46
+						},
+						{
+							"Q": 4,
+							"qdc_mean": 1778.48
+						},
+						{
+							"Q": 3,
+							"qdc_mean": 1116.16
+						},
+						{
+							"Q": 2,
+							"qdc_mean": 635.013
+						}
+					]
+                },
+				{
+					"regex": "main_(?!0193)\\d{4}_\\d{4}",
+                    "pedestal": {
+                        "left": 125.17,
+						"right": 108.4
+                    },
+                    "values": [
+						{
+							"Q": 6,             // not sure
+							"qdc_mean": 3571.79 // not sure
+						},
+						{
+							"Q": 5,             // not sure
+							"qdc_mean": 2679.95 // not sure
+						},
+						{
+							"Q": 4,
+							"qdc_mean": 1755.83
+						},
+						{
+							"Q": 3,
+							"qdc_mean": 1116.63
+						},
+						{
+							"Q": 2,
+							"qdc_mean": 638.533
+						}
+					]
+
+				}
+			]
 		},
 		"31": {
 			"x_offset": 0,
 			"x_factor": 1,
 			"cdiff_lim": [-600, -370],
-			"z0": 1714
+			"z0": 1714,
+			"de_to_q": [
+				{
+                    "regex": "main_0193_\\d{4}",
+                    "pedestal": {
+                        "left": 101.75,
+						"right": 104.17
+                    },
+					"values": [
+						{
+							"Q": 6,
+							"qdc_mean": 2411.25
+						},
+						{
+							"Q": 5,
+							"qdc_mean": 1794.12
+						},
+						{
+							"Q": 4,
+							"qdc_mean": 1252.55
+						},
+						{
+							"Q": 2,
+							"qdc_mean": 274.917
+						}
+					]
+				},
+				{
+					"regex": "main_(?!0193)\\d{4}_\\d{4}",
+                    "pedestal": {
+                        "left": 101.75,
+						"right": 104.17
+                    },
+					"values": [
+						{
+							"Q": 3,
+							"qdc_mean": 2690.33
+						},
+						{
+							"Q": 2,
+							"qdc_mean": 1132.74
+						},
+						{
+							"Q": 1,
+							"qdc_mean": 250.205
+						}
+					]
+				}
+			]
 		},
 		"41": {
 			"x_offset": 0,

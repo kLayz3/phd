@@ -842,6 +842,7 @@ public:
 	ZoomableTGaxis(
 		const char* mapping_name,
 		std::function<double(double)>&& forward, // x'= f(x) , lower x  → upper x'
+		double domain_min, double domain_max,
 		const char* tf1_label = "_t_axis_inv_",
 		int divisions = 510,
 		Option_t* chopt = "",

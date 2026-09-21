@@ -3,7 +3,6 @@
 #include "TFRSHitCont.h"
 #include "TFRSHitProc.h"
 #include "util/PolyFitter.h"
-#include "util/json_struct_def.hh"
 #include <cmath>
 
 #include "util/Geometry.h"
@@ -39,7 +38,7 @@ static std::array<double, 2> uniform_circle(double R) noexcept {
 	return { r*cos(phi), r*sin(phi) };
 }
 
-/* This ctor only gets called once, at the creation. Later on, the clones 
+/* This ctor only gets called once, at the creation. Later on, the clones
  * call the implicit copy-ctor. */
 TFRSHitProc::TFRSHitProc (
 	TFRSHitCont& out,
@@ -97,7 +96,7 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 	double& xT = out.inner().xT;
 	double& yT = out.inner().yT;
 
-	/* This is a mask to say that for incoming track, a (0,0) point directly on the target 
+	/* This is a mask to say that for incoming track, a (0,0) point directly on the target
 	 * also gets included. Just for debugging / sanity checks. Do not use for real data. */
 	if(s2_bt_tracking_mask & RNFRSHit::S2_BT_TRACKING_INCLUDE_POINTLIKE_TARGET_MASK) {
 		auto [x0,y0] = uniform_circle(tar_width);
@@ -140,7 +139,7 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 
 	if(x.size() >= 2) {
 		PolyFit<1>(zx, x, this->fit_result);
-		bt.x0 = fit_result[0]; 
+		bt.x0 = fit_result[0];
 		bt.ax = fit_result[1];
 		xT = poly::Eval(z0, fit_result);
 	}

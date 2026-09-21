@@ -20,6 +20,7 @@ constexpr static u32 DEFAULT_A_SECONDARY =  9;
 
 namespace fs {
 
+inline constexpr const char* runsheet_file_path = "params/runsheet.json";
 inline constexpr const char* file_name_key = "Name ";
 inline constexpr const char* start_num_key = "Start file number";
 inline constexpr const char* end_num_key   = "Stop file number";

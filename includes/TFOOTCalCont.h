@@ -253,7 +253,7 @@ struct FOOTGainParam {
 		 * graph->Draw("AL"); pts->Draw("P SAME"), ; */
 	}
 	[[ nodiscard ]] inline std::pair<TGraph*, TLine*> GetRefZGraph(
-		int Z, 
+		int Z,
 		int Npts = 640
 	) const {
 		const double nm = this->GetNominalValue(Z);

@@ -190,7 +190,7 @@ static void draw_base_(
 	/* Function input is the TOP-axis value; output is the original x.
 	 * So: x = g(x') , aka the `bck` function. */
 	auto* mapping = new TF1(
-		tf1_label.c_str(),
+		tf1_label_inv.c_str(),
 		[f = std::move(bck)](double *xprime, double* _) -> double {
 			(void)_;
 			return f(*xprime);
@@ -206,6 +206,8 @@ static void draw_base_(
 	auto* top = new ZoomableTGaxis<o>(
 		mapping->GetName(),
 		std::move(fwd),
+		xmin, xmax,
+		tf1_label_fwd.c_str(),
 		50510, chopt
 	);
 

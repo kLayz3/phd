@@ -39,7 +39,8 @@ int main(int argc, char* argv[]) {
     add_logged_option(app, "--sratio", sratio, "Width ratio of raw histogram, how much to fit around the peak. Only with --ped option active.")
         ->check(CLI::PositiveNumber);
 	add_logged_option(app, "-l,--line-size", line_size, "Fit curve line size.");
-    add_logged_option(app, "-p,--ped", ped, "Do pedestal subtraction. Two numbers represent average pedestals for left and right channel.");
+    add_logged_option(app, "-p,--ped", ped, "Do pedestal subtraction. Two numbers represent average pedestals for left and right channel, respectively.")
+		->delimiter(',');
     add_logged_flag(app, "--ped-from-file", ped_from_file, "Take the pedestal values from the file itself. Will invalidate the p,--ped entered values.");
     add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
@@ -53,7 +54,7 @@ int main(int argc, char* argv[]) {
 	if(fileName.empty()) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
-    
+
     const auto& label = RNFRSCal::sci_label;
 	std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_params;
     {
@@ -76,6 +77,7 @@ int main(int argc, char* argv[]) {
             cvt->pedestal.right
         };
     }
+
     auto* h1_sci_ped_l = new TH1P (
         Form("((h1_sci))SCI%s-l pedestal [QDC units]", label[i_sci]),0xCB00CB_c, 2000, 0, 2000
     );
@@ -84,14 +86,23 @@ int main(int argc, char* argv[]) {
     );
     TH1P *h1_sci_l = nullptr, *h1_sci_r = nullptr, *h1_sci_e = nullptr;
     if( ped.is_some() ) {
+		auto [pl, pr] = ped.unwrap();
+		if(pl > 1000 or pr > 1000) ERROR(".. Pedestals too large?");
+		int scale_l = 4090 - ped.unwrap()[0];
+		int scale_r = 4090 - ped.unwrap()[1];
+		int scale_lr = (int)sqrt(scale_l * scale_r);
+
         h1_sci_l = new TH1P (
-            Form("((h1_sci))SCI%s-l value [QDC units]@Single hit cut", label[i_sci]), 0xABABAB_c, 4096, 0, 4096
+            Form("((h1_sci))SCI%s-l value [QDC units]@Single hit cut", label[i_sci]), 0xABABAB_c,
+				(Int_t)(0.50*scale_l) - 1, 1.0, scale_l
         );
         h1_sci_r = new TH1P (
-            Form("((h1_sci))SCI%s-r value [QDC units]@Single hit cut", label[i_sci]), 0xBABABA_c, 4096, 0, 4096
+            Form("((h1_sci))SCI%s-r value [QDC units]@Single hit cut", label[i_sci]), 0xBABABA_c,
+				(Int_t)(0.50*scale_r) - 1, 1.0, scale_r
         );
         h1_sci_e = new TH1P (
-            Form("((h1_sci))SCI%s average value [QDC units]@Single hit cut", label[i_sci]), 0xBABABA_c, 4096, 0, 4096
+            Form("((h1_sci))SCI%s average value [QDC units]@Single hit cut", label[i_sci]), 0xBABABA_c,
+				(Int_t)(0.50*scale_lr) - 1, 1.0, scale_lr
         );
     }
 	TApplication rootApp("app", 0, 0);
@@ -121,15 +132,15 @@ int main(int argc, char* argv[]) {
     for(auto entryId : *ntuple) {
         ntuple->LoadEntry(entryId);
         mnd::PrintProgress(bar, entryId, nentries, 500);
-        
+
         const auto& sci = frs->sci[i_sci];
-        
+
         if(sci.hits.empty()) {
             h1_sci_ped_l->Fill(sci.El);
             h1_sci_ped_r->Fill(sci.Er);
             continue;
         }
-        
+
         if(ped.is_some()) {
             /* Demand single hit entries only. */
             if(sci.hits.size() != 1) continue;
@@ -156,6 +167,14 @@ int main(int argc, char* argv[]) {
     WARN("Pedestal of SCI%s found:\n", label[i_sci]);
     std::cerr << "\"pedestal\": " << nlohmann::json(result).dump(4) << std::endl;
 
+    SCIQDCPedestal peak;
+	TH1D* hl = &h1_sci_ped_l->h;
+	TH1D* hr = &h1_sci_ped_r->h;
+	peak.left  = hl->GetXaxis()->GetBinCenter( hl->GetMaximumBin() );
+	peak.right = hr->GetXaxis()->GetBinCenter( hr->GetMaximumBin() );
+    WARN("Pedestal PEAK of SCI%s found:\n", label[i_sci]);
+    std::cerr << "\"pedestal\": " << nlohmann::json(peak).dump(4) << std::endl;
+
     if(ped.is_some()) {
         TCanvas *c = new TCanvas("qdc_sub", "qdc_sub", 1800, 1200);
         c->Divide(2,2);
@@ -165,8 +184,16 @@ int main(int argc, char* argv[]) {
         h1_sci_r->Draw();
         c->cd(3);
         h1_sci_e->Draw();
-    }
-
-    WARN("End-of-main");
+		c->cd(4); new PLatex(0.07,
+			"Pedestal values: ",
+			Form("L: %.3f", ped.unwrap()[0]),
+			Form("R: %.3f", ped.unwrap()[1])
+		);
+		canvas::save_all<canvas::Exe>( save, { mnd::msg("SCI%d", i_sci) });
+    } else {
+		WARN("Won't be saved, since pedestal not supplied.\n");
+	}
+	
+    WARN("End-of-main\n");
     rootApp.Run(); return 0;
 }

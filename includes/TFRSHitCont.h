@@ -44,9 +44,12 @@ struct FRSToFSingle {
 
     template<typename T>
     using A = std::array<T, 2>;
-    
+
     ADD_SERIALIZABLE_FIELD(A<u32>,    combo, {}, 0);
     ADD_SERIALIZABLE_FIELD(A<double>, par,   {}, 1);
+	
+	double Beta(double ) const noexcept;
+	double Beta(const RNFRSCal& ) const noexcept;
 
 	FRSToFSingle() = default;
 	virtual ~FRSToFSingle() = default;
@@ -121,7 +124,6 @@ struct RNFRSHit {
 		s2_at.Clean();
 		s3.Clean();
 		xT = NAN; yT = NAN;
-		//cal.Clean(); // dont need since it's just copied over from prev. step
 	}
 
 	virtual ~RNFRSHit() = default;

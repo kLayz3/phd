@@ -4,7 +4,6 @@
 #include <string>
 
 nlohmann::json mnd::fs::runsheet_obj {};
-constexpr static const char* runsheet_file_path_ = "params/runsheet.json";
 
 /* Returns None for missing key, null or JSON conversion exception.
  * Otherwise return (by value) the json object converted to `T`. */
@@ -25,7 +24,7 @@ void mnd::fs::load_runsheet(const std::filesystem::path& p) {
 	runsheet_obj = ParseJSON(p);
 }
 void mnd::fs::load_runsheet() {
-	runsheet_obj = ParseJSON(runsheet_file_path_);
+	runsheet_obj = ParseJSON(runsheet_file_path);
 }
 
 static const auto is_eq = [](double a, double b) -> bool {

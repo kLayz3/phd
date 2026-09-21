@@ -102,7 +102,7 @@ void TFOOTMapProc::ProcessEntry() noexcept {
 void TFOOTMapProc::CalcGlobalPedestal() {
 	TH2I* h = out.h2_raw_tmp;
 	if(h->GetEntries() == 0) {
-		WARN("Ran over the raw Go4 FOOT data batch, but found 0 events with data? " EMPH(FOOT: %d) ", Setting keeping old pedestals / setting to 0.", N);
+		WARN("Ran over the raw Go4 FOOT data batch, but found 0 events with data? " EMPH(FOOT: %d) ", Setting keeping old pedestals / setting to 0.\n", N);
 		return;
 	}
 

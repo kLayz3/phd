@@ -16,6 +16,28 @@ static TrigParam _trig_param;
 static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
 static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
 
+double FRSToFSingle::Beta(double dt) const noexcept {
+	const double denom = dt - par[0];
+	if(denom <= 0) return NAN;
+	
+	return std::min(par[1] / denom, 1.0);
+}
+
+double FRSToFSingle::Beta(const RNFRSCal& cal) const noexcept {
+	const RNSciCal& start = cal.sci[ combo[0] ];
+	const RNSciCal& end = cal.sci[ combo[1] ];
+	/* ^^^ both acceses cannot be UB. Validity checked during `TFRSHitCont::Init()` */
+
+	if(start.hits.empty() || end.hits.empty())
+		return NAN;
+	
+	/* Take first hit, and have that as the reference. */
+	const RNSciCal::Measurement& m0 = start.hits.front();
+	const RNSciCal::Measurement& m1 = start.hits.front();
+	
+	return this->Beta(m1.t - m0.t);
+}
+
 std::string RNFRSHit::DecodeS2() const noexcept {
 	std::stringstream info;
 	info << "S2 BT tracking: ";

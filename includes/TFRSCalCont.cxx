@@ -26,26 +26,30 @@ bool SCIDEIntoQConverter::matches_file(std::string_view fname) const {
     /* Regex needs to match entirely on the stem. */
     return std::regex_match(fname.begin(), fname.end(), re);
 }
-double SCIDEIntoQConverter::Q(const RNSciCal& s) const noexcept {
+
+double SCIDEIntoQConverter::Q(double e) const noexcept {
     if(!this->is_initialized_)
         QParamInit();
+    return std::pow(f_ * e, c_);
+}
+double SCIDEIntoQConverter::Q(const RNSciCal& s) const noexcept {
     const f64 de_l = std::max( (s.El - pedestal.left),  BELOW_PEDESTAL_VAL);
     const f64 de_r = std::max( (s.Er - pedestal.right), BELOW_PEDESTAL_VAL);
-    const f64 inv = std::sqrt( de_l * de_r );
-    return std::pow(f_ * inv, c_);
+    const f64 e = std::sqrt( de_l * de_r );
+    return Q(e);
 }
 
-void SCIDEIntoQConverter::QParamInit() const {
+void SCIDEIntoQConverter::QParamInit(bool verbose) const {
     if( !mnd::isfinite(pedestal.left, pedestal.right) ) {
         ERROR("SCI: de-to-q converter, pedestal left parameter is null.\n");
         std::cerr << pedestal << std::endl;
     }
-        
+
     std::vector<f64> x, y;
     for(auto [Q, qdc_mean] : this->values) {
         if(qdc_mean <= pedestal.left || qdc_mean <= pedestal.right)
             ERROR("SCI: de-to-q converter, for charge %d, its mean value <= pedestal?\n", Q);
-        
+
         x.push_back( std::log(Q) );
         y.push_back( std::log(qdc_mean) );
     }
@@ -53,6 +57,43 @@ void SCIDEIntoQConverter::QParamInit() const {
     this->f_ = std::exp(-r[0]);
     this->c_ = 1.0 / r[1];
     this->is_initialized_ = true;
+	if(verbose) {
+		WARN("Found coefficients: " BOLD "E(Q) = %.2f * Q^%.2f" KRNM "  <=>  "
+			KBH_GRN "Q(E) = (%.2f * E)^%.2f\n" KNRM,
+			1.0/f_, 1.0/c_, f_, c_);
+	}
+}
+std::pair<TGraph*, TGraph*> SCIDEIntoQConverter::GetGraph(
+	int ndiv,
+	double lo,
+	double hi
+) const {
+	if(lo >= hi || lo < 0 || !std::isfinite(lo) || !std::isfinite(hi) || ndiv <= 0)
+		ERROR("Requested bad [ndiv,lo,hi] interval.\n");
+
+	TGraph* g = new TGraph(ndiv);
+	for(int i=0; i<ndiv; ++i) {
+		double y = lo + (i+0.5) * (hi-lo) / ndiv; // centre
+		double value = Q(y);
+		g->SetPoint(i, y, value);
+	}
+	g->SetLineWidth(4);
+	g->SetLineColor(kRed + 2);
+	g->GetXaxis()->SetTitle("QDC mean (after pedestal sub)");
+	g->GetYaxis()->SetTitle("Ion charge");
+
+	TGraph* gpts = new TGraph{};
+	for(auto [Q, qdc_mean]: values) {
+		gpts->AddPoint(qdc_mean, Q);
+	}
+
+	gpts->SetMarkerStyle(20);
+	gpts->SetMarkerSize(2.0);
+	
+	return { gpts, g };
+	/* Draw via:
+	 * auto [pts, graph] = GetGraph();
+	 * graph->Draw("AL"); pts->Draw("P SAME"), ; */
 }
 
 double SCIParam::Q(const RNSciCal& s) const noexcept {
