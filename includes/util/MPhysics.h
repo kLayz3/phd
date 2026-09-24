@@ -27,18 +27,18 @@ constexpr static auto None = ::mnd::None;
 
 namespace si {
 
-inline constexpr double e = 1.602176634e-19;   // C
-inline constexpr double c = 299792458.;        // m/s
-inline constexpr double me = 9.1093837139e-31; // kg
-inline constexpr double u = 1.66053906892e-27; // kg
+inline constexpr double e  = 1.602176634e-19;   // C
+inline constexpr double c  = 299792458.;        // m/s
+inline constexpr double me = 9.1093837139e-31;  // kg
+inline constexpr double u  = 1.66053906892e-27; // kg
 
 } // namespace si
 
 namespace nuc {
 
-inline constexpr double e = 1.0;
-inline constexpr double c = 1.0;
-inline constexpr double u = 931.49410372;   // MeV/c^2
+inline constexpr double e  = 1.0;           // Charge unit
+inline constexpr double c  = 1.0;           // By default
+inline constexpr double u  = 931.49410372;  // MeV/c^2
 inline constexpr double me = 0.51099895069; // MeV/c^2
 inline constexpr double be = 13.6e-6;       // MeV, binding energy of electron in 1H atom
 inline constexpr double Tm = 299.792458;    // MeV/(e*c) , conversion for tesla-meter
@@ -64,6 +64,9 @@ struct Brho_t {
 	double value;
 };
 struct Beta_t {
+	double value;
+};
+struct BetaGamma_t {
 	double value;
 };
 /* Kinetic energy per nucleon [AMeV]. */
@@ -93,7 +96,7 @@ inline constexpr uint32_t n_chem_symbols =
 
 namespace detail {
 struct chem_symbol_table {
-	char data[n_chem_symbols][3] = {'\0'};
+	char data[n_chem_symbols][3] = {{'\0'}};
 };
 
 inline constexpr auto chem_symbol_storage_ = []() constexpr {
@@ -175,6 +178,8 @@ struct Nucleus {
 	/* Returns the mass of the nucleus. */
 	double mass() const noexcept;
 	double mass_per_nucleon() const noexcept;
+
+	inline constexpr double AoQ() const noexcept { return static_cast<double>(A) / Z; }
 	Option<uint32_t> charge_state() const noexcept;
 	Option<AtomicNumber> ChemElem() const noexcept;
 	std::string to_string() const noexcept;
@@ -189,7 +194,7 @@ struct Nucleus {
 	 * [3]: Usual format as used in text. */
 	std::string chem_to_string(
 		Represent repr = Represent::Normal,
-		bool add_nucleon_number = false
+		bool add_nucleon_number = true
 	) const noexcept;
 
 	/* Parse a string into the Nucleus state.
@@ -272,7 +277,22 @@ inline double BetaGamma(uint32_t A, uint32_t Q, EKin_t e) noexcept {
 	return sqrt( BetaGamma2(A,Q,e) );
 }
 
-/* Sometimes A,Q is known at comptime. */
+/* Unqualified measurements. When utmost precision isn't needed and
+ * can just assume that mass: m(A,Z) == A*u . */
+inline double BetaGamma(EKin_t e) noexcept {
+	constexpr double uc2 = nuc::u * nuc::c * nuc::c;
+	double frac_plus_1 = e.value / uc2 + 1;
+	return std::sqrt(frac_plus_1 * frac_plus_1 - 1.0);
+}
+inline double AoQ(Brho_t R, BetaGamma_t bg) noexcept {
+	constexpr double tm_over_uc = nuc::Tm / (nuc::u * nuc::c);
+	return R.value/bg.value * tm_over_uc;
+}
+inline double AoQ(Brho_t R, EKin_t e) noexcept {
+	const double bg = BetaGamma(e);
+	return AoQ(R, BetaGamma_t{bg});
+}
+
 template<uint32_t A, uint32_t Q>
 constexpr double BetaGamma(Brho_t brho) noexcept {
 	constexpr double m = mass<A,Q>();
@@ -287,7 +307,7 @@ constexpr double BetaGamma2(EKin_t e) noexcept {
 }
 template<uint32_t A, uint32_t Q>
 constexpr double BetaGamma(EKin_t e) noexcept {
-	return sqrt( BetaGamma<A,Q>(e) );
+	return sqrt( BetaGamma2<A,Q>(e) );
 }
 
 /* Brho is a number corresponding to units of tesla-meter. */
@@ -300,7 +320,6 @@ inline double Beta(uint32_t A, uint32_t Q, EKin_t e) noexcept {
 	return cvt::get_beta_from_betagamma2(beta_gamma2);
 }
 
-/* Sometimes A,Q is known at comptime. */
 template<uint32_t A, uint32_t Q>
 constexpr double Beta(Brho_t brho) noexcept {
 	const double beta_gamma = BetaGamma<A,Q>(brho);

@@ -26,9 +26,13 @@ data = {}
 
 for i in range(starting_row, final_row+1):
 	record = {
-		str(key): None if pd.isna(value) else value
+		str(key): (
+		    None if pd.isna(value)
+		    else value.strip() if isinstance(value, str)
+		    else value
+	    )
 		for key, value in zip(df.iloc[1], df.iloc[i])
-		if pd.notna(key)
+		if pd.notna(key) and str(key).strip()
 	}
 
 	data[str(i + 1)] = record

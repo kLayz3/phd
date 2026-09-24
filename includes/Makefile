@@ -1,35 +1,13 @@
 include q.mk
-
-SRC_DIR = $(shell pwd -P)
-BUILD_DIR = $(SRC_DIR)/build_$(shell gcc -dumpmachine)_$(shell gcc -dumpversion)
-DICT_DIR = $(SRC_DIR)/dict
-
-GO4_SRC_DIR = $(shell pwd -P)/../../go4/src
-CXXFLAGS := $(shell root-config --cflags) -Wall -MMD -MP -fPIC \
-	-I$(SRC_DIR)/core \
-	-I$(GO4_SRC_DIR) \
-	-I$(GO4SYS)/include
-
+include includes.mk
 include monad/common.mk
 
-LDFLAGS := $(shell root-config --ldflags)
-LIBS := $(shell root-config --libs) -lROOTNTuple \
-		$(shell python3-config --embed --ldflags) \
-		-Wl,-rpath,'$$ORIGIN' \
+SRC_DIR := $(shell pwd -P)
+BUILD_DIR := $(SRC_DIR)/build_$(shell gcc -dumpmachine)_$(shell gcc -dumpversion)
+DICT_DIR := $(SRC_DIR)/dict
 
-# Normally on lustre.hpc the libfftw3 is fucked so I found
-# one normally on a /usr/lib that works and ported it over to $HOME/.local/lib
-# This is a very handwavy hack.
-HOSTNAME = $(shell hostname)
-ifneq ($(findstring lustre,$(HOSTNAME)),)
-	LIBS += -Wl,--no-as-needed \
-		-L$(HOME)/.local/lib \
-		-Wl,-rpath,$(HOME)/.local/lib \
-		-lfftw3 \
-		-Wl,--as-needed
-else
-	LIBS += -lfftw3
-endif
+LIBS += $(shell python3-config --embed --ldflags) \
+		-lfftw3
 
 SRC := $(wildcard $(SRC_DIR)/*.cxx)
 HEADERS := $(wildcard $(SRC_DIR)/*.h)
@@ -56,8 +34,8 @@ UTIL_LIB = $(UTIL_DIR)/libUtil.a
 all: $(GEN_LIB) $(DICT) symlink
 
 # I fucked up the linking order at some point
-# , so from the static I gotta load all the symbols. 🤦 */ 
-$(GEN_LIB) : $(UTIL_LIB) $(OBJ) $(DICT_OBJ) 
+# , so from the static I gotta load all the symbols. 🤦 */
+$(GEN_LIB) : $(UTIL_LIB) $(OBJ) $(DICT_OBJ)
 	$(Q)$(call log,LINK,$(notdir $@))
 	$(Q)$(CXX) $(LDFLAGS) -shared -o $@ \
 		-Wl,--whole-archive $< \

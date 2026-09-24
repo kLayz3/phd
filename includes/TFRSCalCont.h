@@ -24,6 +24,7 @@ struct RNSciCal {
 	double E  = NAN; // quick n' dirty: sqrt(El * Er)
 	std::vector<Measurement> hits;
 
+	/* Return true if more than 1 hit registered by the MHTDC. */
 	inline bool IsOk() const noexcept  { return hits.size() > 0; }
 	inline void Clean() noexcept { E = (El = (Er = NAN)); hits.clear(); }
 	virtual ~RNSciCal() = default;
@@ -324,12 +325,14 @@ inline void Add(TrigParam&, const TrigParam&) {}
 
 struct TFRSCalCont : TContainer<RNFRSCal> {
 	friend struct TFRSCalProc;
+	friend struct TFRSHitProc;
 	
 	TH2I* h2_tpc_xy[RNFRSCal::N_VALID_TPC][2];
 	TH1I* h1_tpc_y[RNFRSCal::N_VALID_TPC][4];
 	TH1I* h1_tpc_mask[RNFRSCal::N_VALID_TPC][2];
 	TH1I* h1_x_sc21_before_target;
 	TH1I* h1_x_sc22_after_target;
+	TH1I* h1_s3_tdc_dt;
 
 	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param{};
 	std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_param{};
@@ -348,7 +351,5 @@ struct TFRSCalCont : TContainer<RNFRSCal> {
     );
 
 private:
-    inline static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
-    inline static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
-    inline static TrigParam _trig_param {};
+	static nlohmann::json setup;
 };

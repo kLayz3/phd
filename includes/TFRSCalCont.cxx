@@ -4,27 +4,31 @@
 
 #include "util/JSONParser.h"
 #include "util/PolyFitter.h"
+#include "util/json_struct_def.hh"
 
 using nlohmann::json;
 namespace fs = std::filesystem;
 
-static nlohmann::json setup {};
+json TFRSCalCont::setup {};
+
+static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
+static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
+static TrigParam _trig_param {};
 
 bool SCIDEIntoQConverter::matches_file(std::string_view fname) const {
     /* `fname` could be with an extension, or with fullpath appended.
      * In this case, just strip it out. */
-    const std::string stem = fs::path(fname).stem().string();
     std::regex re;
     try {
         re = std::regex{this->regex};
     } catch(const std::exception& e) {
-        ERROR("SCIDEIntoQConverter::matches_file(...): "
-            "Compiling underlying regex: \'%s\' failed. Info: %s\n",
+        MND_THROW("SCIDEIntoQConverter::matches_file(...): "
+            "Compiling underlying regex: '%s' failed. Info: %s\n",
             this->regex.c_str(), e.what());
     }
 
-    /* Regex needs to match entirely on the stem. */
-    return std::regex_match(fname.begin(), fname.end(), re);
+    /* Regex needs to just find a match on the fname. Thats it. */
+    return std::regex_search(fname.begin(), fname.end(), re);
 }
 
 double SCIDEIntoQConverter::Q(double e) const noexcept {
@@ -158,7 +162,7 @@ TFRSCalCont::TFRSCalCont() : TContainer("FRS") {}
 
 void TFRSCalCont::Init(TDictInfo info) {
 	auto it = info.find("Setup");
-	if(it == info.end()) 
+	if(it == info.end())
 		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
 	const std::string& file_name = it->second;
 	setup = ParseJSON(file_name);
@@ -193,9 +197,10 @@ void TFRSCalCont::Init(TDictInfo info) {
 	}
 
     constexpr auto trig_param_json_name = TrigParam::get_name<0>();
-    if(setup.contains(trig_param_json_name)) {
-        UNROLL_JSON_PARAM(_trig_param, setup.at(trig_param_json_name), 0);
-    }
+    if(setup.find(trig_param_json_name) == setup.end())
+		WARN("'%s' JSON entry not found. Trig/tpat mapping not performed... Is fine.\n", trig_param_json_name);
+    else
+		UNROLL_JSON_PARAM(_trig_param, setup, 0);
 }
 
 using T1 = std::remove_reference_t<decltype(*TFRSCalCont::tpc_param)>; // std::array<TPCParam, _>
@@ -220,6 +225,7 @@ void TFRSCalCont::Setup() {
 
 	h1_x_sc21_before_target = RegisterObject<TH1I>("h1_x_sc21_before_target", "Position (from Scintillator) before target (mm)", 400,-100,100);
 	h1_x_sc22_after_target = RegisterObject<TH1I>("h1_x_sc22_after_target", "Position (from Scintillator) after target (mm)", 400,-100,100);
+	h1_s3_tdc_dt = RegisterObject<TH1I>("h1_s3_tdc_dt", "Raw TDC time difference - SCI31 - SCI22:TDC [25ps]", 2000, -1000, 1000);
 
 	/* no-op collector taken deduces from free Add fnc's implemented above. */
 	tpc_param = RegisterObject<T1>("tpc_parameters", {});

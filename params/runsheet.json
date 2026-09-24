@@ -2,7 +2,7 @@
   "26": {
     "Date": "15.02.2024",
     "Start time": null,
-    "Name ": "expert_trigger_min_matter",
+    "Name": "expert_trigger_min_matter",
     "MARTIN NOTES": null,
     "Start file number": 1,
     "Stop file number": 2,
@@ -23,7 +23,7 @@
   "27": {
     "Date": "15.02.2024",
     "Start time": "03:05:00",
-    "Name ": "expert_trigger_frsdet",
+    "Name": "expert_trigger_frsdet",
     "MARTIN NOTES": "ToF 1",
     "Start file number": 1,
     "Stop file number": 1,
@@ -44,7 +44,7 @@
   "28": {
     "Date": "15.02.2024",
     "Start time": "03:05:00",
-    "Name ": "expert_trigger_with_target",
+    "Name": "expert_trigger_with_target",
     "MARTIN NOTES": "ToF 2",
     "Start file number": 1,
     "Stop file number": 2,
@@ -65,7 +65,7 @@
   "29": {
     "Date": "15.02.2024",
     "Start time": "03:42:00",
-    "Name ": "expert_trigger_with_target",
+    "Name": "expert_trigger_with_target",
     "MARTIN NOTES": "ToF 3",
     "Start file number": 3,
     "Stop file number": 3,
@@ -86,7 +86,7 @@
   "30": {
     "Date": "15.02.2024",
     "Start time": "03:55:00",
-    "Name ": "expert_trigger_with_target",
+    "Name": "expert_trigger_with_target",
     "MARTIN NOTES": "ToF 4",
     "Start file number": 4,
     "Stop file number": 4,
@@ -107,7 +107,7 @@
   "31": {
     "Date": "15.02.2024",
     "Start time": "04:33:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": "JUNK FOR FOOT",
     "Start file number": 1,
     "Stop file number": 1,
@@ -128,7 +128,7 @@
   "32": {
     "Date": "15.02.2024",
     "Start time": "04:33:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": null,
     "Start file number": 2,
     "Stop file number": 2,
@@ -149,7 +149,7 @@
   "33": {
     "Date": "15.02.2024",
     "Start time": "04:33:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": null,
     "Start file number": 3,
     "Stop file number": 3,
@@ -170,7 +170,7 @@
   "34": {
     "Date": "15.02.2024",
     "Start time": "04:33:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": null,
     "Start file number": 4,
     "Stop file number": 4,
@@ -191,7 +191,7 @@
   "35": {
     "Date": "15.02.2024",
     "Start time": "04:33:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": null,
     "Start file number": 5,
     "Stop file number": 5,
@@ -212,7 +212,7 @@
   "36": {
     "Date": "15.02.2024",
     "Start time": "04:33:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": null,
     "Start file number": 6,
     "Stop file number": 6,
@@ -233,7 +233,7 @@
   "37": {
     "Date": "15.02.2024",
     "Start time": "04:33:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": null,
     "Start file number": 7,
     "Stop file number": 7,
@@ -254,7 +254,7 @@
   "38": {
     "Date": "15.02.2024",
     "Start time": "05:07:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": null,
     "Start file number": 8,
     "Stop file number": 8,
@@ -275,7 +275,7 @@
   "39": {
     "Date": "15.02.2024",
     "Start time": "05:07:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": null,
     "Start file number": 9,
     "Stop file number": 9,
@@ -296,7 +296,7 @@
   "40": {
     "Date": "15.02.2024",
     "Start time": "05:16:00",
-    "Name ": "c9_sc21trig",
+    "Name": "c9_sc21trig",
     "MARTIN NOTES": null,
     "Start file number": 10,
     "Stop file number": 11,
@@ -317,7 +317,7 @@
   "41": {
     "Date": "15.02.2024",
     "Start time": "05:16:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 1,
     "Stop file number": null,
@@ -338,7 +338,7 @@
   "42": {
     "Date": "15.02.2024",
     "Start time": "05:32:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 2,
     "Stop file number": null,
@@ -359,7 +359,7 @@
   "43": {
     "Date": "15.02.2024",
     "Start time": "05:46:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 3,
     "Stop file number": 12,
@@ -380,7 +380,7 @@
   "44": {
     "Date": "15.02.2024",
     "Start time": "07:02:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 13,
     "Stop file number": 15,
@@ -401,7 +401,7 @@
   "45": {
     "Date": "15.02.2024",
     "Start time": "09:20:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 16,
     "Stop file number": 16,
@@ -422,7 +422,7 @@
   "46": {
     "Date": "15.02.2024",
     "Start time": "12:50:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 17,
     "Stop file number": 17,
@@ -443,18 +443,18 @@
   "47": {
     "Date": "15.02.2024",
     "Start time": "15:20:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 18,
     "Stop file number": 18,
-    "Ion": null,
-    "E_in [MeV/u]": null,
-    "Fragment": null,
-    "FRS Setting number": null,
-    "TA-S1": null,
-    "S1-S2": null,
-    "S2-S3": null,
-    "S3-S4": null,
+    "Ion": "12C4+",
+    "E_in [MeV/u]": 860,
+    "Fragment": "9C6+ to S2, 4He to S3,S4",
+    "FRS Setting number": 8,
+    "TA-S1": 7.1741,
+    "S1-S2": 6.7626,
+    "S2-S3": 8.8181,
+    "S3-S4": 8.806,
     "TA": null,
     "S1": null,
     "S2": null,
@@ -464,7 +464,7 @@
   "48": {
     "Date": "15.02.2024",
     "Start time": "15:36:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 19,
     "Stop file number": 19,
@@ -485,14 +485,14 @@
   "49": {
     "Date": "15.02.2024",
     "Start time": "16:04:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 20,
     "Stop file number": 22,
     "Ion": "12C4+",
     "E_in [MeV/u]": 860,
     "Fragment": "9C6+ to S2, 4He to S3,S4",
-    "FRS Setting number": 8,
+    "FRS Setting number": "template <Orientation> class ZoomableTGaxis;",
     "TA-S1": 7.1741,
     "S1-S2": 6.7626,
     "S2-S3": 8.8181,
@@ -506,7 +506,7 @@
   "50": {
     "Date": "15.02.2024",
     "Start time": "16:30:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 23,
     "Stop file number": 24,
@@ -527,7 +527,7 @@
   "51": {
     "Date": "15.02.2024",
     "Start time": "16:40:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 25,
     "Stop file number": 26,
@@ -548,7 +548,7 @@
   "52": {
     "Date": "15.02.2024",
     "Start time": "16:45:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 27,
     "Stop file number": 27,
@@ -569,7 +569,7 @@
   "53": {
     "Date": "15.02.2024",
     "Start time": "16:55:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 28,
     "Stop file number": 32,
@@ -590,7 +590,7 @@
   "54": {
     "Date": "15.02.2024",
     "Start time": "16:55:00",
-    "Name ": "main ",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 33,
     "Stop file number": 38,
@@ -611,7 +611,7 @@
   "55": {
     "Date": "15.02.2024",
     "Start time": "18:10:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 39,
     "Stop file number": 48,
@@ -632,7 +632,7 @@
   "56": {
     "Date": "15.02.2024",
     "Start time": "18:45:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 49,
     "Stop file number": 50,
@@ -653,7 +653,7 @@
   "57": {
     "Date": "15.02.2024",
     "Start time": "18:50:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 51,
     "Stop file number": 57,
@@ -674,7 +674,7 @@
   "58": {
     "Date": "15.02.2024",
     "Start time": "19:00:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 58,
     "Stop file number": 62,
@@ -695,7 +695,7 @@
   "59": {
     "Date": "15.02.2024",
     "Start time": "19:05:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 63,
     "Stop file number": 79,
@@ -716,7 +716,7 @@
   "60": {
     "Date": "15.02.2024",
     "Start time": "19:40:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 80,
     "Stop file number": 81,
@@ -737,7 +737,7 @@
   "61": {
     "Date": "15.02.2024",
     "Start time": "19:51:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 82,
     "Stop file number": 85,
@@ -758,7 +758,7 @@
   "62": {
     "Date": "15.02.2024",
     "Start time": "19:55:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 86,
     "Stop file number": 106,
@@ -779,7 +779,7 @@
   "63": {
     "Date": "15.02.2024",
     "Start time": "22:47:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 107,
     "Stop file number": 117,
@@ -800,7 +800,7 @@
   "64": {
     "Date": "15.02.2024",
     "Start time": "22:55:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 118,
     "Stop file number": 126,
@@ -821,7 +821,7 @@
   "65": {
     "Date": "16.02.2024",
     "Start time": "0:07:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 127,
     "Stop file number": 155,
@@ -842,7 +842,7 @@
   "66": {
     "Date": "16.02.2024",
     "Start time": "1:07:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 156,
     "Stop file number": 192,
@@ -863,7 +863,7 @@
   "67": {
     "Date": "16.02.2024",
     "Start time": "02:24:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": "\u2713",
     "Start file number": 193,
     "Stop file number": 199,
@@ -884,7 +884,7 @@
   "68": {
     "Date": "16.02.2024",
     "Start time": "02:36:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 200,
     "Stop file number": 202,
@@ -905,7 +905,7 @@
   "69": {
     "Date": "16.02.2024",
     "Start time": "02:46:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 203,
     "Stop file number": 203,
@@ -926,7 +926,7 @@
   "70": {
     "Date": "16.02.2024",
     "Start time": "02:48:00",
-    "Name ": "main",
+    "Name": "main",
     "MARTIN NOTES": null,
     "Start file number": 204,
     "Stop file number": 208,

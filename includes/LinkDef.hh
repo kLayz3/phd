@@ -31,10 +31,9 @@
 #pragma link C++ class TrigParamSingle+;
 #pragma link C++ class TrigParam+;
 
-#pragma link C++ class FRSIdParam+;
-#pragma link C++ class FRSTargetParam+;
 #pragma link C++ class FRSToFSingle+;
 #pragma link C++ class FRSToFParam+;
+#pragma link C++ class BeamInfo+;
 #pragma link C++ class RNFRSHit+;
 #pragma link C++ class RNFRSHit::Id+;
 

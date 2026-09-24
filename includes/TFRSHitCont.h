@@ -9,36 +9,6 @@
 #include "Rtypes.h"
 #include "TH2D.h"
 
-/* In this low-Z experiments, we always perform the PiD with
- * different scintillators, and not directly with gas detectors. */
-struct FRSTargetParam {
-	GET_HELP_AUX_IMPL;
-
-	ADD_SERIALIZABLE_FIELD(double, width,     0.0, 0);
-	ADD_SERIALIZABLE_FIELD(double, thickness, 0.0, 1);
-
-	FRSTargetParam() = default;
-	virtual ~FRSTargetParam() = default;
-	ClassDef(FRSTargetParam, 1);
-};
-ADD_JSON_TYPE_RESOLUTION(FRSTargetParam, 1)
-
-struct FRSIdParam {
-	GET_HELP_AUX_IMPL;
-	 
-	ADD_SERIALIZABLE_FIELD(double,         dist,          0.0,  0); /* Distance relative to iron yoke at S2 (last quad b4 air). */
-	ADD_SERIALIZABLE_FIELD(double,         magnification, 1.0,  1); 
-	ADD_SERIALIZABLE_FIELD(double,         brho,          10.0, 2); /* Brho at the entrance to that focal point. */
-	ADD_SERIALIZABLE_FIELD(double,         dispersion,    0.0,  3);
-	ADD_SERIALIZABLE_FIELD(double,         zfocus,        1000, 4);
-	ADD_SERIALIZABLE_FIELD(FRSTargetParam, target,        {},   5);
-
-	FRSIdParam() = default;
-	virtual ~FRSIdParam() = default;
-	ClassDef(FRSIdParam, 1);
-};
-ADD_JSON_TYPE_RESOLUTION(FRSIdParam, 5)
-
 struct FRSToFSingle {
     GET_HELP_AUX_IMPL;
 
@@ -60,21 +30,41 @@ ADD_JSON_TYPE_RESOLUTION(FRSToFSingle, 1)
 struct FRSToFParam {
     GET_HELP_AUX_IMPL;
 
-    using FRSToFSingleVec = std::vector<FRSToFSingle>;
-    ADD_SERIALIZABLE_FIELD(FRSToFSingleVec, ToF, {}, 0);
-	
+    using FRSToFVec = std::vector<FRSToFSingle>;
+    ADD_SERIALIZABLE_FIELD(FRSToFVec, ToF, {}, 0);
+
+	FRSToFSingle const* Get(u32, u32) const noexcept;
+
     FRSToFParam() = default;
 	virtual ~FRSToFParam() = default;
 	ClassDef(FRSToFParam, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(FRSToFParam, 0)
 
+/* This parameter does not come from setup file, but rather from the runsheet row. */
+struct BeamInfo {
+    GET_HELP_AUX_IMPL;
+	
+	ADD_SERIALIZABLE_FIELD(u32,    A0,   0, 0); // Nucleon number (selected) coming into S2.
+	ADD_SERIALIZABLE_FIELD(u32,    Z0,   0, 1); // Atomic number (selected) coming into S2.
+	ADD_SERIALIZABLE_FIELD(double, R0, NAN, 2); // Magnetic rigidity just before S2
+	// ^^^ These two values give us `beta*gamma` and also A/Q
+
+	ADD_SERIALIZABLE_FIELD(double, R1, NAN, 3); // Magnetic rigidity just before S3
+	ADD_SERIALIZABLE_FIELD(double, R2, NAN, 4); // Magnetic rigidity just before S4
+	// ^^^ Here we have ToF, and don't need to "guess" the kinetic energy.
+
+    BeamInfo() = default;
+	virtual ~BeamInfo() = default;
+	ClassDef(BeamInfo, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(BeamInfo, 4)
+
 struct RNFRSHit {
 	static constexpr i32 S2_BT_TRACKING_INCLUDE_SCI21_MASK            = 0x01;
 	static constexpr i32 S2_BT_TRACKING_INCLUDE_TPC21_MASK            = 0x02;
 	static constexpr i32 S2_BT_TRACKING_INCLUDE_TPC22_MASK            = 0x04;
 	static constexpr i32 S2_BT_TRACKING_INCLUDE_TPC23_MASK            = 0x08;
-	static constexpr i32 S2_BT_TRACKING_INCLUDE_POINTLIKE_TARGET_MASK = 0x10;
 
 	/* At this level, FRS ID in a single focal point is determined uniquely by:
      * - (A,Q) particle ID
@@ -131,21 +121,25 @@ struct RNFRSHit {
 };
 
 struct TFRSHitCont : TContainer<RNFRSHit> {
-	TH2D *h2_track_x, *h2_track_y;
+	TH2D *h2_track_x;
+	TH2D *h2_track_y;
 	TH2D *h2_target_xy;
+	TH2D *h2_s2_q;
+	TH2D *h2_s3_q;
+	TH1D *h1_s3_beta;
+	TH2D *h2_s3_id;
 
-	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param{};
-	std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_param{};
+	/* Next fields just get forwarded by the processor, from the cal step. */
+	std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param{}; // gets FW'ed from cal step.
+	std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_param{}; // gets FW'ed from cal step.
+    TrigParam *trig_param;                                    // gets FW'ed from cal step.
+	std::string *setupName;                                   // gets FW'ed from cal step.
 
-	FRSIdParam *s2p, *s3p;
-	FRSTargetParam *sTar;
     FRSToFParam *sTof;
-    TrigParam *trig_param;
-	std::string *setupName;
+	BeamInfo *binfo;
 	
 	TFRSHitCont();
 
-	void Init(TDictInfo info) override;
 	void Setup() override;
 };
 

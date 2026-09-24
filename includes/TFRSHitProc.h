@@ -13,7 +13,7 @@ struct TFRSHitProc : TProcessor <
 	int s2_bt_tracking_mask;
 	enum class S2BeforeTargetPositionV { all, any } s2_bt_posv;
 
-	TFRSHitProc(TFRSHitCont& , const TFRSCalCont& , int );
+	TFRSHitProc(TFRSHitCont& , const TFRSCalCont& , int, std::string_view );
 	TFRSHitProc() = default;
 
 	void ProcessEntry() noexcept;
@@ -21,10 +21,14 @@ struct TFRSHitProc : TProcessor <
 	void ProcessS2AT() noexcept;
     void ProcessS3() noexcept;
 
+	void FinalInit() override;
+
 	/* Local buffer containers. */
 	std::array<double, 2> fit_result;
 	std::vector<double> x, y, zx, zy;
 	
 	/* EXPERT target parameters. */
-	double z0, tar_width;
+	double z0;
+
+	FRSToFSingle const* tofp_s3_s2;
 };

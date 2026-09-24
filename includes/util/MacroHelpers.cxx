@@ -1,6 +1,5 @@
-#include "MacroHelpers.h"
-#include "FromChars.h"
-#include <string_view>
+#include "util/MacroHelpers.h"
+#include "util/FromChars.h"
 
 using PipeDeleter = int (*)(FILE*);
 
@@ -143,15 +142,14 @@ mnd::fs::file_info(std::string_view file) {
     const fs::path path{file};
     const std::string name = path.filename().string();
 
-    if(name.size() > file.size()) {
-        MND_THROW("Invalid file path? %*s", (int)file.size(), file.data());
-	}
+    if(name.size() > file.size())
+		MND_THROW("Invalid file path? %.*s", (int)file.size(), file.data());
 
 	std::smatch match;
     if(!std::regex_match(name, match, re)) {
-		MND_THROW("mnd::fs::file_info: provided file name \'%s\' does not "
-			"match the regular expression: %s\n",
-			name.c_str(), filename_pattern);
+		MND_THROW("mnd::fs::file_info(): provided file name '%s' does not "
+			"match the regular expression: %s%s%s\n",
+			name.c_str(), BOLD, filename_pattern, KNRM);
 	}
 	
 	const std::string basename = match[1];
@@ -208,4 +206,12 @@ std::string mnd::fs::file_names_concatenated(const std::vector<std::string>& fil
         + mnd::utos(bounds.first, nchars_run_number)
         + "_"
         + mnd::utos(bounds.second, nchars_run_number);
+}
+
+std::filesystem::path mnd::fs::resolve_maybe_symlink(const std::filesystem::path& path) {
+	if(!std::filesystem::is_symlink(path))
+		return path;
+
+	auto target = std::filesystem::read_symlink(path);
+	return target.is_absolute() ? target : path.parent_path() / target;
 }

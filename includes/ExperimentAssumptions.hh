@@ -1,12 +1,15 @@
 #pragma once
 
 #include <array>
+#include "util/MPhysics.h"
 
 /* In the experiment, there are a few things we can assume and "leave" to the comptime.
  * E.g., we cannot directly measure the velocity/kin.energy of the fragment directly *before* the S2 target.
  * But from sims, LISE++, can roughly describe it to have minor corrections to different measurements. */
 
 namespace mnd::assume {
+inline constexpr phy::Nucleus primary { .A = 12, .Z = 6 };
+
 namespace s2 {
 
 /* Kinetic energy loss [AMeV] from the entrance of S2 to the Be target. */

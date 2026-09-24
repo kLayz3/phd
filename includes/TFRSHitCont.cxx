@@ -1,52 +1,52 @@
 #include "TFRSHitCont.h"
 #include "TFRSCalCont.h"
-#include "util/JSONParser.h"
 
 #include "util/Geometry.h"
-#include "util/json_struct_def.hh"
+#include "util/PolyFitter.h"
+#include "ExperimentAssumptions.hh"
 
 using nlohmann::json;
-
-static nlohmann::json setup {};
-static FRSIdParam _s2p, _s3p;
-static FRSTargetParam _sTar;
-static FRSToFParam _sTof;
-static TrigParam _trig_param;
 
 static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
 static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
 
 double FRSToFSingle::Beta(double dt) const noexcept {
-	const double denom = dt - par[0];
-	if(denom <= 0) return NAN;
-	
-	return std::min(par[1] / denom, 1.0);
+	return 1.0 / poly::Eval(dt, par);
 }
 
 double FRSToFSingle::Beta(const RNFRSCal& cal) const noexcept {
 	const RNSciCal& start = cal.sci[ combo[0] ];
 	const RNSciCal& end = cal.sci[ combo[1] ];
-	/* ^^^ both acceses cannot be UB. Validity checked during `TFRSHitCont::Init()` */
+	/* ^^^ both acceses shall not be UB. Validity checked during `TFRSHitCont::Init()` */
 
 	if(start.hits.empty() || end.hits.empty())
 		return NAN;
 	
-	/* Take first hit, and have that as the reference. */
+	/* Always take first hit, and have that as the reference. */
 	const RNSciCal::Measurement& m0 = start.hits.front();
-	const RNSciCal::Measurement& m1 = start.hits.front();
+	const RNSciCal::Measurement& m1 = end.hits.front();
 	
 	return this->Beta(m1.t - m0.t);
+}
+FRSToFSingle const* FRSToFParam::Get(u32 start, u32 stop) const noexcept {
+	for(const auto& attempt : this->ToF) {
+		const auto& combo = attempt.combo;
+		if(start == combo[0] && stop == combo[1]) {
+			return &attempt;
+		}
+	}
+	return nullptr;
 }
 
 std::string RNFRSHit::DecodeS2() const noexcept {
 	std::stringstream info;
 	info << "S2 BT tracking: ";
 	if(s2_bt.code & S2_BT_TRACKING_INCLUDE_SCI21_MASK) {
-		info << "SCI21 ";	
-	} 
+		info << "SCI21 ";
+	}
 	if(s2_bt.code & S2_BT_TRACKING_INCLUDE_TPC21_MASK) {
 		info << "TPC21 ";
-	} 
+	}
 	if(s2_bt.code & S2_BT_TRACKING_INCLUDE_TPC22_MASK) {
 		info << "TPC22 ";
 	}
@@ -61,104 +61,31 @@ std::string RNFRSHit::DecodeS3() const noexcept {
 
 TFRSHitCont::TFRSHitCont() : TContainer("FRS") {}
 
-/* This is a bit of copy-paste from cal step. Just to keep the
- * parameter values also in this ROOT file. NOTE that the src program
- * extracts the file name from the ROOT file itself,
- * special JSON file name shouldn't be given directly. This is a bit of an inconvenience
- * in the API,.. small todo: could be solved in stone if we call the init directly during 
- * TFRSHitProc constructor (*not* the copy-ctor). */
-void TFRSHitCont::Init(TDictInfo info) {
-	auto it = info.find("Setup");
-	if(it == info.end()) 
-		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
-	const std::string& file_name = it->second;
-
-	setup = ParseJSON(file_name);
-	setup["file_name"] = file_name;
-
-	/* Copy over params from cal step. */
-	for(const auto& [_tpc_i, params] : setup.at("TPC").items()) {
-		if(RNFRSCal::tpc_moniker.find(_tpc_i) == RNFRSCal::tpc_moniker.end())
-			ERROR("TPC parameter named \'%s\' found in the %s JSON parameter file isn't mapped to 0..%zu index.",
-				_tpc_i.c_str(), file_name.c_str(), _tpc_param.size());
-		
-		u32 i = RNFRSCal::tpc_moniker.at(_tpc_i);
-		if(i >= RNFRSCal::N_VALID_TPC) continue;
-		UNROLL_JSON_PARAM(_tpc_param[i], params, 9)
-	}
-	for(const auto& [_sci_i, params] : setup.at("SCI").items()) {
-		if(RNFRSCal::sci_moniker.find(_sci_i) == RNFRSCal::sci_moniker.end())
-			ERROR("Sci parameter named \'%s\' found in the %s JSON parameter file isn't mapped to 0..%zu index.",
-				_sci_i.c_str(), file_name.c_str(), _sci_param.size());
-		
-		u32 i = RNFRSCal::sci_moniker.at(_sci_i);
-		if(i >= RNFRSCal::N_VALID_SCI) continue;
-		UNROLL_JSON_PARAM(_sci_param[i], params, 3)
-	}
-
-	auto j_it = setup.find("FRS");
-	if(j_it == setup.end()) ERROR("\'FRS\' key not found in JSON file: %s\n", file_name.c_str());
-	auto& jfrs = j_it.value();
-
-	j_it  = jfrs.find("S2");
-	if(j_it == jfrs.end()) ERROR("\'S2\' key not found in \'FRS\' section of JSON file: %s\n", file_name.c_str());
-	UNROLL_JSON_PARAM(_s2p, j_it.value(), 5);
-	
-	/* Unpack the S2 target param values. */
-	auto& js2 = j_it.value();
-	j_it = j_it.value().find("target");
-	if(j_it == js2.end()) ERROR("\'targte\' key not found in \'S2\' section of JSON file: %s\n", file_name.c_str());
-	UNROLL_JSON_PARAM(_sTar, j_it.value(), 1);
-	
-	j_it  = jfrs.find("S3");
-	if(j_it == jfrs.end()) ERROR("\'S3\' key not found in \'FRS\' section of JSON file: %s\n", file_name.c_str());
-	UNROLL_JSON_PARAM(_s3p, j_it.value(), 5);
-
-	j_it  = jfrs.find("ToF");
-	if(j_it == jfrs.end()) {
-        UNROLL_JSON_PARAM(_sTof, j_it.value(), 0)
-    } else {
-        WARN("\'ToF\' key not found in \'FRS\' section of JSON file: %s .. Is OK.\n", file_name.c_str());
-    }
-
-    constexpr auto trig_param_json_name = TrigParam::get_name<0>();
-    if(setup.contains(trig_param_json_name)) {
-        UNROLL_JSON_PARAM(_trig_param, setup.at(trig_param_json_name), 0);
-    }
-}
-
-void Add(FRSIdParam&, const FRSIdParam&) {}
-void Add(FRSTargetParam&, const FRSTargetParam&) {}
-
 void TFRSHitCont::Setup() {
 	h2_track_x   = RegisterObject<TH2D>("s2_upstream_track_x", "S2 TPC Tracking;z[mm];x[mm]", 400, 0, 4200, 200, -100, 100);
 	h2_track_y   = RegisterObject<TH2D>("s2_upstream_track_y", "S2 TPC Tracking;z[mm];y[mm]", 400, 0, 4200, 200, -100, 100);
 	h2_target_xy = RegisterObject<TH2D>("s2_target_xy", "S2 Upstream Target Hit;x[mm];y[mm]", 200, -20, 20, 200, -20, 20);
+	h2_s2_q      = RegisterObject<TH2D>("s2_q", "S2 Particle Charge;Q[before S2 target];Q[after S2 target]", 200, 0, 10, 200, 0, 10);
+	h2_s3_q      = RegisterObject<TH2D>("s3_q", "S2 Particle Charge;Q[before S2 target];Q[S3]", 200, 0, 10, 200, 0, 10);
+	h1_s3_beta   = RegisterObject<TH1D>("s3_b", "S3 beta velocity;#beta = v/c", 400, 0, 1);
+	h2_s3_id     = RegisterObject<TH2D>("s3_id", "S3 Particle ID;AoQ;Q[charge]",
+		200, 1.0, mnd::assume::primary.AoQ() + 0.2,
+		200, 0.0, mnd::assume::primary.Z + 2
+	);
 	
-	/* no-op collector taken deduces from free Add fnc's implemented above. */
-	tpc_param = RegisterObject<std::array<TPCParam, RNFRSCal::N_VALID_TPC>>("tpc_parameters", {});
-	sci_param = RegisterObject<std::array<SCIParam, RNFRSCal::N_VALID_SCI>>("sci_parameters", {});
+	tpc_param  = RegisterObject<std::array<TPCParam, RNFRSCal::N_VALID_TPC>>("tpc_parameters", {});
+	sci_param  = RegisterObject<std::array<SCIParam, RNFRSCal::N_VALID_SCI>>("sci_parameters", {});
+	trig_param = RegisterObject<TrigParam>("trigger_map", TrigParam{});
+	setupName  = RegisterObject<std::string>("setup_file", {});
 
-	/* Just copy over from the static. */
-	for(int i=0; i < (int)tpc_param->size(); ++i)
-		tpc_param->at(i) = _tpc_param[i];
-	for(int i=0; i < (int)sci_param->size(); ++i)
-		sci_param->at(i) = _sci_param[i];
-
-	s2p = RegisterObject<FRSIdParam>("FRS S2 ID Parameter");
-	s3p = RegisterObject<FRSIdParam>("FRS S3 ID Parameter");
-	sTar = RegisterObject<FRSTargetParam>("FRS S2 Target Parameter");
-
-    trig_param = RegisterObject<TrigParam>("trigger_map", _trig_param);
-	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
+	sTof  = RegisterObject<FRSToFParam>("tof_par", mnd::noop_fn<FRSToFParam>(), FRSToFParam{}); // Will be filled out by `TFRSHitProc::TFRSHitProc(..) ctor`
+	binfo = RegisterObject<BeamInfo>("beam_info" , mnd::noop_fn<BeamInfo>(),    BeamInfo{});    // Will be filled out by `TFRSHitProc::TFRSHitProc(..) ctor`
 }
 
 mnd::geom::Line3D RNTrackToLine3D(const RNFRSHit::Id& t) { return { t.x0, t.ax, t.y0, t.ay }; }
 
-ClassImp(FRSIdParam);
-ClassImp(FRSTargetParam);
+ClassImp(FRSToFSingle);
+ClassImp(FRSToFParam);
+ClassImp(BeamInfo);
 ClassImp(RNFRSHit);
 ClassImp(RNFRSHit::Id);
-ClassImp(FRSToFSingle);
-ClassImp(FRSToFParam)
-

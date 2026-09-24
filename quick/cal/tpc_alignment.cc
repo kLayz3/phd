@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
     constexpr auto N_TPC = TPCParam::N_S2_TPC;
 
     std::vector<std::string> fileNames{};
-	std::vector<TPCRef> ref{}; 
+	std::vector<TPCRef> ref{};
 	u32 i_tpc = 0;
 	A3 binning_x = {100, -30, 30};
 	A3 binning_y = {100, -30, 30};
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
         ->check(CLI::ReadPermissions);
     add_logged_option(app, "-i,--tpc", i_tpc, "Scintillator index; 0 => SCI21, 1 => SCI22.")
         ->check(CLI::Range(0, (int)N_TPC - 1));
-    add_logged_option<DisplayDefault::No>(app, "-r, --ref", ref, 
+    add_logged_option<DisplayDefault::No>(app, "-r, --ref", ref,
 		"Select which TPC's (either with index: 0,1,2, or with a label: 21,22,23) make the reference. \
 		Select by '0/1' which delay lines get included into the measurement. ")
 		->type_name("[INT|LABEL:BOOL,BOOL;...]")
@@ -79,11 +79,11 @@ int main(int argc, char* argv[]) {
     add_logged_option(app, "--sratio", sratio, "Width ratio of raw histogram, how much to fit around the peak.")
         ->check(CLI::PositiveNumber);
     add_logged_option<DisplayDefault::No>(app, "--sci21",sci21_cut, "SCI21 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci22",sci22_cut, "SCI22 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
     add_logged_flag(app, "--no-fit", dont_fit, "Do not fit the correlation plot.");
     add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
@@ -98,12 +98,12 @@ int main(int argc, char* argv[]) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
 
-	if(ref.size() < 2) 
+	if(ref.size() < 2)
 		ERROR("At least two valid referent TPC's must be given.\n");
     for(const auto& tpc : ref) {
-		if(!tpc) { // operator bool() 
-			std::cerr << tpc << std::endl; 
-			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid."); 
+		if(!tpc) { // operator bool()
+			std::cerr << tpc << std::endl;
+			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid.");
 		}
 	}
 
@@ -118,13 +118,13 @@ int main(int argc, char* argv[]) {
     }
 
 	auto& tpc_param = tpc_params->at(i_tpc);
-	const Arr2<double, N_TPC, 2> zDL = TFRSCalCont::z_s2_tpc_delay_lines(tpc_params); 
+	const Arr2<double, N_TPC, 2> zDL = TFRSCalCont::z_s2_tpc_delay_lines(tpc_params);
     const std::array<double, N_TPC> zTPC = TFRSCalCont::z_s2_tpc(tpc_params);
     const std::array<double, 2>& z0 = zDL[i_tpc];
 
     WARN("All TPC positions: \n");
 	for(u32 i=0; i<N_TPC; ++i) printf("TPC%s: %.1f mm\n", label[i], zTPC[i]);
-    
+
     WARN("Calibrating TPC%s: nominal positition: %.1f, delay lines nominally at: ",
          label[i_tpc], zTPC[i_tpc]);
     std::cerr << z0 << std::endl;
@@ -148,7 +148,7 @@ int main(int argc, char* argv[]) {
 	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", 0x890389_c, 500, 300, 4000);
 	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, 500, 300, 4000);
 	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", 0x7DE69D_c, 500, 300, 4000);
-    
+
     auto* h2_track_x = new TH2P("((h2_track_x))Track density (X) [mm]:Depth z [mm]@S2 area", 800, 0, RNFRSCal::S2_LENGTH, 800, -60, 60);
     auto* h2_track_y = new TH2P("((h2_track_x))Track density (Y) [mm]:Depth z [mm]@S2 area", 800, 0, RNFRSCal::S2_LENGTH, 800, -60, 60);
     auto* h2_ab = new TH2P(Form("((h2_ab))Y-angle [mrad]:X-angle [mrad]@At TPC%s, clb point", label[i_tpc]), 100, -20, 20, 100, -20, 20);
@@ -160,7 +160,7 @@ int main(int argc, char* argv[]) {
         auto model = RNTupleModel::Create();
         auto frs = model->MakeField<RNFRSCal>("FRS"); // shared_ptr.
         auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
-        
+
         ProgressBar bar {
             option::BarWidth{55},
                 option::Start{"["},
@@ -184,7 +184,7 @@ int main(int argc, char* argv[]) {
         for(auto entryId : *ntuple) {
             ntuple->LoadEntry(entryId);
             mnd::PrintProgress(bar, entryId, nentries, 500);
-            
+
             const auto& sci21 = frs->sci[0];
             const auto& sci22 = frs->sci[1];
             const auto& sci31 = frs->sci[2];
@@ -215,9 +215,9 @@ int main(int argc, char* argv[]) {
                     if(!id.use[d] or tpc.hits[d].size() != 1)
                         continue;
                     const RNTPCCal::Measurement& hit = tpc.hits[d].front();
-                    const double x = hit.X(); 
-                    const double y = hit.Y(); 
-                    if(!std::isfinite(x) or !std::isfinite(y)) 
+                    const double x = hit.X();
+                    const double y = hit.Y();
+                    if(!std::isfinite(x) or !std::isfinite(y))
                         continue;
                     xe.push_back( x );
                     ye.push_back( y );
@@ -227,7 +227,7 @@ int main(int argc, char* argv[]) {
             if(xe.size() < 3 or ye.size() < 3) continue;
             const auto fx = PolyFit<1>(ze, xe);
             const auto fy = PolyFit<1>(ze, ye);
-                
+
             /* Extrapolated positions at the TPC, both delay lines: */
             for(u32 d: {0,1}) {
                 xRef[d] = fx[1] * z0[d] + fx[0];
@@ -237,7 +237,7 @@ int main(int argc, char* argv[]) {
                 const Measurement hit = hits_vec[d].front();
                 h2_x[d]->Fill (
                     xRef[d],
-                    hit.X() - xRef[d] 
+                    hit.X() - xRef[d]
                 );
                 for(int a: {0,1})
                 if( std::isfinite(hit.y[a]) ) {
@@ -258,7 +258,7 @@ int main(int argc, char* argv[]) {
         ++f_index;
     }
     constexpr int N_PTS_FOR_GRAPH = 30;
-    
+
     HistDrawer h_buff_dl[2], h_buff_a[4];
     if(!dont_fit) {
         TPCParam new_param = tpc_param;
@@ -290,7 +290,7 @@ int main(int argc, char* argv[]) {
         PRINT_TPC_PARAM(x_offset, (tpc_param), (,))
         PRINT_TPC_PARAM(y_factor, (tpc_param), (,))
         PRINT_TPC_PARAM(y_offset, (tpc_param), ())
-        WARN("\nNew values: \n" BOLD)
+        WARN("\nNew values: \n" BOLD);
         PRINT_TPC_PARAM(x_factor, (new_param), (,))
         PRINT_TPC_PARAM(x_offset, (new_param), (,))
         PRINT_TPC_PARAM(y_factor, (new_param), (,))
@@ -302,7 +302,7 @@ int main(int argc, char* argv[]) {
             const double slope1 = new_param.x_factor[d]; const double offset1 = new_param.x_offset[d];
             WARN("~~~~ [DL%d] This is a relative change of: " BOLD "%.3f%% and %.3f%%\n" KNRM, d,
                 100*std::abs((slope1-slope0)/slope0), 100*std::abs((offset1 - offset0)/offset0));
-        }        
+        }
         for(int a: {0,1,2,3}) {
             const double slope0 = tpc_param.y_factor[a]; const double offset0 = tpc_param.y_offset[a];
             const double slope1 = new_param.y_factor[a]; const double offset1 = new_param.y_offset[a];
@@ -317,7 +317,7 @@ int main(int argc, char* argv[]) {
             h_buff_a[a] = { .hist = h2_y[a], .gerr = nullptr, .g = nullptr };
         }
     }
-    
+
     using mnd::hist::vline;
 	TCanvas* cTr = new TCanvas("Tracks", "Tracks", 2000, 1200);
 	cTr->Divide(2,2);

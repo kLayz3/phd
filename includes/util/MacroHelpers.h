@@ -5,7 +5,7 @@
 #include <optional>
 #include <ostream>
 #include <string_view>
-#include <variant>
+#include <string_view>
 #include <filesystem>
 #include <sstream>
 #include <cmath>
@@ -20,8 +20,8 @@
 #include "TImage.h"
 #include "TFile.h"
 
-#include "../monad/monad.hxx"
-#include "../magic_enum/magic_enum.hpp"
+#include "monad/monad.hxx"
+#include "magic_enum/magic_enum.hpp"
 #include "CLI.h"
 
 #include "Option.hxx"
@@ -77,9 +77,13 @@ using namespace std::literals;
 inline constexpr const char* file_prefix = "main";
 inline constexpr u32 nchars_run_number = 4;
 
-/* Generally, we expect files to be called with this format. */
+/* Generally, we expect files to be called with this PCRE2 format. E.g.:
+ * main_0051_0085_dbg.root
+ * Group 1: 0–4   main
+ * Group 2: 5–9   0051
+ * Group 3: 10–14 0085 */
 inline constexpr const char* filename_pattern
-	= R"(^(\w.+)_(\d+)(?:_(\d+)?)\.root$)";
+	= R"(^(\w.+?)_(\d{1,4})(?:_(\d{1,4}))?(?:.+?)?\.root$)";
 
 /* If "main_0023_0144.root" => "main"s */
 std::string run_name(std::string_view );
@@ -117,12 +121,16 @@ std::filesystem::path path_sequence(Range const& parts) {
 	return p;
 }
 
+/* Resolve a path object if it's a symlink. */
+std::filesystem::path resolve_maybe_symlink(const std::filesystem::path& path);
+
 } // namespace mnd::fs
 
 namespace canvas {
 
 /* Get all TObject-derived elements from a Canvas. */
 void DumpPrimitives(TVirtualPad* , int = 0);
+
 /* Extract all histogram objects from a Canvas. */
 std::vector<TH1*> GetHistograms(TVirtualPad* );
 

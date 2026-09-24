@@ -106,7 +106,7 @@ Nucleus Nucleus::get_ion(std::string_view str,
 
 	Option<u32> A = mnd::stou_munch(view);
 	if(A.is_none()) {
-		auto msg = mnd::msg("mnd::RunsheetState::get_ion(desc: \"%s\") for input string: \'%*s\', "
+		auto msg = mnd::msg("mnd::RunsheetState::get_ion(desc: \"%s\") for input string: \'%.*s\', "
 			"couldn't parse out the mass number (A). Got `None`. "
 			"Setting the value to default: %u\n", desc, (int)view.length(), view.data(), DEFAULT_A_PRIMARY);
 		if(!bad_parse_is_error) {
@@ -119,8 +119,8 @@ Nucleus Nucleus::get_ion(std::string_view str,
 
 	Option<u32> Z = phy::Z(view);
 	if(Z.is_none()) {
-		auto msg = mnd::msg("mnd::RunsheetState::get_ion(desc: \"%*s\") for input string: \'%s\' "
-			"(current view: \'%*s\'), "
+		auto msg = mnd::msg("mnd::RunsheetState::get_ion(desc: \"%s\") for input string: \'%.*s\' "
+			"(current view: \'%.*s\'), "
 			"couldn't parse out the atomic number (Z). Got `None`. "
 			"Setting the value to default: %u\n", desc, (int)str.length(), str.data(),
 			(int)view.length(), view.data(), DEFAULT_A_PRIMARY);
@@ -143,8 +143,8 @@ Nucleus Nucleus::get_ion(std::string_view str,
 	return ::phy::Nucleus {
 		.A = A.unwrap(),
 		.Z = Z.unwrap(),
-		.N_electrons = Q.and_then([&Z](const u32 q) -> Option<u16> {
-			return (Z.unwrap() >= q) ? mnd::Some{(u16)(Z.unwrap() - q)} : mnd::Some{u16{0}};
+		.N_electrons = Q.map([&Z](const u16 q) {
+			return (Z.unwrap() >= q) ? (u16)(Z.unwrap() - q) : (u16)0;
 		})
 	};
 	/* There can be more junk after the parse, but that's fine. */

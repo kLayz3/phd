@@ -109,10 +109,7 @@ int main(int argc, char* argv[]) {
 
     auto model = RNTupleModel::Create();
     auto frs = model->MakeField<RNFRSCal>("FRS");
-    auto ntuple = (
-        mnd::set_current_input_file(fileName),
-        RNTupleReader::Open(std::move(model), "h103", fileName)
-    );
+    auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
     ProgressBar bar {
         option::BarWidth{50},
             option::Start{"["},

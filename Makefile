@@ -1,28 +1,17 @@
 include includes/q.mk
+include includes/includes.mk
+include includes/monad/common.mk
 
 CXX:=g++
 SRC_DIR = src
-INC_DIR = includes
 BUILD_DIR = build_$(shell gcc -dumpmachine)_$(shell gcc -dumpversion)
 SCRIPT_DIR = scripts
-GO4_SRC_DIR = $(shell pwd -P)/../go4/src
-CXXFLAGS := $(shell root-config --cflags) \
-	-Wall -MMD -MP -fPIC \
-	-I$(INC_DIR) \
-	-I$(INC_DIR)/core \
-	-I$(GO4_SRC_DIR) \
-	-I$(GO4SYS)/include \
 
-include includes/monad/common.mk
+CXXFLAGS += -I$(GO4SYS)/include
 
-LDFLAGS += $(shell root-config --ldflags) 
-LIBS += $(shell root-config --libs) \
-		-lROOTNTuple \
-		-L$(shell pwd -P)/includes/build \
-		-Wl,-rpath,$(shell pwd -P)/includes/build \
-		-lStructures \
-		-L. -lGo4UserAnalysis \
-		-Wl,-rpath,'$$ORIGIN'
+LIBS += -L$(shell pwd -P)/includes/build \
+		-Wl,-rpath,$(INC_DIR)/build -lStructures \
+		-L. -lGo4UserAnalysis
 
 SRC:=$(wildcard $(SRC_DIR)/*.cc)
 
@@ -30,8 +19,6 @@ OBJ:=$(patsubst $(SRC_DIR)/%.cc,  $(BUILD_DIR)/%.o, $(SRC))
 EXE:=$(patsubst $(SRC_DIR)/%.cc, %.exe, $(SRC))
 
 STRUCT_LIB = $(INC_DIR)/$(BUILD_DIR)/libStructures.so
-
-MKDIR = mkdir -p $(@D)
 
 .PHONY: all
 

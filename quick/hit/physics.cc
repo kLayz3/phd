@@ -338,7 +338,7 @@ int main(int argc, char* argv[]) {
 	}
 	{
 		std::string_view rho_type_label =  magic_enum::enum_name(rho_ex_type);
-		WARN("Matched the ρ-analysis type: it is: %s%*s%s, the decay of "
+		WARN("Matched the ρ-analysis type: it is: %s%.*s%s, the decay of "
 			MND_RGB_COL(141,249,155) "%s" KNRM "\n",
 			BOLD, (int)rho_type_label.length(), rho_type_label.data(), KNRM,
 			mother.to_string().c_str());
@@ -366,7 +366,7 @@ int main(int argc, char* argv[]) {
 			const auto& [heavy, nheavy_, _] = selected.front();
 			const auto& [proton, nprotons, __] = selected.back();
 			if(nheavy_ != 1)
-				ERROR("Something is wrong. Heavy ion: \'%s\' selected as quantity %u and not 1\n?",
+				ERROR("Something is wrong. Heavy ion: '%s' selected as quantity %u and not 1\n?",
 					heavy.to_string().c_str(), nheavy_);
 			
 			const auto heavy_ion_label_rootex = heavy.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope);

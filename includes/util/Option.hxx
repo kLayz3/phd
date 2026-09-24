@@ -116,6 +116,8 @@ public:
 	constexpr T value_or( U&& default_value ) && {
 		return is_some() ? std::move(unwrap()) : static_cast<T>(std::forward<U>(default_value));
 	}
+
+	/* fn and_then<U, F>(self, f: F) -> Option<U>, where F(T) -> Option<U> */
 	template<typename F>
 	constexpr auto and_then(F&& f) & {
 		using R = type_traits::remove_cvref_t<
@@ -156,6 +158,8 @@ public:
 		);
 		return is_some() ? std::invoke(std::forward<F>(f), std::move(data.value())) : R{};
 	}
+
+	/* fn or_else<F>(self, f: F) -> Option<T>, where F() -> Option<T> */
 	template<typename F>
 	constexpr Option or_else( F&& f ) const& {
 		return is_some() ? *this : std::invoke(std::forward<F>(f));
@@ -165,7 +169,7 @@ public:
 		return is_some() ? std::move(*this) : std::invoke(std::forward<F>(f));
 	};
 
-	/* fn map<U, F>(self, f: F) -> Option<U> */
+	/* fn map<U, F>(self, f: F) -> Option<U>, where F(T) -> U */
 	template<typename F>
 	constexpr auto map(F&& f) & {
 		using U = std::remove_cv_t<std::invoke_result_t<F, T&>>;

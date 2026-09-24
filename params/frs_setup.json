@@ -152,7 +152,7 @@
 					]
                 },
 				{
-					"regex": "main_(?!0193)\\d{4}_\\d{4}",
+					"regex": "main_(?!0193)\\d{1,4}_\\d{1,4}",
                     "pedestal": {
                         "left": 125.17,
 						"right": 108.4
@@ -179,7 +179,6 @@
 							"qdc_mean": 638.533
 						}
 					]
-
 				}
 			]
 		},
@@ -190,7 +189,7 @@
 			"z0": 1714,
 			"de_to_q": [
 				{
-                    "regex": "main_0193_\\d{4}",
+                    "regex": "main_0193_\\d{3,4}",
                     "pedestal": {
                         "left": 101.75,
 						"right": 104.17
@@ -215,7 +214,7 @@
 					]
 				},
 				{
-					"regex": "main_(?!0193)\\d{4}_\\d{4}",
+					"regex": "main_(?!0193)\\d{1,4}_\\d{1,4}",
                     "pedestal": {
                         "left": 101.75,
 						"right": 104.17
@@ -245,43 +244,24 @@
 		}
 	},
 
-	"FRS": {
-		"S2": {
-			"dist": 0.0,
-			"magnification": 1.0,
-			"brho": 6.7626,
-			"dispersion": 0.0,
-			"zfocus": 3345.0,
-			"target": {
-				"width": 10.0,
-				"thickness": 7500.0 // mg/cm^2
-			}
+	"ToF": [
+		{
+			/* Referring to scintillator indices: TFRSCalCont::sci_moniker
+				* SCI21 => [0]
+				* SCI22 => [1]
+				* SCI31 => [2]
+				* SCI41 => [3] */
+			"combo": [1,2],
+			"par": [2.23248694, 0.01692684]
+			/* ^^^ dT[TDC] = par[1]/β + par[0]
+				* -> β = par[1] / (dT[TDC] - par[0])
+				* dt[TDC] is just raw V1290 TDC difference between SCI's. */
 		},
-		"S3": {
-			"dist": 17340.3,
-			"magnification": 1.0,
-			"brho": 8.8181,
-			"dispersion": 0.0,
-			"zfocus": 1279
-		},
-		"ToF": [
-            {
-                /* Referring to scintillator indices: TFRSCalCont::sci_moniker
-                 * SCI21 => [0]
-                 * SCI22 => [1]
-                 * SCI31 => [2] */
-                "combo": [1,2],
-                "par": [2.232431, 0.016926]
-                // ^^^ dT[TDC] = par[1]/β + par[0] 
-                // -> β = par[1] / (dT[TDC] - par[0])
-                // dt[TDC] is just raw V1290 TDC difference between SCI's.
-            },
-            {
-                "combo": [0,1],
-                "par": [-3.596724, 0.105703]
-            }
-		]
-	},
+		{
+			"combo": [0,1],
+			"par": [-5.0410712, 0.1376763]
+		}
+	],
 
 	"trigger_map": [
 		{

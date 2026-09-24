@@ -1,6 +1,5 @@
 #include "util/RunsheetParser.h"
 #include "util/JSONParser.h"
-#include "util/FromChars.h"
 #include <string>
 
 nlohmann::json mnd::fs::runsheet_obj {};
@@ -20,11 +19,8 @@ static mnd::Option<T> j_value(const nlohmann::json& j, const Key& key) {
 }
 
 /* Will throw on bad parse, or if file does not exist. */
-void mnd::fs::load_runsheet(const std::filesystem::path& p) {
-	runsheet_obj = ParseJSON(p);
-}
-void mnd::fs::load_runsheet() {
-	runsheet_obj = ParseJSON(runsheet_file_path);
+void mnd::fs::load_runsheet(std::string_view s) {
+	runsheet_obj = ParseJSON(std::string{s});
 }
 
 static const auto is_eq = [](double a, double b) -> bool {
@@ -103,6 +99,7 @@ mnd::QueryRunsheet<
 	/* Loop over the JSON object, select the rows named as the filename
 	 * base and look from there. */
 	for(const auto& [_, row] : fs::runsheet_obj.items()) {
+		const std::string& name = row.at(fs::file_name_key);
 		if(row.at(fs::file_name_key) != basename)
 			continue;
 
@@ -134,19 +131,19 @@ mnd::RunsheetState mnd::QueryRunsheet<
 	auto [start_info, end_info] = QueryRunsheet<false, OptRunsheetStatePair>(str);
 
 	if(start_info.is_none())
-		MND_THROW("mnd::QueryRunsheet(\"%*s\"): file name's inferred basename '%s' "
+		MND_THROW("mnd::QueryRunsheet(\"%.*s\"): file name's inferred basename '%s' "
 			"and start run-number '%u' not found in a row in the runsheet.\n",
 			(int)str.size(), str.data(), basename.c_str(), start_num);
 
 	if(end_info.is_none())
-		MND_THROW("mnd::QueryRunsheet(\"%*s\"): file name's inferred basename '%s' "
+		MND_THROW("mnd::QueryRunsheet(\"%.*s\"): file name's inferred basename '%s' "
 			"and end run-number '%u' not found in a row in the runsheet.\n",
 			(int)str.size(), str.data(), basename.c_str(), end_num);
 
 	if(start_info.unwrap() != end_info.unwrap()) {
 		std::cerr << "mnd::QueryRunsheet: mismatch!\n"
 			<< start_info.unwrap() << " ... and:\n" << end_info.unwrap() << std::endl;
-		MND_THROW("mnd::QueryRunsheet(\"%*s\"): file name's inferred basename '%s': "
+		MND_THROW("mnd::QueryRunsheet(\"%.*s\"): file name's inferred basename '%s': "
 			"start '%u' and end '%u' run-numbers mismatched runsheet info?\n",
 			(int)str.size(), str.data(), basename.c_str(), start_num, end_num);
 	}

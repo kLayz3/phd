@@ -21,7 +21,7 @@ constexpr static u32 DEFAULT_A_SECONDARY =  9;
 namespace fs {
 
 inline constexpr const char* runsheet_file_path = "params/runsheet.json";
-inline constexpr const char* file_name_key = "Name ";
+inline constexpr const char* file_name_key = "Name";
 inline constexpr const char* start_num_key = "Start file number";
 inline constexpr const char* end_num_key   = "Stop file number";
 inline constexpr const char* e_primary     = "E_in [MeV/u]";
@@ -41,8 +41,7 @@ inline constexpr const char* s3_s4 = "S3-S4";
 extern ::nlohmann::json runsheet_obj;
 
 /* This should be called exclusively by the main thread, only once. */
-void load_runsheet(const std::filesystem::path& );
-void load_runsheet();
+void load_runsheet(const std::string_view = runsheet_file_path);
 
 } // namespace fs
 
@@ -79,9 +78,11 @@ ResultType QueryRunsheet(std::string_view );
 /* Return runsheet status at the enclosed run numbers.
  * Will check that these statuses match.
  * In case they don't match, an exception is thrown. */
-template<> RunsheetState QueryRunsheet<true, RunsheetState>(std::string_view );
+template<>
+[[nodiscard]] RunsheetState QueryRunsheet<true, RunsheetState>(std::string_view );
 
 /* Return pair of possible runsheet statuses at the enclosed run numbers. */
-template<> OptRunsheetStatePair QueryRunsheet<false, OptRunsheetStatePair>(std::string_view );
+template<>
+[[nodiscard]] OptRunsheetStatePair QueryRunsheet<false, OptRunsheetStatePair>(std::string_view );
 
 } // namespace mnd

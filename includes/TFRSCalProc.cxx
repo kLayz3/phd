@@ -63,6 +63,15 @@ void TFRSCalProc::ProcessEntry() noexcept {
 		this->ProcessTPC(i);
 	});
 
+	if(out.inner().sci[RNFRSCal::SCI31_I].IsOk() &&
+	   out.inner().sci[RNFRSCal::SCI22_I].IsOk())
+	{
+		out.h1_s3_tdc_dt->Fill(
+			out.inner().sci[RNFRSCal::SCI31_I].hits.front().t -
+			out.inner().sci[RNFRSCal::SCI22_I].hits.front().t
+		);
+	}
+
 	// Just copy the value.
 	out.inner().trig = std::get<1>(this->in).inner();
 }
@@ -116,7 +125,7 @@ void TFRSCalProc::ProcessCSum(int _i_tpc, int i) noexcept {
 	
 	const RNTPCMap& in = std::get<0>( this->in ).inner().tpc[_i_tpc];
 
-	const auto& csum_lim = TFRSCalCont::_tpc_param[_i_tpc].csum_lim; // read from .rodata
+	const auto& csum_lim = out.tpc_param->operator[](_i_tpc).csum_lim;
 	auto& dl_list = candidate_list[i];
 
 	/* Input hits for this delay line. */
@@ -374,7 +383,7 @@ void TFRSCalProc::PostProcessTPC(int _i_tpc) noexcept {
 	RNTPCCal& out = (this->out).inner().tpc[_i_tpc];
 
 	[[ maybe_unused ]]
-	const auto& [bx, ax, by, ay, _1, _2, _3, _4, _5, _6] = TFRSCalCont::_tpc_param[_i_tpc]; // read from .rodata
+	const auto& [bx, ax, by, ay, _1, _2, _3, _4, _5, _6] = this->out.tpc_param->operator[](_i_tpc);
 	
 	for(int d : {0,1} ) {
 		auto& l = full_candidate_list[d];
@@ -423,7 +432,7 @@ void TFRSCalProc::ProcessSci(int _i_sci) noexcept {
 	const auto& hits = in.tdc;
 
 	[[maybe_unused]]
-	const auto& [bx, ax, lim, _, __] = TFRSCalCont::_sci_param.at(_i_sci);
+	const auto& [bx, ax, lim, _, __] = this->out.sci_param->operator[](_i_sci);
 
 	double d_l, d_r;
 
