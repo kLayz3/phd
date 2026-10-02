@@ -61,7 +61,7 @@ struct FOOTAsicGainParam {
 	}
 
 	inline bool IsSaneZ() const {
-		return std::is_sorted( multi_poly.begin(), multi_poly.end(), 
+		return std::is_sorted( multi_poly.begin(), multi_poly.end(),
 			[](const auto& lhs, const auto& rhs) { return lhs.Z < rhs.Z; }
 		);	
 	}
@@ -84,7 +84,7 @@ struct FOOTAsicGainParam {
 
 	/* Return an iterator to the first referent measurment line (along E; for set x) that has ref >= e */
 	inline auto GetMeasurementBound(double x, double e) const -> typename Vec::const_iterator {
-		return std::lower_bound( multi_poly.begin(), multi_poly.end(), std::pair{x,e}, 
+		return std::lower_bound( multi_poly.begin(), multi_poly.end(), std::pair{x,e},
 			[](const FMultiPoly& p, const std::pair<double, double>& q) noexcept {
 				const auto [x, e] = q;
 				return poly::Eval(x, p.pol) < e;
@@ -123,7 +123,7 @@ struct FOOTGainParam {
 	ADD_SERIALIZABLE_FIELD(AsicArray,     fit,           {}, 0);
 	ADD_SERIALIZABLE_FIELD(NominalValues, nominal_value, {}, 1);
 
-	/* Throws on invalid access. */ 
+	/* Throws on invalid access. */
 	inline const FOOTAsicGainParam& GetASIC(double x) const { return fit.at( x / N_STRIPS_PER_ASIC ); }
 
 	inline std::vector<int> GetNominalZ() const {
@@ -144,14 +144,14 @@ struct FOOTGainParam {
 			if(Zs != nominalZ) return false;
 
 			for(int n=0; n < TFOOTMapCont::N_STRIPS_PER_ASIC; ++n) {
-				double x = TFOOTMapCont::N_STRIPS_PER_ASIC*i + n + 0.5; // centre of the strip. 
+				double x = TFOOTMapCont::N_STRIPS_PER_ASIC*i + n + 0.5; // centre of the strip.
 				if(!asic.IsSane(x, evals)) return false;
 			}
 		}
 		/* Check also if the referent Z measurements are sorted, and all are unique. */	
-		return ( 
+		return (
 			std::is_sorted(nominal_value.begin(), nominal_value.end()) and
-			std::adjacent_find(nominal_value.begin(), nominal_value.end(), 
+			std::adjacent_find(nominal_value.begin(), nominal_value.end(),
 				[](const auto& lo, const auto& hi) { return lo.Z == hi.Z; }) == nominal_value.end()
 		);
 	}
@@ -202,7 +202,7 @@ struct FOOTGainParam {
 		int lo_y    = 0,
 		int hi_y    = 2500
 	) const {
-		TH2D* h = new TH2D("_hFOOTGainParam", "FOOT Gain Parameter", 
+		TH2D* h = new TH2D("_hFOOTGainParam", "FOOT Gain Parameter",
 			nbins_x, 0, TFOOTMapCont::N_STRIPS,
 			nbins_y, lo_y, hi_y );
 		
@@ -278,13 +278,13 @@ struct FOOTGainParam {
 
 		return {g, lref};
 	}
-	[[ nodiscard ]] 
+	[[ nodiscard ]]
 	inline std::vector <
 		std::tuple<i32, TGraph*, TLine*>
 	> GetAllRefZGraph(int Npts = 640) const {
 		std::vector<std::tuple<i32, TGraph*, TLine*>> r;
 		const auto nominalZ = GetNominalZ();
-		for(const i32 Z : nominalZ) { 
+		for(const i32 Z : nominalZ) {
 			auto [g,l] = GetRefZGraph(Z, Npts);
 			r.emplace_back(Z,g,l);
 		}
@@ -332,7 +332,7 @@ ADD_JSON_TYPE_RESOLUTION(FOOTDeltaFFT, 1);
 /* Small struct to hold delta-correction associated params. */
 struct FOOTDeltaParam {
 	GET_HELP_AUX_IMPL;
-	ADD_SERIALIZABLE_FIELD(double,       s,  0.33, 0);	
+	ADD_SERIALIZABLE_FIELD(double,       s,  0.33, 0);
 	ADD_SERIALIZABLE_FIELD(double,       f,  0.50, 1);
 	ADD_SERIALIZABLE_FIELD(FOOTDeltaFFT, f2, {},   2);
 
@@ -352,7 +352,7 @@ struct FOOTDeltaParam {
 	
 	/* Small helper function to plot what we're actually matching upon. */
 	[[ nodiscard ]] inline TGraph* GetGraph(int Npts = 60, double x_lo = -0.5, double x_hi = 0.5) const {
-		TGraph* g = new TGraph(Npts);	
+		TGraph* g = new TGraph(Npts);
 		for(int i=0; i<Npts; ++i) {
 			double x0 = x_lo + (i+0.5) * (x_hi - x_lo) / Npts;
 			double y0 = this->CorrectionFactor(x0);
@@ -395,16 +395,8 @@ struct FOOTParam {
 	ADD_SERIALIZABLE_FIELD(FOOTGainParam,    gain,        {},                 8);
 	ADD_SERIALIZABLE_FIELD(FOOTDeltaParam,   de,          {},                 9);
 
-	inline Orientation GetOrientation() const noexcept {
-		if(orientation[0] == 'x' or (orientation.length() > 1 and orientation[1] == 'x')) return Orientation::X;
-		if(orientation[0] == 'y' or (orientation.length() > 1 and orientation[1] == 'y')) return Orientation::Y;
-		return Orientation::UNKNOWN;
-	};
-
-	inline double R() const noexcept {
-		if(orientation[0] == '-') return -1.0;
-		return 1.0;
-	}
+	Orientation GetOrientation() const noexcept;
+	double R() const noexcept;
 
 	/* Convert raw cluster position `cx` and its integrated ADC value
 	 * `ce` into the final calibrated ADC value. */
@@ -412,13 +404,9 @@ struct FOOTParam {
 
 	/* Main method: convert cluster energy (E) to nominal charge (Q)
 	 * If the dependence is E(Q) = A * Q^a, then:
-	 * f = 1/A, c = 1/a <=> Q(E) = (f * E)^c 
+	 * f = 1/A, c = 1/a <=> Q(E) = (f * E)^c
 	 * This energy, has to be properly both gain-matched and delta-corrected. */
-	inline double Q(double E) const noexcept {
-		if(!this->is_initialized_)
-			QParamInit();
-		return std::pow(f_*E, c_);
-	}
+	double Q(double E) const noexcept;
 	double Q(const RNFOOTCluster& ) const noexcept;
 
 	/* Calculate the (bare) cluster hit position in millimeters.
@@ -431,37 +419,30 @@ struct FOOTParam {
 	/* Get params for the nominal dependence: E(Q) = <0> * Q ^ <1> */
 	template<size_t N>
 	double GetQParam() const noexcept {
-		if(!this->is_initialized_)
-			QParamInit();
+		if(!fit_.load())
+			Init();
 		if constexpr(N == 0) {
-			return 1.0 / f_; 
+			return 1.0 / fit_->f;
 		} else if constexpr(N == 1) {
-			return 1.0 / c_;
+			return 1.0 / fit_->c;
 		} else {
 			static_assert(N < 2, "Template param must be 0 or 1.");
 		}
 	}
-	inline void ResetQ() const noexcept { this->is_initialized_ = false; }
-	
+	inline void Reset() const noexcept {  fit_.reset(); }
+
 protected:
 	/* Some cached values for quick Q- calculation.
-	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default 
-	 * JSON propagator cannot know this. Meaning that `ResetQ` has to be called manually. */
-	mutable double f_ = NAN; //!
-    mutable double c_ = NAN; //!
-	mutable bool is_initialized_ = false; //!
+	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default
+	 * JSON propagator cannot know this. Meaning that `Reset()` has to be called manually. */
+	struct fit_coeff {
+		double f, c;
+		fit_coeff() : f{NAN}, c{NAN} {};
+	};
+	mutable mnd::cache<fit_coeff> fit_; //!
+	static std::mutex mtx_;
 
-	inline void QParamInit() const {
-		std::vector<double> x, y;
-		for(auto [Q,E] : gain.nominal_value) {
-			x.push_back( std::log(Q) );
-			y.push_back( std::log(E) );
-		}
-		auto r = PolyFit<1>(x,y);
-		this->f_ = std::exp(-r[0]);
-		this->c_ = 1.0 / r[1];
-		this->is_initialized_ = true;
-	}
+	void Init() const;
 
 public:
 	int de10_index_ = -1;
@@ -560,9 +541,9 @@ struct FOOTClusterFit {
 	inline int   I0() const noexcept { return mnd::rround<int>( mu - delta ); }
 	inline double E() const noexcept { return a0 * sigma * TWO_PI_SQRT; }
 	
-	inline double E_discrete() const noexcept { 
-		return this->E() * (1 + 2 * (ffourier(1,sigma,delta) + ffourier(2,sigma,delta) + ffourier(3,sigma,delta))); 
-	} 
+	inline double E_discrete() const noexcept {
+		return this->E() * (1 + 2 * (ffourier(1,sigma,delta) + ffourier(2,sigma,delta) + ffourier(3,sigma,delta)));
+	}
 
 	/* If true, all fit parameters are given. */
 	bool IsOk() const noexcept { return std::isfinite(delta); }
@@ -590,7 +571,7 @@ struct RNFOOTCluster {
 	FOOTClusterFit fit{};
 
 	inline double Delta() const noexcept { return mnd::rround<int>(fCX) - fCX; }
- 
+
 	RNFOOTCluster(double, double, u32, ClusterType, FOOTClusterFit);
 	RNFOOTCluster() = default;
 	virtual ~RNFOOTCluster() = default;
@@ -604,7 +585,7 @@ private:
 		else if constexpr(I == 2) return (std::forward<Self>(self).fCM);
 		else if constexpr(I == 3) return (std::forward<Self>(self).fCT);
 		else static_assert(I < 4, "Index out of bounds for RNFOOTCluster::get");
-	} 
+	}
 };
 
 /* Make it structured-binding decomposable. */
@@ -622,8 +603,8 @@ struct RNFOOTCal {
 
 	using ClusterType = RNFOOTCluster::ClusterType;
 	std::vector<RNFOOTCluster> fCl{};
-    
-    /* Record whole event in a vector, if we find a large cluster, for some reason, or 
+
+    /* Record whole event in a vector, if we find a large cluster, for some reason, or
      * a good cluster but with some weird gimmicks. Vector size will be either 0 or 640.*/
 	std::vector<double> fRaw{};
 
@@ -640,7 +621,7 @@ struct RNFOOTCal {
 	void Clean() noexcept;
 
     /* This API is written this way, bit unintuitive I admit - because adding a fresh single
-     * `bool` indicator will spill the alignment over into the next cache line. And to keep it 
+     * `bool` indicator will spill the alignment over into the next cache line. And to keep it
      * all nice and tucked while also having room to */
 
 	/**
@@ -681,14 +662,14 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	
 	int FOOT_N = -1; /* Comes from sort step, isn't in order. */
 
-	TH1I* h1_mult; 
-	TH1I* h1_dE; 
-	TH1I* h1_X; 
-	TH1I* h1_cl_type; 
+	TH1I* h1_mult;
+	TH1I* h1_dE;
+	TH1I* h1_X;
+	TH1I* h1_cl_type;
 
-	TH1I* h1_dE_m1; 
-	TH1I* h1_dE_m2; 
-	TH1I* h1_dE_m3; 
+	TH1I* h1_dE_m1;
+	TH1I* h1_dE_m2;
+	TH1I* h1_dE_m3;
 	TH1I* h1_cl_sigma;
 	TH2I* h2_mult_e;
 
@@ -707,7 +688,7 @@ private:
 	FOOTBoxParam bpar; /* Again, local object for a small temporary buffer. */
 	bool should_register_box_ = false;
 	
-	/* ^^^ I don't make them internally linked in the .cxx since different containers 
+	/* ^^^ I don't make them internally linked in the .cxx since different containers
 	 * could point to different parameter files/objects,.. then I'd need some map and query it..
 	 * It's a bit too complex for less than 500 byte of memory saved. */
 

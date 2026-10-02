@@ -109,8 +109,7 @@ template <
 	double mean() const noexcept { return get().mean(); }
 	double var() const noexcept { return get().var(); }
 	friend std::ostream& operator<<(std::ostream& os, const QCombinator& Q) {
-		::mnd_output_homogeneous_range_(os, Q.buffer.data(), Q.N);
-		return os << " => " << Q.get();	
+		return os << mnd::as_span(Q.buffer.data(), Q.N) << " => " << Q.get();
 	}
 
 private:
@@ -236,11 +235,11 @@ struct Track {
 
 		std::streamsize old_precision = os.precision();
 		os << std::setprecision(4);
-		os << "{| ";
-		os << "x: "; ::mnd_output_homogeneous_range_(os, t.xs.data(), N);
-		os << ", y: "; ::mnd_output_homogeneous_range_(os, t.ys.data(), N);
-		os << ", z: "; ::mnd_output_homogeneous_range_(os, t.zs.data(), N);
-		os << ", q: " << t.q
+		os << "{| "
+		   << "x: "   << mnd::span<double>{t.xs.data(), N}
+		   << ", y: " << mnd::span<double>{t.ys.data(), N}
+		   << ", z: " << mnd::span<double>{t.zs.data(), N}
+		   << ", q: " << t.q
 		   << ", R: " << t.get() << " |}";
 		os.precision(old_precision);
 		return os;

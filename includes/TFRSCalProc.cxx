@@ -430,9 +430,7 @@ void TFRSCalProc::ProcessSci(int _i_sci) noexcept {
 	/* ^^^ Last addition is t make sqrt() stable for (0,0) combination. */
 
 	const auto& hits = in.tdc;
-
-	[[maybe_unused]]
-	const auto& [bx, ax, lim, _, __] = this->out.sci_param->operator[](_i_sci);
+	const auto& [bx, ax, lim, _, __, ___] = this->out.sci_param->operator[](_i_sci);
 
 	double d_l, d_r;
 

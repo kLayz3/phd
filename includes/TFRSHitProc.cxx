@@ -92,9 +92,9 @@ TFRSHitProc::TFRSHitProc (
 	if(!binfo) ERROR("Forgot to call TFRSHitCont::Setup() ?");
 	binfo->A0 = runsheet_row.secondary.A;
 	binfo->Z0 = runsheet_row.secondary.Z;
-	binfo->R0 = runsheet_row.brho.s1_s2;
-	binfo->R1 = runsheet_row.brho.s2_s3;
-	binfo->R2 = runsheet_row.brho.s3_s4;
+	binfo->R0 = runsheet_row.brho[mnd::S1_S2];
+	binfo->R1 = runsheet_row.brho[mnd::S2_S3];
+	binfo->R2 = runsheet_row.brho[mnd::S3_S4];
 	WARN("Beam impinging on S2 target identified as %s%s%s\n", KBH_MAG,
 	  phy::Nucleus{
 		.A = binfo->A0,

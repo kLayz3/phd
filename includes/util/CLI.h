@@ -15,9 +15,6 @@
 
 using DisplayDefault = mnd::BinaryOpt;
 
-template<typename... Ts>
-std::ostream& operator<<(std::ostream& , const std::tuple<Ts...>& );
-
 namespace mnd::cli::detail {
 
 struct State {
@@ -26,34 +23,6 @@ struct State {
 };
 
 inline constexpr char auth_sym = '!';
-
-/* Format tuple elements with indices [first, last>. Handles nested tuples, too! */
-template<typename... Ts>
-std::ostream& print_tuple(
-	std::ostream& os,
-	const std::tuple<Ts...>& tup,
-	size_t first = 0,            // first index to print
-	size_t last  = sizeof...(Ts) // first-after-last index to print.
-) {
-	using Tuple = std::tuple<Ts...>;
-	constexpr size_t N = sizeof...(Ts);
-
-	if(first > last || last > N)
-		ERROR("Invalid tuple '%s' print range? Requested [%zu, %zu>\n",
-			mnd::type_name<Tuple>().c_str(), first, last);
-
-	os << '[';
-
-	mnd::static_for<0, N>([&](auto I) {
-		constexpr size_t i = decltype(I)::value;
-
-		if(i >= first && i < last) {
-			if(i != first) os << ", ";
-			os << std::get<i>(tup);
-		}
-	});
-	return os << ']';
-}
 
 } //namespace mnd::cli::detail
 
@@ -65,15 +34,6 @@ template<typename T, typename S = std::ostream>
 using is_ostreamable = CLI::detail::is_ostreamable<T, S>;
 
 } // namespace mnd::type_traits
-
-/* RISKY: add an overload to `ostream& operator<<` to format std::tuple types.
- * Note, if somebody else defined it, then this will blow up the compiler.
- * Note, we allow to also format only a slice of the full tuple. */
-template<
-	typename... Ts
-> std::ostream& operator<<(std::ostream& os, const std::tuple<Ts...>& tup) {
-	return mnd::cli::detail::print_tuple(os, tup);
-}
 
 /* Overload for non-enum types. */
 template <
@@ -295,10 +255,10 @@ template <
 
 			std::cerr << KBH_YEL << name << KNRM << " as ";
 			std::cerr << KBH_CYN;
-			mnd::cli::detail::print_tuple(std::cerr, variable, 0, args.size());
+			mnd::fmt::detail::print_tuple(std::cerr, variable, 0, args.size());
 			if(args.size() < N) {
 				std::cerr << KNRM << ", " << KBH_MAG;
-				mnd::cli::detail::print_tuple(std::cerr, variable, args.size());
+				mnd::fmt::detail::print_tuple(std::cerr, variable, args.size());
 			}
 			std::cerr << KNRM "\n";
 		},
@@ -328,7 +288,124 @@ template <
 	return opt;
 }
 
+template<
+	DisplayDefault d = DisplayDefault::Yes,
+	typename K, typename V, typename Compare, typename Alloc
+> CLI::Option* add_logged_option(
+	CLI::App& app,
+	const std::string& name,
+	std::map<K, V, Compare, Alloc>& variable,
+	const std::string& description,
+	std::array<char, 2> seps = {':', ';'} // [0]: map sep; [1]: sequence sep
+) {
+	using Map = std::map<K, V, Compare, Alloc>;
 
+	auto state = std::make_shared<mnd::cli::detail::State>();
+
+	auto* opt = app.add_option_function<std::string>(
+		name,
+		[&variable, name, state, seps](std::string const& raw) {
+			std::string input = raw;
+
+			const bool authoritative = !input.empty()
+				&& input.front() == mnd::cli::detail::auth_sym;
+
+			if(authoritative)
+				input.erase(input.begin());
+
+			auto fail = [&name](std::string message) {
+				throw CLI::ValidationError(name, std::move(message));
+			};
+
+			/* Reject empty fields, including trailing separators. */
+			auto split = [&fail](const std::string& text, char sep) {
+				if(text.empty() || text.back() == sep)
+					fail("Empty field in map argument.");
+
+				std::vector<std::string> parts;
+				std::istringstream stream{text};
+
+				for(std::string part; std::getline(stream, part, sep);) {
+					if(part.empty())
+						fail("Empty field in map argument.");
+
+					parts.push_back(std::move(part));
+				}
+
+				return parts;
+			};
+
+			/* Preserve the comparator and allocator, but replace the
+			 * contents only after every entry has been validated. */
+			Map parsed(variable.key_comp(), variable.get_allocator());
+
+			for(const auto& entry : split(input, seps[1])) {
+				const auto kv_sep_it = entry.find(seps[0]);
+
+				if(kv_sep_it == std::string::npos || kv_sep_it == 0 || kv_sep_it + 1 == entry.size()
+					|| entry.find(seps[0], kv_sep_it + 1) != std::string::npos
+				) {
+					fail(std::string{"Expected KEY"}
+						+ seps[0] + "VALUE in '" + entry + "' without additional delimiters.");
+				}
+
+				const auto key_text = entry.substr(0, kv_sep_it);
+
+				/* Values could be a sequence, such as std::vector, or std::array,... */
+				const auto values = split(entry.substr(kv_sep_it + 1), ',');
+
+				K key{};
+				V value{};
+
+				if(!CLI::detail::lexical_cast(key_text, key))
+					fail("Invalid map key '" + key_text + "'.");
+
+				/* Explicitly require every array element. */
+				if constexpr(mnd::is_an_array_v<V>) {
+					if(values.size() != mnd::is_an_array<V>::size)
+						fail("Wrong number of array elements in '" +
+							entry + "'.");
+				}
+
+				if(!CLI::detail::lexical_conversion<V, V>(values, value))
+					fail("Invalid map value in '" + entry + "'.");
+
+				if(!parsed.emplace(std::move(key), std::move(value)).second)
+					fail("Duplicate map key '" + key_text + "'.");
+			}
+
+			if(state->authoritative_seen && !authoritative)
+				return;
+
+			variable = std::move(parsed);
+
+			if(authoritative)
+				state->authoritative_seen = true;
+
+			WARN("Parsed %soption ",
+				authoritative ? BOLD "authoritative " KNRM : "");
+
+			std::cerr << KBH_YEL << name << KNRM << " as "
+				<< KBH_CYN << variable << KNRM << '\n';
+		},
+		description
+	)
+	->type_size(1)
+	->expected(1)
+	->delimiter('\0')
+	->trigger_on_parse()
+	->type_name(
+		std::string{CLI::detail::type_name<K>()} + seps[0] + CLI::detail::type_name<V>()
+		+ '[' + seps[1] +
+		CLI::detail::type_name<K>() + seps[0] + CLI::detail::type_name<V>()
+		+ "...]"
+	);
+
+	if constexpr(d == DisplayDefault::Yes)
+		opt->default_str(CLI::detail::to_string(variable));
+
+	return opt;
+}
 
 /* For the Option<T> wrapper, also expose a CLI tool template specialization
  * to parse it properly, otherwise boilerplate reeks through the code. */

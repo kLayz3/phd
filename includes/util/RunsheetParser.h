@@ -13,10 +13,10 @@
 
 namespace mnd {
 
-constexpr static u32 DEFAULT_Z_PRIMARY   =  6;
-constexpr static u32 DEFAULT_A_PRIMARY   = 12;
-constexpr static u32 DEFAULT_Z_SECONDARY =  6;
-constexpr static u32 DEFAULT_A_SECONDARY =  9;
+inline constexpr u32 DEFAULT_Z_PRIMARY   =  6;
+inline constexpr u32 DEFAULT_A_PRIMARY   = 12;
+inline constexpr u32 DEFAULT_Z_SECONDARY =  6;
+inline constexpr u32 DEFAULT_A_SECONDARY =  9;
 
 namespace fs {
 
@@ -30,9 +30,19 @@ inline constexpr const char* i_secondary   = "Fragment";
 
 namespace brho {
 
-inline constexpr const char* s1_s2 = "S1-S2";
-inline constexpr const char* s2_s3 = "S2-S3";
-inline constexpr const char* s3_s4 = "S3-S4";
+inline constexpr const char* label[] = {
+	"TA-S1",
+	"S1-S2",
+	"S2-S3",
+	"S3-S4"
+};
+inline constexpr size_t label_index(std::string_view name) {
+	for(size_t i = 0; i < std::size(label); ++i) {
+		if(name == label[i])
+			return i;
+	}
+	throw "size_t mnd::fs::brho::label_index(std::string_view ): Unknown label provided.";
+}
 
 } // namespace brho
 
@@ -46,9 +56,32 @@ void load_runsheet(const std::string_view = runsheet_file_path);
 } // namespace fs
 
 /* Different interesting things we can query from a single runsheet row. */
+inline constexpr const char* focal_point[] = {
+	"S1", "S2", "S3", "S4"
+};
+inline constexpr size_t N_FOCAL_PTS = std::size(focal_point);
+
+static_assert(std::size(fs::brho::label) == N_FOCAL_PTS,
+	"Compiling in $1 focal points, but there's $2 labels in the array. Not matching."
+);
+inline constexpr size_t TA_S1 = fs::brho::label_index("TA-S1");
+inline constexpr size_t S1_S2 = fs::brho::label_index("S1-S2");
+inline constexpr size_t S2_S3 = fs::brho::label_index("S2-S3");
+inline constexpr size_t S3_S4 = fs::brho::label_index("S3-S4");
+
 struct RunsheetState {
 	struct Brho {
-		double s1_s2, s2_s3, s3_s4;
+		double value[N_FOCAL_PTS];
+		
+		/* Can throw on a bad string query, only proper mnd::fs::brho::label queries allowed. */
+		inline constexpr double& operator[](std::string_view name) {
+			return value[ fs::brho::label_index(name) ];
+		};
+		inline constexpr double const& operator[](std::string_view name) const {
+			return value[ fs::brho::label_index(name) ];
+		};
+		inline constexpr double& operator[](size_t I) noexcept { return value[I]; };
+		inline constexpr double const& operator[](size_t I) const noexcept { return value[I]; };
 		bool operator==(const Brho& rhs) const noexcept;
 	} brho;
 
@@ -65,6 +98,7 @@ struct RunsheetState {
 	static RunsheetState from(const nlohmann::json &);
 };
 std::ostream& operator<<(std::ostream& , const RunsheetState& );
+std::ostream& operator<<(std::ostream&, const RunsheetState::Brho&);
 
 using OptRunsheetStatePair = std::pair<
 	Option<RunsheetState>,

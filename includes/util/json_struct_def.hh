@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include <iostream>
-#include <vector>
-#include <array>
 #include "nlohmann/json.hpp"
+
+/* Used only for streaming of std::vector<T> type. */
+#include "monad/monad.hxx"
 
 #ifndef MND_EMPTY_MACRO
 #define MND_EMPTY_MACRO(...)
@@ -145,33 +145,10 @@
 #define ADD_JSON_TYPE_RESOLUTION_11(TYPE) ADD_JSON_TYPE_RESOLUTION_10(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 11)
 #define ADD_JSON_TYPE_RESOLUTION_12(TYPE) ADD_JSON_TYPE_RESOLUTION_11(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 12)
 
-#define MND_HAS_RANGE_OSTREAM_
-
-template<typename T>
-std::ostream& operator<<(std::ostream& os, const std::vector<T>& );
-template<typename T, std::size_t N>
-std::ostream& operator<<(std::ostream& os, const std::array<T,N>& );
-/* ^^^ Fwd declared for symbol visibility in the function below
- * All underlying 'bare' `T` must have the overloaded operator defined at this point. */
-
-template<typename T>
-std::ostream& mnd_output_homogeneous_range_(std::ostream& os, const T* p, const std::size_t N) {
-	os << '[';
-	if(N > 0) os << p[0];
-	for(std::size_t i = 1; i < N; ++i) {
-		os << ", " << p[i];
-	}
-	return os << ']';
-}
-
-template<typename T>
-std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
-	return ::mnd_output_homogeneous_range_(os, v.data(), v.size());
-}
-template<typename T, std::size_t N>
-std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v) {
-	return ::mnd_output_homogeneous_range_(os, v.data(), v.size());
-}
+/* Only tricky part. This small helper function FORCES the MONAD's STL containers formatting API
+ * into the global namespace. Will interfere if other libraries define the std::ostream& operator<< 
+ * overloads. */
+using namespace mnd::fmt;
 
 /* How to use, example:
 Suppose your json looks like this:

@@ -174,6 +174,9 @@ inline constexpr RGBA operator+(RGBA col, Opacity opacity) {
 /* Get a sequential color code back */
 Color_t Col(uint32_t );
 
+RGBA next_col();
+RGBA rand_col();
+
 } // namespace mnd::col
 
 extern template std::ostream& mnd::col::operator<< <true >(std::ostream&, const mnd::col::RGBA& );

@@ -192,7 +192,7 @@ int main(int argc, char* argv[]) {
 	/* Average kinetic energy per nucleon, as beam enters the S2. */
 	const double ekin_s2 = phy::EKin(
 		A_beam, Z_beam,
-		phy::Brho_t{run_info->brho.s1_s2}
+		phy::Brho_t{run_info->brho["S1-S2"]}
 	);
 	/* Average kinetic energy per nucleon, just before the target. */
 	const double avg_ekin_before_target =
@@ -733,7 +733,8 @@ int main(int argc, char* argv[]) {
 		} // for(size_t entryId{0}; entryId < nentries; ++entryId )
 
 #ifdef MND_MULTITHREADING_TOGGLE
-		bar.mark_as_completed();
+		if(!bar.is_completed())
+			bar.mark_as_completed();
 #endif
 	}
 

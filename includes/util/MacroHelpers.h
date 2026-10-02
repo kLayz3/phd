@@ -26,14 +26,15 @@
 
 #include "Option.hxx"
 
-namespace _detail {
+namespace mnd::detail {
 inline TFile* file_ptr(TFile* f) noexcept {
     return f;
 }
 inline TFile* file_ptr(std::unique_ptr<TFile> const& f) noexcept {
     return f.get();
 }
-}
+} // namespace mnd::detail
+
 /* Handle can be either unique ptr, or standard pointer.
  * `var` must be a raw pointer! You own the object now, never the ROOT. */
 template<typename F, typename P>
@@ -42,7 +43,7 @@ void get_obj(F&& fhandle, P& var, const char* label) {
 
 	using T = std::remove_pointer_t<P>;
 	
-	TFile* f = _detail::file_ptr(fhandle);
+	TFile* f = mnd::detail::file_ptr(fhandle);
 
 	if constexpr(std::is_base_of_v<TObject, T>) {
 		var = dynamic_cast<T*>(f->Get(label));

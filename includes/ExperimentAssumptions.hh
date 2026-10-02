@@ -8,7 +8,7 @@
  * But from sims, LISE++, can roughly describe it to have minor corrections to different measurements. */
 
 namespace mnd::assume {
-inline constexpr phy::Nucleus primary { .A = 12, .Z = 6 };
+inline constexpr phy::Nucleus primary { .A = 12, .Z = 6, .N_electrons = Some<u16>{2} };
 
 namespace s2 {
 

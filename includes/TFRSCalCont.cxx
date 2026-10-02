@@ -11,9 +11,45 @@ namespace fs = std::filesystem;
 
 json TFRSCalCont::setup {};
 
+std::mutex SCIPrimary::mtx_{};
+std::mutex SCIDEIntoQConverter::mtx_{};
+
 static std::array<TPCParam, RNFRSCal::N_VALID_TPC> _tpc_param {};
 static std::array<SCIParam, RNFRSCal::N_VALID_SCI> _sci_param {};
 static TrigParam _trig_param {};
+
+void SCIPrimary::Init() const noexcept {
+	auto lock = std::lock_guard{mtx_};
+
+	// Another thread may have initialized it while waiting
+	if(qdc_ref.load() == true)
+		return;
+
+	*qdc_ref = poly::Eval(1 / (beta * beta), fit);
+	qdc_ref.publish(true);
+}
+
+/* These two fncs are still valid, even if β- is uncalculated. */
+double SCIPrimary::Correct(double E, double b) const noexcept {
+	if(!std::isfinite(b) || !IsOk()) return 0.0;
+	return E * CorrectionRatio(b);
+}
+void SCIPrimary::Correct(double& E, double b) const noexcept {
+	if(!std::isfinite(b) or !IsOk()) return;
+	E *= CorrectionRatio(b);
+}
+
+/* Bad behaviour if b<0 or if instance not parametrised properly.
+ * Is *not* enforced at runtime. */
+double SCIPrimary::CorrectionRatio(double b) const noexcept {
+	if(MND_UNLIKELY(!qdc_ref.load_acq()))
+		Init();
+	double one_over_beta2 = 1/(b*b);
+	return *qdc_ref/ poly::Eval(one_over_beta2, fit);
+}
+bool SCIPrimary::IsOk() const noexcept {
+	return std::isfinite(beta);
+}
 
 bool SCIDEIntoQConverter::matches_file(std::string_view fname) const {
     /* `fname` could be with an extension, or with fullpath appended.
@@ -32,18 +68,28 @@ bool SCIDEIntoQConverter::matches_file(std::string_view fname) const {
 }
 
 double SCIDEIntoQConverter::Q(double e) const noexcept {
-    if(!this->is_initialized_)
-        QParamInit();
-    return std::pow(f_ * e, c_);
+    if( MND_UNLIKELY(!fit_.load_acq()) )
+        Init();
+    return std::pow(fit_->f * e, fit_->c);
 }
-double SCIDEIntoQConverter::Q(const RNSciCal& s) const noexcept {
+
+double SCIDEIntoQConverter::E(const RNSciCal& s) const noexcept {
     const f64 de_l = std::max( (s.El - pedestal.left),  BELOW_PEDESTAL_VAL);
     const f64 de_r = std::max( (s.Er - pedestal.right), BELOW_PEDESTAL_VAL);
-    const f64 e = std::sqrt( de_l * de_r );
+    return std::sqrt( de_l * de_r );
+}
+double SCIDEIntoQConverter::Q(const RNSciCal& s) const noexcept {
+    const f64 e = this->E(s);
     return Q(e);
 }
 
-void SCIDEIntoQConverter::QParamInit(bool verbose) const {
+void SCIDEIntoQConverter::Init(bool verbose) const {
+	auto lock = std::lock_guard{mtx_};
+
+	// Another thread may have initialized it while waiting
+	if(fit_.load() == true)
+		return;
+
     if( !mnd::isfinite(pedestal.left, pedestal.right) ) {
         ERROR("SCI: de-to-q converter, pedestal left parameter is null.\n");
         std::cerr << pedestal << std::endl;
@@ -58,14 +104,14 @@ void SCIDEIntoQConverter::QParamInit(bool verbose) const {
         y.push_back( std::log(qdc_mean) );
     }
     auto r = PolyFit<1>(x,y);
-    this->f_ = std::exp(-r[0]);
-    this->c_ = 1.0 / r[1];
-    this->is_initialized_ = true;
+    fit_->f = std::exp(-r[0]);
+    fit_->c = 1.0 / r[1];
 	if(verbose) {
 		WARN("Found coefficients: " BOLD "E(Q) = %.2f * Q^%.2f" KRNM "  <=>  "
 			KBH_GRN "Q(E) = (%.2f * E)^%.2f\n" KNRM,
-			1.0/f_, 1.0/c_, f_, c_);
+			1.0/fit_->f, 1.0/fit_->c, fit_->f, fit_->c);
 	}
+	fit_.publish(true);
 }
 std::pair<TGraph*, TGraph*> SCIDEIntoQConverter::GetGraph(
 	int ndiv,
@@ -193,7 +239,7 @@ void TFRSCalCont::Init(TDictInfo info) {
 		
 		u32 i = RNFRSCal::sci_moniker.at(_sci_i);
 		if(i >= RNFRSCal::N_VALID_SCI) continue;
-		UNROLL_JSON_PARAM(_sci_param[i], params, 4)
+		UNROLL_JSON_PARAM(_sci_param[i], params, 5)
 	}
 
     constexpr auto trig_param_json_name = TrigParam::get_name<0>();
@@ -250,7 +296,7 @@ std::array<double, TPCParam::N_S2_TPC>
 TFRSCalCont::z_s2_tpc(
     std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_param
 ) {
-    if(!tpc_param) 
+    if(!tpc_param)
         ERROR("nullptr supplied to z_s2_tpc\n");
     return { 
         tpc_param->at(0).z0,
@@ -280,6 +326,7 @@ ClassImp(RNTPCCal::Measurement);
 ClassImp(RNFRSCal);
 
 ClassImp(TPCParam);
+ClassImp(SCIPrimary);
 ClassImp(SCIQDCPedestal);
 ClassImp(SCIMeanQDC);
 ClassImp(SCIDEIntoQConverter);

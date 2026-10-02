@@ -129,7 +129,7 @@ struct RNFRSCal {
         {"31", SCI31_I},
         {"41", SCI41_I}
     };
-	static constexpr std::array<const char*, N_VALID_SCI> sci_label = { 
+	static constexpr std::array<const char*, N_VALID_SCI> sci_label = {
         "21", "22", "31", "41"
     };
 
@@ -181,11 +181,49 @@ struct TPCParam {
 };
 ADD_JSON_TYPE_RESOLUTION(TPCParam, 9);
 
+/* This type is responsible for β-correction of the
+ * dE measurement of scintillators. Hence, only will be utilized in
+ * the next, hit step. */
+struct SCIPrimary {
+    GET_HELP_AUX_IMPL
+	using A2 = std::array<double, 2>;
+
+	// Nullable according to the `beta` field. Passing in beta outside of <0,1> in parameter file
+	// is undefined behaviour.
+    ADD_SERIALIZABLE_FIELD(f64, beta, NAN, 0); // Referent velocity at maximal matter
+	ADD_SERIALIZABLE_FIELD(A2,  fit,  {},  1); // Fit for E vs. 1/β^2
+
+	/* SCI's give the 1st calibrated QDC value as:
+	 * sqrt((L - pedL) * (R - pedR))
+	 * Correct this energy based on the incoming particle β, if it
+	 * can be calculated. In case β is a NAN, returns 0.
+	 * Passing in β<0 is bad behaviour, and is not verified! */
+	/* Absolute correction. */
+	[[nodiscard]]
+	auto Correct(double  E, double b) const noexcept -> double;
+	auto Correct(double& E, double b) const noexcept -> void;
+
+	[[nodiscard]] double CorrectionRatio(double b) const noexcept;
+	bool IsOk() const noexcept;
+	void Reset() const noexcept { qdc_ref.reset(); }
+
+    SCIPrimary() = default;
+	virtual ~SCIPrimary() = default;
+	ClassDef(SCIPrimary, 1);
+
+private:
+	void Init() const noexcept;
+	mutable mnd::cache<double> qdc_ref{}; //!
+	static std::mutex mtx_; //!
+};
+
+ADD_JSON_TYPE_RESOLUTION(SCIPrimary, 1)
+
 struct SCIQDCPedestal {
     GET_HELP_AUX_IMPL
     ADD_SERIALIZABLE_FIELD(f64, left,  0.0, 0);
     ADD_SERIALIZABLE_FIELD(f64, right, 0.0, 1);
-    
+
     SCIQDCPedestal() = default;
 	virtual ~SCIQDCPedestal() = default;
 	ClassDef(SCIQDCPedestal, 1);
@@ -222,9 +260,13 @@ struct SCIDEIntoQConverter {
 	 * f = 1/A, c = 1/a <=> Q(E) = (f * E)^c */
 	double Q(const RNSciCal& ) const noexcept;
 	double Q(double ) const noexcept;
-	
-	inline void ResetQ() const noexcept { this->is_initialized_ = false; }
-	void QParamInit(bool verbose = false) const;
+
+	/* Convert SCI left-right measurement to nominal "energy":
+	 * E = sqrt( (E(l) - Ped(l)) * (E(r) - Ped(r)) ) */
+	double E(const RNSciCal& ) const noexcept;
+
+	inline void Reset() const noexcept { fit_.reset(); }
+	void Init(bool verbose = false) const;
 
 	[[ nodiscard ]] std::pair<TGraph*, TGraph*> GetGraph(
 		int ndiv  = 500,
@@ -240,10 +282,13 @@ struct SCIDEIntoQConverter {
 protected:
 	/* Some cached values for quick Q- calculation.
 	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default
-	 * JSON propagator cannot know this. Meaning that `ResetQ` has to be called manually. */
-	mutable double f_ = NAN; //!
-    mutable double c_ = NAN; //!
-	mutable bool is_initialized_ = 0; //!
+	 * JSON propagator cannot know this. Meaning that `Reset()` has to be called manually. */
+	struct fit_coeff {
+		double f, c;
+		fit_coeff() : f{NAN}, c{NAN} {};
+	};
+	mutable mnd::cache<fit_coeff> fit_; //!
+	static std::mutex mtx_; //!
 
 public:
 	virtual ~SCIDEIntoQConverter() = default;
@@ -261,7 +306,8 @@ struct SCIParam {
 	ADD_SERIALIZABLE_FIELD(double,                x_factor,  1,  1);
 	ADD_SERIALIZABLE_FIELD(arr2,                  cdiff_lim, {}, 2);
 	ADD_SERIALIZABLE_FIELD(double,                z0,        0,  3);
-    ADD_SERIALIZABLE_FIELD(DeltaEToQConverterSeq, de_to_q,   {}, 4);
+	ADD_SERIALIZABLE_FIELD(SCIPrimary,            primary,   {}, 4)
+    ADD_SERIALIZABLE_FIELD(DeltaEToQConverterSeq, de_to_q,   {}, 5);
 
     SCIParam() = default;
 
@@ -283,7 +329,7 @@ public:
 	virtual ~SCIParam() = default;
 	ClassDef(SCIParam, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(SCIParam, 4)
+ADD_JSON_TYPE_RESOLUTION(SCIParam, 5)
 
 struct TrigParamSingle {
     GET_HELP_AUX_IMPL

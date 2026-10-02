@@ -545,15 +545,31 @@ std::istream& mnd::col::operator>>(std::istream& in, mnd::col::Opacity& out) {
 	return in;
 }
 
+namespace detail_ {
+static constexpr uint32_t cols[] = {
+	0xC41E3A, 0xA330C9, 0xFF7C0A, 0x33937F,
+	0xAAD372, 0x3FC7EB, 0x00FF98, 0xF48CBA,
+	0xFFF468, 0x0070DD, 0x8788EE, 0xC69B6D
+};
+static constexpr size_t Ncols = sizeof cols / sizeof *cols;
+static std::atomic<std::size_t> n_col_curr {};
+
+} // namespace detail_
+
 Color_t mnd::col::Col(uint32_t i) {
-	constexpr uint32_t cols[] = {
-		0xC41E3A, 0xA330C9, 0xFF7C0A, 0x33937F,
-		0xAAD372, 0x3FC7EB, 0x00FF98, 0xF48CBA,
-		0xFFF468, 0x0070DD, 0x8788EE, 0xC69B6D
-	};
-	constexpr size_t Ncols = sizeof cols / sizeof *cols;
-	
-	return RGBA::hex_to_col( cols[i % Ncols] );
+	return RGBA::hex_to_col( detail_::cols[i % detail_::Ncols] );
+}
+
+mnd::col::RGBA mnd::col::next_col() {
+	return RGBA::from_packed(
+		detail_::cols[detail_::n_col_curr++ % detail_::Ncols]
+	);
+}
+mnd::col::RGBA mnd::col::rand_col() {
+	uint32_t x = static_cast<uint32_t>(rand());
+	return RGBA::from_packed(
+		detail_::cols[x % detail_::Ncols]
+	);
 }
 
 using namespace mnd::plot;

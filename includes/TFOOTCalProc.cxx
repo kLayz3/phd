@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "util/json_struct_def.hh"
 #include "util/FastGauss.hxx"
 
 // This will make all the fits be analytical from 3 points around the maximum
@@ -103,8 +102,7 @@ std::ostream& operator<<(std::ostream& os, const TFOOTCalProc::TClustHit& cl) {
 }
 
 void TFOOTCalProc::PrintBuff() {
-	mnd_output_homogeneous_range_(std::cerr, _buf, _cl_cnt);	
-	fprintf(stderr, "\n");
+	std::cerr << mnd::as_span(_buf, _cl_cnt) << '\n';
 }
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int );
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int );

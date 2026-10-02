@@ -28,10 +28,14 @@ static const auto is_eq = [](double a, double b) -> bool {
 };
 
 bool mnd::RunsheetState::Brho::operator==(const Brho& rhs) const noexcept {
-	return is_eq(s1_s2, rhs.s1_s2) &&
-	       is_eq(s2_s3, rhs.s2_s3) &&
-	       is_eq(s3_s4, rhs.s3_s4);
+	bool eq = true;
+	mnd::static_for<0, N_FOCAL_PTS>([&eq,&rhs,this](auto I){
+		constexpr size_t i = decltype(I)::value;
+		eq &= is_eq(this->value[i], rhs.value[i]);
+	});
+	return eq;
 }
+
 bool mnd::RunsheetState::operator==(const RunsheetState& rhs) const noexcept {
 	return brho == rhs.brho &&
 	       is_eq(e0, rhs.e0) &&
@@ -46,12 +50,13 @@ bool mnd::RunsheetState::operator!=(const RunsheetState& rhs) const noexcept {
 }
 
 mnd::RunsheetState mnd::RunsheetState::from(const nlohmann::json& j) {
+	RunsheetState::Brho brho{};
+	mnd::static_for<0, N_FOCAL_PTS>([&brho, &j](auto I) {
+		constexpr size_t i = decltype(I)::value;
+		brho.value[i] = j_value<double>(j, fs::brho::label[i]).value_or(NAN);
+	});
 	return RunsheetState {
-		.brho = {
-			.s1_s2 = j_value<double>(j, fs::brho::s1_s2).value_or(NAN),
-			.s2_s3 = j_value<double>(j, fs::brho::s2_s3).value_or(NAN),
-			.s3_s4 = j_value<double>(j, fs::brho::s3_s4).value_or(NAN)
-		},
+		.brho = std::move(brho),
 		.e0 = j_value<double>(j, fs::e_primary).value_or(NAN),
 		.primary  = phy::Nucleus::get_ion(
 			j_value<std::string>(j, fs::i_primary).value_or(""), false, fs::i_primary
@@ -62,11 +67,17 @@ mnd::RunsheetState mnd::RunsheetState::from(const nlohmann::json& j) {
 	};
 }
 
+std::ostream& mnd::operator<<(std::ostream& os, const RunsheetState::Brho& brho) {
+	os << "brho: {";
+	mnd::static_for<0, N_FOCAL_PTS-1>([&](auto I){
+		constexpr size_t i = decltype(I)::value;
+		os << fs::brho::label[i] << BOLD << brho.value[i] << KNRM " Tm,";
+	});
+	return os << fs::brho::label[N_FOCAL_PTS-1] << BOLD << brho.value[N_FOCAL_PTS-1] << KNRM " Tm}";
+}
 std::ostream& mnd::operator<<(std::ostream& os, const RunsheetState& r) {
-	return os << KBH_GRN "({" KRNM " brho: {"
-		<< fs::brho::s1_s2 << ": " << BOLD << r.brho.s1_s2 << KNRM " Tm, "
-		<< fs::brho::s2_s3 << ": " << BOLD << r.brho.s2_s3 << KNRM " Tm, "
-		<< fs::brho::s3_s4 << ": " << BOLD << r.brho.s3_s4 << KNRM " Tm}"
+	return os << KBH_GRN "({" KNRM
+		<< r.brho
 		<< ", {primary"
 		<< ": Z: " BOLD << r.primary.Z << KNRM
 		<< ", A: " BOLD << r.primary.A << KNRM

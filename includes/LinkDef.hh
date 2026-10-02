@@ -24,6 +24,7 @@
 #pragma link C++ class RNTPCCal::Measurement+;
 #pragma link C++ class RNFRSCal+;
 #pragma link C++ class TPCParam+;
+#pragma link C++ class SCIPrimary+;
 #pragma link C++ class SCIQDCPedestal+;
 #pragma link C++ class SCIMeanQDC+;
 #pragma link C++ class SCIDEIntoQConverter+;

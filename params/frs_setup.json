@@ -92,6 +92,13 @@
 			"x_factor": 1.34929,     // [ mm ]
 			"cdiff_lim": [-80, 150], // [ TDC_UNITS ]
 			"z0": 1554.5,            // [ mm ]
+			"primary": {             // Energy loss β-correction
+				"beta": 0.8305084407466166,
+				"fit": [
+					931.2453274416049,
+					1396.0090893453478
+				]
+			},
             "de_to_q": [ // Energy loss to charge calibrator
                 {
                     "regex": "main_\\d{4}_\\d{4}", // Regex that basefile name (w/o .root) must match.
@@ -121,6 +128,13 @@
 			"x_factor": 1.53948,
 			"cdiff_lim": [-120, 200],
 			"z0": 3790,
+			"primary": {
+				"beta": 0.8172103860120323,
+				"fit": [
+					2014.11,
+					413.146
+				]
+			},
 			"de_to_q": [
 				{
                     "regex": "main_0193_\\d{4}",
@@ -187,6 +201,13 @@
 			"x_factor": 1,
 			"cdiff_lim": [-600, -370],
 			"z0": 1714,
+			"primary": {
+				"beta": 0.8172103860120323,
+				"fit": [
+					684.4964617450514,
+					661.3217462916623
+				]
+			},
 			"de_to_q": [
 				{
                     "regex": "main_0193_\\d{3,4}",

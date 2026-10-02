@@ -8,13 +8,30 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
+std::mutex FOOTParam::mtx_{};
+
 double FOOTDeltaFFT::Evaluate(const double x) const {
-	return FFTW::Evaluate(this->c, this->n, x, -0.5, 0.5); 	
+	return FFTW::Evaluate(this->c, this->n, x, -0.5, 0.5);
+}
+
+Orientation FOOTParam::GetOrientation() const noexcept {
+	if(orientation[0] == 'x' or (orientation.length() > 1 and orientation[1] == 'x')) return Orientation::X;
+	if(orientation[0] == 'y' or (orientation.length() > 1 and orientation[1] == 'y')) return Orientation::Y;
+	return Orientation::UNKNOWN;
+};
+double FOOTParam::R() const noexcept {
+	if(orientation[0] == '-') return -1.0;
+	return 1.0;
+}
+double FOOTParam::Q(double E) const noexcept {
+	if( MND_UNLIKELY(!fit_.load_acq()) )
+		Init();
+	return std::pow(fit_->f*E, fit_->c);
 }
 
 double FOOTParam::E(const RNFOOTCluster& clust) const noexcept {
 	double ce = clust.fCE;
-	double d  = clust.Delta();
+	double const d  = clust.Delta();
 	double cx = clust.fCX;
 
 	ce *= this->gain.CorrectionFactor(cx, ce);
@@ -24,7 +41,7 @@ double FOOTParam::E(const RNFOOTCluster& clust) const noexcept {
 };
 
 double FOOTParam::Q(const RNFOOTCluster& clust) const noexcept {
-	double e = this->E(clust); 
+	const double e = this->E(clust);
 	return this->Q(e);
 }
 
@@ -33,6 +50,22 @@ double FOOTParam::BarePosition(const RNFOOTCluster& clust) const noexcept {
 }
 double FOOTParam::X0(const RNFOOTCluster& clust) const noexcept {
 	return BarePosition(clust) + delta_p;
+}
+void FOOTParam::Init() const {
+	auto lock = std::lock_guard{mtx_};
+	
+	// Another thread may have initialized it while waiting
+	if(fit_.load() == true)
+		return;
+	std::vector<double> x, y;
+	for(auto [Q,E] : gain.nominal_value) {
+		x.push_back( std::log(Q) );
+		y.push_back( std::log(E) );
+	}
+	auto r = PolyFit<1>(x,y);
+	fit_->f = std::exp(-r[0]);
+	fit_->c = 1.0 / r[1];
+	fit_.publish(true);
 }
 
 RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t, FOOTClusterFit fit) :

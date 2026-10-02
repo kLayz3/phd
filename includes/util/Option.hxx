@@ -251,7 +251,6 @@ public:
 	friend constexpr bool operator==(None_t , const Option& rhs) noexcept {
 		return rhs.is_none();
 	}
-	/* ^^^ all possible comparisons given. */
 
 protected:
 	std::optional<T> data;

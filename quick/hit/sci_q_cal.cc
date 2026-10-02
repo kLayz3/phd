@@ -3,7 +3,7 @@
 #include "util/PrettyHisto.h"
 
 #include "TApplication.h"
-#include "TFRSCalCont.h"
+#include "TFRSHitCont.h"
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
@@ -11,13 +11,11 @@ using namespace indicators;
 using namespace mnd::col::literals;
 
 int main(int argc, char* argv[]) {
-    CLI::App app{"Calibrate the QDC into-charge measurement of SCI21/22/31. "
-        "We don't do the velocity dependence correction, as it is anyway close to the minimum "
-        "of the Bethe-Bloch curve. Maybe a TODO for later,..."};
+    CLI::App app{"Calibrate the QDC into-charge measurement of SCI21/22/31/41. "
+        "We also do the velocity dependence (β) correction, since it comes from the tof_cal step."};
 
     std::string fileName{};
 	u32 i_sci = 0;
-	A3 binning_sci = {4000, 0, 4000};
     u32 niter = 2;
     unsigned short line_size = 4;
     double sratio = 1.4;
@@ -28,12 +26,12 @@ int main(int argc, char* argv[]) {
     add_logged_option(app, "-f,--file", fileName, "Pass a file name.")
         ->check(CLI::ReadPermissions);
     add_logged_option(app, "-i,--sci", i_sci,
-        mnd::msg("Scintillator index; %u => SCI21, %u => SCI22, %u => SCI31",
-            RNFRSCal::SCI21_I, RNFRSCal::SCI22_I, RNFRSCal::SCI31_I))
-        ->check(CLI::Range(0, (int)RNFRSCal::SCI31_I));
+        mnd::msg("Scintillator index; %u => SCI21, %u => SCI22, %u => SCI31, %u => SCI41",
+            RNFRSCal::SCI21_I, RNFRSCal::SCI22_I, RNFRSCal::SCI31_I, RNFRSCal::SCI41_I))
+        ->check(CLI::Range(
+			(int)RNFRSCal::SCI21_I, (int)RNFRSCal::SCI41_I
+		));
 
-	add_logged_option(app, "-s,--binning-sci", binning_sci, "Binning Y. If difference toggle given, then Y becomes the difference axis (delta axis).")
-		->delimiter(',');
     add_logged_option(app, "--niter", niter, "Gaussian TH1D fit, number of iterations for the peak finder. Only with --ped option active.")
         ->check(CLI::PositiveNumber);
     add_logged_option(app, "--sratio", sratio, "Width ratio of raw histogram, how much to fit around the peak. Only with --ped option active.")
@@ -61,7 +59,7 @@ int main(int argc, char* argv[]) {
 		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.c_str(), "READ");
         get_obj(f, sci_params, "FRS_sci_parameters");
     }
-    [[maybe_unused]] const SCIParam& par = sci_params->at(i_sci);
+    const SCIParam& par = sci_params->at(i_sci);
     if( ped_from_file ) {
         /* In this case just take the pedestal values from the file. */
         u32 n_matched = par.SetConverter(fileName);
@@ -108,7 +106,7 @@ int main(int argc, char* argv[]) {
 	TApplication rootApp("app", 0, 0);
 
     auto model = RNTupleModel::Create();
-    auto frs = model->MakeField<RNFRSCal>("FRS");
+    auto frs = model->MakeField<RNFRSHit>("FRS");
     auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
     ProgressBar bar {
         option::BarWidth{50},
@@ -129,8 +127,9 @@ int main(int argc, char* argv[]) {
     for(auto entryId : *ntuple) {
         ntuple->LoadEntry(entryId);
         mnd::PrintProgress(bar, entryId, nentries, 500);
-
-        const auto& sci = frs->sci[i_sci];
+		
+		const RNFRSCal& cfrs = frs->cal;
+        const auto& sci = cfrs.sci[i_sci];
 
         if(sci.hits.empty()) {
             h1_sci_ped_l->Fill(sci.El);
