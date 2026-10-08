@@ -39,6 +39,9 @@ Option<uint32_t> Nucleus::charge_state() const noexcept {
 		return mnd::Some{Z - ne};
 	});
 }
+uint32_t Nucleus::Q() const noexcept {
+	return charge_state().value_or(Z);
+}
 
 Option<AtomicNumber> Nucleus::ChemElem() const noexcept {
 	return ToAtomicNumber(Z);

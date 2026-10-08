@@ -28,6 +28,8 @@ struct TFRSCalProc : TProcessor <
 	void ProcessEntry() noexcept;
 
 private:
+	void LoadQDCParams();
+
 	/* Encapsulating viable data from single TPC, single anode channel */
 	struct TPCHitCandidate {
 		i32 a_tdc;

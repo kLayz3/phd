@@ -1,5 +1,6 @@
 /* pybind11 stuff must be first to be included. */
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <pybind11/numpy.h>
@@ -566,7 +567,14 @@ mnd::col::RGBA mnd::col::next_col() {
 	);
 }
 mnd::col::RGBA mnd::col::rand_col() {
-	uint32_t x = static_cast<uint32_t>(rand());
+	const uint32_t curr_col = /* 0,1,2, ..., Ncols-1 */
+		(uint32_t)detail_::n_col_curr.load(std::memory_order_relaxed) % detail_::Ncols;
+
+	uint32_t x;
+	while(x = static_cast<uint32_t>(rand()) % detail_::Ncols,
+		x == curr_col) {}
+	detail_::n_col_curr.store(x+1, std::memory_order_relaxed);
+
 	return RGBA::from_packed(
 		detail_::cols[x % detail_::Ncols]
 	);

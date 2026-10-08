@@ -552,15 +552,18 @@ template <
 
 	return opt;
 }
-
-inline CLI::Option* add_logged_flag (
+template<typename T>
+CLI::Option* add_logged_flag (
 	CLI::App& app,
 	std::string name,
-	bool& variable,
+	T& variable,
 	std::string description
 ) {
+	static_assert(std::is_same_v<T, bool> || std::is_same_v<T, int>,
+		"Supplied type the add_logged_flag must be either bool or int.");
+
 	return app.add_flag(name, variable, description)
-		->each (
+		->each(
 			[name](const std::string& match) {
 				WARN("Parsed flag ");
 				std::cerr << KBH_YEL << name << KNRM << " as "

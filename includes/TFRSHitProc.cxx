@@ -11,6 +11,7 @@
 #include "util/json_struct_def.hh"
 
 thread_local mnd::geom::Line3D g_upstream_track {};
+double TFRSHitProc::z0 = NAN;
 
 /* This ctor only gets called once, at the creation. Later on, the clones
  * call the implicit copy-ctor. */
@@ -41,37 +42,17 @@ TFRSHitProc::TFRSHitProc (
 			tof_param_json_name);
 	} else {
 		UNROLL_JSON_PARAM( (*out.sTof), in.setup, 0);
+		for(const auto& tofp : out.sTof->ToF) {
+			if(!tofp.IsValid())
+				ERROR("Parsed in ToF combination marked as invalid:\nIt is: %s\n",
+					mnd::streamable(tofp).c_str());
+		}
 		WARN("'%s' JSON successfully parsed as: %s\n", tof_param_json_name, mnd::streamable(*out.sTof).c_str());
 	}
 
 	const std::string_view fname = mnd::g_input_file.name();
 	WARN("TFRSHitProc::TFRSHitProc(..) found current input file from MONAD: %s%.*s%s\n",
 		KBH_MAG, (int)fname.size(), fname.data(), KNRM);
-
-	/* Self clarification: `in` is the input container, owning the underlying `_vc` vector
-	 * pinned on the heap via shared_ptr API. AKA: the raw pointers such as in.sci_param will just get copied around
-	 * during the ping-ponging of constructing the full TAnalysisProcess<..> and TAnalysisPool<..> but
-	 * still refer to the correct `TOnce<T>` inside the _vc vector.
-	 *
-	 * It's only important to refer to the CAL step's converter, not output current HIT step's. */
-#define INIT_DE_TO_Q(SCI_LABEL) \
-    { \
-        const SCIParam& s = in.sci_param->at( RNFRSCal::SCI##SCI_LABEL##_I ); \
-        u32 r = s.SetConverter(fname); \
-        if(r > 1) { \
-            WARN("SCI%s parameter: found >1 (out of %zu) \"de_to_q\" matches for current input file: '%.*s'. Is OK, will take last match.\n", \
-                 #SCI_LABEL, s.de_to_q.size(), (int)fname.size(), fname.data()); \
-        } else if(r == 0) { \
-            WARN("SCI%s parameter: found =0 (out of %zu) \"de_to_q\" matches for current input file: '%.*s'. Is OK, charge values will be NAN.\n", \
-                 #SCI_LABEL, s.de_to_q.size(), (int)fname.size(), fname.data()); \
-        } \
-		else { \
-			WARN("SCI%s parameter: " BOLD "successfully attached the charge converter.\n" KNRM, #SCI_LABEL); \
-		} \
-    }
-    INIT_DE_TO_Q(21);
-    INIT_DE_TO_Q(22);
-    INIT_DE_TO_Q(31);
 
 	mnd::fs::load_runsheet(runsheet_name);
 	const mnd::RunsheetState runsheet_row = mnd::QueryRunsheet(fname);
@@ -90,16 +71,10 @@ TFRSHitProc::TFRSHitProc (
 
 	BeamInfo* binfo = out.binfo;
 	if(!binfo) ERROR("Forgot to call TFRSHitCont::Setup() ?");
-	binfo->A0 = runsheet_row.secondary.A;
-	binfo->Z0 = runsheet_row.secondary.Z;
-	binfo->R0 = runsheet_row.brho[mnd::S1_S2];
-	binfo->R1 = runsheet_row.brho[mnd::S2_S3];
-	binfo->R2 = runsheet_row.brho[mnd::S3_S4];
+	binfo->GetFrom(runsheet_row);
+	
 	WARN("Beam impinging on S2 target identified as %s%s%s\n", KBH_MAG,
-	  phy::Nucleus{
-		.A = binfo->A0,
-		.Z = binfo->Z0
-	  }.chem_to_string().c_str(), KNRM
+		binfo->SecondaryIon()->chem_to_string().c_str(), KNRM
 	);
 }
 
@@ -108,9 +83,45 @@ void TFRSHitProc::ProcessEntry() noexcept {
 	out.Clean();
 
 	out.cal = std::get<0>(this->in).inner(); // RNFRSCal& operator=(RNFRSCal& )
+	
+	ProcessToF();
 	ProcessS2BT();
     ProcessS2AT();
     ProcessS3();
+}
+
+void TFRSHitProc::ProcessToF() noexcept {
+	const TFRSCalCont& cal = std::get<0>( this->in );
+	const RNFRSCal& in = cal.inner();
+
+    const SCIParam& sci21_p   = cal.sci_param->operator[]( RNFRSCal::SCI21_I );
+    const SCIParam& sci22_p   = cal.sci_param->operator[]( RNFRSCal::SCI22_I );
+
+	const double beta_21_22 = tofp_s21_s22
+		? tofp_s21_s22->Beta(in)
+		: NAN;
+
+	const double beta_22_31 = tofp_s22_s31
+		? tofp_s22_s31->Beta(in)
+		: NAN;
+	
+	/* C++11: 'If control enters the declaration concurrently while the variable is being initialized,
+	 *         the concurrent execution shall wait for completion of the initialization'
+	 * https://timsong-cpp.github.io/cppwp/n3337/stmt.dcl , §4 */
+	static const double lambda = (
+		(sci21_p.z0 > 0 && sci22_p.z0 > 0 && z0 > 0 &&
+		 mnd::is_strictly_ascending(sci21_p.z0, z0, sci22_p.z0))
+		? (z0 - sci21_p.z0)/(sci22_p.z0 - sci21_p.z0)
+		: NAN
+	);
+	/* SCI21 - SCI22 ToF:
+	 * λ/β₁ = 1/β - (1-λ)/β₂ */
+	const double lambda_over_b1 = 1.0 / beta_21_22 - (1-lambda)/beta_22_31;
+	const double beta_21 = lambda/lambda_over_b1;
+
+	out->s2_bt.beta = beta_21;
+	out->s2_at.beta = beta_22_31;
+	out->s3.beta    = beta_22_31;
 }
 
 /* Before target we don't have full Q vs. A/Q measurement, since there's no 
@@ -121,6 +132,7 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 
 	const TFRSCalCont& cal = std::get<0>( this->in );
 	const RNFRSCal& in = cal.inner();
+	RNFRSHit::Id& bt = out.inner().s2_bt;
 
 	i64 code{0};
 	if(s2_bt_tracking_mask & RNFRSHit::S2_BT_TRACKING_INCLUDE_SCI21_MASK) {
@@ -175,27 +187,25 @@ void TFRSHitProc::ProcessS2BT() noexcept {
     const SCIParam& sci21_p   = cal.sci_param->operator[]( RNFRSCal::SCI21_I );
     const RNSciCal& sci21_data = in.sci[ RNFRSCal::SCI21_I ];
 
-	double Q = sci21_p.Q( sci21_data );
+	const double beta = bt.beta; /*from ProcessToF()*/
+	const double E0 = sci21_p.E0( sci21_data );
+	const double Q0 = sci21_p.Q(E0, NAN);
+	const double Qc = sci21_p.Q(E0, beta);
+	this->s2_q0[0] = Q0;
+	this->s2_qc[0] = Qc;
 	
-	/* Since S2 'Q' measurement can vary, plugging in a constant 'A'
-	 * number into beta calculation would be wrong.
-	 * C++11: 'If control enters the declaration concurrently while the variable is being initialized,
-	 *         the concurrent execution shall wait for completion of the initialization'
-	 * https://timsong-cpp.github.io/cppwp/n3337/stmt.dcl?utm_source=chatgpt.com , Paragraph [4] */
-	static double const s2_beta_assume = phy::Beta(
-		out.binfo->A0,
-		out.binfo->Z0,
-		phy::Brho_t{ out.binfo->R0 }
+	const double AoQ = phy::AoQ(
+		phy::Brho_t{ out.binfo->BrhoAt(RNFRSCal::SCI22_I) },
+		phy::Beta_t{ beta }
 	);
-	
-	RNFRSHit::Id& bt = out.inner().s2_bt;
-	/* bt.A ==> should be measured, not assumed! */
-	bt.Q    = Q;
-	bt.x0   = x0;
-	bt.y0   = y0;
-	bt.ax   = ax;
-	bt.ay   = ay;
-	bt.beta = s2_beta_assume;
+
+	bt.AoQ = AoQ;
+	bt.Q   = Qc;
+	bt.x0  = x0;
+	bt.y0  = y0;
+	bt.ax  = ax;
+	bt.ay  = ay;
+	// bt.beta assigned in `ProcessTof()`.
 	bt.code = code;
 
 	g_upstream_track = RNTrackToLine3D(bt); // could be null.
@@ -204,20 +214,27 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 void TFRSHitProc::ProcessS2AT() noexcept {
     const TFRSCalCont& cal = std::get<0>( this->in );
 	const RNFRSCal& in = cal.inner();
-	
-    const RNSciCal& sci21_data = in.sci[ RNFRSCal::SCI21_I ];
+	RNFRSHit::Id& at = out.inner().s2_at;
 
+	const RNSciCal& sci21_data = in.sci[ RNFRSCal::SCI21_I ];
+	
     const SCIParam& sci22_p   = cal.sci_param->operator[]( RNFRSCal::SCI22_I );
     const RNSciCal& sci22_data = in.sci[ RNFRSCal::SCI22_I ];
-
-	RNFRSHit::Id& at = out.inner().s2_at;
-    double Q = sci22_p.Q( sci22_data );
 	
-	out.h2_s2_q->Fill( out.inner().s2_bt.Q, Q );
+	const double beta = at.beta; /*from ProcessToF()*/
+	const double E0 = sci22_p.E0( sci22_data );
+	const double Q0 = sci22_p.Q(E0, NAN);
+	const double Qc = sci22_p.Q(E0, beta);
+	this->s2_q0[1] = Q0;
+	this->s2_qc[1] = Qc;
 
-	at.Q    = Q;
-	at.code = (sci21_data.hits.size() << 32)
-		| sci22_data.hits.size();
+	out.h2_s2_q ->Fill( s2_q0[0], s2_q0[1] );
+	out.h2_s2_qc->Fill( s2_qc[0], s2_qc[1] );
+
+	at.Q    = Qc;
+	// at.beta assigned in `ProcessTof()`
+	at.code |= (sci21_data.hits.size() << 32);
+	at.code |=  sci22_data.hits.size();
 
 	/* Other fields are unmeasurable or not measurable to wanted precision, like
 	 * position and angles. */
@@ -226,46 +243,48 @@ void TFRSHitProc::ProcessS2AT() noexcept {
 void TFRSHitProc::ProcessS3() noexcept {
     const TFRSCalCont& cal = std::get<0>( this->in );
 	const RNFRSCal& in = cal.inner();
+	RNFRSHit::Id& s3 = out.inner().s3;
+
+	const RNSciCal& sci22_data = in.sci[ RNFRSCal::SCI22_I ];
 	
     const SCIParam& sci31_p   = cal.sci_param->operator[]( RNFRSCal::SCI31_I );
     const RNSciCal& sci31_data = in.sci[ RNFRSCal::SCI31_I ];
 
-    const RNSciCal& sci22_data = in.sci[ RNFRSCal::SCI22_I ];
+	const double beta = out->s3.beta;
+	const double E0 = sci31_p.E0( sci31_data );
+	const double Q0 = sci31_p.Q(E0, NAN);
+	const double Qc = sci31_p.Q(E0, beta);
 
-	double Q = sci31_p.Q( sci31_data );
-
-	const double beta = tofp_s3_s2
-		? tofp_s3_s2->Beta(in)
-		: NAN;
-
-	const double gamma = phy::Gamma(beta);
-
-	double AoQ = phy::AoQ(
-		phy::Brho_t{ out.binfo->R1 },
-		phy::BetaGamma_t{ beta*gamma }
+	const double AoQ = phy::AoQ(
+		phy::Brho_t{ out.binfo->BrhoAt(RNFRSCal::SCI31_I) },
+		phy::Beta_t{ beta }
 	);
 
-	out.h2_s3_id->Fill(AoQ, Q);
-	out.h2_s3_q->Fill( out.inner().s2_bt.Q, Q );
+	out.h2_s3_id->Fill(AoQ, Qc);
+	out.h2_s3_q ->Fill( s2_q0[1], Q0 );
+	out.h2_s3_qc->Fill( s2_qc[1], Qc );
 	out.h1_s3_beta->Fill(beta);
 
-	/* Local references. */
-	RNFRSHit::Id& s3 = out.inner().s3;
-
-	s3.Q    = Q;
-	s3.A    = AoQ * Q;
-	s3.beta = beta;
-	s3.code = (sci22_data.hits.size() << 32)
-		| sci31_data.hits.size();
+	s3.AoQ  = AoQ;
+	s3.Q    = Qc;
+	// s3.beta assigned in `ProcessTof()`
+	s3.code |= (sci22_data.hits.size() << 32);
+	s3.code |=  sci31_data.hits.size();
 }
 
 void TFRSHitProc::FinalInit() {
 	/* Is const-qualified and once loaded, won't change. */
-	tofp_s3_s2 = out.sTof
+	tofp_s22_s31 = out.sTof
 		? out.sTof->Get(
 			RNFRSCal::SCI22_I,
 			RNFRSCal::SCI31_I
 		)
 		: nullptr;
-
+	
+	tofp_s21_s22 = out.sTof
+		? out.sTof->Get(
+			RNFRSCal::SCI21_I,
+			RNFRSCal::SCI22_I
+		)
+		: nullptr;
 }

@@ -1,7 +1,10 @@
 #include "TFRSHitCont.h"
 #include "TFRSMapCont.h"
 #include "TFRSCalCont.h"
+#include "util/json_struct_def.hh"
 #include "TFRSCalProc.h"
+
+using json = nlohmann::json;
 
 /* This ostream API is really hacked. Close your eyes. */
 #ifdef TFRSCALPROC_VERBOSE_
@@ -47,6 +50,75 @@ TFRSCalProc::TFRSCalProc(
 		for(auto& list : l2) list.reserve(CANDIDATE_LIST_CAPACITY);
 	for(auto& list : full_candidate_list)	
 		list.reserve(CANDIDATE_LIST_CAPACITY * mnd::len(candidate_list));
+
+	LoadQDCParams();
+}
+
+void TFRSCalProc::LoadQDCParams() {
+	if(!out.sci_param)
+		ERROR("Output containers objects are empty? Did you call TFRSCalCont::Setup() ?");
+	if(mnd::g_input_file.name().empty())
+		ERROR("Trying to load qdc parameters, but input file name is empty..?");
+
+	std::string_view fname = mnd::g_input_file.name();
+	json& setup = TFRSCalCont::setup;
+	if(setup.empty())
+		ERROR("TFRSCalCont::setup is still empty..?");
+	if(fname.empty())
+		ERROR("Input file name still empty..?");
+
+	constexpr const char* qdc_seq_key = "de_to_q";
+	constexpr const char* regex_key = "regex";
+	constexpr const char* qdc_key = "regex";
+
+	for(const auto& [_sci_i, params] : setup.at("SCI").items()) {
+		if(RNFRSCal::sci_moniker.find(_sci_i) == RNFRSCal::sci_moniker.end())
+			ERROR("Sci parameter named '%s' found in the setup JSON parameter file isn't mapped to 0..%d index.",
+				_sci_i.c_str(), RNFRSCal::N_VALID_SCI);
+		
+		const u32 i = RNFRSCal::sci_moniker.at(_sci_i);
+		if(i >= RNFRSCal::N_VALID_SCI) continue;
+
+		SCIDEIntoQConverter& qdc = out.sci_param->operator[](i).qdc;
+		std::regex re;
+		
+		if(auto it = params.find(qdc_seq_key); it != params.end()) {
+			for(const auto& item: *it) {
+				/* item has to have a "regex" key */
+				if(!item.contains(regex_key) || !item.contains(qdc_key))
+					continue; /* Is fine, go try next entry. */
+
+				std::string const& raw_regex = item.at(regex_key);
+				try {
+					re = std::regex{raw_regex};
+				} catch(const std::exception& e) {
+					MND_THROW("SCIDEIntoQConverter::matches_file(...): "
+						"Compiling underlying regex: '%s' failed. Info: %s\n",
+						raw_regex.c_str(), e.what());
+				}
+
+				/* Regex needs to just find a match on the fname. Thats it. */
+				if( std::regex_search(fname.begin(), fname.end(), re) ) {
+					if(qdc.IsValid())
+						ERROR("'%s' entry for SCI%s is already marked as valid: %s\nBut found another match. "
+							"Regex in question: '%s' , current input file name %.*s, full: %s\n",
+							qdc_seq_key, _sci_i.c_str(), mnd::streamable(qdc).c_str(), raw_regex.c_str(),
+							(int)fname.size(), fname.data(), mnd::g_input_file.full_path().c_str());
+
+					UNROLL_JSON_PARAM(qdc, item.at(qdc_key), 1);
+				}
+			}
+
+			if( qdc.IsDefaulted() ) {
+				WARN("SCI%s : '%s' key found in the JSON. But could not match current file name %.*s. QDC converter written as defaulted.\n",
+					_sci_i.c_str(), qdc_seq_key, (int)fname.size(), fname.data());
+			}
+		}
+		else {
+			WARN("SCI%s : '%s' key not found in the JSON. Is fine. QDC converter written as defaulted.\n",
+				_sci_i.c_str(), qdc_seq_key);
+		}
+	}
 }
 
 void TFRSCalProc::ProcessEntry() noexcept {

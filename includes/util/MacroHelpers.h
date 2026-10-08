@@ -288,6 +288,8 @@ bool IsValid(const Option<std::array<T,N>>& bounds) {
 std::vector<std::string> ParseFile(const std::string& );
 std::string ParseFileToString(const std::string& );
 
+std::string longest_common_prefix(mnd::span<const std::string> );
+
 /* Invoke a function `func` over a range of objects, over nthreads.
  * `Range` here binds to any type that is indexable such as array/vector/span.
  * Function invocation can carry mutable (outside) state, and each thread

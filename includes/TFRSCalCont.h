@@ -97,7 +97,7 @@ struct RNFRSCal {
     constexpr static double S2_LENGTH = 4560.0;
 
 	// Which name corresponds to which index in later naming convention.
-	// Note, we keep this to match Go4.
+	// Note, we keep this to match Map step.
     static constexpr u32 SCI21_I = 0;
     static constexpr u32 SCI22_I = 1;
     static constexpr u32 SCI31_I = 2;
@@ -194,18 +194,18 @@ struct SCIPrimary {
 	ADD_SERIALIZABLE_FIELD(A2,  fit,  {},  1); // Fit for E vs. 1/β^2
 
 	/* SCI's give the 1st calibrated QDC value as:
-	 * sqrt((L - pedL) * (R - pedR))
-	 * Correct this energy based on the incoming particle β, if it
-	 * can be calculated. In case β is a NAN, returns 0.
-	 * Passing in β<0 is bad behaviour, and is not verified! */
-	/* Absolute correction. */
-	[[nodiscard]]
-	auto Correct(double  E, double b) const noexcept -> double;
-	auto Correct(double& E, double b) const noexcept -> void;
-
-	[[nodiscard]] double CorrectionRatio(double b) const noexcept;
+	 * sqrt((L - pedL) * (R - pedR)) .
+	 * Calculate the correction factor of this energy based on the incoming particle β,
+	 * if the β can be calculated. Passing in β<0 or a NAN, returns back a factor 1.0. */
+	[[nodiscard]] double BetaCorrection(double b) const noexcept;
 	bool IsOk() const noexcept;
-	void Reset() const noexcept { qdc_ref.reset(); }
+	void Reset() const noexcept;
+
+	[[nodiscard]] TGraph* GetGraph(
+		int ndiv  = 100,
+		double lo = 0.56,
+		double hi = 0.95
+	) const;
 
     SCIPrimary() = default;
 	virtual ~SCIPrimary() = default;
@@ -221,14 +221,27 @@ ADD_JSON_TYPE_RESOLUTION(SCIPrimary, 1)
 
 struct SCIQDCPedestal {
     GET_HELP_AUX_IMPL
-    ADD_SERIALIZABLE_FIELD(f64, left,  0.0, 0);
-    ADD_SERIALIZABLE_FIELD(f64, right, 0.0, 1);
+	constexpr static f64 INVALID_PEDESTAL = NAN;
+
+    ADD_SERIALIZABLE_FIELD(f64, left,  NAN, 0);
+    ADD_SERIALIZABLE_FIELD(f64, right, NAN, 1);
+	
+	constexpr inline bool IsDefaulted() const noexcept {
+		return !mnd::isfinite(left, right)
+			|| left  == INVALID_PEDESTAL
+			|| right == INVALID_PEDESTAL;
+	}
+	constexpr inline bool IsValid() const noexcept {
+		return !IsDefaulted();
+	}
 
     SCIQDCPedestal() = default;
 	virtual ~SCIQDCPedestal() = default;
 	ClassDef(SCIQDCPedestal, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(SCIQDCPedestal, 1)
+bool operator==(SCIQDCPedestal const& , SCIQDCPedestal const& );
+bool operator!=(SCIQDCPedestal const& , SCIQDCPedestal const& );
 
 /* We don't globally have only a single parameter for dE -> Q conversion,
  * There can be different QDC gains set for different files. We tag the sequence of files
@@ -243,39 +256,49 @@ struct SCIMeanQDC {
 	ClassDef(SCIMeanQDC, 1);
 };
 ADD_JSON_TYPE_RESOLUTION(SCIMeanQDC, 1)
+bool operator==(SCIMeanQDC const& , SCIMeanQDC const& );
+bool operator!=(SCIMeanQDC const& , SCIMeanQDC const& );
 
 struct SCIDEIntoQConverter {
 	GET_HELP_AUX_IMPL
     constexpr static f64 BELOW_PEDESTAL_VAL = 0.66; // Some random small number
 
     using SCIMeanQDCSeq = std::vector<SCIMeanQDC>;
-    ADD_SERIALIZABLE_FIELD(std::string,    regex,    {},  0);
-    ADD_SERIALIZABLE_FIELD(SCIQDCPedestal, pedestal, {},  1);
-    ADD_SERIALIZABLE_FIELD(SCIMeanQDCSeq,  values,   {},  2);
+    ADD_SERIALIZABLE_FIELD(SCIQDCPedestal, pedestal, {},  0);
+    ADD_SERIALIZABLE_FIELD(SCIMeanQDCSeq,  values,   {},  1);
  
     /* Main method: convert SCI energy (E) to nominal charge (Q)
-	 * "Energy" is defined as E = sqrt( (E(l) - Ped(l)) * (E(r) - Ped(r)) )
+	 * "Energy" is defined as E0 = sqrt( (E(l) - Ped(l)) * (E(r) - Ped(r)) ),
+	 * times the beta-correction factor (~0.95 - 1.05).
 	 * If the dependence is: E(Q) = A * Q^a,
-     * then:
-	 * f = 1/A, c = 1/a <=> Q(E) = (f * E)^c */
-	double Q(const RNSciCal& ) const noexcept;
+     * then: f = 1/A, c = 1/a <=> Q(E) = (f * E)^c */
 	double Q(double ) const noexcept;
 
-	/* Convert SCI left-right measurement to nominal "energy":
-	 * E = sqrt( (E(l) - Ped(l)) * (E(r) - Ped(r)) ) */
-	double E(const RNSciCal& ) const noexcept;
+	/* Return just the initial energy:
+	 * E0 = sqrt( (E(l) - Ped(l)) * (E(r) - Ped(r)) ) */
+	double E0(const RNSciCal& ) const noexcept;
+
+	/* Sci left-measured energy (ADC units): E(l) - Ped(l). */
+	double E0_l(const RNSciCal& ) const noexcept;
+
+	/* Sci right-measured energy (ADC units): E(l) - Ped(l). */
+	double E0_r(const RNSciCal& ) const noexcept;
 
 	inline void Reset() const noexcept { fit_.reset(); }
 	void Init(bool verbose = false) const;
+
+	constexpr inline bool IsDefaulted() const noexcept {
+		return pedestal.IsDefaulted();
+	}
+	constexpr inline bool IsValid() const noexcept {
+		return !IsDefaulted();
+	}
 
 	[[ nodiscard ]] std::pair<TGraph*, TGraph*> GetGraph(
 		int ndiv  = 500,
 		double lo = 10,
 		double hi = 4000
 	) const;
-
-    /* Quickly compile the regex, and match a string_view against it. */
-    bool matches_file(std::string_view ) const;
 
     SCIDEIntoQConverter() = default;
 
@@ -294,36 +317,43 @@ public:
 	virtual ~SCIDEIntoQConverter() = default;
 	ClassDef(SCIDEIntoQConverter, 1);
 };
-ADD_JSON_TYPE_RESOLUTION(SCIDEIntoQConverter, 2)
+ADD_JSON_TYPE_RESOLUTION(SCIDEIntoQConverter, 1)
+
+bool operator==(SCIDEIntoQConverter const& , SCIDEIntoQConverter const& );
+bool operator!=(SCIDEIntoQConverter const& , SCIDEIntoQConverter const& );
 
 struct SCIParam {
 	GET_HELP_AUX_IMPL
 	constexpr static double channel_to_ns = 0.025;
 	using arr2 = std::array<double,2>;
-    using DeltaEToQConverterSeq = std::vector<SCIDEIntoQConverter>;
 
 	ADD_SERIALIZABLE_FIELD(double,                x_offset,  0,  0);
 	ADD_SERIALIZABLE_FIELD(double,                x_factor,  1,  1);
 	ADD_SERIALIZABLE_FIELD(arr2,                  cdiff_lim, {}, 2);
 	ADD_SERIALIZABLE_FIELD(double,                z0,        0,  3);
-	ADD_SERIALIZABLE_FIELD(SCIPrimary,            primary,   {}, 4)
-    ADD_SERIALIZABLE_FIELD(DeltaEToQConverterSeq, de_to_q,   {}, 5);
+	ADD_SERIALIZABLE_FIELD(SCIPrimary,            primary,   {}, 4);
+    ADD_SERIALIZABLE_FIELD(SCIDEIntoQConverter,   qdc,       {}, 5);
 
     SCIParam() = default;
 
-    double Q(const RNSciCal& s) const noexcept;
+	/* Returns the SCI final calibrated charge (after pedestal subtraction and β-correction). */
+    double Q(const RNSciCal& s, double beta = NAN) const noexcept;
+	
+	/* Returns the SCI final calibrated charge (after pedestal subtraction and β-correction).
+	 * Input is the preliminary energy measurement: sqrt((E_l - ped_l) * (E_r - ped_r)) .*/
+    double Q(double E0, double beta = NAN) const noexcept;
 
-    /* Getting the correct converter depends on which run number
-     * we are currently, to do the correct dE->Q conversion. But monad's TContainers cannot know of this
-     * filename, it is passed only explicitly at the initial TAnalysisProcess ctor. */
+	/* Sci measured energy (ADC units) after pedestal subtraction. */
+	double E0(const RNSciCal& ) const noexcept;
 
-    /* Assigns the intrinsic converter from a passed-in file name. Returns how many
-     * instances matched. Sequential matches override the previous ones. */
-    u32 SetConverter(std::string_view ) const;
-    SCIDEIntoQConverter const* GetConverter() const;
+	/* Sci left-measured energy (ADC units) after pedestal subtraction. */
+	double E0_l(const RNSciCal& ) const noexcept;
 
-protected:
-    mutable SCIDEIntoQConverter const* current_converter = nullptr; //!
+	/* Sci right-measured energy (ADC units) after pedestal subtraction. */
+	double E0_r(const RNSciCal& ) const noexcept;
+
+	/* Sci measured energy (ADC units) after pedestal subtraction and β-correction. */
+	double E(const RNSciCal& , double beta=NAN ) const noexcept;
 
 public:
 	virtual ~SCIParam() = default;

@@ -49,12 +49,11 @@
 		try { \
 			StructInstance.get<INDEX>() = JSONInstance[ key ].get<BareType::type_##INDEX>(); \
 		} catch(std::exception const& e) { \
-			fprintf(stderr, \
+			MND_THROW( \
 				"Failed JSON setup assignment \'%s\': index: %d, key:%s " \
 				"(Json instance: '%s'), " \
 				"reason: %s\n",  \
 				#StructInstance, INDEX, key, #JSONInstance, e.what()); \
-			throw; \
 		} \
 		MND_EMPTY_MACRO(INDEX) \
 	} while(0); \

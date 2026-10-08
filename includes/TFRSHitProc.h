@@ -17,6 +17,7 @@ struct TFRSHitProc : TProcessor <
 	TFRSHitProc() = default;
 
 	void ProcessEntry() noexcept;
+	void ProcessToF() noexcept;
 	void ProcessS2BT() noexcept;
 	void ProcessS2AT() noexcept;
     void ProcessS3() noexcept;
@@ -28,7 +29,10 @@ struct TFRSHitProc : TProcessor <
 	std::vector<double> x, y, zx, zy;
 	
 	/* EXPERT target parameters. */
-	double z0;
-
-	FRSToFSingle const* tofp_s3_s2;
+	static double z0;
+	
+	double s2_q0[2 /* [0]=bt, [1]=at */];
+	double s2_qc[2 /* [0]=bt, [1]=at */];
+	FRSToFSingle const* tofp_s22_s31;
+	FRSToFSingle const* tofp_s21_s22;
 };

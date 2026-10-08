@@ -185,13 +185,12 @@ int main(int argc, char* argv[]) {
 	WARN("Secondary beam: "); std::cerr << run_info->secondary << std::endl;
 	if(!run_info->primary.valid() or !run_info->secondary.valid())
 		ERROR("Either primary or secondary beam is invalid. Parse from runsheet was unsuccessful.\n");
-	
-	const double A_beam = run_info->secondary.A;
-	const double Z_beam = run_info->secondary.Z;
+
+	const auto& sec_ion = run_info->secondary;
 
 	/* Average kinetic energy per nucleon, as beam enters the S2. */
 	const double ekin_s2 = phy::EKin(
-		A_beam, Z_beam,
+		sec_ion,
 		phy::Brho_t{run_info->brho["S1-S2"]}
 	);
 	/* Average kinetic energy per nucleon, just before the target. */
@@ -205,10 +204,10 @@ int main(int argc, char* argv[]) {
 	const double avg_ekin_reaction = (avg_ekin_before_target + avg_ekin_after_target) / 2.0;
 	/* Average beta corresponding to this energy. */
 	const double beta_nominal = phy::Beta(
-		A_beam, Z_beam,
+		sec_ion,
 		phy::EKin_t{avg_ekin_reaction}
 	);
-	const double gamma_nominal = phy::Gamma(beta_nominal);
+	const double gamma_nominal = phy::Gamma( phy::Beta_t{beta_nominal} );
 	const double beta_gamma_n = beta_nominal * gamma_nominal;
 
 	WARN("Assumed values for just before/after 9Be target: "
@@ -699,7 +698,7 @@ int main(int argc, char* argv[]) {
 						+ mnd::assume::s2::e_dispersion[1] * x_;
 
 					const double beta_gamma = phy::BetaGamma(
-						A_beam, Z_beam, // secondary beam runinfo asserted to be valid
+						sec_ion,
 						phy::EKin_t{ekin_per_n}
 					);
 					rho_val *= (beta_gamma / beta_gamma_n);

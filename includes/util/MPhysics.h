@@ -63,6 +63,9 @@ using Option = mnd::Option<T>;
 struct Brho_t {
 	double value;
 };
+struct Gamma_t {
+	double value;
+};
 struct Beta_t {
 	double value;
 };
@@ -73,6 +76,16 @@ struct BetaGamma_t {
 struct EKin_t {
 	double value;
 };
+struct A_t {
+	uint32_t value;
+};
+struct Z_t {
+	uint32_t value;
+};
+struct Q_t {
+	uint32_t value;
+};
+
 
 enum class AtomicNumber : uint32_t {
 	H = 1, He,
@@ -180,7 +193,15 @@ struct Nucleus {
 	double mass_per_nucleon() const noexcept;
 
 	inline constexpr double AoQ() const noexcept { return static_cast<double>(A) / Z; }
+
+	/* Definitive charge state, based on N_electrons. If N_electrons is None, or
+	 * bigger than Z, then yields None, else is Z-N_electrons.unwrap(). */
 	Option<uint32_t> charge_state() const noexcept;
+
+	/* Charge state, based on N_electrons. If N_electrons is None, or invalid,
+	 * yields the fully stripped nucleus, aka Q = Z, else is Z-N_electrons.unwrap(). */
+	uint32_t Q() const noexcept;
+
 	Option<AtomicNumber> ChemElem() const noexcept;
 	std::string to_string() const noexcept;
 
@@ -242,132 +263,91 @@ inline Nucleus operator""_n(const char* text, std::size_t size) {
 }
 } // namespace literals
 
-namespace cvt {
-
-inline constexpr double get_beta_from_betagamma2(double beta_gamma2) noexcept {
+namespace detail {
+inline constexpr double beta_from_betagamma_sq(double beta_gamma2) noexcept {
 	return sqrt( beta_gamma2 / (1 + beta_gamma2) );
 }
-inline constexpr double get_beta_from_betagamma(double beta_gamma) noexcept {
+inline constexpr double beta_from_betagamma(double beta_gamma) noexcept {
 	return beta_gamma / sqrt(1 + beta_gamma * beta_gamma);
 }
 
-}; // namespace cvt
-
-inline double Gamma(double b) noexcept {
-	if constexpr(detail::debug_) {
-		if(b >= 1 || b < 0)
-			MND_THROW("Requested beta velocity %.2f out of bounds.", b);
-	}
-	if(b >= 1) return std::numeric_limits<double>::infinity();
-	if(b < 0)  return NAN;
-	return 1.0 / std::sqrt(1.0 - b*b);
-}
-
-/* Brho is a number corresponding to units of tesla-meter. */
-inline double BetaGamma(uint32_t A, uint32_t Q, Brho_t brho) noexcept {
-	const double m = mass(A,Q);
-	return brho.value * Q * nuc::Tm / m;
-}
-inline double BetaGamma2(uint32_t A, uint32_t Q, EKin_t e) noexcept {
-	const double m = mass(A,Q);
-	const double tmp = (e.value * A)/ m + 1;
+/* (βγ)² = ( K*A/(mc²) + 1)² -1 */
+inline double beta_gamma_sq(Nucleus const& n, EKin_t K) noexcept {
+	const double m = n.mass();
+	const double tmp = (K.value * n.A)/m + 1;
 	return tmp*tmp - 1;
 }
-inline double BetaGamma(uint32_t A, uint32_t Q, EKin_t e) noexcept {
-	return sqrt( BetaGamma2(A,Q,e) );
+inline double beta_gamma_sq(EKin_t K) noexcept {
+	constexpr double uc2 = nuc::u * nuc::c * nuc::c;
+	const double tmp = (K.value / uc2) + 1;
+	return tmp*tmp - 1;
+}
+}; // namespace detail
+
+/* In the following public functions, every single argument
+ * is strongly typed. Return value is always a `double` though. */
+
+inline double Gamma(Beta_t beta) noexcept {
+	if constexpr(detail::debug_) {
+		if(beta.value >= 1 || beta.value < 0)
+			MND_THROW("Requested beta velocity %.2f out of bounds.", beta.value);
+	}
+	if(beta.value >= 1) return std::numeric_limits<double>::infinity();
+	if(beta.value < 0)  return NAN;
+	return 1.0 / std::sqrt(1.0 - beta.value * beta.value);
+}
+inline double BetaGamma(Beta_t beta) noexcept {
+	return beta.value * Gamma(beta);
 }
 
-/* Unqualified measurements. When utmost precision isn't needed and
- * can just assume that mass: m(A,Z) == A*u . */
-inline double BetaGamma(EKin_t e) noexcept {
-	constexpr double uc2 = nuc::u * nuc::c * nuc::c;
-	double frac_plus_1 = e.value / uc2 + 1;
-	return std::sqrt(frac_plus_1 * frac_plus_1 - 1.0);
+inline double BetaGamma(Nucleus const& n, Brho_t brho) noexcept {
+	const double m = n.mass();
+	return brho.value * n.Q() * nuc::Tm / m;
 }
+inline double BetaGamma(Nucleus const& n, EKin_t K) noexcept {
+	return sqrt(detail::beta_gamma_sq(n,K));
+}
+inline double BetaGamma(EKin_t K) noexcept {
+	return sqrt(detail::beta_gamma_sq(K));
+}
+
+inline double Beta(Nucleus const& n, Brho_t brho) noexcept {
+	const double beta_gamma = BetaGamma(n, brho);
+	return detail::beta_from_betagamma(beta_gamma);
+}
+inline double Beta(Nucleus const& n, EKin_t K) noexcept {
+	const double beta_gamma_sq = detail::beta_gamma_sq(n,K);
+	return detail::beta_from_betagamma_sq(beta_gamma_sq);
+}
+inline double Beta(EKin_t K) noexcept {
+	const double beta_gamma_sq = detail::beta_gamma_sq(K);
+	return detail::beta_from_betagamma_sq(beta_gamma_sq);
+}
+
 inline double AoQ(Brho_t R, BetaGamma_t bg) noexcept {
 	constexpr double tm_over_uc = nuc::Tm / (nuc::u * nuc::c);
 	return R.value/bg.value * tm_over_uc;
 }
-inline double AoQ(Brho_t R, EKin_t e) noexcept {
-	const double bg = BetaGamma(e);
+inline double AoQ(Brho_t R, Beta_t b) noexcept {
+	const double bg = BetaGamma(b);
+	return AoQ(R, BetaGamma_t{bg});
+}
+inline double AoQ(Brho_t R, EKin_t K) noexcept {
+	const double bg = BetaGamma(K);
 	return AoQ(R, BetaGamma_t{bg});
 }
 
-template<uint32_t A, uint32_t Q>
-constexpr double BetaGamma(Brho_t brho) noexcept {
-	constexpr double m = mass<A,Q>();
-	constexpr double q_tm_over_m = Q * nuc::Tm / m;
-	return brho.value * q_tm_over_m;
-}
-template<uint32_t A, uint32_t Q>
-constexpr double BetaGamma2(EKin_t e) noexcept {
-	constexpr double m = mass<A,Q>();
-	const double tmp = (e.value * A)/ m + 1;
-	return tmp*tmp - 1;
-}
-template<uint32_t A, uint32_t Q>
-constexpr double BetaGamma(EKin_t e) noexcept {
-	return sqrt( BetaGamma2<A,Q>(e) );
-}
-
-/* Brho is a number corresponding to units of tesla-meter. */
-inline double Beta(uint32_t A, uint32_t Q, Brho_t brho) noexcept {
-	const double beta_gamma = BetaGamma(A,Q,brho);
-	return cvt::get_beta_from_betagamma(beta_gamma);
-}
-inline double Beta(uint32_t A, uint32_t Q, EKin_t e) noexcept {
-	const double beta_gamma2 = BetaGamma2(A,Q,e);
-	return cvt::get_beta_from_betagamma2(beta_gamma2);
-}
-
-template<uint32_t A, uint32_t Q>
-constexpr double Beta(Brho_t brho) noexcept {
-	const double beta_gamma = BetaGamma<A,Q>(brho);
-	return cvt::get_beta_from_betagamma(beta_gamma);
-}
-template<uint32_t A, uint32_t Q>
-constexpr double Beta(EKin_t e) noexcept {
-	const double beta_gamma2 = BetaGamma2<A,Q>(e);
-	return cvt::get_beta_from_betagamma2(beta_gamma2);
-}
-
-/* Kinetic energy per nucleon, if (A,Q,beta) are known. */
-inline double EKin(uint32_t A, uint32_t Q, Beta_t beta) noexcept {
-	const double g = Gamma(beta.value);
-	const double gb = g * beta.value;
-	const double frac = std::max(sqrt(gb*gb + 1.0) - 1.0, 0.0);
-	return frac * mass(A,Q) / A;
-}
-/* Kinetic energy per nucleon, if (A,Q,brho) are known. */
-inline double EKin(uint32_t A, uint32_t Q, Brho_t brho) noexcept {
-	const double gb = BetaGamma(A, Q, brho);
-	const double frac = std::max(sqrt(gb*gb + 1.0) - 1.0, 0.0);
-	return frac * mass(A,Q) / A;
-}
-
-template<uint32_t A, uint32_t Q>
-constexpr double EKin(Beta_t beta) noexcept {
-	constexpr double mass_per_nucleon = mass<A,Q> / A;
-	const double g = Gamma(beta.value);
-	const double gb = g * beta.value;
-	const double frac = std::max(sqrt(gb*gb + 1.0) - 1.0, 0.0);
-	return frac * mass_per_nucleon;
-}
-template<uint32_t A, uint32_t Q>
-constexpr double EKin(Brho_t brho) noexcept {
-	constexpr double mass_per_nucleon = mass<A,Q> / A;
-	const double gb = BetaGamma<A,Q>(brho.value);
-	const double frac = std::max(sqrt(gb*gb + 1.0) - 1.0, 0.0);
-	return frac * mass_per_nucleon;
-}
-/* ^^^ Here we make an overload with strongly-typed beta vs. brho and not give
- * a generic `double` overload. This was a source of headache. \_(>_<)_/ */
-
-inline double EKin(const Nucleus& n, Beta_t beta) {
-	const double g = Gamma(beta.value);
-	const double gb = g * beta.value;
-	const double frac = std::max(sqrt(gb*gb + 1.0) - 1.0, 0.0);
+/* Kinetic energy per nucleon, if (Nucleus,beta) are known. */
+inline double EKin(Nucleus const& n, Beta_t beta) noexcept {
+	const double bg = BetaGamma(beta);
+	const double frac = std::max(sqrt(bg*bg + 1.0) - 1.0, 0.0);
 	return frac * n.mass_per_nucleon();
+}
+/* Kinetic energy per nucleon, if (Nucleus,brho) are known. */
+inline double EKin(Nucleus const& n, Brho_t brho) noexcept {
+	const double bg = BetaGamma(n, brho);
+	const double frac = std::max(sqrt(bg*bg + 1.0) - 1.0, 0.0);
+	return frac * n.mass() / n.A;
 }
 
 /* Calculate the ρ-value given a sequence of tracks and masses.
@@ -421,4 +401,6 @@ inline constexpr Brho_t operator""_brho(long double value) noexcept {
 }
 
 } // namespace literals
+
+
 } // namespace phy

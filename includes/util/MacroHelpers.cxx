@@ -128,6 +128,26 @@ std::string mnd::ParseFileToString(const std::string& fileName) {
 	return text;
 }
 
+std::string mnd::longest_common_prefix(mnd::span<const std::string> sequence) {
+	if(sequence.empty())
+		return {};
+
+	std::string_view prefix = sequence.front();
+	for(const auto& s : sequence.subspan(1)) {
+		const auto limit = std::min(prefix.size(), s.size());
+		size_t i = 0;
+
+		while(i < limit && prefix[i] == s[i])
+			++i;
+
+		prefix = prefix.substr(0, i);
+		if(prefix.empty())
+			break;
+	}
+
+	return std::string{prefix};
+}
+
 using namespace std::literals;
 
 static const std::regex re {mnd::fs::filename_pattern};

@@ -1,6 +1,6 @@
 #include "TFRSCalCont.h"
+#include <algorithm>
 #include <filesystem>
-#include <regex>
 
 #include "util/JSONParser.h"
 #include "util/PolyFitter.h"
@@ -24,33 +24,52 @@ void SCIPrimary::Init() const noexcept {
 	// Another thread may have initialized it while waiting
 	if(qdc_ref.load() == true)
 		return;
-
+	
 	*qdc_ref = poly::Eval(1 / (beta * beta), fit);
 	qdc_ref.publish(true);
 }
 
-/* These two fncs are still valid, even if β- is uncalculated. */
-double SCIPrimary::Correct(double E, double b) const noexcept {
-	if(!std::isfinite(b) || !IsOk()) return 0.0;
-	return E * CorrectionRatio(b);
-}
-void SCIPrimary::Correct(double& E, double b) const noexcept {
-	if(!std::isfinite(b) or !IsOk()) return;
-	E *= CorrectionRatio(b);
-}
+double SCIPrimary::BetaCorrection(double b) const noexcept {
+	if(!std::isfinite(b) or !IsOk())
+		return 1.0;
 
-/* Bad behaviour if b<0 or if instance not parametrised properly.
- * Is *not* enforced at runtime. */
-double SCIPrimary::CorrectionRatio(double b) const noexcept {
 	if(MND_UNLIKELY(!qdc_ref.load_acq()))
 		Init();
+
 	double one_over_beta2 = 1/(b*b);
 	return *qdc_ref/ poly::Eval(one_over_beta2, fit);
 }
 bool SCIPrimary::IsOk() const noexcept {
 	return std::isfinite(beta);
 }
+void SCIPrimary::Reset() const noexcept {
+	qdc_ref.reset();
+}
 
+TGraph* SCIPrimary::GetGraph(
+	int ndiv,
+	double lo,
+	double hi
+) const {
+	if(lo >= hi || lo < 0 || !std::isfinite(lo) || !std::isfinite(hi) || ndiv <= 0)
+		ERROR("Requested bad [ndiv,lo,hi] interval.\n");
+
+	TGraph* g = new TGraph(ndiv);
+	for(int i=0; i<ndiv; ++i) {
+		double y = lo + (i+0.5) * (hi-lo) / ndiv; // centre
+		double value = BetaCorrection(y);
+		g->SetPoint(i, y, value);
+	}
+	g->SetLineWidth(4);
+	g->SetLineColor(kRed + 2);
+	g->GetXaxis()->SetTitle("#Beta-correction factor");
+	g->GetYaxis()->SetTitle("#beta [0.4 ... 0.99]");
+	
+	return g; /* Draw via:
+	           * TGraph* g = GetGraph(); g->Draw("AL"); */
+}
+
+#if 0
 bool SCIDEIntoQConverter::matches_file(std::string_view fname) const {
     /* `fname` could be with an extension, or with fullpath appended.
      * In this case, just strip it out. */
@@ -66,6 +85,7 @@ bool SCIDEIntoQConverter::matches_file(std::string_view fname) const {
     /* Regex needs to just find a match on the fname. Thats it. */
     return std::regex_search(fname.begin(), fname.end(), re);
 }
+#endif
 
 double SCIDEIntoQConverter::Q(double e) const noexcept {
     if( MND_UNLIKELY(!fit_.load_acq()) )
@@ -73,14 +93,20 @@ double SCIDEIntoQConverter::Q(double e) const noexcept {
     return std::pow(fit_->f * e, fit_->c);
 }
 
-double SCIDEIntoQConverter::E(const RNSciCal& s) const noexcept {
-    const f64 de_l = std::max( (s.El - pedestal.left),  BELOW_PEDESTAL_VAL);
-    const f64 de_r = std::max( (s.Er - pedestal.right), BELOW_PEDESTAL_VAL);
-    return std::sqrt( de_l * de_r );
+double SCIDEIntoQConverter::E0(const RNSciCal& s) const noexcept {
+	const f64 de_l = E0_l(s);
+    const f64 de_r = E0_r(s);
+	return std::sqrt(de_l * de_r);
 }
-double SCIDEIntoQConverter::Q(const RNSciCal& s) const noexcept {
-    const f64 e = this->E(s);
-    return Q(e);
+double SCIDEIntoQConverter::E0_l(const RNSciCal& s) const noexcept {
+	return std::max(
+		(s.El - pedestal.left), BELOW_PEDESTAL_VAL
+	);
+}
+double SCIDEIntoQConverter::E0_r(const RNSciCal& s) const noexcept {
+    return std::max(
+		(s.Er - pedestal.right), BELOW_PEDESTAL_VAL
+	);
 }
 
 void SCIDEIntoQConverter::Init(bool verbose) const {
@@ -146,27 +172,52 @@ std::pair<TGraph*, TGraph*> SCIDEIntoQConverter::GetGraph(
 	 * graph->Draw("AL"); pts->Draw("P SAME"), ; */
 }
 
-double SCIParam::Q(const RNSciCal& s) const noexcept {
-    if(!current_converter)
-        return NAN;
-    return current_converter->Q(s);
+bool operator==(SCIQDCPedestal const& lhs, SCIQDCPedestal const& rhs) {
+	return lhs.right == rhs.right
+		&& lhs.left == rhs.left;
+}
+bool operator==(SCIMeanQDC const& lhs, SCIMeanQDC const& rhs) {
+	return lhs.qdc_mean == rhs.qdc_mean
+		&& lhs.Q == rhs.Q;
+}
+bool operator==(SCIDEIntoQConverter const& lhs, SCIDEIntoQConverter const& rhs) {
+	return lhs.pedestal == rhs.pedestal
+		&& lhs.values == rhs.values;
+}
+bool operator!=(SCIQDCPedestal const& lhs, SCIQDCPedestal const& rhs) {
+	return !(lhs == rhs);
+}
+bool operator!=(SCIMeanQDC const& lhs, SCIMeanQDC const& rhs) {
+	return !(lhs == rhs);
+}
+bool operator!=(SCIDEIntoQConverter const& lhs, SCIDEIntoQConverter const& rhs) {
+	return !(lhs == rhs);
 }
 
-/* Regex and fs are called in a small loop, but it doesn't really matter.
- * This call should only be at the init, not in some kind of a loop. */
-u32 SCIParam::SetConverter(std::string_view fname) const {
-    u32 cnt{0};
-    for(const auto& cvt : this->de_to_q) {
-        if(cvt.matches_file(fname)) {
-            current_converter = &cvt;
-            ++cnt;
-        }
-    }
-    return cnt;
+
+double SCIParam::Q(const RNSciCal& s, double beta) const noexcept {
+	const f64 e = this->E(s, beta); // could be quiet NAN;
+	return qdc.Q(e);
 }
-SCIDEIntoQConverter const* SCIParam::GetConverter() const {
-    return current_converter;
+double SCIParam::Q(double E0, double beta) const noexcept {
+	const f64 de1 = E0 * primary.BetaCorrection(beta);
+	return qdc.Q(de1);
 }
+
+double SCIParam::E0(const RNSciCal& s) const noexcept {
+	return qdc.E0(s);
+}
+double SCIParam::E0_l(const RNSciCal& s) const noexcept {
+	return qdc.E0_l(s);
+}
+double SCIParam::E0_r(const RNSciCal& s) const noexcept {
+	return qdc.E0_r(s);
+}
+double SCIParam::E(const RNSciCal& s, double beta) const noexcept {
+	const double e0 = this->E0(s);
+	return e0 * primary.BetaCorrection(beta);
+}
+
 bool TrigParamSingle::IsActive(u32 tpat) const noexcept {
     // Tpat index == 0 is special. TRIG_PENDING gets mapped to that
     // and it only matches if the entire tpat is exactly 0.
@@ -243,7 +294,7 @@ void TFRSCalCont::Init(TDictInfo info) {
 	}
 
     constexpr auto trig_param_json_name = TrigParam::get_name<0>();
-    if(setup.find(trig_param_json_name) == setup.end())
+    if(!setup.contains(trig_param_json_name))
 		WARN("'%s' JSON entry not found. Trig/tpat mapping not performed... Is fine.\n", trig_param_json_name);
     else
 		UNROLL_JSON_PARAM(_trig_param, setup, 0);
@@ -285,6 +336,7 @@ void TFRSCalCont::Setup() {
 	if(SCIParam::channel_to_ns < 0)
 		ERROR("Conversion between channel number to ns not given (or parsed) in \'%s\'", setupFileName.c_str());
 
+	/* The remaining `qdc` part of the SCIParam is handled by the TFRSCalProc::FinalInit(...) . */
     trig_param = RegisterObject<TrigParam>("trigger_map", _trig_param);
 	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setupFileName);
 

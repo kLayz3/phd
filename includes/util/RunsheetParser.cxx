@@ -71,7 +71,7 @@ std::ostream& mnd::operator<<(std::ostream& os, const RunsheetState::Brho& brho)
 	os << "brho: {";
 	mnd::static_for<0, N_FOCAL_PTS-1>([&](auto I){
 		constexpr size_t i = decltype(I)::value;
-		os << fs::brho::label[i] << BOLD << brho.value[i] << KNRM " Tm,";
+		os << fs::brho::label[i] << ": " BOLD << brho.value[i] << KNRM " Tm, ";
 	});
 	return os << fs::brho::label[N_FOCAL_PTS-1] << BOLD << brho.value[N_FOCAL_PTS-1] << KNRM " Tm}";
 }
