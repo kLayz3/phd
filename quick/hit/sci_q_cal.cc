@@ -20,12 +20,12 @@ constexpr auto N_VALID_SCI = RNFRSCal::N_VALID_SCI;
 
 int main(int argc, char* argv[]) {
 	CLI::App app{"Calibrate the QDC into-charge measurement of SCI 21/22/31/41. "
-		"Prerequisite before running this program is to have both the pedestal subtraction and "
+		"Prerequisite before running this program is to have both the pedestal subtraction AND "
         "velocity dependence (β) correction done. These programs are from the cal directory; "
 		"`sci_qdc_ped` and `tof_cal`, respectively. "
 		"Optionally, can also use FOOT's tracking here to imply the charge Q."};
 
-	std::vector<std::string> fileName;
+	std::vector<std::string> fileNames;
 	u32 i_sci = 0;
 	u32 nthreads = 1;
 	mnd::Option<u32> q = mnd::None;
@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
 	double beta_range = 0.2;
 	constexpr int beta_binning = 200;
 
-	add_logged_option(app, "-f,--file", fileName, "Pass one or more file names, delimited by ','")
+	add_logged_option(app, "-f,--file", fileNames, "Pass one or more file names, delimited by ','")
 		->delimiter(',')
 		->check(CLI::ReadPermissions);
 	add_logged_option(app, "-i,--sci", i_sci,
@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
 	CLI11_PARSE(app, argc, argv);
 	
 	if(test) return 0;
-	if(fileName.size() == 0)
+	if(fileNames.size() == 0)
 		ERROR("To continue, must supply at least one file name!\n");
 	
     const auto& label = RNFRSCal::sci_label;
@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
 	BeamInfo const* beam_param {};
 	std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_params {};
 	{
-		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.front().c_str(), "READ");
+		std::unique_ptr<TFile> f = std::make_unique<TFile>(fileNames.front().c_str(), "READ");
         get_obj(f, sci_params, "FRS_sci_parameters");
         get_obj(f, tof_param,  "FRS_tof_par");
 		get_obj(f, beam_param, "FRS_beam_info");
@@ -92,17 +92,17 @@ int main(int argc, char* argv[]) {
 	
 	if(cvt_first.IsDefaulted())
 		ERROR("Tried to reach for the charge converter, but the initial file labelled '%s' has the defaulted converter?\n"
-			"Full parameter is: %s\n", fileName.front().c_str(), mnd::streamable(par).c_str());
+			"Full parameter is: %s\n", fileNames.front().c_str(), mnd::streamable(par).c_str());
 
 	/* Should be common for all the files.. If not, something is very bad. */
 	FRSToFSingle const* const tof_p =
-		   (i_sci == SCI21_I)                        ? tof_param->Get(SCI21_I, SCI22_I)
+		   (i_sci == SCI21_I)                        ? tof_param->Get(SCI21_I, SCI22_I) // could be null
 		: ((i_sci == SCI22_I) || (i_sci == SCI31_I)) ? tof_param->Get(SCI22_I, SCI31_I)
 		:  (i_sci == SCI41_I)                        ? tof_param->Get(SCI31_I, SCI41_I)
 		: nullptr;
 
 	if(!tof_p)
-		WARN("ToF parameter is nullptr, that's fine. Will not do β-correction in this case.");
+		WARN("ToF parameter is nullptr, that's fine. Will not do β-correction for SCI%s in this case.\n", label[i_sci]);
 
 	std::unique_ptr<phy::Nucleus> sec_nuc = beam_param->SecondaryIon();
 	WARN("Secondary nucleus identified as: %s\n",
@@ -162,13 +162,13 @@ int main(int argc, char* argv[]) {
 	show_console_cursor(false);
 	DynamicProgress<ProgressBar> progress;
 
-	mnd::parallel_process(fileName, nthreads, [=, &progress](size_t i, auto fname) mutable {
+	mnd::parallel_process(fileNames, nthreads, [=, &progress](size_t i, auto fname) mutable {
 		
 		/* Just to not have threads racing over mutable elements,
 		 * we open the file here and fetch the parameter also on a per-file basis. */
 		std::array<SCIParam, RNFRSCal::N_VALID_SCI> *sci_params_local;
 		{
-			std::unique_ptr<TFile> f = std::make_unique<TFile>(fileName.front().c_str(), "READ");
+			std::unique_ptr<TFile> f = std::make_unique<TFile>(fileNames.front().c_str(), "READ");
 			get_obj(f, sci_params_local, "FRS_sci_parameters");
 		}
 		const SCIParam& p = sci_params_local->at(i_sci);
@@ -199,7 +199,7 @@ int main(int argc, char* argv[]) {
 			option::Lead{">"},
 			option::Remainder{" "},
 			option::End{"]"},
-			option::PostfixText{mnd::msg("%zu/%zu: %zu (%s)", i+1, fileName.size(), nentries, fname.c_str())},
+			option::PostfixText{mnd::msg("%zu/%zu: %zu (%s)", i+1, fileNames.size(), nentries, fname.c_str())},
 			option::ForegroundColor{ indicators::next_col() },
 			option::ShowPercentage{true},
 			option::ShowElapsedTime{true},

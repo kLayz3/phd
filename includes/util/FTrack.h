@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../monad/monad.hxx" // only used for assert stuff
+#include "monad/monad.hxx" // only used for assert+fmt stuff
 
 #include "PolyFitter.h"
 #include <cmath>
@@ -136,7 +136,7 @@ DECL_TYPE_TRAIT_HAS_STATIC(N_PAIRS);
 struct FTrack {
 	mnd::geom::Line3D l;
 	mnd::track::Q q;
-	friend std::ostream& operator<<(std::ostream& , const FTrack& ); 
+	friend std::ostream& operator<<(std::ostream& , const FTrack& );
 };
 
 /* Type encapsulating an 'online' track object to be handed over 
@@ -231,6 +231,7 @@ struct Track {
 	}
 
 	friend std::ostream& operator<<(std::ostream& os, const Track& t) {
+		using mnd::fmt::operator<<;
 		const size_t N = t.N();
 
 		std::streamsize old_precision = os.precision();

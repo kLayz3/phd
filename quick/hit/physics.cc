@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "--py-linewidth", py_linewidth, "Linewidth for the ρ-value histogram to be exported from Python.");
 	add_logged_option(app, "--py-fillcol", py_fillcol, "Line col (ARGB) for the ρ-value histogram to be exported from Python. "
 		"By default, taken from original TH1P")
-		->default_str( mnd::to_string(DEFAULT_FILL_COL_EX) );
+		->default_str( mnd::streamable(DEFAULT_FILL_COL_EX) );
 	add_logged_option(app, "--py-linecol", py_linecol, "Line col (ARGB) for the ρ-value histogram to be exported from Python. "
 		"If left as none, taken from original TH1P");
 	add_logged_flag(app, "--fmt-isotope", fmt_isotope,

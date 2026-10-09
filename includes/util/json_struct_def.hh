@@ -8,12 +8,8 @@
 
 #include "nlohmann/json.hpp"
 
-/* Used only for streaming of std::vector<T> type. */
+/* Used only for streaming of std::vector<T> type, and also MND_ macros. */
 #include "monad/monad.hxx"
-
-#ifndef MND_EMPTY_MACRO
-#define MND_EMPTY_MACRO(...)
-#endif
 
 #define GET_HELP_AUX_IMPL  \
 	template<std::size_t I> \
@@ -37,7 +33,10 @@
 	static constexpr const char* get_name() { return #NAME; } \
 	\
 	template<std::size_t I, typename Self, typename std::enable_if<(I == INDEX)>::type* = nullptr> \
-	static void print_field(std::ostream& os, Self&& self) noexcept { os << ".\e[1;94m" <<  get_name<I>() << "\e[0m = " << std::forward<Self>(self).NAME << ", "; }; \
+	static void print_field(std::ostream& os, Self&& self) { \
+		using mnd::fmt::operator<<; \
+		os << ".\e[1;94m" <<  get_name<I>() << "\e[0m = " << std::forward<Self>(self).NAME << ", "; \
+	}; \
 
 #define UNROLL_MAYBE_JSON_PARAM_SINGLE_(StructInstance, JSONInstance, INDEX) \
 	do { \
@@ -50,7 +49,7 @@
 			StructInstance.get<INDEX>() = JSONInstance[ key ].get<BareType::type_##INDEX>(); \
 		} catch(std::exception const& e) { \
 			MND_THROW( \
-				"Failed JSON setup assignment \'%s\': index: %d, key:%s " \
+				"Failed JSON setup assignment '%s': index: %d, key: '%s' " \
 				"(Json instance: '%s'), " \
 				"reason: %s\n",  \
 				#StructInstance, INDEX, key, #JSONInstance, e.what()); \
@@ -61,19 +60,22 @@
 #define UNROLL_JSON_PARAM(StructInstance, JSONInstance, N)  UNROLL_JSON_PARAM_N_(StructInstance, JSONInstance, N)
 #define UNROLL_JSON_PARAM_N_(StructInstance, JSONInstance, N) UNROLL_JSON_PARAM_##N(StructInstance, JSONInstance)
 
-#define UNROLL_JSON_PARAM_0(T1, T2)  MND_EMPTY_MACRO(T1, T2)        UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  0)
-#define UNROLL_JSON_PARAM_1(T1, T2)  UNROLL_JSON_PARAM_0(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  1)
-#define UNROLL_JSON_PARAM_2(T1, T2)  UNROLL_JSON_PARAM_1(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  2)
-#define UNROLL_JSON_PARAM_3(T1, T2)  UNROLL_JSON_PARAM_2(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  3)
-#define UNROLL_JSON_PARAM_4(T1, T2)  UNROLL_JSON_PARAM_3(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  4)
-#define UNROLL_JSON_PARAM_5(T1, T2)  UNROLL_JSON_PARAM_4(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  5)
-#define UNROLL_JSON_PARAM_6(T1, T2)  UNROLL_JSON_PARAM_5(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  6)
-#define UNROLL_JSON_PARAM_7(T1, T2)  UNROLL_JSON_PARAM_6(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  7)
-#define UNROLL_JSON_PARAM_8(T1, T2)  UNROLL_JSON_PARAM_7(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  8)
-#define UNROLL_JSON_PARAM_9(T1, T2)  UNROLL_JSON_PARAM_8(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  9)
-#define UNROLL_JSON_PARAM_10(T1, T2) UNROLL_JSON_PARAM_9(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 10)
+#define UNROLL_JSON_PARAM_0(T1, T2) MND_EMPTY_MACRO(T1, T2)     UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  0)
+#define UNROLL_JSON_PARAM_1(T1, T2) UNROLL_JSON_PARAM_0(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  1)
+#define UNROLL_JSON_PARAM_2(T1, T2) UNROLL_JSON_PARAM_1(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  2)
+#define UNROLL_JSON_PARAM_3(T1, T2) UNROLL_JSON_PARAM_2(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  3)
+#define UNROLL_JSON_PARAM_4(T1, T2) UNROLL_JSON_PARAM_3(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  4)
+#define UNROLL_JSON_PARAM_5(T1, T2) UNROLL_JSON_PARAM_4(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  5)
+#define UNROLL_JSON_PARAM_6(T1, T2) UNROLL_JSON_PARAM_5(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  6)
+#define UNROLL_JSON_PARAM_7(T1, T2) UNROLL_JSON_PARAM_6(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  7)
+#define UNROLL_JSON_PARAM_8(T1, T2) UNROLL_JSON_PARAM_7(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  8)
+#define UNROLL_JSON_PARAM_9(T1, T2) UNROLL_JSON_PARAM_8(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  9)
+#define UNROLL_JSON_PARAM_10(T1, T2) UNROLL_JSON_PARAM_9 (T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 10)
 #define UNROLL_JSON_PARAM_11(T1, T2) UNROLL_JSON_PARAM_10(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 11)
 #define UNROLL_JSON_PARAM_12(T1, T2) UNROLL_JSON_PARAM_11(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 12)
+#define UNROLL_JSON_PARAM_13(T1, T2) UNROLL_JSON_PARAM_12(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 13)
+#define UNROLL_JSON_PARAM_14(T1, T2) UNROLL_JSON_PARAM_13(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 14)
+#define UNROLL_JSON_PARAM_15(T1, T2) UNROLL_JSON_PARAM_14(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 15)
 
 #define ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, INDEX) \
 	namespace std { \
@@ -130,24 +132,22 @@
 	ADD_JSON_TYPE_RESOLUTION_N_(TYPE, N) \
 
 #define ADD_JSON_TYPE_RESOLUTION_N_(TYPE, N) ADD_JSON_TYPE_RESOLUTION_##N(TYPE)
-#define ADD_JSON_TYPE_RESOLUTION_0(TYPE)  MND_EMPTY_MACRO(TYPE)                ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  0)
-#define ADD_JSON_TYPE_RESOLUTION_1(TYPE)  ADD_JSON_TYPE_RESOLUTION_0(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  1)
-#define ADD_JSON_TYPE_RESOLUTION_2(TYPE)  ADD_JSON_TYPE_RESOLUTION_1(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  2)
-#define ADD_JSON_TYPE_RESOLUTION_3(TYPE)  ADD_JSON_TYPE_RESOLUTION_2(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  3)
-#define ADD_JSON_TYPE_RESOLUTION_4(TYPE)  ADD_JSON_TYPE_RESOLUTION_3(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  4)
-#define ADD_JSON_TYPE_RESOLUTION_5(TYPE)  ADD_JSON_TYPE_RESOLUTION_4(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  5)
-#define ADD_JSON_TYPE_RESOLUTION_6(TYPE)  ADD_JSON_TYPE_RESOLUTION_5(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  6)
-#define ADD_JSON_TYPE_RESOLUTION_7(TYPE)  ADD_JSON_TYPE_RESOLUTION_6(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  7)
-#define ADD_JSON_TYPE_RESOLUTION_8(TYPE)  ADD_JSON_TYPE_RESOLUTION_7(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  8)
-#define ADD_JSON_TYPE_RESOLUTION_9(TYPE)  ADD_JSON_TYPE_RESOLUTION_8(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  9)
-#define ADD_JSON_TYPE_RESOLUTION_10(TYPE) ADD_JSON_TYPE_RESOLUTION_9(TYPE)   ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 10)
-#define ADD_JSON_TYPE_RESOLUTION_11(TYPE) ADD_JSON_TYPE_RESOLUTION_10(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 11)
-#define ADD_JSON_TYPE_RESOLUTION_12(TYPE) ADD_JSON_TYPE_RESOLUTION_11(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 12)
-
-/* Only tricky part. This small helper function FORCES the MONAD's STL containers formatting API
- * into the global namespace. Will interfere if other libraries define the std::ostream& operator<< 
- * overloads. */
-using namespace mnd::fmt;
+#define ADD_JSON_TYPE_RESOLUTION_0(TYPE)  MND_EMPTY_MACRO(TYPE)             ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  0)
+#define ADD_JSON_TYPE_RESOLUTION_1(TYPE)  ADD_JSON_TYPE_RESOLUTION_0(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  1)
+#define ADD_JSON_TYPE_RESOLUTION_2(TYPE)  ADD_JSON_TYPE_RESOLUTION_1(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  2)
+#define ADD_JSON_TYPE_RESOLUTION_3(TYPE)  ADD_JSON_TYPE_RESOLUTION_2(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  3)
+#define ADD_JSON_TYPE_RESOLUTION_4(TYPE)  ADD_JSON_TYPE_RESOLUTION_3(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  4)
+#define ADD_JSON_TYPE_RESOLUTION_5(TYPE)  ADD_JSON_TYPE_RESOLUTION_4(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  5)
+#define ADD_JSON_TYPE_RESOLUTION_6(TYPE)  ADD_JSON_TYPE_RESOLUTION_5(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  6)
+#define ADD_JSON_TYPE_RESOLUTION_7(TYPE)  ADD_JSON_TYPE_RESOLUTION_6(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  7)
+#define ADD_JSON_TYPE_RESOLUTION_8(TYPE)  ADD_JSON_TYPE_RESOLUTION_7(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  8)
+#define ADD_JSON_TYPE_RESOLUTION_9(TYPE)  ADD_JSON_TYPE_RESOLUTION_8(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE,  9)
+#define ADD_JSON_TYPE_RESOLUTION_10(TYPE) ADD_JSON_TYPE_RESOLUTION_9(TYPE)  ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 10)
+#define ADD_JSON_TYPE_RESOLUTION_11(TYPE) ADD_JSON_TYPE_RESOLUTION_10(TYPE) ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 11)
+#define ADD_JSON_TYPE_RESOLUTION_12(TYPE) ADD_JSON_TYPE_RESOLUTION_11(TYPE) ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 12)
+#define ADD_JSON_TYPE_RESOLUTION_13(TYPE) ADD_JSON_TYPE_RESOLUTION_12(TYPE) ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 13)
+#define ADD_JSON_TYPE_RESOLUTION_14(TYPE) ADD_JSON_TYPE_RESOLUTION_13(TYPE) ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 14)
+#define ADD_JSON_TYPE_RESOLUTION_15(TYPE) ADD_JSON_TYPE_RESOLUTION_14(TYPE) ADD_JSON_TYPE_RESOLUTION_SINGLE_(TYPE, 15)
 
 /* How to use, example:
 Suppose your json looks like this:
@@ -163,8 +163,8 @@ struct MyStruct {
 	GET_HELP_AUX_IMPL;
 	using T1 = std::array<std::array<int, 2>, 2>;
 	using T2 = std::array<double, 2>;
-    
-	//   MACRO NAME                must match label in JSON    default value     index must be in order 
+
+	//   MACRO NAME                must match label in JSON    default value     index must be in order
 	
 	ADD_SERIALIZABLE_FIELD(T1,     anode_diff_lim,                  { },                  0);
 	ADD_SERIALIZABLE_FIELD(T2,     x_factor,                        { },                  1);
@@ -177,11 +177,11 @@ Note: if your type, in this case `std::array<double, 2>` contains a comma, then 
 write it into `ADD_SERIALIZABLE_FIELD(  )` block. Then just call it some simple label with `using` C++ alias.
 
 
-In code then you can access it like regular structure. 
+In code then you can access it like regular structure.
 
-============================
-===== Complete Example =====
-============================
+================================
+~~~~~~~ Complete Example ~~~~~~~
+================================
 
 #include <bits/stdc++.h>
 #include "json_struct_def.hh"
@@ -200,7 +200,7 @@ struct MyStruct {
 	using T1 = std::array<double, 2>;
 	using T2 = std::array<std::array<int, 2>, 2>;
 	using T3 = std::array<T2, 3>;
-    
+
 	ADD_SERIALIZABLE_FIELD(T1,          x_factor,        {}, 0);
 	ADD_SERIALIZABLE_FIELD(T2,          anode_diff_lim,  {}, 1);
 	ADD_SERIALIZABLE_FIELD(double,      z0,               0, 2);
@@ -212,7 +212,7 @@ ADD_JSON_TYPE_RESOLUTION(MyStruct, 5)
 
 int main() {
 	using json = nlohmann::json;
-    
+
 	MyStruct par;
 	json j = json::parse(R"(
 	{
@@ -225,6 +225,9 @@ int main() {
 			"index": 2,
 			"bounds": [42, 77];
 			"used": false
+		},
+		"some-other-field": {
+			"extra": "whatever"
 		}
 	}
 	)");

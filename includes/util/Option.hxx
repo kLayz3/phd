@@ -1,7 +1,9 @@
 #pragma once
 
 #include <optional>
+#include <utility>
 #include <functional>
+#include <type_traits>
 
 /* Rust fanboi? Hell yea! Simple:
  * enum Option<T> {
@@ -197,6 +199,35 @@ public:
 		return is_some()
 			? Option<U>{Some<U>{std::invoke(std::forward<F>(f), std::move(data).value())}}
 			: Option<U>{None};
+	}
+
+	/* fn filter<F>(self, f: F) -> Option<T>, where F(const T&) -> bool.
+	 * Returns exact same object, if it passes the predicate, else it returns None. */
+	template<typename F>
+	constexpr Option filter(F&& f) const& {
+		using R = type_traits::remove_cvref_t<
+			std::invoke_result_t<F, T const&>
+		>;
+		static_assert(std::is_convertible_v<R, bool>, "mnd::Option<T>::filter : "
+			"callback function must accept const T&, and return a type convertible to bool.");
+
+		if(is_some() && std::invoke(std::forward<F>(f), std::as_const(data).value()) )
+			return *this;
+
+		return None;
+	}
+	template<typename F>
+	constexpr Option filter(F&& f) && {
+		using R = type_traits::remove_cvref_t<
+			std::invoke_result_t<F, T const&>
+		>;
+		static_assert(std::is_convertible_v<R, bool>, "mnd::Option<T>::filter : "
+			"callback function must accept const T&, and return a type convertible to bool.");
+			
+		if(is_some() && std::invoke(std::forward<F>(f), std::as_const(data).value()) )
+			return std::move(*this);
+
+		return None;
 	}
 
 	/* Reset the state back to the `No` variant. */

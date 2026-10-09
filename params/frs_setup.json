@@ -131,8 +131,8 @@
 							"left": 82.17,  // Left anode pedestal
 							"right": 183.32 // Right anode pedestal
 						},
-					},
-					"values": []
+						"values": []
+					}
 				}
             ]
 		},
@@ -156,8 +156,8 @@
 							"left": 125.17,
 							"right": 108.4
 						},
-					},
-					"values": []
+						"values": []
+					}
 				},
 				{
                     "regex": "main_0193_\\d{4}",
@@ -243,8 +243,8 @@
 							"left": 101.75,
 							"right": 104.17
 						},
-					},
-					"values": []
+						"values": []
+					}
 				},
 				{
                     "regex": "main_0193_\\d{3,4}",
@@ -306,15 +306,23 @@
 
 			"de_to_q": [
 				{
+					"regex": "^expert_trigger_",
+					"qdc": {
+						"pedestal": {
+							"left": 101.75,
+							"right": 104.17
+						},
+						"values": []
+					}
+				},
+				{
                     "regex": "main_0193_\\d{3,4}",
 					"qdc": {
 						"pedestal": {
 							"left": 158.52284899481,
 							"right": 241.86516460923096
 						},
-						"values": [
-
-						]
+						"values": []
 					}
 				}
 			]

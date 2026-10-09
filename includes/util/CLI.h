@@ -154,6 +154,7 @@ template <
 	auto* opt = app.add_option_function<std::vector<std::string>>(
 		name,
 		[&variable, name, state](const std::vector<std::string>& matches) {
+			using mnd::fmt::operator<<;
 			std::vector<E> parsed;
 			parsed.reserve(matches.size());
 
@@ -574,20 +575,6 @@ CLI::Option* add_logged_flag (
 
 namespace mnd {
 
-/* A small wrapper to parse out the sections in the config file block. */
-mnd::Option<std::string_view> extract_text_body(std::string_view , std::string_view , std::string_view );
-
-/* Split a string into smaller substrings. */
-std::vector<std::string> split(const std::string& , char );
-
-/* Return a vector of views to the underlying sequence of strings. */
-std::vector<std::string_view> to_views(const std::vector<std::string>& );
-
-/* Split a string into smaller substrings, and return a view.
- * The reference could dangle! */
-std::vector<std::string_view> split_view(std::string_view , char );
-std::vector<std::string_view> split_view(std::string&& , char ) = delete;
-
 class Argv {
 	std::vector<std::string> storage;
 	std::vector<char*> argv;
@@ -625,7 +612,7 @@ namespace fs {
 std::filesystem::path current_executable_path();
 std::filesystem::path current_executable_name();
 }
-#endif
+#endif // __linux__
 
 /* Parse an array range from a text input by a separator 'c' */
 template<unsigned char c, typename Cont,
@@ -645,7 +632,7 @@ template<unsigned char c, typename Cont,
 			return in;
 		}
 	}
-	return in;	
+	return in;
 }
 
 /* Other overload is specifically for dynamically sized objects */

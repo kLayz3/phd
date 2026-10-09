@@ -48,7 +48,7 @@ void get_obj(F&& fhandle, P& var, const char* label) {
 	if constexpr(std::is_base_of_v<TObject, T>) {
 		var = dynamic_cast<T*>(f->Get(label));
 		if constexpr(std::is_base_of_v<TH1, T>) {
-			var->SetDirectory(nullptr);
+			if(var) var->SetDirectory(nullptr);
 		}
 	} else {
 		var = f->Get<T>(label);
@@ -250,17 +250,6 @@ extern template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extensi
 
 namespace mnd {
 
-template<typename T>
-std::string to_string(const T& val) {
-	static_assert(type_traits::is_istreamable<T>::value,
-		"Type T must be input-streamable to stringstream. AKA: there must be at least "
-		"istream& operator>>(..) overload (works also for std::stringstream).");
-	
-	std::stringstream ss{};
-	ss << val;
-	return ss.str();
-}
-
 /* Predicate if the value is inside a range spanned by last 2 elements of some array.
  * Note, variant state is *assumed* to be valued here, and isn't checked! */
 template<typename T, typename U, std::size_t N>
@@ -285,10 +274,37 @@ bool IsValid(const Option<std::array<T,N>>& bounds) {
 /* Parse a file first thru the GCC preprocessor, and then
  * try to parse the output as a sequence of lines.
  * Is not thread safe! */
-std::vector<std::string> ParseFile(const std::string& );
-std::string ParseFileToString(const std::string& );
+auto parse_file_to_string(const std::string& ) -> std::string;
+auto parse_file_to_lines (const std::string& ) -> std::vector<std::string>;
 
-std::string longest_common_prefix(mnd::span<const std::string> );
+/* {"hehe.txt", "heha.jpg", "hehe.mk"} -> "heh"s */
+auto longest_common_prefix(mnd::span<const std::string> ) -> std::string;
+
+/* Parse top-level SECTION(label) { body } blocks from preprocessed text.
+ * Empty labels conform to GLOBAL().
+ * Quoted/escaped braces do not affect nesting. Duplicates and malformed matching
+ * blocks throw; an absent requested label returns None.
+ * Both APIs return views into text. */
+auto extract_text_body(
+	std::string_view , // SECTION
+	std::string_view , // section name
+	std::string_view   // full text
+) -> mnd::Option<std::string_view>;
+auto extract_available_sections(
+	std::string_view , // SECTION
+	std::string_view
+) -> std::vector<std::string_view>;
+
+/* Split a string into smaller substrings. */
+auto split(const std::string& , char ) -> std::vector<std::string>  ;
+
+/* Return a vector of views to the underlying sequence of strings. */
+auto to_views(const std::vector<std::string>& ) -> std::vector<std::string_view> ;
+
+/* Split a string into smaller substrings, and return a view.
+ * The reference could dangle! */
+auto split_view(std::string_view , char ) -> std::vector<std::string_view>;
+auto split_view(std::string&& , char ) -> std::vector<std::string_view> = delete;
 
 /* Invoke a function `func` over a range of objects, over nthreads.
  * `Range` here binds to any type that is indexable such as array/vector/span.

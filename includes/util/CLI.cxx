@@ -2,50 +2,6 @@
 #include <cstring>
 #include <string>
 
-mnd::Option<std::string_view> mnd::extract_text_body (
-	std::string_view block_name,
-	std::string_view text,
-	std::string_view label
-) {
-	std::string needle;
-	needle.reserve(block_name.size() + label.size() + 2);
-	needle += block_name;
-	needle += "(";
-	needle += label;
-	needle += ")";
-
-	size_t pos = 0;
-
-	while(true) {
-		pos = text.find(needle, pos);
-		if(pos == std::string_view::npos)
-			return None;
-
-		size_t brace = text.find('{', pos + needle.size());
-		if(brace == std::string_view::npos)
-			return None;
-
-		size_t body_start = brace + 1; // where the slice will start
-		size_t depth = 1;
-
-		for(size_t i = brace+1; i < text.size(); ++i) {
-			if(text[i] == '{') {
-				++depth;
-			} else if (text[i] == '}') {
-				--depth;
-
-				if(depth == 0) {
-					return Some{text.substr(body_start, i - body_start)};
-				}
-			}
-		}
-
-		ERROR("mnd::extract_text_body: "
-			"Parse error: unterminated section \'%s(%s)\'\n",
-			std::string(block_name).c_str(), std::string(label).c_str());
-	}
-}
-
 static auto is_space = [](unsigned char c) {
 	return std::isspace(c) != 0;
 };
@@ -129,36 +85,6 @@ mnd::Argv mnd::parse_argv(std::string_view text, std::string program_name) {
 	// Now, out.argv[0] and out.argv.data() and is ready to be passed to execve. */
 }
 
-/* https://stackoverflow.com/a/7408245/4487530 */
-std::vector<std::string> mnd::split(const std::string &text, char sep) {
-	std::vector<std::string> tokens;
-	std::string::size_type start = 0, end = 0;
-	while((end = text.find(sep, start)) != std::string::npos) {
-		tokens.push_back(text.substr(start, end - start));
-		start = end + 1;
-	}
-	tokens.push_back(text.substr(start));
-	return tokens;
-}
-
-std::vector<std::string_view> mnd::to_views(const std::vector<std::string>& seq) {
-	std::vector<std::string_view> views;
-	views.reserve(seq.size());
-	for(const std::string& str : seq)
-		views.emplace_back(str);
-	return views;
-}
-
-std::vector<std::string_view> mnd::split_view(std::string_view text, char sep) {
-	std::vector<std::string_view> tokens;
-	std::string::size_type start = 0, end = 0;
-	while((end = text.find(sep, start)) != std::string::npos) {
-		tokens.emplace_back(text.substr(start, end - start));
-		start = end + 1;
-	}
-	tokens.emplace_back(text.substr(start));
-	return tokens;
-}
 
 #ifdef __linux__
 
@@ -178,4 +104,4 @@ std::filesystem::path mnd::fs::current_executable_name() {
 	return current_executable_path().stem();	
 }
 
-#endif
+#endif // __linux__

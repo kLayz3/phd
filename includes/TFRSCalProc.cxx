@@ -69,7 +69,7 @@ void TFRSCalProc::LoadQDCParams() {
 
 	constexpr const char* qdc_seq_key = "de_to_q";
 	constexpr const char* regex_key = "regex";
-	constexpr const char* qdc_key = "regex";
+	constexpr const char* qdc_key = "qdc";
 
 	for(const auto& [_sci_i, params] : setup.at("SCI").items()) {
 		if(RNFRSCal::sci_moniker.find(_sci_i) == RNFRSCal::sci_moniker.end())
