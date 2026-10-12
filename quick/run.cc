@@ -45,14 +45,14 @@ int main(int argc, char* argv[]) {
 		std::cerr.flush();
 		execvp(fwd_argv[0], fwd_argv.data() );
 
-		const int exec_error = errno;
-		YELL("Cannot execute '%s': %s\n", prog.c_str(), std::strerror(exec_error));
-		return exec_error == ENOENT ? 127 : 126;
+		const int err = errno;
+		YELL("Cannot execute '%s': %s\n", prog.c_str(), std::strerror(err));
+		_exit(127);
 	}
 
 	if(config.empty()) {
 		std::cerr << "-c,--config is required.\nRun with --help for more information.";
-		return 0;
+		return 1;
 	}
 
 	// Resolve only after CLI parsing, when --program has its final value.
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
 		WARN("Config file heuristically found as: %s%s%s\n", BOLD, config.c_str(), KNRM);
 	}
 
-	/* Parse the config file. */
+	/* Parse the config file. It throws here on bad parse.. */
 	const std::string cfg_contents = mnd::parse_file_to_string(config);
 
 	if(print_sections) {
@@ -97,17 +97,15 @@ int main(int argc, char* argv[]) {
 	std::string full_contents = std::string{g_contents.value_or("")} + "\n" + std::string{sec_contents};
 	
 	mnd::Argv fwd_argv = mnd::parse_argv(full_contents, prog);
-	if(help_underlying)
-		fwd_argv.push_back("--help");
 
 	WARN("Replacing the run script with '%s'\n%s%s%s\n", fwd_argv[0], BOLD, artsy, KNRM);
 	std::cout.flush();
 	std::cerr.flush();
 	execvp(fwd_argv[0], fwd_argv.data() );
 
-	const int exec_error = errno;
-	YELL("Cannot execute '%s': %s\n", prog.c_str(), std::strerror(exec_error));
-	return exec_error == ENOENT ? 127 : 126;
+	const int err = errno;
+	YELL("Cannot execute '%s': %s\n", prog.c_str(), std::strerror(err));
+	_exit(127);
 }
 
 const char* artsy = "\

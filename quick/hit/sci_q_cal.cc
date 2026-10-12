@@ -11,6 +11,7 @@ using namespace ROOT;
 using namespace ROOT::Experimental;
 using namespace indicators;
 using namespace mnd::col::literals;
+using namespace std::string_literals;
 
 constexpr auto SCI21_I = RNFRSCal::SCI21_I;
 constexpr auto SCI22_I = RNFRSCal::SCI22_I;
@@ -31,12 +32,11 @@ int main(int argc, char* argv[]) {
 	mnd::Option<u32> q = mnd::None;
 	double d = 0.4;
 	A3 bin = {400,100,4000};
-    u32 niter = 2;
     unsigned short line_size = 4;
-    double sratio = 1.4;
 
 	double beta_range = 0.2;
 	constexpr int beta_binning = 200;
+	std::vector<canvas::Extension> save = {};
 
 	add_logged_option(app, "-f,--file", fileNames, "Pass one or more file names, delimited by ','")
 		->delimiter(',')
@@ -56,14 +56,11 @@ int main(int argc, char* argv[]) {
 		->check(CLI::Range(0.01,0.50));
 	add_logged_option(app, "--binning", bin, "Binning for SCI QDC axis.")
 		->delimiter(',');
-	add_logged_option(app, "--niter", niter, "Gaussian TH1D fit, number of iterations for the peak finder.")
-        ->check(CLI::PositiveNumber);
-    add_logged_option(app, "--sratio", sratio, "Width ratio of raw histogram, how much to fit around the peak.")
-        ->check(CLI::PositiveNumber);
 	add_logged_option(app, "-l,--line-size", line_size, "Fit curve line size.");
-	add_logged_option(app, "-b,--beta-range", beta_range, "β-interval around nominal β taken from Bρ")
+	add_logged_option(app, "-b,--beta-range", beta_range, "β-interval around nominal β taken from Bρ, for histogramming.")
 		->check(CLI::Range(0.05, 0.5));
-
+	add_logged_option(app, "-o,--save", save, "Save the resulting canvases as one or more extensions.")
+		->delimiter(',');
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");
 
@@ -149,9 +146,12 @@ int main(int argc, char* argv[]) {
 	auto h1_foot_raw = TH1P{"((h1_raw))FOOT Q [charge]@No cut", 0xF27100_c, 140, 0, 7};
 	auto h1_foot_cut = TH1P{"((h1_cut))FOOT Q [charge]@W/ cut", 0xB08100_c, 140, 0, 7};
 
-	auto h1_sci_l_c = TH1P{Form("((h1_cut))SCI%s QDC l [QDC units]@With FOOT selection", label[i_sci]),   0x009B4F_c, bin[0], bin[1], bin[2]};
-	auto h1_sci_r_c = TH1P{Form("((h1_cut))SCI%s QDC r [QDC units]@With FOOT selection", label[i_sci]),   0x007B2F_c, bin[0], bin[1], bin[2]};
-	auto h1_sci_a_c = TH1P{Form("((h1_cut))SCI%s QDC avg [QDC units]@With FOOT selection", label[i_sci]), 0x005B0F_c, bin[0], bin[1], bin[2]};
+	auto h1_sci_l_c = TH1P{Form("((h1_cut))SCI%s QDC l [QDC units]@With FOOT selection", label[i_sci]),
+		0x009B4F_c, bin[0], bin[1], bin[2]};
+	auto h1_sci_r_c = TH1P{Form("((h1_cut))SCI%s QDC r [QDC units]@With FOOT selection", label[i_sci]),
+		0x007B2F_c, bin[0], bin[1], bin[2]};
+	auto h1_sci_a_c = TH1P{Form("((h1_cut))SCI%s QDC avg [QDC units]@With FOOT selection", label[i_sci]),
+		0x005B0F_c, bin[0], bin[1], bin[2]};
 
 	WARN("SCI%s: ToF parameter identified as: %s\n", label[i_sci],
 		tof_p ? mnd::streamable(*tof_p).c_str() : "nullptr");
@@ -281,6 +281,10 @@ int main(int argc, char* argv[]) {
 		cf->cd(4); h1_foot_raw.Draw();
 		cf->cd(5); h1_foot_cut.Draw();
 	}
+
+	const std::string finfo = q.map([](auto q) { return "FOOT"s + mnd::utos(q); })
+		.value_or("NO-FOOT");
+	canvas::save_all<canvas::Exe>(save, { finfo, label.at(i_sci) });
 
 	WARN("End-of-main\n");
 	rootApp.Run(); return 0;

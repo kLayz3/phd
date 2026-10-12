@@ -33,7 +33,13 @@
  * Is used mainly for monadic operations to have nice representation pre-C++20.
  * Alias for the true std::optional in MONAD is `Maybe` type.
  * Reason is that various perfect forwarding, correct reference returning
- * machinery isn't fully tested or built in. */
+ * machinery isn't fully tested or built in. 
+ *
+ * Another reason is to have Rust-like niche discriminant packing. E.g.
+ * generally: sizeof(std::optional<T> == 2*sizeof(T)) is alignment is standard,
+ * however for certain objects such as pointers or non-zero integers, the discriminant can be packed 
+ * in one of the bits, thus reducing it to exactly sizeof(T). This is kinda cool to keep the cache playstyle
+ * nice and packed. */
 /* NOTE: No deref/bool operator, unlike STL optional. This is to keep the intent very explicit in the code. */
 
 namespace mnd {
@@ -109,7 +115,7 @@ public:
 	constexpr decltype(auto) get() const noexcept { return (data); }
 	constexpr decltype(auto) get() noexcept { return (data); }
 
-	/* Normally in STL, the functor type `F` is constrained by different concepts. */	
+	/* Normally in STL, the functor type `F` is constrained by different concepts. */
 	template<typename U = std::remove_cv_t<T>>
 	constexpr T value_or( U&& default_value ) const& {
 		return is_some() ? unwrap() : static_cast<T>(std::forward<U>(default_value));
@@ -201,7 +207,7 @@ public:
 			: Option<U>{None};
 	}
 
-	/* fn filter<F>(self, f: F) -> Option<T>, where F(const T&) -> bool.
+	/* fn filter<F>(self, f: F) -> Option<T>, where F(const T&) -> bool
 	 * Returns exact same object, if it passes the predicate, else it returns None. */
 	template<typename F>
 	constexpr Option filter(F&& f) const& {
