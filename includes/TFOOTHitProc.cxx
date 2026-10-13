@@ -14,6 +14,7 @@
 #include "util/FloatHacks.hxx"
 
 extern thread_local mnd::geom::Line3D g_upstream_track; // extern'ed from `includes/TFRSHitProc.cxx`
+using mnd::fmt::operator<<; // to shut up the whiney-ass LSP :X
 
 /* These following values are assigned only once; at the TFOOTHitProc ctor.
  * Later access is read-only, as such safe to be non thread_local. */
@@ -25,13 +26,13 @@ static std::array<Eigen::Vector2d, TFOOTHitProc::N_PAIRS> refl; // +-1 based on 
 	const TFOOTCalCont& in_##n
 #define GEN_ARG_NAME_FOOT(z, n, data) in_##n
 
-/* This part below is a bit stupid, since anyway once the compiler sees the 
- * field inside TFOOTHitProc, it can implicitly instantiate the templated type. 
- * However, if we leave the *full* instantiation there, we will be 
- * running into the Cling's good old Eigen non-digestability. 
+/* This part below is a bit stupid, since anyway once the compiler sees the
+ * field inside TFOOTHitProc, it can implicitly instantiate the templated type.
+ * However, if we leave the *full* instantiation there, we will be
+ * running into the Cling's good old Eigen non-digestability.
  * Hence, we extern it there, and explicitly instantiate here. Once and for all.
  * Cute little fact: when the compiler first sees `TFOOTHitProc::hm`, it will instantiate just enough
- * of the template to answer: alignof, alignas, sizeof, and all the ABI stuff 
+ * of the template to answer: alignof, alignas, sizeof, and all the ABI stuff
  * (vptr/vtable / dispatches). But it does not need to implicitly define all the
  * member functions/inlined statics/dtor/ctors. That part is extern'ed.
  * These actually get their definition and home right here. :-) */
@@ -40,12 +41,12 @@ template struct Track<TFOOTHitCont::N_PAIRS, RNFOOTPair>;
 
 using mnd::Maybe;
 using FHitMatrix = TFOOTHitProc::FHitMatrix;
-using FTrackOnline = TFOOTHitProc::FTrackOnline; 
+using FTrackOnline = TFOOTHitProc::FTrackOnline;
 
 namespace mnd {
 template<typename Tuple, typename BinaryOp, std::size_t... Is>
 void _for_pair_in_tuple_impl(Tuple&& t, BinaryOp&& f, std::index_sequence<Is...>) {
-	(..., f (std::get<2*Is>(std::forward<Tuple>(t)), 
+	(..., f (std::get<2*Is>(std::forward<Tuple>(t)),
 			 std::get<2*Is+1>(std::forward<Tuple>(t))) );
 }
 template<typename Tuple, typename BinaryOp>
@@ -53,12 +54,12 @@ void for_pair_in_tuple(Tuple&& t, BinaryOp&& f) {
 	constexpr std::size_t N = std::tuple_size_v<std::decay_t<Tuple>>;
 	static_assert(N % 2 == 0, "Tuple size must be an even number.");
 
-	_for_pair_in_tuple_impl(std::forward<Tuple>(t), std::forward<BinaryOp>(f), 
+	_for_pair_in_tuple_impl(std::forward<Tuple>(t), std::forward<BinaryOp>(f),
 		std::make_index_sequence<N/2>{});
 }
 };
 
-/* Some global analysis states, which are set-up during TFOOTHitProc ctor, and then 
+/* Some global analysis states, which are set-up during TFOOTHitProc ctor, and then
  * everafter only read from. */
 double TrackCost::Cr = TrackCost::DEFAULT_COST_R; // cost per mm^2 difference
 double TrackCost::Cq = TrackCost::DEFAULT_COST_Q; // cost per charge^2 difference
@@ -94,17 +95,17 @@ bool operator>(const TrackCost& c, double max_cost) {
 		max_cost *= 0.666667; // reduce by 2/3
 	switch(c.test_track_size) {
 		case 0: return c.sum() > max_cost * 0.5; // Only kq measurement possible (without track contribution)
-		case 1: return c.sum() > max_cost * 1.4; // kq             + kt       
+		case 1: return c.sum() > max_cost * 1.4; // kq             + kt
 		case 2: return c.sum() > max_cost * 1.2; // kq + kr        + kt(3 pts)
 		case 3: return c.sum() > max_cost * 1.0; // kq + kr(3 pts) + kt(4 pts)
 		default: mnd::unreachable();
 	}
 }
-inline bool operator<(const TrackCost& c, double max_cost) noexcept { return !(c > max_cost); } 
+inline bool operator<(const TrackCost& c, double max_cost) noexcept { return !(c > max_cost); }
 
 /* Read the param file and create the matrix `A`:
  *  1/cos(θx-θy) * (  cos(θx)  sin(θx) )
- *                 ( -sin(θy)  cos(θy) ) 
+ *                 ( -sin(θy)  cos(θy) )
  *  and the offset vector `d_xy`. */
 void TFOOTHitProc::SetConversionMatrices(int ipair, const FOOTParam& px, const FOOTParam& py ) {
 	using std::cos; using std::sin;
@@ -121,7 +122,7 @@ void TFOOTHitProc::SetConversionMatrices(int ipair, const FOOTParam& px, const F
 }
 
 TFOOTHitProc::TFOOTHitProc (
-	TFOOTHitCont& out, 
+	TFOOTHitCont& out,
 	BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_INSTANCE_FOOT, ~),
 	double max_cost_,
 	double max_cost_final_track_,
@@ -135,11 +136,11 @@ TFOOTHitProc::TFOOTHitProc (
 {
 	TFOOTHitProc::v = v_;
 	TFOOTHitProc::requires_valid_upstream_track = req_;
-	TrackCost::max_cost = max_cost_; 
-	TrackCost::max_cost_final_track = max_cost_final_track_; 
+	TrackCost::max_cost = max_cost_;
+	TrackCost::max_cost_final_track = max_cost_final_track_;
 
 #ifndef MND_FOOTTRACK_DEBUG
-	if(v > 0) 
+	if(v > 0)
 		WARN("Asking for a verbose analysis, but `MND_FOOTTRACK_DEBUG` option not compiled in.. Recompile it please.");
 #endif
 
@@ -169,7 +170,7 @@ TFOOTHitProc::TFOOTHitProc (
 
 	u32 i = 0;
 
-	std::vector< 
+	std::vector<
 		std::map<Orientation, double> // orientation vs. z
 	> test_vec(N_PAIRS);
 	const FOOTBoxParam* box = out.box;
@@ -187,7 +188,7 @@ TFOOTHitProc::TFOOTHitProc (
 		if(o == Orientation::UNKNOWN) ERROR("FOOT%u, orientation unknown.\n", i);
 		
 		const u32 ipair = i/2;
-		if(ipair > N_PAIRS) 
+		if(ipair > N_PAIRS)
 			ERROR("Checking for input setup validity, encountered %i>%i ?", ipair, N_PAIRS);	
 		auto& map = test_vec[ipair];
 		map.insert({o,z});
@@ -226,7 +227,7 @@ TFOOTHitProc::TFOOTHitProc (
 				box->GetFOOTZRel(f2.setup->N) + f2.setup->dz
 			) / 2.0 + TFOOTHitProc::TARGET_Z;
 			Orientation o1 = (f1.setup->orientation[1] == 'x') ? Orientation::X : Orientation::Y;
-			if(o1 == Orientation::X) { 
+			if(o1 == Orientation::X) {
 				this->SetConversionMatrices(i, *f1.setup, *f2.setup);
 
 				this->out.foot_param[i]->at(0) = *f1.setup;
@@ -260,7 +261,7 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 	if(requires_valid_upstream_track && !g_upstream_track.HasValue()) return;
 
 #ifdef MND_FOOTTRACK_DEBUG
-	if(v > 1) { 
+	if(v > 1) {
 		static u64 ev_num = 0;
 		fprintf(stderr, "\n%s>>> Entry[%lu] <<<%s\n", KBH_GRN, ++ev_num, KNRM);
 	}
@@ -316,7 +317,7 @@ void TFOOTHitProc::ProcessPair (
 		// Cluster size 1 fucks with everything above Z >~ 1,
 		// so only care about it if its sitting at low energies..
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
-			output.x.emplace_back(q, mult 
+			output.x.emplace_back(q, mult
 #ifdef MND_FOOTTRACK_DEBUG
 				, ctype, hit.Delta(), ce
 #endif
@@ -330,9 +331,9 @@ void TFOOTHitProc::ProcessPair (
 
 		double yprime = refl[ipair].y() * (cy - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM;
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
-			output.y.emplace_back(q, mult 
+			output.y.emplace_back(q, mult
 #ifdef MND_FOOTTRACK_DEBUG
-				, ctype, hit.Delta(), ce 
+				, ctype, hit.Delta(), ce
 #endif
 				, yprime);
 	}
@@ -363,8 +364,8 @@ double TFOOTHitProc::kr(const FTrackOnline& ft, const FHitMatrix::Entry& candida
 		return Cr * ((extrapolated.eigen_view() - measured).squaredNorm());
 }
 
-/* kQ = Cq || Qij - Qn ||^2 
- * ==== Cq( [ mean(Qij) - mean(Qtrack) ]^2 + variance_ij )  
+/* kQ = Cq || Qij - Qn ||^2
+ * ==== Cq( [ mean(Qij) - mean(Qtrack) ]^2 + variance_ij ) 
  * Can *never* return a nil value. */
 double TFOOTHitProc::kq(const FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 k) const noexcept {
 	(void)k;
@@ -406,7 +407,7 @@ double TFOOTHitProc::kt(const FTrackOnline& ft, const FHitMatrix::Entry& candida
 	return cost_t;
 }
 
-/* Once identified a valid track, remove the corresponding col/row from the 
+/* Once identified a valid track, remove the corresponding col/row from the
  * individual hit matrices. */
 void TFOOTHitProc::PoisonEntriesFromHMs(const DAG::DAGPath& path) noexcept {
 	static_assert(DAG::depth == std::tuple_size_v<decltype(path.node)>, "Paranoia V3");
@@ -426,7 +427,7 @@ void TFOOTHitProc::PoisonEntriesFromHMs(const DAG::DAGPath& path) noexcept {
 void TFOOTHitProc::ConstructObviousTracks() noexcept {
 	static_assert(DAG::depth == N_PAIRS, "Paranoia V4");
 
-	/* Do the same CKF but with reduced phase space: meaning that 
+	/* Do the same CKF but with reduced phase space: meaning that
 	 * we only take last row/column as candidates.
 	 * Taking only the last entry (largest Qx,Qy) is a bit lazy, since the hit could go through
 	 * noisy/dead strip, and the corresponding entry won't be the largest Z. But anyway, this should
@@ -553,11 +554,11 @@ void TFOOTHitProc::ConstructObviousTracks() noexcept {
 		tau.zs,
 		qm,
 		sqm,
-		e0_x, delta_x, c0_x, 
+		e0_x, delta_x, c0_x,
 		e0_y, delta_y, c0_y
 #endif
 	);
- 
+
 #ifdef MND_FOOTTRACK_DEBUG
 	if(v > 2) {
 		fprintf(stderr, BKH_GRN KBH_RED KBLINK "🐄🐄🐄 found a matching heavy fragment track:" KNRM BOLD);
@@ -573,7 +574,7 @@ static constexpr auto sort_by_cost = [](const CostIndex& lhs, const CostIndex& r
 static_assert(std::tuple_size<TFOOTHitProc::CandidatesBuffer>::value >= 2*TFOOTHitProc::MAX_CANDIDATES);
 
 void TFOOTHitProc::ConstructDAG() noexcept {
-	/* Idea is explained in the PhD writeup. 
+	/* Idea is explained in the PhD writeup.
 	 * If you don't have it, ask Klayze. */
 
 	/* To keep the algorithm invariant between layers, tracks can also be nullable (e.g. containing 0 or 1 point). */	
@@ -591,15 +592,15 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 
 		/* If every single combination, for every single existing path is good,
 		 * could have at most 1 path branching out to nx*ny paths extra. */
-		size_t graph_branch_factor = std::min(nx*ny, (size_t)MAX_CANDIDATES); 
+		size_t graph_branch_factor = std::min(nx*ny, (size_t)MAX_CANDIDATES);
 		new_paths.reserve( graph_branch_factor * current_paths.size() ); // could be larger.
 		
 #ifdef MND_FOOTTRACK_DEBUG
-		if(v > 0) 
+		if(v > 0)
 			WARN("[#%u] ConstructDAG(): new_paths to be reserved at size: %zu (size currently:%zu)\n", n, new_paths.capacity(), new_paths.size());
 #endif
 		
-		/* Each path already draws (an optional) preliminary track. 
+		/* Each path already draws (an optional) preliminary track.
 		 * Try to match some of the current layer's hitmatrix elements against that
 		 * specific preliminary test track. */
 		for(const DAG::DAGPath& path : current_paths) {
@@ -666,12 +667,12 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 void TFOOTHitProc::AnalyseDAG() noexcept {
 	static_assert(N_PAIRS - 1 >= 3, "Maximal paranoia");
 
-	/* Allow only one layer to be missing. Must have 3 or more 
+	/* Allow only one layer to be missing. Must have 3 or more
 	 * valid measurements and be below total allowed cost. */
 	dag.KeepIf( [this](const DAG::DAGPath& p) -> bool {
 		return (
 			(p.Rank() >= (int)N_PAIRS - 1) and
-			this->GetPrelimTrackFromPath(p).GetScore() < max_cost_final_track 
+			this->GetPrelimTrackFromPath(p).GetScore() < max_cost_final_track
 		);
 	});	
 
@@ -693,7 +694,7 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		}
 	);
 
-	/* Go over the score table, pluck the entries in order, and poison the occupied hitmatrix row/cols. 
+	/* Go over the score table, pluck the entries in order, and poison the occupied hitmatrix row/cols.
 	 * If an entry's matched indices aren't poisoned, they are encoded as valid tracks. */
 	for(const DAG::DAGPath& path : dag.path) {
 		bool is_valid = true;
@@ -717,11 +718,11 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		const FTrack& t = tau.get(); // Evaluate the actual track fit.
 
 #ifdef MND_FOOTTRACK_DEBUG
-		auto xs      = mnd::make_filled_array<double, N_PAIRS>(NAN); 
-		auto ys      = mnd::make_filled_array<double, N_PAIRS>(NAN); 
-		auto zs      = mnd::make_filled_array<double, N_PAIRS>(NAN); 
-		auto qm      = mnd::make_filled_array<double, N_PAIRS>(NAN); 
-		auto sqm     = mnd::make_filled_array<double, N_PAIRS>(NAN); 
+		auto xs      = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto ys      = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto zs      = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto qm      = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto sqm     = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto e0_x    = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto delta_x = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto c0_x    = mnd::make_filled_array<u32,    N_PAIRS>(-1);
@@ -756,8 +757,8 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		out.inner().track.emplace_back (
 			t.l.xarray(), t.l.yarray(), t.q.mean(), score, N
 #ifdef MND_FOOTTRACK_DEBUG
-				, xs, ys, zs, qm, sqm, 
-				e0_x, delta_x, c0_x, 
+				, xs, ys, zs, qm, sqm,
+				e0_x, delta_x, c0_x,
 				e0_y, delta_y, c0_y
 #endif
 		);
@@ -846,8 +847,8 @@ void TFOOTHitProc::ReplayCostCalculation(const DAG::DAGPath& path) noexcept {
 		const double kq = this->kr(tau, e, n);
 		const double kr = this->kr(tau, e, n);
 		const double kt = this->kt(tau, e, n);
-		out.h1_acc_q[n]->Fill( kq / Cq ); 
-		out.h1_acc_r[n]->Fill( kr / Cr );	 
+		out.h1_acc_q[n]->Fill( kq / Cq );
+		out.h1_acc_r[n]->Fill( kr / Cr );	
 		out.h1_acc_t[n]->Fill( kt / Ct );
 
 		p.node[n] = path.node[n];

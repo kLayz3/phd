@@ -2,25 +2,24 @@
 
 #include "monad/monad.hxx" // only used for assert+fmt stuff
 
-#include "PolyFitter.h"
 #include <cmath>
 #include <limits>
 #include <type_traits>
 
-#include "json_struct_def.hh"
-#include "HitMatrix.hxx"
-#include "Geometry.h"
-#include "DirectedAGraph.hxx"
+#include "util/PolyFitter.h"
+#include "util/HitMatrix.hxx"
+#include "util/Geometry.h"
+#include "util/DirectedAGraph.hxx"
+#include "util/Option.hxx"
 
 #include "../Eigen.h"
 
 namespace mnd {
 namespace track {
 
+/* Nullable according to the mu field's special NAN. */
 struct Q {
 	double mu, v;
-	Q(): mu(NAN), v(NAN) {}
-	Q(double mu_, double v_): mu(mu_), v(v_) {}
 
 	inline double& mean() noexcept { return mu; }
 	inline double const& mean() const noexcept { return mu; }
@@ -28,8 +27,6 @@ struct Q {
 	inline double const& var() const noexcept { return v; }
 
 	inline double s() const noexcept { return std::sqrt( var() ); }
-	inline bool HasValue() const noexcept { return std::isfinite(mu); }
-	inline explicit operator bool() const noexcept { return HasValue(); }
 
 	friend std::ostream& operator<<(std::ostream& os, const Q& rhs) {
 		return os << rhs.mean() << "±" << rhs.s();
@@ -37,19 +34,61 @@ struct Q {
 };
 
 } // namespace track
+
+namespace detail {
+
+/* Hack for niche-optimized optional type. */
+struct TrackQ_ {
+	using value_type = track::Q;
+	inline constexpr static double nil = none_f64;
+	inline constexpr static u64 nil_bits = none_bits_f64;
+
+	constexpr TrackQ_() : val_{nil, 0.0} {}
+	constexpr TrackQ_(None_t ) : val_{nil, 0.0} {}
+	constexpr TrackQ_(value_type val) : val_(std::move(val)) {}
+
+	constexpr bool has_value() const noexcept {
+		return __builtin_bit_cast(u64, val_.mu) != nil_bits;
+	}
+	constexpr void reset() noexcept { val_.mu = nil; }
+
+	MND_OPTION_ADD_CHECKED_ACCESS
+	MND_OPTION_ADD_UNCHECKED_ACCESS
+
+private:
+	value_type val_;
+};
+
+} // namespace detail
+
+/* Ok: I might've overkilled it. Fuck it. Basically: by parking the `struct { double x,y; };`
+ * behind an std::optional<> pads the struct to a 3x64 bits. That's why std::optional is cursed.
+ * My own wrapper hacks this by allowing a custom provided underlying 'sum-type' which has to
+ * only implement a few constexpr methods and expose a value_type and that's basically it.
+ * A simple "glorified" NAN abuser. TBH, it's probably a negligible runtime gain, but is cool AF NGL.
+ * Templates are actually so beautiful.. ／人 ⌒ ‿‿ ⌒ 人＼ */
+template<>
+class Option<track::Q> : public detail::OptionBase<Option<track::Q>, detail::TrackQ_> {
+	using base = detail::OptionBase<Option<track::Q>, detail::TrackQ_>;
+public:
+	using base::base;
+    using base::operator=;
+};
+static_assert(sizeof(Option<track::Q>) == sizeof(track::Q));
+
 } // namespace mnd
 
-/* A simple function that combines two base values and returns a some kind of a combined charge measurement.
- * Keep it as a higher-order functor for now, to potentially enter some state inside the combinator later on. 
+/* A simple type that abstracts away storing some 'base' charge values and returning some kind of a combined charge measurement.
+ * Keep it as a higher-order functor for now, to potentially enter some state inside the combinator later on.
  * E.g. that different FOOTs also have some other dependence here... */
 template <
 	std::size_t Capacity,
 	typename EntryType  = mnd::hm::Q,
 	typename ResultType = mnd::track::Q
 > struct QCombinator {
-	QCombinator& operator+=(const EntryType& e) noexcept { 
+	QCombinator& operator+=(const EntryType& e) noexcept {
 		/* it's noexcept, since `ERROR(..)` simply calls std::abort */
-		if(N == Capacity) 
+		if(N == Capacity)
 			ERROR("Trying to add an entry but capacity %zu already reached.\n", Capacity);
 		buffer[N++] = e;
 		value.reset();
@@ -58,7 +97,7 @@ template <
 
 	const EntryType& operator[](std::size_t i) const noexcept {
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
-		if(i >= N) 
+		if(i >= N)
 			ERROR("Requesting index: %zu, but currently combinator (%s) has %zu entries (capacity=%zu)",
 				i, _SELF_TYPE_CSTR, N, Capacity);
 #endif
@@ -79,10 +118,10 @@ template <
 
 	QCombinator& operator--() { pop_back(); return *this; }
 
-	/* Result accesses are lazily calculated. We could have null values stashed in there. 
+	/* Result accesses are lazily calculated. We could have null values stashed in there.
 	 * Don't take them into account when calculating the statistics. */
 	const ResultType& get() const noexcept {
-		if(!value) {
+		if(value.is_none()) {
 			int nvalid = 0;
 			double sum = 0;
 			for(size_t i=0; i<N; ++i) {
@@ -91,8 +130,14 @@ template <
 					++nvalid;
 				}
 			}
+			if(nvalid == 0) {
+				value = mnd::Some{ResultType{NAN, NAN}};
+				return *value;
+			}
+
 			const double mean = sum / (2*nvalid);
 			double M2 = 0;
+			
 			for(size_t i=0; i<N; ++i) {
 				if(buffer[i]) {
 					double dx = buffer[i].qx - mean;
@@ -100,8 +145,9 @@ template <
 					M2 += dx*dx + dy*dy;
 				}
 			}
-			value->mean() = mean;
-			value->var() = M2 / (2*nvalid - 1);
+			value = mnd::Some {
+				ResultType{mean, M2 / (2*nvalid - 1)}
+			};
 		}
 		return *value;
 	}
@@ -115,23 +161,9 @@ template <
 private:
 	std::size_t N = 0;
 	std::array<EntryType, Capacity> buffer;
-	mutable std::optional<ResultType> value {}; // lazily evaluated and cached.
+	mutable mnd::Option<ResultType> value {}; // lazily evaluated and cached.
 
 }; // struct QCombinator
-
-namespace mnd {
-#define DECL_TYPE_TRAIT_HAS_STATIC(VAR) \
-	template<typename, typename = void> \
-	struct has_static_##VAR : std::false_type {}; \
-	\
-	template<typename T> \
-	struct has_static_##VAR<T, std::void_t<decltype(T::VAR)>> \
-		: std::true_type { \
-			using underlying_type = std::remove_cv_t<decltype(T::VAR)>; \
-		};
-
-DECL_TYPE_TRAIT_HAS_STATIC(N_PAIRS);
-} // namespace mnd
 
 struct FTrack {
 	mnd::geom::Line3D l;
@@ -139,13 +171,51 @@ struct FTrack {
 	friend std::ostream& operator<<(std::ostream& , const FTrack& );
 };
 
-/* Type encapsulating an 'online' track object to be handed over 
+namespace mnd {
+namespace detail {
+
+/* Hack for niche-optimized optional type. */
+struct FTrack_ {
+	using value_type = ::FTrack;
+	inline constexpr static double nil = none_f64;
+	inline constexpr static u64 nil_bits = none_bits_f64;
+
+	constexpr FTrack_() : val_{} {
+		val_.q.mu = none_f64;
+	}
+	constexpr FTrack_(None_t ) : FTrack_() {}
+	constexpr FTrack_(value_type val) : val_(std::move(val)) {}
+
+	constexpr bool has_value() const noexcept {
+		return __builtin_bit_cast(u64, val_.q.mu) != nil_bits;
+	}
+	constexpr void reset() noexcept { val_.q.mu = nil; }
+	
+	MND_OPTION_ADD_CHECKED_ACCESS
+	MND_OPTION_ADD_UNCHECKED_ACCESS
+
+private:
+	value_type val_;
+};
+} // namespace detail
+
+template<>
+class Option<::FTrack> : public detail::OptionBase<Option<::FTrack>, detail::FTrack_> {
+	using base = detail::OptionBase<Option<::FTrack>, detail::FTrack_>;
+public:
+	using base::base;
+    using base::operator=;
+};
+static_assert(sizeof(Option<::FTrack>) == sizeof(::FTrack));
+
+} // namespace mnd
+
+/* Type encapsulating an 'online' track object to be handed over
  * to the Kalman filter. Is nullable! */
 template <
 	std::size_t Capacity,
 	typename FOOTPair
->
-struct Track {
+> struct Track {
 	using FHitMatrix = HitMatrix<FOOTPair>;
 	using Entry = typename FHitMatrix::Entry;
 	using QEntryType = typename Entry::q_type;	
@@ -153,22 +223,23 @@ struct Track {
 	static constexpr double SP = 0.100 * 0.100; // [ mm^2 ]
 	static constexpr double SQ = 0.5 * 0.5; // [ Q*Q ; 'Q' = one charge unit ]
 
-	inline static const auto BareTrack 
-		= FTrack { 
-			mnd::geom::Line3D{NAN,NAN, NAN,NAN},
-			{}
+	inline static constexpr auto BareTrack
+		= FTrack {
+			.l = mnd::geom::Line3D{NAN,NAN, NAN,NAN},
+			.q = { .mu = NAN, .v = NAN }
 		};
 
 	// Containers
 	std::array<double, Capacity> xs, ys, zs;
 	QCombinator<Capacity, QEntryType, mnd::track::Q> q;
+
 	inline size_t N() const noexcept { return q.size(); }
 
-	/* If track currently holds 0 or 1 points, fill the undeterminable fit fields with NAN. */
-	const FTrack& get() const noexcept { 
-		if(!t) 
-			evaluate_track(); 
-		return *t;	
+	/* If track currently holds 0 or 1 points, fill the undeterminable fit fields with ordinary qnan */
+	const FTrack& get() const noexcept {
+		if(t.is_none())
+			evaluate_track();
+		return *t;
 	}
 
 	void Add(const Entry& rhs, double z) noexcept {
@@ -210,65 +281,57 @@ struct Track {
 			
 			sp += dx*dx + dy*dy;
 
-			double q0 = t->q.mean();
+			double q0 = this->get().q.mean();
 			double dqx = q[i].qx - q0;
 			double dqy = q[i].qy - q0;
 			
 			sq += dqx*dqx + dqy*dqy;
 		}
-		return (sp / Track::SP + sq / Track::SQ) / (n_current - 2);	
+		return (sp / Track::SP + sq / Track::SQ) / (n_current - 2);
 	}
 
-	enum class Status { Bare, SinglePoint, WellDefined };
-	
-	Status GetStatus() const noexcept {
-		const size_t N = this->N();
-		switch(N) {
-			case 0: return Status::Bare;
-			case 1: return Status::SinglePoint;
-			default: return Status::WellDefined;
-		}
-	}
-
-	friend std::ostream& operator<<(std::ostream& os, const Track& t) {
+	friend std::ostream& operator<<(std::ostream& os, const Track& rhs) {
 		using mnd::fmt::operator<<;
-		const size_t N = t.N();
+		const size_t N = rhs.N();
 
 		std::streamsize old_precision = os.precision();
 		os << std::setprecision(4);
 		os << "{| "
-		   << "x: "   << mnd::span<double>{t.xs.data(), N}
-		   << ", y: " << mnd::span<double>{t.ys.data(), N}
-		   << ", z: " << mnd::span<double>{t.zs.data(), N}
-		   << ", q: " << t.q
-		   << ", R: " << t.get() << " |}";
+		   << "x: "   << mnd::span<double>{rhs.xs.data(), N}
+		   << ", y: " << mnd::span<double>{rhs.ys.data(), N}
+		   << ", z: " << mnd::span<double>{rhs.zs.data(), N}
+		   << ", q: " << rhs.q
+		   << ", R: " << rhs.get() << " |}";
 		os.precision(old_precision);
 		return os;
 	}
 
-	/* Main API: a nullable track can be constructed 
+	/* Main API: a nullable track can be constructed
 	 * from the currently samples sequence of points.  */
 private:
 	void evaluate_track() const noexcept {
 		const size_t N = this->N();
 		switch(N) {
-			case 0: 
-				t = BareTrack;
+			case 0:
+				t = mnd::Some{BareTrack};
 				break;
 			case 1:
-				t = BareTrack;
-				t->q = q.get();
+				t = mnd::Some{BareTrack};
+				(*t).q = q.get();
 				break;
 			default:
-				t = {	
-					{ PolyFit<1>(zs, xs, N),
-					  PolyFit<1>(zs, ys, N) },
-					q.get()
+				t = mnd::Some<FTrack>{
+					.value = {
+						.l = { PolyFit<1>(zs, xs, N),
+						       PolyFit<1>(zs, ys, N) },
+						.q = q.get()
+					}
 				};
 				break;
 		}
 	}
 
 	// Result track. Calculated on demand.
-	mutable std::optional<FTrack> t; 
+	mutable mnd::Option<FTrack> t;
+
 }; // struct Track

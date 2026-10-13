@@ -1,14 +1,13 @@
 #pragma once
 
 #include "../monad/monad.hxx"
-#include "json_struct_def.hh"
 #include <algorithm>
 #include <type_traits>
 #include <array>
 #include <vector>
 #include <ostream>
 
-/* Small struct representing a nullable 2-index, used to memorize the "location" (i,j) of the entry used 
+/* Small struct representing a nullable 2-index, used to memorize the "location" (i,j) of the entry used
  * in the Kalman online + possible null location. */
 template<typename T>
 struct __attribute__((packed)) DAGIndex { // attribute is redundant here, but stays to convince the compiler for DAGPath packing.
@@ -31,9 +30,9 @@ struct __attribute__((packed)) DAGIndex { // attribute is redundant here, but st
 	DAGIndex(std::size_t first, std::size_t second) : i_{static_cast<T>(first), static_cast<T>(second)} {}
 
 	explicit operator bool() const noexcept { return i_ != null; }
-	explicit operator int() const noexcept  { return static_cast<int>( bool(*this) ); } // `0` or `1` 
+	explicit operator int() const noexcept  { return static_cast<int>( bool(*this) ); } // `0` or `1`
 
-	friend std::ostream& operator<<(std::ostream& os, const DAGIndex& i) { 
+	friend std::ostream& operator<<(std::ostream& os, const DAGIndex& i) {
 		if(!i) return os << "(∅)";
 		
 		os << '(';
@@ -64,20 +63,20 @@ struct DirectedAGraph {
 		inline int Rank() const noexcept {
 			return mnd::sum<mnd::Unroll::Yes, int>(node); // explicit conversion of of `Index` to `int`.
 		}
-	}; 
+	};
 
 	DirectedAGraph() = default;
 
 	// Called at the start, places a singular path with all nulls. */
-	void Initialize() noexcept { 
-		path.clear(); 
+	void Initialize() noexcept {
+		path.clear();
 		path.emplace_back();
 	}
 
 	DirectedAGraph(std::size_t N) { path.reserve(N); };
 
 	void TrimRankLessThan(int N) noexcept {
-		/* [1] Partition the paths container, and put the "valid" paths as preceeding. */ 
+		/* [1] Partition the paths container, and put the "valid" paths as preceeding. */
 		auto it = std::partition(path.begin(), path.end(),
 			[N](const DAGPath& singular_path) {
 				return singular_path.Rank() >= N;
@@ -87,7 +86,7 @@ struct DirectedAGraph {
 		/* [2] Trim the container. */
 		path.erase(it, path.end());
 	}
-	/* Trim the graph, keeping only the elements which evaluate to 'true' based 
+	/* Trim the graph, keeping only the elements which evaluate to 'true' based
 	 * on the predicate `fnc`.  Function invocation must not throw. */
 	template<typename Pred>
 	void KeepIf(Pred&& pred) noexcept (
@@ -95,17 +94,17 @@ struct DirectedAGraph {
 		std::is_nothrow_swappable_v<DAGPath>
 	) {
 		static_assert(std::is_invocable_r_v<bool, Pred, const DAGPath&>,
-			"Predicate type must be a callable bool(const DAGPath&)"); 
+			"Predicate type must be a callable bool(const DAGPath&)");
 
-		/* [1] Partition the paths container, and put the "valid" paths as preceeding. */ 
+		/* [1] Partition the paths container, and put the "valid" paths as preceeding. */
 		auto it = std::partition(path.begin(), path.end(), std::ref(pred));
 		path.erase(it, path.end());
 	}
 
-	friend std::ostream& operator<<(std::ostream& os, const DirectedAGraph& g) { 
+	friend std::ostream& operator<<(std::ostream& os, const DirectedAGraph& g) {
 		return os << g.path;
 	}
-	std::vector<DAGPath> path; 
+	std::vector<DAGPath> path;
 };
 
 

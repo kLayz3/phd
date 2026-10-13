@@ -15,6 +15,7 @@
 #include "util/Geometry.h"
 #include "util/DirectedAGraph.hxx"
 #include "util/Verbosity.hxx"
+#include "util/Option.hxx"
 
 #define GEN_ARG_TYPE_FOOT(z, n, data) \
 	BOOST_PP_TUPLE_ELEM(2, 0, data) TFOOTCalCont BOOST_PP_TUPLE_ELEM(2, 1, data)
@@ -55,7 +56,7 @@ struct TrackCost {
 	 * Handles NAN's and is idempotent. */
 	template<enum F o>
 	void set(double v) noexcept {
-		if(!sum_) sum_ = 0;
+		if(sum_.is_none()) sum_ = mnd::Some{0.0};
 
 		if constexpr(o == KR) {
 			if(std::isfinite(kr_)) *sum_ -= kr_;
@@ -86,7 +87,9 @@ struct TrackCost {
 		}
 	}
 
-	inline double sum() const noexcept { return sum_ ? *sum_ : std::numeric_limits<double>::infinity(); }
+	inline double sum() const noexcept {
+		return sum_.value_or(std::numeric_limits<double>::infinity());
+	}
 	inline void reset() noexcept {
         kr_ = kq_ = kt_ = NAN;
         sum_.reset();
@@ -102,7 +105,7 @@ struct TrackCost {
 
 private:
 	double kr_ = NAN, kq_ = NAN,  kt_ = NAN;
-	std::optional<double> sum_ {};
+	mnd::Option<double> sum_ {};
 };
 
 struct TFOOTHitProc : TProcessor <

@@ -122,8 +122,8 @@ struct Line3D {
 	static constexpr double ALMOST_PARALLEL  = 1e-4;
 	static constexpr double ALMOST_PARALLEL2 = ALMOST_PARALLEL*ALMOST_PARALLEL;
 
-	Line3D() = default;
-	Line3D (
+	constexpr Line3D() = default;
+	constexpr Line3D (
 		double a0_, /* offset x:z */
 		double a1_, /* slope  x:z */
 		double b0_, /* offset y:z */

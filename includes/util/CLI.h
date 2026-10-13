@@ -496,7 +496,7 @@ template <
 		if(authoritative)
 			state->authoritative_seen = true;
 
-		variable = std::move(match);
+		variable = mnd::Some{std::move(match)};
 
 		if(reset) {
 			variable.reset();

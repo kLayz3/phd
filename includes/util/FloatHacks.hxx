@@ -16,36 +16,20 @@
  * This gives different `f()` value if compiled under `-fno-strict-aliasing` or without!
  * No clue why GCC even under `-Wextra` doesn't warn about this. */
 
-#include <cstdint>
+/* Sadly, none of the functions are constexpr. Only in C++20 with std::bit_cast is
+ * it generally constexpr. Before that gotta use compiler intrinsics e.g.
+ * __builtin_bit_cast(double, payload); */
+
 #include <cstring>
-#include <limits>
+#include <util/FloatAsserts.hxx>
 
 namespace mnd {
-
-using f64 = double;
-using f32 = float;
-
-using u32 = uint32_t;
-using u64 = uint64_t;
-
-static_assert(sizeof(f64) == 8, "Must hold for the implementation to be valid.");
-static_assert(sizeof(f32) == 4, "Must hold for the implementation to be valid.");
-static_assert(std::numeric_limits<f64>::is_iec559);
-static_assert(std::numeric_limits<f32>::is_iec559);
-
-static_assert(std::numeric_limits<f64>::radix == 2);
-static_assert(std::numeric_limits<f64>::digits == 53);
-static_assert(std::numeric_limits<f64>::max_exponent == 1024);
-
-static_assert(std::numeric_limits<f32>::radix == 2);
-static_assert(std::numeric_limits<f32>::digits == 24);
-static_assert(std::numeric_limits<f32>::max_exponent == 128);
 
 /* Construct a quiet NAN with a specific mantissa payload
  * given as bytes of an 8-byte value. */
 inline f64 make_nan64(u64 payload) noexcept {
 	const u64 repr = (0x7ff8000000000000ULL
-		| (payload & 0x0007ffffffffffffULL));
+		 | (payload & 0x0007ffffffffffffULL));
 
 	f64 result;
 	std::memcpy(&result, &repr, sizeof repr);
@@ -53,7 +37,7 @@ inline f64 make_nan64(u64 payload) noexcept {
 }
 inline f32 make_nan32(u32 payload) noexcept {
 	const u32 repr = (0x7fc00000U
-		| (payload & 0x003fffffU));
+		 | (payload & 0x003fffffU));
 
 	f32 result;
 	std::memcpy(&result, &repr, sizeof repr);

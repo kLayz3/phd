@@ -147,8 +147,8 @@ template <
 } /* namespace mnd::detail */ 
 
 /* Compile time version; poly degree `R` known at compile time. */
-template < 
-	std::size_t R, 
+template <
+	std::size_t R,
 	fit_info sliceType = fit_info::PROFILE_MAX
 > [[ nodiscard ]]
 std::tuple <
