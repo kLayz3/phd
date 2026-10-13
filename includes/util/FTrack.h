@@ -37,7 +37,7 @@ struct Q {
 
 namespace detail {
 
-/* Hack for niche-optimized optional type. */
+/* Hack for niche-optimized layout of optional type. */
 struct TrackQ_ {
 	using value_type = track::Q;
 	inline constexpr static double nil = none_f64;
@@ -72,7 +72,7 @@ class Option<track::Q> : public detail::OptionBase<Option<track::Q>, detail::Tra
 	using base = detail::OptionBase<Option<track::Q>, detail::TrackQ_>;
 public:
 	using base::base;
-    using base::operator=;
+	using base::operator=;
 };
 static_assert(sizeof(Option<track::Q>) == sizeof(track::Q));
 
@@ -82,7 +82,7 @@ static_assert(sizeof(Option<track::Q>) == sizeof(track::Q));
  * Keep it as a higher-order functor for now, to potentially enter some state inside the combinator later on.
  * E.g. that different FOOTs also have some other dependence here... */
 template <
-	std::size_t Capacity,
+	size_t Capacity,
 	typename EntryType  = mnd::hm::Q,
 	typename ResultType = mnd::track::Q
 > struct QCombinator {
@@ -95,7 +95,7 @@ template <
 		return *this;
 	}
 
-	const EntryType& operator[](std::size_t i) const noexcept {
+	const EntryType& operator[](size_t i) const noexcept {
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(i >= N)
 			ERROR("Requesting index: %zu, but currently combinator (%s) has %zu entries (capacity=%zu)",
@@ -159,7 +159,7 @@ template <
 	}
 
 private:
-	std::size_t N = 0;
+	size_t N = 0;
 	std::array<EntryType, Capacity> buffer;
 	mutable mnd::Option<ResultType> value {}; // lazily evaluated and cached.
 
@@ -174,7 +174,7 @@ struct FTrack {
 namespace mnd {
 namespace detail {
 
-/* Hack for niche-optimized optional type. */
+/* Hack for niche-optimized layout of optional type. */
 struct FTrack_ {
 	using value_type = ::FTrack;
 	inline constexpr static double nil = none_f64;
@@ -204,7 +204,7 @@ class Option<::FTrack> : public detail::OptionBase<Option<::FTrack>, detail::FTr
 	using base = detail::OptionBase<Option<::FTrack>, detail::FTrack_>;
 public:
 	using base::base;
-    using base::operator=;
+	using base::operator=;
 };
 static_assert(sizeof(Option<::FTrack>) == sizeof(::FTrack));
 
@@ -213,7 +213,7 @@ static_assert(sizeof(Option<::FTrack>) == sizeof(::FTrack));
 /* Type encapsulating an 'online' track object to be handed over
  * to the Kalman filter. Is nullable! */
 template <
-	std::size_t Capacity,
+	size_t Capacity,
 	typename FOOTPair
 > struct Track {
 	using FHitMatrix = HitMatrix<FOOTPair>;

@@ -462,7 +462,7 @@ class Option : public detail::OptionBase<Option<T>, std::optional<T>> {
 	using base = detail::OptionBase<Option<T>, std::optional<T>>;
 public:
 	using base::base;
-    using base::operator=;
+	using base::operator=;
 };
 
 template<>
@@ -470,7 +470,7 @@ class Option<f64> : public detail::OptionBase<Option<f64>, detail::pf64> {
 	using base = detail::OptionBase<Option<f64>, detail::pf64>;
 public:
 	using base::base;
-    using base::operator=;
+	using base::operator=;
 };
 
 template<>
@@ -478,7 +478,7 @@ class Option<f32> : public detail::OptionBase<Option<f32>, detail::pf32> {
 	using base = detail::OptionBase<Option<f32>, detail::pf32>;
 public:
 	using base::base;
-    using base::operator=;
+	using base::operator=;
 };
 
 template<typename T>
@@ -486,7 +486,7 @@ class Option<T*> : public detail::OptionBase<Option<T*>, detail::NonZero<T*>> {
 	using base = detail::OptionBase<Option<T*>, detail::NonZero<T*>>;
 public:
 	using base::base;
-    using base::operator=;
+	using base::operator=;
 };
 
 template<typename T>
@@ -495,7 +495,7 @@ class Option<detail::NonZero<T>>
 	using base = detail::OptionBase<Option<detail::NonZero<T>>, detail::NonZero<T>>;
 public:
 	using base::base;
-    using base::operator=;
+	using base::operator=;
 };
 
 } // namespace mnd
