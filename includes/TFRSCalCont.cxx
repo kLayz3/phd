@@ -25,6 +25,8 @@ void SCIPrimary::Init() const noexcept {
 	if(qdc_ref.load() == true)
 		return;
 	
+	/* Fit comes for granted - from the setup file.
+	 * Same as beta (last ToF calib point nominal beta) */
 	*qdc_ref = poly::Eval(1 / (beta * beta), fit);
 	qdc_ref.publish(true);
 }
@@ -36,7 +38,7 @@ double SCIPrimary::BetaCorrection(double b) const noexcept {
 	if(MND_UNLIKELY(!qdc_ref.load_acq()))
 		Init();
 
-	double one_over_beta2 = 1/(b*b);
+	double const one_over_beta2 = 1/(b*b);
 	return *qdc_ref/ poly::Eval(one_over_beta2, fit);
 }
 bool SCIPrimary::IsOk() const noexcept {

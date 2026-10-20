@@ -41,7 +41,7 @@
  * Bigger reason is to have Rust-like niche discriminant packing.
  * Generally in C++ (as of 2026): sizeof(std::optional<T>) > sizeof(T) , because of alignment.
  * However for certain objects such as pointers or non-zero integers, the discriminant can be packed
- * in one of the bit-patterns, thus reducing it to exactly sizeof(T). 
+ * in one of the bit-patterns, thus reducing it to exactly sizeof(T).
  * This is kinda cool to keep the cache playground tidy and packed. */
 /* NOTE: No bool operator, unlike STL optional. This is to keep the intent very explicit in the code.
  * NOTE: No direct assignment supported, a'la Rust. `mnd::Option<i32> i = 32;` is a compiler error!
@@ -231,7 +231,8 @@ public:
 	}
 
 	/* fn filter<F>(self, f: F) -> Option<T>, where F(const T&) -> bool
-	 * Returns exact same object, if it passes the predicate, else it returns None. */
+	 * Returns exact same the same object (by value),
+	 * if it passes the predicate, else it returns None. */
 	template<typename F>
 	constexpr Derived filter(F&& f) const& {
 		using R = type_traits::remove_cvref_t<
@@ -264,14 +265,14 @@ public:
 	template<typename U>
 	constexpr Derived& operator=(Some<U>&& rhs) {
 		static_assert(std::is_assignable_v<Repr&, U&&>,
-			  "Right hand-side inner value type must be move-assignable to the optional representation.");
+			"Right hand-side inner value type must be move-assignable to the optional representation.");
 		data = std::move( rhs.value );
 		return self();
 	}
 	template<typename U>
 	constexpr Derived& operator=(const Some<U>& rhs) {
 		static_assert(std::is_assignable_v<Repr&, const U&>,
-			  "Right hand-side inner value type must be copy-assignable to the optional representation.");
+			"Right hand-side inner value type must be copy-assignable to the optional representation.");
 		data = rhs.value;
 		return self();
 	}
@@ -350,28 +351,32 @@ MND_UNSAFE_FORCE_INLINE constexpr f32 make_f32(u32 payload) noexcept {
 } // namespace unsafe
 
 #define MND_OPTION_ADD_CHECKED_ACCESS  \
-	constexpr decltype(auto) value() & { \
+	inline constexpr decltype(auto) value() & { \
 		if(!has_value()) throw std::bad_optional_access(); \
 		return (val_); \
 	} \
-	constexpr decltype(auto) value() const& { \
+	inline constexpr decltype(auto) value() const& { \
 		if(!has_value()) throw std::bad_optional_access(); \
 		return (val_); \
 	} \
-	constexpr decltype(auto) value() && { \
+	inline constexpr decltype(auto) value() && { \
 		if(!has_value()) throw std::bad_optional_access(); \
 		return std::move(val_); \
 	} \
-	constexpr decltype(auto) value() const && { \
+	inline constexpr decltype(auto) value() const && { \
 		if(!has_value()) throw std::bad_optional_access(); \
 		return std::move(val_); \
 	} \
 
 #define MND_OPTION_ADD_UNCHECKED_ACCESS \
-    constexpr decltype(auto) operator*() &       noexcept { return (val_); } \
-    constexpr decltype(auto) operator*() const&  noexcept { return (val_); } \
-    constexpr decltype(auto) operator*() &&      noexcept { return std::move(val_); } \
-    constexpr decltype(auto) operator*() const&& noexcept { return std::move(val_); } \
+    inline constexpr decltype(auto) operator*() & \
+		noexcept { return (val_); } \
+    inline constexpr decltype(auto) operator*() const& \
+		noexcept { return (val_); } \
+    inline constexpr decltype(auto) operator*() && \
+		noexcept { return std::move(val_); } \
+    inline constexpr decltype(auto) operator*() const&& \
+		noexcept { return std::move(val_); } \
 
 inline constexpr u64 none_bits_f64 = 0x7ff80BADC0DEBEEFULL;
 inline constexpr u32 none_bits_f32 = 0x7fcBADAFU;
@@ -380,42 +385,42 @@ inline constexpr f32 none_f32 = unsafe::make_f32(none_bits_f32);
 inline constexpr f64 none_f64 = unsafe::make_f64(none_bits_f64);
 
 /* We encode the enum discriminant in one of the quiet NANs.
- * Now, since the underlying types f64/f32 are primitives, no point to implement all 4 ref-specific
- * overloads for the value() method. Here we implicitly *trust* the users not to directly encode
- * std::nan(?) into the value, as this violates the discriminant. And this check
- * is not enforced at runtime. */
+ * Here we implicitly *trust* the users not to directly encode
+ * std::nan(?) into the value, as this violates the discriminant.
+ * For efficiency sake, this check is not enforced at runtime. */
 #define IMPL_NICHE_FLOAT(N) \
 struct pf##N { \
 	using value_type = f##N; \
+	\
 	constexpr pf##N() : val_(none_f##N) {} \
 	constexpr pf##N(None_t ) : val_(none_f##N) {} \
 	constexpr pf##N(value_type val) : val_(val) {} \
 	\
-	constexpr bool has_value() const noexcept { \
+	inline constexpr bool has_value() const noexcept { \
 		return __builtin_bit_cast(u##N, val_) != none_bits_f##N; \
 	} \
-	constexpr void reset() noexcept { val_ = none_f##N; } \
+	inline constexpr void reset() noexcept { val_ = none_f##N; } \
 	\
-	constexpr decltype(auto) value() & { \
+	inline constexpr decltype(auto) value() & { \
 		if(!has_value()) throw std::bad_optional_access(); \
 		return (val_); \
 	} \
-	constexpr decltype(auto) value() const& { \
+	inline constexpr decltype(auto) value() const& { \
 		if(!has_value()) throw std::bad_optional_access(); \
 		return (val_); \
 	} \
-	constexpr decltype(auto) value() && { \
+	inline constexpr decltype(auto) value() && { \
 		if(!has_value()) throw std::bad_optional_access(); \
 		return std::move(val_); \
 	} \
-	constexpr decltype(auto) value() const && { \
+	inline constexpr decltype(auto) value() const && { \
 		if(!has_value()) throw std::bad_optional_access(); \
 		return std::move(val_); \
 	} \
-	constexpr decltype(auto) operator*() &       noexcept { return (val_); } \
-	constexpr decltype(auto) operator*() const&  noexcept { return (val_); } \
-	constexpr decltype(auto) operator*() &&      noexcept { return std::move(val_); } \
-	constexpr decltype(auto) operator*() const&& noexcept { return std::move(val_); } \
+	inline constexpr decltype(auto) operator*() &       noexcept { return (val_); } \
+	inline constexpr decltype(auto) operator*() const&  noexcept { return (val_); } \
+	inline constexpr decltype(auto) operator*() &&      noexcept { return std::move(val_); } \
+	inline constexpr decltype(auto) operator*() const&& noexcept { return std::move(val_); } \
 	\
 private: \
 	f##N val_; \

@@ -12,25 +12,24 @@
 template<typename T>
 struct __attribute__((packed)) DAGIndex { // attribute is redundant here, but stays to convince the compiler for DAGPath packing.
 	static_assert(std::is_fundamental_v<T>, "Underlying type must be fundamental.");
-	static_assert(std::is_integral_v<T>, "Underlying type must be fundamental.");
+	static_assert(std::is_integral_v<T>, "Underlying type must be integral.");
 	static_assert(std::is_unsigned_v<T>, "Underlying type must be unsigned.");
 	
-	constexpr static T NULL_VALUE = static_cast<T>(-1);
-
 	using value_type = T;
-	inline static std::array<T,2> const null = { static_cast<T>(NULL_VALUE), static_cast<T>(NULL_VALUE) };
-	inline static std::array<T,2> const& Null() noexcept { return null; }
 
-	inline T& operator[](std::size_t pos) noexcept { return i_[pos]; }
-	inline T const& operator[](std::size_t pos) const noexcept { return i_[pos]; }
+	constexpr static T NULL_VALUE = static_cast<T>(-1);
+	constexpr static std::array<T,2> null = { static_cast<T>(NULL_VALUE), static_cast<T>(NULL_VALUE) };
 
-	DAGIndex(): i_( Null() ) {};
+	T& operator[](std::size_t pos) noexcept { return i_[pos]; }
+	T const& operator[](std::size_t pos) const noexcept { return i_[pos]; }
+
+	DAGIndex(): i_{null} {};
 	explicit DAGIndex(T first, T second) : i_{first, second} {}
 	
 	DAGIndex(std::size_t first, std::size_t second) : i_{static_cast<T>(first), static_cast<T>(second)} {}
 
 	explicit operator bool() const noexcept { return i_ != null; }
-	explicit operator int() const noexcept  { return static_cast<int>( bool(*this) ); } // `0` or `1`
+	explicit operator int()  const noexcept { return static_cast<int>( bool(*this) ); } // `0` or `1`
 
 	friend std::ostream& operator<<(std::ostream& os, const DAGIndex& i) {
 		if(!i) return os << "(∅)";
