@@ -349,7 +349,7 @@ int main(int argc, char* argv[]) {
 			phy::format_reaction(phy::Nucleus::Represent::Normal,
 				std::vector{mother}, nuclei ).c_str()
 		);
-		WARN("Daughter nuclei: "); std::cerr << nuclei << std::endl;
+		WARN("Daughter nuclei: %s\n", mnd::streamable(nuclei).c_str());
 	}
 	else if(!mother.valid() and nuclei.size() > 1) {
 		ERROR("Requesting a reaction channel for mother nucleus: %s , but "
@@ -563,9 +563,9 @@ int main(int argc, char* argv[]) {
 
 			ntuple->LoadEntry(entryId);
 
-			const auto& sci21 = frs->cal.sci[0];
-			const auto& sci22 = frs->cal.sci[1];
-			const auto& sci31 = frs->cal.sci[2];
+			const auto& sci21 = frs->cal.sci[RNFRSCal::SCI21_I];
+			const auto& sci22 = frs->cal.sci[RNFRSCal::SCI22_I];
+			const auto& sci31 = frs->cal.sci[RNFRSCal::SCI31_I];
 			
 			if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
 			if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);

@@ -461,7 +461,7 @@ void TFRSCalProc::PostProcessTPC(int _i_tpc) noexcept {
 		auto& l = full_candidate_list[d];
 		//std::sort(l.begin(), l.end());
 #ifdef TFRSCALPROC_SINGLEHIT
-		assert(l.size() < 2 && mnd::msg("What, TPC%d, has %lu hits, and should be 1?", l.size()));
+		MND_ASSERT(l.size() < 2 && mnd::msg("What, TPC%d, has %lu hits, and should be 1?", l.size()));
 #endif
 		std::vector<RNTPCCal::Measurement>& out_list = out.hits[d];
 		out_list.reserve(l.size());

@@ -1,56 +1,59 @@
 include includes/q.mk
 include includes/includes.mk
-include includes/monad/common.mk
 
-CXX:=g++
-SRC_DIR = src
-BUILD_DIR = build_$(shell gcc -dumpmachine)_$(shell gcc -dumpversion)
-SCRIPT_DIR = scripts
+BASE := $(CURDIR)
+SRC_DIR = $(BASE)/src
+BUILD_DIR = $(BASE)/build/$(BUILD_EXTENSION)
 
-CXXFLAGS += -I$(GO4SYS)/include
+STRUCT_DIR = $(INC_DIR)/$(BUILD_EXTENSION)
+STRUCT_LIB = $(STRUCT_DIR)/libStructures.so
 
-LIBS += -L$(shell pwd -P)/includes/build \
-		-Wl,-rpath,$(INC_DIR)/build -lStructures \
-		-L. -lGo4UserAnalysis
+CXXFLAGS += $(GO4_CXXFLAGS)
+LDFLAGS += -L$(STRUCT_DIR) \
+           -Wl,-rpath,$(STRUCT_DIR)
+LIBS += $(GO4_LIBS)
 
 SRC:=$(wildcard $(SRC_DIR)/*.cc)
+OBJ:=$(patsubst $(SRC_DIR)/%.cc, $(BUILD_DIR)/%.o, $(SRC))
+EXE:=$(patsubst $(SRC_DIR)/%.cc, $(BUILD_DIR)/%.exe, $(SRC))
+LINKS:=$(patsubst $(SRC_DIR)/%.cc, %.exe, $(SRC))
 
-OBJ:=$(patsubst $(SRC_DIR)/%.cc,  $(BUILD_DIR)/%.o, $(SRC))
-EXE:=$(patsubst $(SRC_DIR)/%.cc, %.exe, $(SRC))
+.PHONY: all symlink remove clean list FORCE
 
-STRUCT_LIB = $(INC_DIR)/$(BUILD_DIR)/libStructures.so
+all: symlink
 
-.PHONY: all
+# Always let the library's Makefile check its own prerequisites.
+FORCE:
 
-all: $(EXE) $(AUX)
+$(STRUCT_LIB): FORCE
+	$(MAKE) -C $(INC_DIR) BUILD=$(BUILD)
 
-$(EXE): %.exe : $(BUILD_DIR)/%.o $(STRUCT_LIB)
+$(EXE): $(BUILD_DIR)/%.exe : $(BUILD_DIR)/%.o $(STRUCT_LIB)
 	$(Q)$(call log,LINK,$(notdir $@))
-	$(Q)$(CXX) -o $@ $^ $(LDFLAGS) $(LIBS)
+	$(Q)$(CXX) -o $@ $< $(LDFLAGS) -lStructures $(LIBS)
 
-$(BUILD_DIR)/%.o : $(SRC_DIR)/%.cc
+$(OBJ): $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cc
 	@$(MKDIR)
 	$(Q)$(call log,CXX,$(notdir $@))
-	$(Q)$(CXX) -c -o $@ $(CXXFLAGS) $<
+	$(Q)$(CXX) -c -o $@ $< $(CXXFLAGS)
 
-$(STRUCT_LIB):
-	$(MAKE) -C $(INC_DIR)
+# Refresh symlinks.
+symlink: $(EXE)
+	$(Q)$(foreach exe, $(EXE), ln -sf $(exe) $(BASE)/$(notdir $(exe));)
 
-$(AUX) : $(SCRIPT_DIR)/*.bash
-	$(call log,BASH,$(notdir $@))
-	$(Q)./$<
+# Preserve objects in this build mode.
+remove:
+	$(Q)rm -f $(LINKS) $(EXE)
+	$(MAKE) -C $(INC_DIR) BUILD=$(BUILD) remove
 
-.PHONY: clean
 clean:
-	rm -rf $(BUILD_DIR)
-	rm -f $(EXE)
-	$(MAKE) -C $(INC_DIR) clean
-	rm -rf libStructures.so
+	$(Q)rm -f $(LINKS)
+	$(Q)rm -rf $(BUILD_DIR)
+	$(MAKE) -C $(INC_DIR) BUILD=$(BUILD) clean
 
 # h4ck1ng
-.PHONY: list
 list:
 	@LC_ALL=C $(MAKE) -pRrq -f $(firstword $(MAKEFILE_LIST)) : 2>/dev/null \
-		| awk -v RS= -F: '/(^|\n)# Files(\n|$$)/,/(^|\n)# Finished Make data base/ {if ($$1 !~ "^[#.]") {print $$1}}' \
-		| sort \
-		| grep -E -v -e '^[^[:alnum:]]' -e '^$@$$'
+	  | awk -v RS= -F: '/(^|\n)# Files(\n|$$)/,/(^|\n)# Finished Make data base/ {if ($$1 !~ "^[#.]") {print $$1}}' \
+	  | sort \
+	  | grep -E -v -e '^[^[:alnum:]]' -e '^$@$$'

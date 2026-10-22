@@ -24,16 +24,16 @@ namespace mnd::detail {
  * More complex is the variant fit_info::GAUSS_MAX where each projection is treated as its own TH1D,
  * and Gauss is fitted onto that. What gets returned back is a sequence of (x,y,w) where `x` are the bin-centers,
  * the `y` their values of the slice, and `w` weight. */
-template < 
+template <
 	fit_info sliceType = fit_info::PROFILE_MAX
-> 
+>
 std::tuple <
 	std::vector<double>, // x
 	std::vector<double>, // y
 	std::vector<double>, // w
 	TGraphErrors*        // [pts]
 > FitSplineImpl (
-	TH2D* h2, 
+	TH2D* h2,
 	double& x_lo,
 	double& x_hi,
 	double side_ratio,
@@ -61,13 +61,13 @@ std::tuple <
 		double xlast = xax->GetBinUpEdge(ibin_last);
 		int nbins = ibin_last - ibin_first + 1;
 		
-		if(v > 1) { 
+		if(v > 1) {
 			fprintf(stderr, "[%s]: from \'%s\'; taking bin indices: [%d,%d], "
-				"with lo = %.1f, hi = %.1f, N=%d\n", 
+				"with lo = %.1f, hi = %.1f, N=%d\n",
 				"FitSpline", h2->GetTitle(), ibin_first, ibin_last, xfirst, xlast, nbins);
 		}
 
-		pfx = std::make_unique<TH1D>("pfx__", "pfx__", 
+		pfx = std::make_unique<TH1D>("pfx__", "pfx__",
 			nbins, xfirst, xlast);
 		pfx->SetDirectory(nullptr);
 		for(int ix = ibin_first, i=1; ix <= ibin_last; ++ix, ++i) {
@@ -94,12 +94,12 @@ std::tuple <
 			w.push_back( 1.0 / (stddev*stddev) );
 		}
 	}
-	TGraphErrors* gerr = new TGraphErrors( pfx.get() ); 
+	TGraphErrors* gerr = new TGraphErrors( pfx.get() );
 	gerr->SetMarkerStyle(20);
 	gerr->SetMarkerSize(1.2);
 	xax->SetRange();
 	if(v > 0) {
-		std::cerr << "[FitSpline]" << h2->GetName() << '(' 
+		std::cerr << "[FitSpline]" << h2->GetName() << '('
 			<< ((sliceType == fit_info::PROFILE_MAX)? "PROFILE_MAX": "GAUSS_MAX") << ") "
 			<< "fitting with " << std::endl
 			<< "x: " << x << std::endl
@@ -112,10 +112,10 @@ std::tuple <
 /* Once the (x,y,w) sequence was fitted with an Rth degree poly, we want to evaluate this poly
  * and get back a fitted graph. */
 template <
-	fit_info sliceType, 
+	fit_info sliceType,
 	typename Cont
 > TGraph* GetGraphImpl(
-	const Cont& r, // 
+	const Cont& r, //
 	TH2D* h2,
 	double x_lo,
 	double x_hi,
@@ -135,7 +135,7 @@ template <
 		}
 		if constexpr(sliceType == fit_info::PROFILE_MAX) {
 			g->SetLineColor(pCol_);
-		} else { 
+		} else {
 			g->SetLineColor(gCol_);
 		}
 
@@ -144,7 +144,7 @@ template <
 	return g;
 }
 
-} /* namespace mnd::detail */ 
+} /* namespace mnd::detail */
 
 /* Compile time version; poly degree `R` known at compile time. */
 template <
@@ -156,7 +156,7 @@ std::tuple <
 	TGraphErrors*, // 'Measured' points
 	TGraph*        // Polynomial fit graph
 > FitSpline (
-	TH2D* h2, 
+	TH2D* h2,
 	double x_lo = -DBL_MAX,
 	double x_hi =  DBL_MAX,
 	int Npts = 80,
@@ -182,7 +182,7 @@ std::tuple <
 	TGraph*
 > FitSpline (
 	std::size_t R,
-	TH2D* h2, 
+	TH2D* h2,
 	double x_lo = -DBL_MAX,
 	double x_hi =  DBL_MAX,
 	int Npts = 80,
@@ -198,14 +198,14 @@ std::tuple <
 	return { r, gerr, g };
 }
 
-extern template std::tuple<std::vector<double>, std::vector<double>, std::vector<double>, TGraphErrors*> 
+extern template std::tuple<std::vector<double>, std::vector<double>, std::vector<double>, TGraphErrors*>
 mnd::detail::FitSplineImpl<fit_info::PROFILE_MAX> (TH2D* , double& , double& , double , uint32_t , Verbosity );
 
-extern template std::tuple<std::vector<double>, std::vector<double>, std::vector<double>, TGraphErrors*> 
+extern template std::tuple<std::vector<double>, std::vector<double>, std::vector<double>, TGraphErrors*>
 mnd::detail::FitSplineImpl<fit_info::GAUSS_MAX> (TH2D* , double& , double& , double , uint32_t , Verbosity );
 
-extern template std::tuple<std::vector<double>, TGraphErrors*, TGraph*> 
+extern template std::tuple<std::vector<double>, TGraphErrors*, TGraph*>
 FitSpline<fit_info::PROFILE_MAX>(std::size_t, TH2D* , double , double , int , double , uint32_t , Verbosity );
 
-extern template std::tuple<std::vector<double>, TGraphErrors*, TGraph*> 
+extern template std::tuple<std::vector<double>, TGraphErrors*, TGraph*>
 FitSpline<fit_info::GAUSS_MAX>(std::size_t, TH2D* , double , double , int , double , uint32_t , Verbosity );

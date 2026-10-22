@@ -13,6 +13,7 @@
 #include "util/CLI.h"
 
 using namespace mnd;
+using namespace std::literals;
 
 extern const char* map_help;
 
@@ -34,7 +35,9 @@ int main(i32 argc, char* argv[]) {
 	double dt_veto = NAN;
 
 	CLI::App app{"This program will go through the raw (sorted) ROOT file and do the full pedestal analysis of the FOOT data "
-		"+ perform mapping of the FRS data.\nAlways remember: PHYSICS IS FUN <(^.^)>"};
+		"+ perform mapping of the FRS data. "
+		"\nBuild mode: "s + mnd::build_mode +
+		"\nAlways remember: PHYSICS IS FUN <(^.^)>"};
 
 	add_logged_option<DisplayDefault::No>(app, "-f,--file", fileName, "Input ROOT file from Go4/UCESB")
 		->required()

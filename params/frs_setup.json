@@ -169,19 +169,19 @@
 						"values": [
 							{
 								"Q": 6,
-								"qdc_mean": 3508.23
+								"qdc_mean": 3483.13 // 3508.23
 							},
 							{
 								"Q": 5,
-								"qdc_mean": 2669.46
+								"qdc_mean": 2638.5 // 2669.46
 							},
 							{
 								"Q": 4,
-								"qdc_mean": 1778.48
+								"qdc_mean": 1757.59 // 1778.48
 							},
 							{
 								"Q": 3,
-								"qdc_mean": 1116.16
+								"qdc_mean": 1117.6 // 1116.16
 							},
 							{
 								"Q": 2,
@@ -256,15 +256,15 @@
 						"values": [
 							{
 								"Q": 6,
-								"qdc_mean": 2411.25
+								"qdc_mean": 2364.22 // 2411.25
 							},
 							{
 								"Q": 5,
-								"qdc_mean": 1794.12
+								"qdc_mean": 1727.12 // 1794.12
 							},
 							{
 								"Q": 4,
-								"qdc_mean": 1252.55
+								"qdc_mean": 1157.07 // 1252.55
 							},
 							{
 								"Q": 2,
@@ -283,11 +283,11 @@
 						"values": [
 							{
 								"Q": 3,
-								"qdc_mean": 2690.33
+								"qdc_mean": 2738.46 // 2690.33
 							},
 							{
 								"Q": 2,
-								"qdc_mean": 1132.74
+								"qdc_mean": 1168.06 // 1132.74
 							},
 							{
 								"Q": 1,
@@ -302,15 +302,20 @@
 			"x_offset": 0,
 			"x_factor": 1,
 			"cdiff_lim": [-330, -180],
-			"z0": 2156,
-
+			"z0": 2156, /*
+			// This measurement is bad since if you check 3rd and 4th calib file,
+			// SCI41 has a right-PMT problem.. IDK how.
+			"primary": {
+				"beta": 0.8160812590321188,
+				"fit": []
+			}, */
 			"de_to_q": [
 				{
 					"regex": "^expert_trigger_",
 					"qdc": {
 						"pedestal": {
-							"left": 101.75,
-							"right": 104.17
+							"left": 158.52284899481,
+							"right": 241.86516460923096
 						},
 						"values": []
 					}
@@ -322,7 +327,24 @@
 							"left": 158.52284899481,
 							"right": 241.86516460923096
 						},
-						"values": []
+						"values": [
+							{
+								"Q": 6,
+								"qdc_mean": 3633.39
+							},
+							{
+								"Q": 5,
+								"qdc_mean": 2780.62
+							},
+							{
+								"Q": 4,
+								"qdc_mean": 1917.44
+							},
+							{
+								"Q": 2,
+								"qdc_mean": 491.721
+							}
+						]
 					}
 				}
 			]
@@ -343,6 +365,8 @@
 				* dt[TDC] is just raw V1290 TDC difference between SCI's. */
 		},
 		{
+			/* This ToF is bad since if you check 3rd and 4th calib file,
+			 * SCI41 has a right-PMT problem.. IDK how. */
 			"combo": [2,3],
 			"par": [1.5238999599203806, 0.017977791780358868]
 		}

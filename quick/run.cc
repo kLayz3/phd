@@ -5,12 +5,16 @@
 
 #include "util/CLI.h"
 #include "util/MacroHelpers.h"
+using namespace std::literals;
+
 extern const char* artsy;
 
 int main(int argc, char* argv[]) {
 	signal(SIGINT , mnd::sig_callback_handler);
 	signal(SIGSEGV, mnd::sig_callback_handler);
-	CLI::App app{"This program will delegate the arguments to the underlying program accordingly."};
+	CLI::App app{"This program will delegate the arguments to the underlying program accordingly."s
+		+ "\nBuild mode: " + mnd::build_mode
+	};
 
 	std::string prog, config, section="";
 	
@@ -89,8 +93,8 @@ int main(int argc, char* argv[]) {
 		sec_contents = body.unwrap();
 	}
 	if(dump) {
-		std::cout << BOLD "GLOBAL : " KNRM << g_contents.value_or("") << "\n\n";
-		std::cout << BOLD "SECTION: " KNRM << sec_contents << "\n";
+		std::cout << BOLD "\nGLOBAL:  " KNRM << g_contents.value_or("");
+		std::cout << BOLD "\nSECTION: " KNRM << sec_contents << "\n";
 		return 0;
 	}
 

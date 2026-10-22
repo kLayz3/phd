@@ -571,13 +571,13 @@ mnd::col::RGBA mnd::col::rand_col() {
 		(uint32_t)detail_::n_col_curr.load(std::memory_order_relaxed) % detail_::Ncols;
 
 	uint32_t x;
+
+	/* Do not randomly draw the same color as before. */
 	while(x = static_cast<uint32_t>(rand()) % detail_::Ncols,
 		x == curr_col) {}
-	detail_::n_col_curr.store(x+1, std::memory_order_relaxed);
 
-	return RGBA::from_packed(
-		detail_::cols[x % detail_::Ncols]
-	);
+	detail_::n_col_curr.store(x, std::memory_order_relaxed);
+	return RGBA::from_packed( detail_::cols[x] );
 }
 
 using namespace mnd::plot;
@@ -596,10 +596,10 @@ static mnd::col::RGBA root_color(Color_t id) {
 
 static std::string root_line_style(Style_t s) {
 	switch(s) {
-		case 1: return "-";
-		case 2: return "--";
-		case 3: return ":";
-		case 4: return "-.";
+		case 1:  return "-";
+		case 2:  return "--";
+		case 3:  return ":";
+		case 4:  return "-.";
 		default: return "-";
 	}
 }

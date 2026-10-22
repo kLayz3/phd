@@ -267,11 +267,11 @@ double phy::rho<phy::RhoExpressionType::full>(
 	mnd::span<const mnd::geom::Line3D> tracks
 ) {
 	if constexpr(detail::debug_) {
-		assert(daughters.size() == tracks.size() && daughters.size() > 1 &&
+		MND_ASSERT(daughters.size() == tracks.size() && daughters.size() > 1 &&
 			"phy::rho(): nuclei span and tracks are unequal lengths?");
 		[[maybe_unused]] bool valid_masses = std::all_of(daughters.cbegin(), daughters.cend(),
 			[](const Nucleus& n) { return n.valid(); });
-		assert(valid_masses &&
+		MND_ASSERT(valid_masses &&
 			"phy::rho(): nuclei span seems to have invalid daughter (can't take its mass)?");
 	}
 	
@@ -300,11 +300,11 @@ double phy::rho<phy::RhoExpressionType::p>(
 	mnd::span<const mnd::geom::Line3D> tracks
 ) {
 	if constexpr(detail::debug_) {
-		assert(daughters.size() == tracks.size() && daughters.size() > 1 &&
+		MND_ASSERT(daughters.size() == tracks.size() && daughters.size() > 1 &&
 			"phy::rho(): nuclei span and tracks are unequal lengths or length 0?");
 		[[maybe_unused]] bool valid_masses = std::all_of(daughters.cbegin(), daughters.cend(),
 			[](const Nucleus& n) { return n.valid(); });
-		assert(valid_masses &&
+		MND_ASSERT(valid_masses &&
 			"phy::rho(): nuclei span seems to have invalid daughter (can't take its mass)?");
 	}
 
@@ -343,11 +343,11 @@ double phy::rho<phy::RhoExpressionType::equinuclear>(
 	mnd::span<const mnd::geom::Line3D> tracks
 ) {
 	if constexpr(detail::debug_) {
-		assert(daughters.size() == tracks.size() && daughters.size() > 1 &&
+		MND_ASSERT(daughters.size() == tracks.size() && daughters.size() > 1 &&
 			"phy::rho(): nuclei span and tracks are unequal lengths or length 0?");
 		[[maybe_unused]] bool valid_masses = std::all_of(daughters.cbegin(), daughters.cend(),
 			[](const Nucleus& n) { return n.valid(); });
-		assert(valid_masses &&
+		MND_ASSERT(valid_masses &&
 			"phy::rho(): nuclei span seems to have invalid daughter (can't take its mass)?");
 	}
 	

@@ -41,4 +41,12 @@ python3 -c 'import numpy, matplotlib; print(numpy.__version__); print(matplotlib
 ```
 
 
+### Project compilation
+Project is compiled via recursive Makefile's (*pain*),
+Few build options are possible, via the `BUILD` variable:
+- release: fully optimized code, with effectively `-O3 -march=native -DNDEBUG`
+- debug: half debug code, effectively `-O3 -march=native -DMND_DEBUG_ENABLED` to opt into custom debugging.
+- full-debug: full debug code, no optimization, chonky executables with full debugging tables.
+
+
 --𝒦𝓁𝒶𝓎𝓏𝓮

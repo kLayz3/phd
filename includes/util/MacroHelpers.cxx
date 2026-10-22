@@ -405,3 +405,7 @@ std::filesystem::path mnd::fs::resolve_maybe_symlink(const std::filesystem::path
 	auto target = std::filesystem::read_symlink(path);
 	return target.is_absolute() ? target : path.parent_path() / target;
 }
+
+std::string mnd::fs::file_stem(std::string_view path) {
+	return std::filesystem::path{path}.stem().string();
+}

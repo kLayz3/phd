@@ -21,26 +21,42 @@ namespace mnd {
  * [7]: stou("3294967295") -> Some{3294967295}
  * [8]: stou("-12") -> None
  */
-Option<int32_t> stoi(std::string_view );
-Option<uint32_t> stou(std::string_view );
+Option<i32> stoi(std::string_view );
+Option<u32> stou(std::string_view );
 
 /* Convert int to string:
  * arg #1: value
  * arg #2: padding spaces, will pad to at least this size
  * arg #3: padding char */
-std::string itos(int32_t, uint32_t = 0, char = '0');
+std::string itos(i32, u32 = 0, char = '0');
 
 /* Convert unsigned int to string:
  * arg #1: value
  * arg #2: padding spaces, will pad to at least this size
  * arg #3: padding char */
-std::string utos(uint32_t, uint32_t = 0, char = '0');
+std::string utos(u32, u32 = 0, char = '0');
+
+/* Convert floating point to string:
+ * arg #1: value
+ * arg #2: decimal places, will pad to at least this size (from the right of decimal pt)
+ * arg #3: at least the total width of the string
+ * arg #3: padding char
+ * arg #4: formatter type: scientific|fixed|hex|general. Default: general */
+template<typename T>
+std::string ftos(
+	T value,
+	u32 precision = 2,
+	u32 width = 0,
+	char fill_char = '0',
+	std::chars_format fmt = std::chars_format::fixed
+);
+
 
 /* Case where we wish to consume as many chars as possible.
  * On success, removes the parsed prefix and returns its value.
  * On invalid input or overflow, returns None and leaves the view unchanged. */
-Option<int32_t> stoi_munch(std::string_view& );
-Option<uint32_t> stou_munch(std::string_view& );
+Option<i32> stoi_munch(std::string_view& );
+Option<u32> stou_munch(std::string_view& );
 
 template<typename T>
 bool parse(std::string_view v, T& out) {

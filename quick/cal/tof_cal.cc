@@ -35,10 +35,12 @@ int main(int argc, char* argv[]) {
 	static_assert(RNFRSCal::N_VALID_SCI > 1,
 		"Must have at least two or more valid scintillators compiled in!");
 
-    CLI::App app{"Calibrate the time-of-flight between two scintillators selected by \n\
-                  All of these measurements must be done with 12C files. There are 3 or 4 files of relevance.\n\
-	              This program can also used to do β-calibration of the mean QDC values, based on the measured \n\
-	              velocity for both of the scintillators."};
+    CLI::App app{
+		"Calibrate the time-of-flight between a pair of two scintillators selected by the -s,--sci flags.\n\
+		All of these measurements must be done with 12C files. There are 3 or 4 files of relevance.\n\
+		This program can also used to do β-calibration of the mean QDC values, based on the measured \n\
+		velocity for both of the scintillators."
+	};
 
 	std::vector<std::string> f;
 	A3 dt_cut = {5000, -1000, 1000};
@@ -334,7 +336,7 @@ int main(int argc, char* argv[]) {
 			}
 		}
 
-		TCanvas *c_qf = new TCanvas("QDCFit", "QDC vs. 1/#beta^{2} fit", 2050, 1400);
+		TCanvas *c_qf = new TCanvas("QDCFit", "QDC vs. 1/β² fit", 2050, 1400);
 		c_qf->Divide(2,1);
 
 		std::vector<double> fit_q{};

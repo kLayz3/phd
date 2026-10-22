@@ -26,14 +26,18 @@ struct HistDrawer {
         if(gerr) gerr->Draw("P SAME");
     }
 };
+
+
 int main(int argc, char* argv[]) {
-	CLI::App app{"Calibrate the TPC detectors, by:\n\
-                  => Defining referent (--ref) \"drift velocities\" for specific delay-lines (x-direction).\n\
-                  => Defining referent drift velocities for specific anodes (y-direction).\n\
-                  => Constraining the exact distances of each of the TPC's.\n\
-                  \n\
-                  All of these measurements must be done with 12C files. There are 3 files of relevance.\n\
-                  To calibrate (the offsets) of the referent TPC delay lines/anodes, check the `tpc_ref_alignment` in scripts."};
+	CLI::App app {
+		"Calibrate the TPC detectors, by:\n\
+		=> Defining referent (--ref) \"drift velocities\" for specific delay-lines (x-direction).\n\
+			=> Defining referent drift velocities for specific anodes (y-direction).\n\
+			=> Constraining the exact distances of each of the TPC's.\n\
+			\n\
+			All of these measurements must be done with 12C files. There are 3 files of relevance.\n\
+			To calibrate (the offsets) of the referent TPC delay lines/anodes, check the `tpc_ref_alignment` in scripts."
+	};
 
     constexpr auto N_TPC = TPCParam::N_S2_TPC;
 

@@ -18,8 +18,9 @@ int main(int argc, char *argv[]) {
     signal(SIGINT, sig_callback_handler);
     signal(SIGSEGV, sig_callback_handler);
 
-    CLI::App app{"This program will analyse the mapped ROOT file and perform the clustering of the FOOT data + calibrating FRS data.\n\
-                  Always remember: PHYSICS IS FUN <(^.^)>"};
+    CLI::App app{"This program will analyse the mapped ROOT file and perform the clustering of the FOOT data + calibrating FRS data."s
+		+ "\nBuild mode: " + mnd::build_mode +
+        "\nAlways remember: PHYSICS IS FUN <(^.^)>" };
 
     std::string fileName, outFile;
     std::string setupFile = PROG_PATH "/params/frs_setup.json";
@@ -83,7 +84,7 @@ int main(int argc, char *argv[]) {
         .emplace_process<TFOOTCalProc>(cfoot[6], mfoot[6])
         .emplace_process<TFOOTCalProc>(cfoot[7], mfoot[7])
         .emplace_process<TFRSCalProc>(cfrs, mfrs, trig)
-#ifdef MND_DEBUG_ENABLED
+#ifdef MND_FULL_DEBUG_ENABLED
     .MakePool<1>(512);
 #else
     .MakePool<8>(4092);

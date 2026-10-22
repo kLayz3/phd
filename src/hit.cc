@@ -20,8 +20,9 @@ int main(int argc, char* argv[]) {
 	using namespace indicators;
 	signal(SIGINT , sig_callback_handler);
 	signal(SIGSEGV, sig_callback_handler);
-	CLI::App app{"This program will do FOOT tracking (and tbd: S2/S3 FRS PID + momentum measurement).\n\
-		Always remember: PHYSICS IS FUN <(^.^)>"};
+	CLI::App app{"This program will do FOOT tracking (and tbd: S2/S3 FRS PID + momentum measurement)."s
+		+ "\nBuild mode: " + mnd::build_mode +
+		"\nAlways remember: PHYSICS IS FUN <(^.^)>." };
 
 #ifdef MND_FOOTTRACK_DEBUG
     {
@@ -127,7 +128,7 @@ int main(int argc, char* argv[]) {
 			kalman_max_cost, kalman_max_cost_f,
 			std::array{ kalman_cost_cr, kalman_cost_cq, kalman_cost_ct },
 			must_have_upstream_track, v)
-#ifdef MND_DEBUG_ENABLED
+#ifdef MND_FULL_DEBUG_ENABLED
 			.MakePool<1>( 512 );
 #elif defined(MND_FOOTTRACK_DEBUG)
 			.MakePool<8>( 4092 );

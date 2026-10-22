@@ -125,7 +125,7 @@ template <
 	double const D
 ) { /* It is asserted that `N == lines.size()` */
 	if constexpr(SANITY_CHECK_COMBINATORICS) {
-        assert(N == lines.size() && "Paranoia combinatorics (0) hehe.");
+        MND_ASSERT(N == lines.size() && "Paranoia combinatorics (0) hehe.");
     }
 	Candidate best_candidate {};
 
@@ -155,7 +155,7 @@ template <
 				m &= m - 1;
 			}
 			if constexpr(SANITY_CHECK_COMBINATORICS) {
-				assert(n == (u32)K && "Paranoia combinatorics (1) hehe.");
+				MND_ASSERT(n == (u32)K && "Paranoia combinatorics (1) hehe.");
 			}
 
 			mnd::span<Line3D const*> selected {tmp.data(), (size_t)n};

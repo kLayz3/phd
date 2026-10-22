@@ -1,26 +1,20 @@
 include ../q.mk
+include ../includes.mk
 
 SRC_DIR = $(shell pwd -P)
-BUILD_DIR = $(SRC_DIR)/build_$(shell gcc -dumpmachine)_$(shell gcc -dumpversion)
+BUILD_DIR = $(SRC_DIR)/$(BUILD_EXTENSION)
 
-CXXFLAGS := $(shell root-config --cflags) -Wall -MMD -MP -fPIC -I../ \
-			-I../pybind11/include \
-			-I$(shell python3-config --cflags)
-
-include $(SRC_DIR)/../monad/common.mk
-
-LDFLAGS := $(shell root-config --ldflags)
-LIBS := $(shell root-config --libs)
+CXXFLAGS += -I$(INC_DIR)/pybind11/include \
+            $(shell python3-config --includes)
 
 SRC := $(wildcard $(SRC_DIR)/*.cxx)
 HEADERS := $(wildcard $(SRC_DIR)/*.h)
-
 OBJ := $(patsubst $(SRC_DIR)/%.cxx, $(BUILD_DIR)/%.o, $(SRC))
 
 TARGET := libUtil.a
 GEN_LIB = $(BUILD_DIR)/$(TARGET)
 
-.PHONY: all symlink clean
+.PHONY: all symlink clean remove
 all: $(GEN_LIB) symlink
 
 $(GEN_LIB) : $(OBJ)
@@ -28,7 +22,7 @@ $(GEN_LIB) : $(OBJ)
 	$(Q)ar rcs $(GEN_LIB) $^
 
 $(OBJ) : $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cxx $(SRC_DIR)/%.h
-	$(Q)mkdir -p $(@D)
+	$(Q)$(MKDIR)
 	$(Q)$(call log,CXX,$(notdir $@))
 	$(Q)$(CXX) -c -o $@ $< $(CXXFLAGS)
 
@@ -38,4 +32,7 @@ symlink : $(GEN_LIB)
 
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -rf $(TARGET)
+
+remove:
 	rm -rf $(TARGET)

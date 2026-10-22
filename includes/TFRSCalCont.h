@@ -291,7 +291,7 @@ struct SCIDEIntoQConverter {
 		return pedestal.IsDefaulted();
 	}
 	constexpr inline bool IsValid() const noexcept {
-		return !IsDefaulted();
+		return !IsDefaulted() && values.size() >= 2;
 	}
 
 	[[ nodiscard ]] std::pair<TGraph*, TGraph*> GetGraph(

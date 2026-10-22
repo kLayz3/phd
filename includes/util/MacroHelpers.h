@@ -4,7 +4,7 @@
 #include <istream>
 #include <optional>
 #include <ostream>
-#include <string_view>
+#include <string>
 #include <string_view>
 #include <filesystem>
 #include <sstream>
@@ -123,7 +123,11 @@ std::filesystem::path path_sequence(Range const& parts) {
 }
 
 /* Resolve a path object if it's a symlink. */
-std::filesystem::path resolve_maybe_symlink(const std::filesystem::path& path);
+std::filesystem::path resolve_maybe_symlink(const std::filesystem::path& );
+
+/* One liner to return a stem of the string representing a possible path.
+ * If "caldir/foo/main_0012.root"sv => "main_0012" */
+std::string file_stem(std::string_view );
 
 } // namespace mnd::fs
 

@@ -412,7 +412,7 @@ int main(int argc, char* argv[]) {
 	canvas::save_all<canvas::Exe>(save, {
 		Form("FOOT%d", ifoot),
 		Form("Z_%d",  Q_target),
-		std::filesystem::path(fileName).stem().string(),
+		mnd::fs::file_stem(fileName),
 		ht_info
 	});
 

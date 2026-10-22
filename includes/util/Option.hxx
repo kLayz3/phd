@@ -41,7 +41,7 @@
  * Bigger reason is to have Rust-like niche discriminant packing.
  * Generally in C++ (as of 2026): sizeof(std::optional<T>) > sizeof(T) , because of alignment.
  * However for certain objects such as pointers or non-zero integers, the discriminant can be packed
- * in one of the bit-patterns, thus reducing it to exactly sizeof(T).
+ * into one of the bit-patterns, thus reducing it to exactly sizeof(T).
  * This is kinda cool to keep the cache playground tidy and packed. */
 /* NOTE: No bool operator, unlike STL optional. This is to keep the intent very explicit in the code.
  * NOTE: No direct assignment supported, a'la Rust. `mnd::Option<i32> i = 32;` is a compiler error!

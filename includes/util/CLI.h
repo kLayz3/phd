@@ -583,11 +583,11 @@ class Argv {
 public:
 	Argv() = delete;
 	Argv(size_t n) : capacity(n) {
-		assert(n > 0 && "Cannot construct argv without at least one entry (program name).");
+		MND_ASSERT(n > 0 && "Cannot construct argv without at least one entry (program name).");
 		storage.reserve(n);
 		argv.reserve(n+1); // fills with nullptr
 		argv.push_back( nullptr );
-		assert(argv.size() == 1);
+		MND_ASSERT(argv.size() == 1);
 	}
 	int argc() const noexcept {
 		return static_cast<int>(argv.size()) - 1;

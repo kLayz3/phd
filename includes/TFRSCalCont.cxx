@@ -123,7 +123,7 @@ void SCIDEIntoQConverter::Init(bool verbose) const {
         std::cerr << pedestal << std::endl;
     }
 
-    std::vector<f64> x, y;
+	std::vector<f64> x, y;
     for(auto [Q, qdc_mean] : this->values) {
         if(qdc_mean <= pedestal.left || qdc_mean <= pedestal.right)
             ERROR("SCI: de-to-q converter, for charge %d, its mean value <= pedestal?\n", Q);
@@ -131,16 +131,21 @@ void SCIDEIntoQConverter::Init(bool verbose) const {
         x.push_back( std::log(Q) );
         y.push_back( std::log(qdc_mean) );
     }
-    auto r = PolyFit<1>(x,y);
-    fit_->f = std::exp(-r[0]);
-    fit_->c = 1.0 / r[1];
-	if(verbose) {
-		WARN("Found coefficients: " BOLD "E(Q) = %.2f * Q^%.2f" KRNM "  <=>  "
-			KBH_GRN "Q(E) = (%.2f * E)^%.2f\n" KNRM,
-			1.0/fit_->f, 1.0/fit_->c, fit_->f, fit_->c);
+	if(x.size() >= 2) {
+		auto r = PolyFit<1>(x,y);
+		fit_->f = std::exp(-r[0]);
+		fit_->c = 1.0 / r[1];
+		if(verbose)
+			WARN("SCIDEIntoQConverter::Init(): found coefficients: " BOLD "E(Q) = %.2f * Q^%.2f" KRNM "  <=>  "
+				KBH_GRN "Q(E) = (%.2f * E)^%.2f\n" KNRM, 1.0/fit_->f, 1.0/fit_->c, fit_->f, fit_->c);
+	} else {
+		fit_->f = fit_->c = NAN;
+		if(verbose)
+			WARN("SCIDEIntoQConverter::Init(): found no coefficients.\n");
 	}
 	fit_.publish(true);
 }
+
 std::pair<TGraph*, TGraph*> SCIDEIntoQConverter::GetGraph(
 	int ndiv,
 	double lo,

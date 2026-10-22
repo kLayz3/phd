@@ -8,8 +8,10 @@
 class TH2I;
 
 /* Heavy debugging features compiled in. Can be toggled together automatically.
- * This is either for sanity debugging or for: ../scripts/hit/foot_track_analysis.C ,
- * or for `foot_regain_match.cc` */
+ * This is either for sanity debugging or for:
+ *  - quick/hit/foot_track_analysis.cc ,
+ *  - quick/hit/foot_regain_match.cc
+ */
 //#define MND_FOOTTRACK_DEBUG
 
 /* In case the heavy debug build is enabled, also feature it in here. */

@@ -297,9 +297,9 @@ template <
 		std::streamsize old_precision = os.precision();
 		os << std::setprecision(4);
 		os << "{| "
-		   << "x: "   << mnd::span<double>{rhs.xs.data(), N}
-		   << ", y: " << mnd::span<double>{rhs.ys.data(), N}
-		   << ", z: " << mnd::span<double>{rhs.zs.data(), N}
+		   << "x: "   << mnd::span<const double>{rhs.xs.data(), N}
+		   << ", y: " << mnd::span<const double>{rhs.ys.data(), N}
+		   << ", z: " << mnd::span<const double>{rhs.zs.data(), N}
 		   << ", q: " << rhs.q
 		   << ", R: " << rhs.get() << " |}";
 		os.precision(old_precision);

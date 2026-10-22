@@ -560,7 +560,7 @@ struct PLatex {
 	}
 	/* Special overload for a sequence of texts. */
 	template<typename T>
-	void DrawOne(mnd::span<T const> text_sequence) {
+	void DrawOne(mnd::span<T> text_sequence) {
 		static_assert(std::is_convertible_v<T const&, std::string_view>);
 		for(const auto& text : text_sequence) {
 			DrawOne(std::string_view{text});

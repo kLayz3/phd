@@ -126,31 +126,27 @@ int main(int argc, char* argv[]) {
 		bin[0], bin[1], bin[2]
 	);
 	auto h2_de0_vs_beta = TH2P(
-		Form("E0 initial QDC [QDC units]:#beta [0..1]@SCI%s", label[i_sci]),
+		Form("E0 initial QDC [QDC units]:#beta [0..1]@SCI%s, w/ cut", label[i_sci]),
 		beta_binning, beta_interval[0], beta_interval[1],
 		bin[0], bin[1], bin[2]
 	);
 	auto h2_de1_vs_beta = TH2P(
-		Form("E1 corrected QDC [QDC units]:#beta [0..1]@SCI%s", label[i_sci]),
+		Form("E1 corrected QDC [QDC units]:#beta [0..1]@SCI%s, w/ cut", label[i_sci]),
 		beta_binning, beta_interval[0], beta_interval[1],
 		bin[0], bin[1], bin[2]
 	);
-	auto h1_de0 = TH1P(
-		Form("E0 initial QDC [QDC units]@SCI%s", label[i_sci]),
-		mnd::col::rand_col(), bin[0], bin[1], bin[2]
-	);
 	auto h1_de1 = TH1P(
-		Form("E1 corrected QDC [QDC units]@SCI%s", label[i_sci]),
+		Form("E1 #beta-corrected QDC [QDC units]@SCI%s, w/ cut", label[i_sci]),
 		mnd::col::rand_col(), bin[0], bin[1], bin[2]
 	);
 	auto h1_foot_raw = TH1P{"((h1_raw))FOOT Q [charge]@No cut", 0xF27100_c, 140, 0, 7};
 	auto h1_foot_cut = TH1P{"((h1_cut))FOOT Q [charge]@W/ cut", 0xB08100_c, 140, 0, 7};
 
-	auto h1_sci_l_c = TH1P{Form("((h1_cut))SCI%s QDC l [QDC units]@With FOOT selection", label[i_sci]),
+	auto h1_sci_l_c = TH1P{Form("((h1_cut))SCI%s QDC l [QDC units]@w/ FOOT selection", label[i_sci]),
 		0x009B4F_c, bin[0], bin[1], bin[2]};
-	auto h1_sci_r_c = TH1P{Form("((h1_cut))SCI%s QDC r [QDC units]@With FOOT selection", label[i_sci]),
+	auto h1_sci_r_c = TH1P{Form("((h1_cut))SCI%s QDC r [QDC units]@w/ FOOT selection", label[i_sci]),
 		0x007B2F_c, bin[0], bin[1], bin[2]};
-	auto h1_sci_a_c = TH1P{Form("((h1_cut))SCI%s QDC avg [QDC units]@With FOOT selection", label[i_sci]),
+	auto h1_sci_a_c = TH1P{Form("((h1_cut))SCI%s QDC #beta-corrected avg [QDC units]@w/ FOOT selection", label[i_sci]),
 		0x005B0F_c, bin[0], bin[1], bin[2]};
 
 	WARN("SCI%s: ToF parameter identified as: %s\n", label[i_sci],
@@ -253,23 +249,21 @@ int main(int argc, char* argv[]) {
 			
 			h2_de0_vs_beta->Fill(beta, e0);
 			h2_de1_vs_beta->Fill(beta, e1);
-			h1_de0->Fill(e0);
 			h1_de1->Fill(e1);
 		}
 	});
 	show_console_cursor(true);
 
 	auto c = TCanvas{Form("sci%s",label[i_sci]), Form("SCI%s qdc values", label[i_sci]), 2180, 1420};
-	c.Divide(4,3);
-	c.cd( 1); h1_sci_l.Draw();
-	c.cd( 2); h1_sci_r.Draw();
-	c.cd( 3); h1_sci_a.Draw();
-	c.cd( 4); h2_de0_vs_beta_all.Draw("COLZ"); gPad->SetLogz();
-	c.cd( 8); h2_de1_vs_beta_all.Draw("COLZ"); gPad->SetLogz();
-	c.cd( 9); h2_de0_vs_beta.Draw("COLZ");
-	c.cd(10); h2_de1_vs_beta.Draw("COLZ");
-	c.cd(11); h1_de0.Draw("HIST");
-	c.cd(12); h1_de1.Draw("HIST");
+	c.Divide(4,2);
+	c.cd(1); h1_sci_l.Draw();
+	c.cd(2); h1_sci_r.Draw();
+	c.cd(3); h1_sci_a.Draw();
+	c.cd(4); h1_de1.Draw("HIST");
+	c.cd(5); h2_de0_vs_beta_all.Draw("COLZ"); gPad->SetLogz();
+	c.cd(6); h2_de1_vs_beta_all.Draw("COLZ"); gPad->SetLogz();
+	c.cd(7); h2_de0_vs_beta.Draw("COLZ"); gPad->SetLogz();
+	c.cd(8); h2_de1_vs_beta.Draw("COLZ"); gPad->SetLogz();
 	
 	TCanvas* cf;
 	if(q.is_some()) {
@@ -282,9 +276,15 @@ int main(int argc, char* argv[]) {
 		cf->cd(5); h1_foot_cut.Draw();
 	}
 
-	const std::string finfo = q.map([](auto q) { return "FOOT"s + mnd::utos(q); })
+	const std::string finfo = q.map([](auto q) { return "FOOT-Cut-"s + mnd::utos(q); })
 		.value_or("NO-FOOT");
-	canvas::save_all<canvas::Exe>(save, { finfo, label.at(i_sci) });
+	canvas::save_all<canvas::Exe>(save,
+		{
+			mnd::fs::file_names_concatenated(fileNames),
+			finfo,
+			"SCI"s + label.at(i_sci)
+		}
+	);
 
 	WARN("End-of-main\n");
 	rootApp.Run(); return 0;

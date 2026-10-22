@@ -47,7 +47,8 @@ int main(int argc, char* argv[]) {
 	A2 sci21_cut = {NAN, NAN};
 	A2 sci22_cut = {NAN, NAN};
 	A2 sci31_cut = {NAN, NAN};
-	auto save = canvas::Extension::nil;
+	std::vector<canvas::Extension> save = {};
+
 	Take take = Take::gauss_fit_only;
 	ShowOld show_old = mnd::None;
 
@@ -100,7 +101,8 @@ int main(int argc, char* argv[]) {
 		"Sequence of Z charges (, sep) to overlay their current gain match curve on the canvas.")
 		->delimiter(',')
 		->type_name("INT[,INT...]");
-	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
+	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.")
+		->delimiter(',');
 	
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");
@@ -170,7 +172,7 @@ int main(int argc, char* argv[]) {
 
             for(auto entryId : *ntuple) {
                 ntuple->LoadEntry(entryId);
-		        mnd::PrintProgress(bar, entryId, nentries, 1000;
+		        mnd::PrintProgress(bar, entryId, nentries, 1000);
 
                 const auto& sci21 = frs->cal.sci[0];
                 const auto& sci22 = frs->cal.sci[1];
