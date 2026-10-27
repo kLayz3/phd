@@ -9,7 +9,7 @@ LIBS += $(GO4_LIBS)
 
 SRC_DIR := $(shell pwd -P)
 BUILD_DIR := $(SRC_DIR)/$(BUILD_EXTENSION)
-DICT_DIR := $(SRC_DIR)/dict/$(BUILD)
+DICT_DIR := $(SRC_DIR)/dict/$(ROOT_TAG)_$(BUILD)
 
 LIBS += $(shell python3-config --embed --ldflags) \
 		-lfftw3
