@@ -101,10 +101,10 @@ struct RGBA {
 	
 	constexpr RGBA(u8 r_, u8 g_, u8 b_, double a_ = 1.0) :
 		r( r_ / MAX_V ), g( g_ / MAX_V ), b( b_ / MAX_V ), a(a_) {}
+	
+	RGBA(Color_t ); /* ROOT palette/index color, e.g. kRed+1. No constexpr as it touches gROOT. */
 
-	/* ROOT palette/index color, e.g. kRed+1. */
-	RGBA(Color_t );
-	/* No RBGA(u32 ) ctor, as that would be ambiguous. */
+	/* No RBGA(u32 ) ctor, as that would be ambiguous with the ctor above. */
 
 	/* Preserve the old ORGB packed representation: 0xTTRRGGBB, where
 	 * TT is transparency (0 = opaque, ff = fully transparent). */
