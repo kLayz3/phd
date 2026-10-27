@@ -4,6 +4,7 @@
 #include "util/PrettyHisto.h"
 #include "util/Tracking.h"
 #include "util/MacroHelpers.h"
+#include "util/TextUtils.h"
 
 #include "TStyle.h"
 #include "TApplication.h"
@@ -297,7 +298,7 @@ int main(int argc, char* argv[]) {
 	/* Around each residue, also fit a teeny-weeny gauss-chan 🥺 👉👈
 	 * Its' width is what we label as detector resolution. */
 	TCanvas* c1d = new TCanvas("FitResidue1D", "Fit residues 1D", 2150, 1650);
-	c1d->Divide(N_PAIRS, 5);
+	c1d->Divide(N_PAIRS, 3);
 	for(size_t i=0; i<N_PAIRS; ++i) {
 		c1d->cd(i+1);
 		auto [fit_result_x, _x_] = resx[i]->DrawAndFit(2.0, kMagenta + 2, 5, 4 /* niter */);
@@ -310,15 +311,20 @@ int main(int argc, char* argv[]) {
 		auto [fit_result_q, _q_] = resq[i]->DrawAndFit(2.0, kMagenta + 2, 5, 4 /* niter */);
 		WARN("FOOT%zu Q: " KBH_CYN "%.3f, %.3f" KRNM " [Q]\n", i, fit_result_q[1], fit_result_q[2]);
 
-		c1d->cd(i+1+ 3*N_PAIRS);
-		h1_footx[i]->Draw();
-		c1d->cd(i+1+ 4*N_PAIRS);
-		h1_footy[i]->Draw();
-
 		resolutions.emplace_back (
 			Form("FOOT%zu (X,Y): (%s%.2f%s, %s%.2f%s) um",
 				i, KRED, 1e3*fit_result_x[2], KNRM, KBLU, 1e3*fit_result_y[2], KNRM)
 		);
+	}
+	TCanvas* cpos = new TCanvas("foot_xyq", "FOOT Positions/charge", 2150, 1650);
+	cpos->Divide(N_PAIRS, 3);
+	for(size_t i=0; i<N_PAIRS; ++i) {
+		cpos->cd(i+1+ 0*N_PAIRS);
+		h1_footx[i]->Draw();
+		cpos->cd(i+1+ 1*N_PAIRS);
+		h1_footy[i]->Draw();
+		cpos->cd(i+1+ 3*N_PAIRS);
+		h1q[i]->Draw();
 	}
 	
 	TCanvas* c2d = new TCanvas("FitResidue2D", "Fit residues 2D", 2200, 1400);
@@ -326,13 +332,6 @@ int main(int argc, char* argv[]) {
 	c2d->cd(1); h2_resx->Draw("COLZ");
 	c2d->cd(2); h2_resy->Draw("COLZ");
 	c2d->cd(3); h2_resq->Draw("COLZ");
-
-	TCanvas* cq1d = new TCanvas("Charge1D", "Charge of track measured by layers", 2000, 1200);
-	cq1d->Divide(1, N_PAIRS);
-	for(size_t i=0; i<N_PAIRS; ++i) {
-		cq1d->cd(i+1);
-		h1q[i]->Draw();
-	}
 
 	[[maybe_unused]]
 	TCanvas* cq2d = new TCanvas("Charge2D", "Charge of track measured by layers", 2000, 1200);
@@ -413,7 +412,7 @@ int main(int argc, char* argv[]) {
 	: 0.0;
 
 	canvas::save_all<canvas::Exe>(save, {
-		mnd::fs::file_stem(fileName),
+		mnd::file_stem(fileName),
 		std::string{"Q:"} + mnd::ftos(qvg)
 	});
 

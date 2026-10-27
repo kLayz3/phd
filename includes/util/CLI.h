@@ -1,17 +1,21 @@
 #pragma once
-#include "json_struct_def.hh" // for std::ostream& operator<< on ranges.
-#include "../magic_enum/magic_enum.hpp"
-#include "../monad/monad.hxx"
 
+#include "magic_enum/magic_enum.hpp"
+
+#include <ostream>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
 
 #define CLI11_ENABLE_EXTRA_VALIDATORS 1
-#include "../cli/CLI11.hpp"
+#include "cli/CLI11.hpp"
 
-#include "Option.hxx"
-#include "FromChars.h"
+#include "monad/accessories/typedefs.hxx"
+#include "monad/accessories/formatting.hxx"
+#include "monad/accessories/meta.hxx"
+
+#include "util/Option.hxx"
+#include "util/FromChars.h"
 
 using DisplayDefault = mnd::BinaryOpt;
 
@@ -362,8 +366,8 @@ template<
 					fail("Invalid map key '" + key_text + "'.");
 
 				/* Explicitly require every array element. */
-				if constexpr(mnd::is_an_array_v<V>) {
-					if(values.size() != mnd::is_an_array<V>::size)
+				if constexpr(mnd::meta::is_an_array_v<V>) {
+					if(values.size() != mnd::meta::is_an_array<V>::size)
 						fail("Wrong number of array elements in '" +
 							entry + "'.");
 				}
@@ -553,6 +557,30 @@ template <
 
 	return opt;
 }
+
+/* Append one parsed value per occurrence; no overriding or auth flags.
+ * Can't pass in tuples, option etc. Has to be a type natively understood by the CLI11. */
+template<typename T>
+CLI::Option* add_logged_option_seq (
+	CLI::App& app,
+	const std::string& name,
+	std::vector<T>& variable,
+	const std::string& description
+) {
+	auto* opt = app.add_option_function<T>(
+		name,
+		[&variable, name](const T& match) {
+			variable.push_back(match);
+			WARN("Appended option ");
+			std::cerr << KBH_YEL << name << KNRM << " as "
+				<< KBH_CYN << CLI::detail::to_string(match) << KNRM << '\n';
+		},
+		description
+	)->trigger_on_parse();
+
+	return opt;
+}
+
 template<typename T>
 CLI::Option* add_logged_flag (
 	CLI::App& app,
@@ -583,11 +611,10 @@ class Argv {
 public:
 	Argv() = delete;
 	Argv(size_t n) : capacity(n) {
-		MND_ASSERT(n > 0 && "Cannot construct argv without at least one entry (program name).");
+		assert(n > 0 && "Cannot construct argv without at least one entry (program name).");
 		storage.reserve(n);
 		argv.reserve(n+1); // fills with nullptr
 		argv.push_back( nullptr );
-		MND_ASSERT(argv.size() == 1);
 	}
 	int argc() const noexcept {
 		return static_cast<int>(argv.size()) - 1;
@@ -600,6 +627,7 @@ public:
 	int push_back(std::string );
 	const char* operator[](size_t i) const noexcept { return argv[i]; }
 };
+std::ostream& operator<<(std::ostream& , const Argv& );
 
 /* Parse a block of text (1st arg) and the program name (2nd argument) into an
  * argv/argc format, which can then be delegated to exec(3) family: execvp */
@@ -616,9 +644,9 @@ std::filesystem::path current_executable_name();
 
 /* Parse an array range from a text input by a separator 'c' */
 template<unsigned char c, typename Cont,
-	typename std::enable_if<mnd::is_an_array_v<Cont>>::type* = nullptr
+	typename std::enable_if<mnd::meta::is_an_array_v<Cont>>::type* = nullptr
 > std::istream& operator>>(std::istream& in, Cont& out) {
-	constexpr size_t N = mnd::is_an_array<Cont>::size;
+	constexpr size_t N = mnd::meta::is_an_array<Cont>::size;
 
 	for(size_t i=0; i<N; ++i) {
 		if(i != 0) {

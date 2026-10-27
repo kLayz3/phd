@@ -7,6 +7,7 @@
 #include <array>
 #include <vector>
 #include <cassert>
+#include "monad/accessories/typedefs.hxx"
 
 #if __has_include(<boost/math/tools/estrin.hpp>)
 #include <boost/math/tools/estrin.hpp>
@@ -285,26 +286,6 @@ extern template std::array<double, 2> PolyFit<1,4>(const std::array<double, 4>&,
  * along the entire monad dependency.
  * Namely, above its matching only vector type, since the API for statically
  * known both the poly degree AND container size is the `StaticPolyFitter` */
-
-#if !defined(MND_INCLUDE_SPAN_IS_DEFINED)
-#define MND_INCLUDE_SPAN_IS_DEFINED
-#if __cplusplus >= 202000L
-#	include <span>
-	namespace mnd {
-		template<typename T>
-		using span = std::span<T>;
-	}
-#elif __has_include("boost/beast/core/span.hpp")
-#	include "boost/beast/core/span.hpp"
-	namespace mnd {
-		    template<typename T>
-			using span = boost::beast::span<T>;
-	}
-#else
-#	error "Neither C++20 given, nor boost span library found. Cannot proceed."
-#endif
-#endif // MND_INCLUDE_SPAN_IS_DEFINED
-
 void                PolyFit(size_t, mnd::span<const double> , mnd::span<const double> , std::vector<double>& );
 std::vector<double> PolyFit(size_t, mnd::span<const double> , mnd::span<const double> );
 

@@ -2,6 +2,7 @@
 #include "util/CLI.h"
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.h"
+#include "util/TextUtils.h"
 
 #include "TApplication.h"
 #include "TFRSHitCont.h"
@@ -280,7 +281,7 @@ int main(int argc, char* argv[]) {
 		.value_or("NO-FOOT");
 	canvas::save_all<canvas::Exe>(save,
 		{
-			mnd::fs::file_names_concatenated(fileNames),
+			mnd::rootfile_names_concatenated(fileNames),
 			finfo,
 			"SCI"s + label.at(i_sci)
 		}

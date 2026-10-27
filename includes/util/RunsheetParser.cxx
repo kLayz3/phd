@@ -1,5 +1,7 @@
 #include "util/RunsheetParser.h"
 #include "util/JSONParser.h"
+#include "util/TextUtils.h"
+
 #include <string>
 
 nlohmann::json mnd::fs::runsheet_obj {};
@@ -103,7 +105,7 @@ mnd::QueryRunsheet<
 		basename,
 		start_num,
 		end_num
-	] = mnd::fs::file_info(str);
+	] = mnd::rootfile_info(str);
 	
 	Option<RunsheetState> start_info, end_info;
 
@@ -137,7 +139,7 @@ mnd::RunsheetState mnd::QueryRunsheet<
 		basename,
 		start_num,
 		end_num
-	] = mnd::fs::file_info(str);
+	] = mnd::rootfile_info(str);
 
 	auto [start_info, end_info] = QueryRunsheet<false, OptRunsheetStatePair>(str);
 

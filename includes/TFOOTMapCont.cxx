@@ -26,8 +26,8 @@ template<> void Add(TV& lhs, const TV& rhs) {
 	r.erase(std::unique(r.begin(), r.end()), r.end());
 }
 
-static_assert(mnd::has_free_add_fn<TA>::value, "Sanity check: Arr failed.");
-static_assert(mnd::has_free_add_fn<TV>::value, "Sanity check: Vec failed.");
+static_assert(mnd::meta::has_free_add_fn<TA>::value, "Sanity check: Arr failed.");
+static_assert(mnd::meta::has_free_add_fn<TV>::value, "Sanity check: Vec failed.");
 
 void TFOOTMapCont::Init(TDictInfo info) {
 	auto n_it = info.find("FOOT_ID");

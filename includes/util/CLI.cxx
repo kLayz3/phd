@@ -1,4 +1,5 @@
 #include "CLI.h"
+
 #include <cstring>
 #include <string>
 
@@ -21,8 +22,17 @@ int mnd::Argv::push_back(std::string s) {
 	return static_cast<int>( storage.size() );
 }
 
+std::ostream& mnd::operator<<(std::ostream& os, const Argv& argv) {
+	int i=0;
+	const char* item;
+	while(item = argv[i++], item) {
+		os << item << " ";
+	}
+	return os;
+}
+
 mnd::Argv mnd::parse_argv(std::string_view text, std::string program_name) {
-	static constexpr size_t N_MAX_ARGS = 50;
+	static constexpr size_t N_MAX_ARGS = 100;
 	Argv out(N_MAX_ARGS);
 	out.push_back( std::move(program_name) );
 
@@ -39,8 +49,11 @@ mnd::Argv mnd::parse_argv(std::string_view text, std::string program_name) {
 
 		while(i < text.size() && !is_space(static_cast<unsigned char>(text[i]))) {
 			switch(text[i]) {
-				case '\\': { // escape char, just directly dump the raw following character..
-					++i;
+				case '\\': { // escape char, just directly dump the raw following character
+					         // unless its a whitespace, in this case just keep skipping them.
+					// Skip all whitespace chars until we reach non-ws
+					while(++i < text.size() && is_space(static_cast<unsigned char>(text[i]))) {}
+
 					if(i == text.size()) ERROR("Dangling backslash in argument list\n");
 					arg.push_back(text[i++]);
 					break;

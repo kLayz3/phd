@@ -1,6 +1,9 @@
 #include "FromChars.h"
 
 #include <charconv>
+#include <cmath>
+#include <limits>
+#include <locale>
 #include <iterator>
 #include <sstream>
 #include <iomanip>
@@ -35,6 +38,69 @@ template <
 		sv.remove_prefix(
 			std::distance(sv.data(), ptr)
 		);
+	}
+
+	return Some{value};
+}
+
+template <
+	typename T,
+	bool MatchWholeView = true,
+	bool MunchView = false
+> static Option<T> string_to_f_helper_(std::string_view& sv_) {
+	static_assert(std::is_floating_point_v<T>, "Type must be floating point.");
+	if(sv_.empty())
+		return None;
+	
+	std::string_view sv = sv_;
+	T value{};
+	
+	/* Accept +1.0233, e.g. test if plus is upfront and if a digit follows. */
+	if(sv[0] == '+') {
+		if(sv.size() < 2 || sv[1] == '+' || sv[1] == '-')
+			return None;
+
+		sv.remove_prefix(1);
+		
+		auto parsed = string_to_f_helper_<T, MatchWholeView, MunchView>(sv);
+		if constexpr(MunchView) {
+			if(parsed.has_value())
+				sv_ = sv;
+		}
+
+		return parsed;
+	}
+
+	const auto [ptr, ec] = std::from_chars(
+		sv.data(), sv.data() + sv.size(), value
+	);
+	if(ec != std::errc{} && ec != std::errc::result_out_of_range)
+		return None;
+
+	if constexpr(MatchWholeView) {
+		if(ptr != sv.data() + sv.size())
+			return None;
+	}
+
+	if(ec == std::errc::result_out_of_range) {
+		// `from_chars` leaves value unchanged on both overflow and underflow.
+		// C-locale distinguishes them w/o changing them and can also recover infs/nans.
+		std::istringstream stream{std::string{sv.data(), ptr}};
+		stream.imbue(std::locale::classic());
+		stream >> value;
+		if(stream.fail()) {
+			if(value == std::numeric_limits<T>::max()
+			   || value == -std::numeric_limits<T>::max()) {
+				value = std::copysign(std::numeric_limits<T>::infinity(), value);
+			} else {
+				return None;
+			}
+		}
+	}
+
+	if constexpr(MunchView) {
+		sv.remove_prefix(static_cast<size_t>(ptr - sv.data()));
+		sv_ = sv;
 	}
 
 	return Some{value};
@@ -119,6 +185,15 @@ template std::string mnd::ftos<long double>(long double, u32, u32, char, std::ch
 template std::string mnd::ftos<double>(double, u32, u32, char, std::chars_format);
 template std::string mnd::ftos<float>(float, u32, u32, char, std::chars_format);
 
+template<typename T>
+mnd::Option<T> mnd::stof(std::string_view sv) {
+	return string_to_f_helper_<T>(sv);
+}
+
+template Option<long double> mnd::stof<long double>(std::string_view );
+template Option<double> mnd::stof<double>(std::string_view );
+template Option<float> mnd::stof<float>(std::string_view );
+
 mnd::Option<i32> mnd::stoi_munch(std::string_view& sv) {
 	return string_to_i_helper_<i32, false, true>(sv);
 }
@@ -137,5 +212,4 @@ bool mnd::parse(std::string_view v, bool& b) {
 	}
 	return false;
 }
-
 

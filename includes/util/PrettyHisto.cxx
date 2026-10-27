@@ -1,7 +1,6 @@
 /* pybind11 stuff must be first to be included. */
 #include <algorithm>
 #include <atomic>
-#include <cstdint>
 #include <cstdlib>
 #include <pybind11/numpy.h>
 #include <pybind11/embed.h>
@@ -344,7 +343,7 @@ void mnd::python::poke(bool verbose) {
 	}
 }
 
-std::string mnd::col::ansi_rgb(uint8_t r, uint8_t g, uint8_t b) {
+std::string mnd::col::ansi_rgb(u8 r, u8 g, u8 b) {
 	return "\x1b[38;2;" +
 		std::to_string(r) + ";" +
 		std::to_string(g) + ";" +
@@ -361,18 +360,18 @@ mnd::col::RGBA::RGBA(Color_t root_color) {
 	a = c->GetAlpha();
 }
 
-Color_t mnd::col::RGBA::hex_to_col(uint32_t val) noexcept {
+Color_t mnd::col::RGBA::hex_to_col(u32 val) noexcept {
 	Float_t b = (val & 0xff) / MAX_V; val >>= 8;
 	Float_t g = (val & 0xff) / MAX_V; val >>= 8;
 	Float_t r = (val & 0xff) / MAX_V; val >>= 8;
 	return TColor::GetColor(r,g,b);
 }
 
-uint32_t mnd::col::RGBA::pack() const noexcept {
+u32 mnd::col::RGBA::pack() const noexcept {
 	/* Assume it's not a NAN hehe. */
-	auto to_byte = [](double x) -> uint32_t {
+	auto to_byte = [](double x) -> u32 {
 		x = std::clamp(x, 0.0, 1.0);
-		return static_cast<uint32_t>(x * MAX_V + 0.5);
+		return static_cast<u32>(x * MAX_V + 0.5);
 	};
 	auto r_ = to_byte(r);
 	auto g_ = to_byte(g);
@@ -403,7 +402,7 @@ void mnd::col::RGBA::ApplyFill(TH1* h) const {
 	h->SetFillColorAlpha(idx, a);
 }
 
-static bool parse_packed_rgba(std::string_view input, uint32_t& out) noexcept {
+static bool parse_packed_rgba(std::string_view input, u32& out) noexcept {
 	if(input.size() >= 2 &&
 		input[0] == '0' &&
 		(input[1] == 'x' || input[1] == 'X'))
@@ -415,7 +414,7 @@ static bool parse_packed_rgba(std::string_view input, uint32_t& out) noexcept {
 	if(input.size() != 6 && input.size() != 8)
 		return false;
 
-	uint32_t value{};
+	u32 value{};
 
 	const auto* first = input.data();
 	const auto* last  = input.data() + input.size();
@@ -434,7 +433,7 @@ std::istream& mnd::col::operator>>(std::istream& in, RGBA& out) {
 	if(!(in >> input))
 		return in;
 
-	uint32_t packed;
+	u32 packed;
 	
 	const auto comma = input.find(',');
 
@@ -502,11 +501,11 @@ std::istream& mnd::col::operator>>(std::istream& in, RGBA& out) {
 
 template<bool pretty>
 std::ostream& mnd::col::operator<<(std::ostream& os, const RGBA& o) {
-	const uint32_t packed = o.pack();
+	const u32 packed = o.pack();
 	
-	uint8_t b = static_cast<uint8_t>(packed & 0xff);
-	uint8_t g = static_cast<uint8_t>((packed >> 8) & 0xff);
-	uint8_t r = static_cast<uint8_t>((packed >> 16) & 0xff);
+	u8 b = static_cast<u8>(packed & 0xff);
+	u8 g = static_cast<u8>((packed >> 8) & 0xff);
+	u8 r = static_cast<u8>((packed >> 16) & 0xff);
 
 	os << ansi_rgb(r,g,b);
 	
@@ -547,7 +546,7 @@ std::istream& mnd::col::operator>>(std::istream& in, mnd::col::Opacity& out) {
 }
 
 namespace detail_ {
-static constexpr uint32_t cols[] = {
+static constexpr u32 cols[] = {
 	0xC41E3A, 0xA330C9, 0xFF7C0A, 0x33937F,
 	0xAAD372, 0x3FC7EB, 0x00FF98, 0xF48CBA,
 	0xFFF468, 0x0070DD, 0x8788EE, 0xC69B6D
@@ -557,7 +556,7 @@ static std::atomic<std::size_t> n_col_curr {};
 
 } // namespace detail_
 
-Color_t mnd::col::Col(uint32_t i) {
+Color_t mnd::col::Col(u32 i) {
 	return RGBA::hex_to_col( detail_::cols[i % detail_::Ncols] );
 }
 
@@ -567,13 +566,13 @@ mnd::col::RGBA mnd::col::next_col() {
 	);
 }
 mnd::col::RGBA mnd::col::rand_col() {
-	const uint32_t curr_col = /* 0,1,2, ..., Ncols-1 */
-		(uint32_t)detail_::n_col_curr.load(std::memory_order_relaxed) % detail_::Ncols;
+	const u32 curr_col = /* 0,1,2, ..., Ncols-1 */
+		(u32)detail_::n_col_curr.load(std::memory_order_relaxed) % detail_::Ncols;
 
-	uint32_t x;
+	u32 x;
 
 	/* Do not randomly draw the same color as before. */
-	while(x = static_cast<uint32_t>(rand()) % detail_::Ncols,
+	while(x = static_cast<u32>(rand()) % detail_::Ncols,
 		x == curr_col) {}
 
 	detail_::n_col_curr.store(x, std::memory_order_relaxed);
@@ -689,29 +688,12 @@ static GraphStyle resolve_graph_style(
 	const TGraph& g,
 	GraphStyle style
 ) {
-	style.label_ =
-		style.label_.value_or(g.GetTitle());
-
-	style.line_width_ =
-		style.line_width_.value_or(0.5 * g.GetLineWidth());
-
-	style.line_style_ =
-		style.line_style_.value_or(
-			root_line_style(g.GetLineStyle())
-		);
-
-	style.marker_ =
-		style.marker_.value_or(
-			root_marker_style(g.GetMarkerStyle())
-		);
-	
-	style.marker_size_ =
-		style.marker_size_.value_or(g.GetMarkerSize());
-
-	style.color_ =
-		style.color_.value_or(
-			root_color(g.GetLineColor())
-		);
+	style.label_       |= [&] { return g.GetTitle(); };
+	style.line_width_  |= [&] { return 0.5 * g.GetLineWidth(); };
+	style.line_style_  |= [&] { return root_line_style(g.GetLineStyle()); };
+	style.marker_      |= [&] { return root_marker_style(g.GetMarkerStyle()); };
+	style.marker_size_ |= [&] { return g.GetMarkerSize(); };
+	style.color_       |= [&] { return root_color(g.GetLineColor()); };
 	
 	return style;
 }
@@ -755,19 +737,19 @@ auto bin_centers(const Hist1DData& h) -> std::vector<double> {
 /* =============================================================== */
 
 auto HistStyle::label(std::string s) && -> HistStyle {
-	label_ = std::move(s);
+	label_ = Some{std::move(s)};
 	return std::move(*this);
 }
 auto HistStyle::line_width(double w) && -> HistStyle {
-	line_width_ = w;
+	line_width_ = Some{w};
 	return std::move(*this);
 }
 auto HistStyle::line_style(std::string s) && -> HistStyle {
-	line_style_ = std::move(s);
+	line_style_ = Some{std::move(s)};
 	return std::move(*this);
 }
 auto HistStyle::marker(std::string s) && -> HistStyle {
-	marker_ = std::move(s);
+	marker_ = Some{std::move(s)};
 	return std::move(*this);
 }
 auto HistStyle::stairs() && -> HistStyle {
@@ -787,16 +769,16 @@ auto HistStyle::fill(bool b) && -> HistStyle {
 	return std::move(*this);
 }
 auto HistStyle::facecolor(mnd::col::RGBA col) && -> HistStyle {
-	fill_color_ = std::move(col);
+	fill_color_ = Some{std::move(col)};
 	return std::move(*this);
 }
 auto HistStyle::edgecolor(mnd::col::RGBA col) && -> HistStyle {
-	line_color_ = std::move(col);
+	line_color_ = Some{std::move(col)};
 	return std::move(*this);
 }
 
 auto Hist2DStyle::label(std::string s) && -> Hist2DStyle {
-	label_ = std::move(s);
+	label_ = Some{std::move(s)};
 	return std::move(*this);
 }
 auto Hist2DStyle::colorbar(bool enabled) && -> Hist2DStyle {
@@ -819,23 +801,23 @@ auto Hist2DStyle::contour() && -> Hist2DStyle {
 /* =============================================================== */
 
 auto GraphStyle::label(std::string s) && -> GraphStyle {
-	label_ = std::move(s);
+	label_ = Some{std::move(s)};
 	return std::move(*this);
 }
 auto GraphStyle::line_width(double w) && -> GraphStyle {
-	line_width_ = w;
+	line_width_ = Some{w};
 	return std::move(*this);
 }
 auto GraphStyle::line_style(std::string s) && -> GraphStyle {
-	line_style_ = std::move(s);
+	line_style_ = Some{std::move(s)};
 	return std::move(*this);
 }
 auto GraphStyle::marker(std::string s) && -> GraphStyle {
-	marker_ = std::move(s);
+	marker_ = Some{std::move(s)};
 	return std::move(*this);
 }
 auto GraphStyle::marker_size(double w) && -> GraphStyle {
-	marker_size_ = w;
+	marker_size_ = Some{w};
 	return std::move(*this);
 }
 auto GraphStyle::plot() && -> GraphStyle {
@@ -880,48 +862,34 @@ auto Figure::plot(const TH1& h, HistStyle style) && -> Figure {
 		h.GetXaxis()->GetBinUpEdge(n)
 	);
 
-	out.style.label_ =
-		style.label_.value_or(h.GetTitle());
 
-	out.style.line_width_ =
-		style.line_width_.value_or(h.GetLineWidth());
-
-	out.style.line_style_ =
-		style.line_style_.value_or(
-			root_line_style(h.GetLineStyle())
-		);
-
-	out.style.marker_ =
-		style.marker_.value_or(
-			root_marker_style(h.GetMarkerStyle())
-		);
-
-	out.style.line_color_ =
-		style.line_color_.value_or(
-			root_color(h.GetLineColor())
-		);
+	style.label_      |= [&] { return h.GetTitle(); };
+	style.line_width_ |= [&] { return h.GetLineWidth(); };
+	style.line_style_ |= [&] { return root_line_style(h.GetLineStyle()); };
+	style.marker_     |= [&] { return root_marker_style(h.GetMarkerStyle()); };
+	style.line_color_ |= [&] { return root_color(h.GetLineColor()); };
 	
 	/* Passed-in style color takes priority */
 	if(style.do_fill) {
-		out.style.do_fill = style.do_fill;
-		out.style.fill_color_ = style.fill_color_; // can be nullopt
-
 		const bool has_fill = (h.GetFillStyle() != 0 && h.GetFillColor() != 0);
 
 		/* Fallback case, in case facecolor attribute not supplied to the style. */
-		if(has_fill and !out.style.fill_color_.has_value())
-			out.style.fill_color_ = root_color(h.GetFillColor());
+		if(has_fill and !style.fill_color_.is_some())
+			style.fill_color_ = Some{root_color(h.GetFillColor())};
 		
 		/* In this case, just reject the fill request. */
-		if(!out.style.fill_color_.has_value()) {
+		if(!style.fill_color_.is_some()) {
 			fprintf(stderr,
 				"mnd::plot::Figure::plot(): requested `fill()` for (ROOT) hist: \'%s\' "
 				" but facecolor not provided and also histogram isn't filled.\n", h.GetTitle());
-			out.style.do_fill = false;
+			style.do_fill = false;
 		}
 	}
 
-	out.style.mode_ = style.mode_;
+	if(objects_.empty())
+		default_.from(&h);
+
+	out.style = std::move(style);
 
 	objects_.emplace_back( std::move(out) );
 	return std::move(*this);
@@ -964,8 +932,10 @@ auto Figure::plot(const TH2& h, Hist2DStyle style) && -> Figure {
 				h.GetBinContent(ix, iy)
 			);
 
-	style.label_ =
-		style.label_.value_or(h.GetTitle());
+	style.label_ |= [&] { return h.GetTitle(); };
+
+	if(objects_.empty())
+		default_.from(&h);
 
 	out.style = std::move(style);
 
@@ -981,7 +951,10 @@ auto Figure::plot(const TGraph& g, GraphStyle style) && -> Figure {
 	out.x.assign(g.GetX(), g.GetX() + n);
 	out.y.assign(g.GetY(), g.GetY() + n);
 
-	out.style = resolve_graph_style(g, style);
+	if(objects_.empty())
+		default_.from(&g);
+
+	out.style = resolve_graph_style(g, std::move(style));
 
 	objects_.emplace_back(std::move(out));
 	return std::move(*this);
@@ -1001,17 +974,20 @@ auto Figure::plot (
 	out.xerr.assign(g.GetEX(), g.GetEX() + n);
 	out.yerr.assign(g.GetEY(), g.GetEY() + n);
 
-	out.style = resolve_graph_style(g, style);
+	if(objects_.empty())
+		default_.from(&g);
+
+	out.style = resolve_graph_style(g, std::move(style));
 
 	objects_.emplace_back(std::move(out));
 	return std::move(*this);
 }
 
-auto Figure::xlabel(std::string s) && -> Figure {
+auto FigureStyle::xlabel(std::string s) && -> FigureStyle {
 	xlabel_ = std::move(s);
 	return std::move(*this);
 }
-auto Figure::xlabel(const TObject* obj) && -> Figure {
+auto FigureStyle::xlabel(const TObject* obj) && -> FigureStyle {
 	if(auto const* g = dynamic_cast<TGraph const*>(obj)) {
 		xlabel_ = g->GetXaxis()->GetTitle();
 	}
@@ -1024,11 +1000,11 @@ auto Figure::xlabel(const TObject* obj) && -> Figure {
 	}
 	return std::move(*this);
 }
-auto Figure::ylabel(std::string s) && -> Figure {
+auto FigureStyle::ylabel(std::string s) && -> FigureStyle {
 	ylabel_ = std::move(s);
 	return std::move(*this);
 }
-auto Figure::ylabel(const TObject* obj) && -> Figure {
+auto FigureStyle::ylabel(const TObject* obj) && -> FigureStyle {
 	if(auto const* g = dynamic_cast<TGraph const*>(obj)) {
 		ylabel_ = g->GetYaxis()->GetTitle();
 	}
@@ -1036,65 +1012,69 @@ auto Figure::ylabel(const TObject* obj) && -> Figure {
 		ylabel_ = g->GetYaxis()->GetTitle();
 	}
 	else {
-		fprintf(stderr, "Figure::ylabel(const TObject*): passed [%s] obj, but expects something castable to TGraph/TH1\n",
+		fprintf(stderr, "FigureStyle::ylabel(const TObject*): passed [%s] obj, but expects something castable to TGraph/TH1\n",
 			obj->ClassName());
 	}
 	return std::move(*this);
 }
 
-auto Figure::title(std::string s) && -> Figure {
+auto FigureStyle::title(std::string s) && -> FigureStyle {
 	title_ = std::move(s);
 	return std::move(*this);
 }
-auto Figure::title(const TObject* obj) && -> Figure {
+auto FigureStyle::title(const TObject* obj) && -> FigureStyle {
 	if(obj)
 		title_ = obj->GetTitle();
 	return std::move(*this);
 }
-auto Figure::figsize(double x, double y) && -> Figure {
+auto FigureStyle::figsize(double x, double y) && -> FigureStyle {
 	if(!std::isfinite(x) || x <= 0 || !std::isfinite(y) || y <= 0) {
-		fprintf(stderr, "Figure::figsize(double,double): passed invalid (%.2f,%.2f) values. Ignoring this request.\n",
+		fprintf(stderr, "FigureStyle::figsize(double,double): passed invalid (%.2f,%.2f) values. Ignoring this request.\n",
 			x,y);
 	} else {
-		figsize_ = {x,y};
+		figsize_ = Some{ std::pair<double,double>{x,y} };
 	}
 	return std::move(*this);
 }
-auto Figure::save_dpi(double value) && -> Figure {
+auto FigureStyle::save_dpi(double value) && -> FigureStyle {
 	if(!std::isfinite(value) || value <= 0) {
-		fprintf(stderr, "Figure::save_dpi(double): passed invalid (%.2f) value. Ignoring this request.\n",
+		fprintf(stderr, "FigureStyle::save_dpi(double): passed invalid (%.2f) value. Ignoring this request.\n",
 			value);
 	} else {
-		save_dpi_ = value;
+		save_dpi_ = Some{value};
 	}
 	return std::move(*this);
 }
 
-auto Figure::xlim(double lo, double hi) && -> Figure {
-	xlim_ = {lo, hi};
+auto FigureStyle::xlim(double lo, double hi) && -> FigureStyle {
+	xlim_ = Some{ std::pair<double,double>{lo, hi} };
 	return std::move(*this);
 }
-auto Figure::ylim(double lo, double hi) && -> Figure {
-	ylim_ = {lo, hi};
+auto FigureStyle::ylim(double lo, double hi) && -> FigureStyle {
+	ylim_ = Some{ std::pair<double,double>{lo, hi}};
 	return std::move(*this);
 }
-auto Figure::logx(bool v) && -> Figure {
+auto FigureStyle::logx(bool v) && -> FigureStyle {
 	logx_ = v;
 	return std::move(*this);
 }
-auto Figure::logy(bool enabled) && -> Figure {
+auto FigureStyle::logy(bool enabled) && -> FigureStyle {
 	logy_ = enabled;
 	return std::move(*this);
 }
-auto Figure::grid(bool v) && -> Figure {
+auto FigureStyle::logz(bool enabled) && -> FigureStyle {
+	logz_ = enabled;
+	return std::move(*this);
+}
+auto FigureStyle::grid(bool v) && -> FigureStyle {
 	grid_ = v;
 	return std::move(*this);
 }
-auto Figure::enable_right_top_spline(bool v) && -> Figure {
+auto FigureStyle::enable_right_top_spline(bool v) && -> FigureStyle {
 	hide_right_and_top_spline_ = !v;
 	return std::move(*this);
 }
-auto Figure::legend(bool enabled) && -> Figure {
+auto FigureStyle::legend(bool enabled) && -> FigureStyle {
 	legend_ = enabled;
 	return std::move(*this);
 }
@@ -1103,16 +1083,16 @@ auto Figure::legend(bool enabled) && -> Figure {
 static auto make_stairs_kwargs(const HistStyle& style) -> py::dict {
 	py::dict kwargs;
 
-	if(style.label_ && !style.label_->empty())
+	if(style.label_.is_some() && !style.label_->empty())
 		kwargs["label"] = *style.label_;
 
-	if(style.line_width_)
+	if(style.line_width_.is_some())
 		kwargs["linewidth"] = *style.line_width_;
 
-	if(style.line_style_)
+	if(style.line_style_.is_some())
 		kwargs["linestyle"] = *style.line_style_;
 
-	if(style.line_color_) {
+	if(style.line_color_.is_some()) {
 		const auto& c = *style.line_color_;
 
 		kwargs["edgecolor"] = py::make_tuple(
@@ -1134,16 +1114,16 @@ static auto make_stairs_kwargs(const HistStyle& style) -> py::dict {
 static auto make_line_kwargs(const HistStyle& style) -> py::dict {
 	py::dict kwargs;
 
-	if(style.label_ && !style.label_->empty())
+	if(style.label_.is_some() && !style.label_->empty())
 		kwargs["label"] = *style.label_;
 
-	if(style.line_width_)
+	if(style.line_width_.is_some())
 		kwargs["linewidth"] = *style.line_width_;
 
-	if(style.line_style_)
+	if(style.line_style_.is_some())
 		kwargs["linestyle"] = *style.line_style_;
 
-	if(style.line_color_) {
+	if(style.line_color_.is_some()) {
 		const auto& c = *style.line_color_;
 		kwargs["color"] = rgba(c);
 	}
@@ -1228,6 +1208,20 @@ static void render_hist1d(
 	}
 }
 
+void Figure::Default::from(const TObject* obj) {
+	if(auto const* g = dynamic_cast<TGraph const*>(obj)) {
+		xlabel = g->GetXaxis()->GetTitle();
+		ylabel = g->GetYaxis()->GetTitle();
+		title  = g->GetTitle();
+	}
+	else if(auto const* h = dynamic_cast<TH1 const*>(obj)) {
+		xlabel = h->GetXaxis()->GetTitle();
+		ylabel = h->GetYaxis()->GetTitle();
+		title  = h->GetTitle();
+	}
+	/* Should never reach here, is a private fnc */
+}
+
 void Figure::save(const std::filesystem::path& path) const {
 	/* First: create the output directories. */
 	std::filesystem::create_directories( path.parent_path() );
@@ -1239,13 +1233,13 @@ void Figure::save(const std::filesystem::path& path) const {
 
 	py::dict kwargs;
 
-	if(figsize_) {
+	if(style_.figsize_.is_some()) {
 		auto mpl = py::module_::import("matplotlib");
-		const double dpi = save_dpi_.value_or(
+		const double dpi = style_.save_dpi_.value_or(
 			mpl.attr("rcParams")["figure.dpi"].cast<double>()
 		);
 
-		const auto [width, height] = *figsize_; // Asserted positive in the setter
+		const auto [width, height] = *style_.figsize_; // Asserted positive in the setter
 
 		kwargs["figsize"] = py::make_tuple(width / dpi, height / dpi);
 		kwargs["dpi"] = dpi;
@@ -1273,36 +1267,37 @@ void Figure::save(const std::filesystem::path& path) const {
 			}
 		}
 
-		if(!xlabel_.empty())
-			ax.attr("set_xlabel")(xlabel_);
+		ax.attr("set_xlabel")(
+			!style_.xlabel_.empty() ? style_.xlabel_ : default_.xlabel
+		);
+		ax.attr("set_ylabel")(
+			!style_.ylabel_.empty() ? style_.ylabel_ : default_.ylabel
+		);
+		ax.attr("set_title")(
+			!style_.title_.empty() ? style_.title_ : default_.title
+		);
 
-		if(!ylabel_.empty())
-			ax.attr("set_ylabel")(ylabel_);
-
-		if(!title_.empty())
-			ax.attr("set_title")(title_);
-
-		if(xlim_) {
+		if(style_.xlim_.is_some()) {
 			ax.attr("set_xlim")(
-				xlim_->first,
-				xlim_->second
+				style_.xlim_->first,
+				style_.xlim_->second
 			);
 		}
 
-		if(ylim_) {
+		if(style_.ylim_.is_some()) {
 			ax.attr("set_ylim")(
-				ylim_->first,
-				ylim_->second
+				style_.ylim_->first,
+				style_.ylim_->second
 			);
 		}
 
-		if(logx_)
+		if(style_.logx_)
 			ax.attr("set_xscale")("log");
 
-		if(logy_)
+		if(style_.logy_)
 			ax.attr("set_yscale")("log");
 
-		if(grid_) {
+		if(style_.grid_) {
 			ax.attr("grid")(true);
 			ax.attr("set_axisbelow")(true);
 			ax.attr("grid")(
@@ -1311,12 +1306,12 @@ void Figure::save(const std::filesystem::path& path) const {
 			);
 		}
 
-		if(hide_right_and_top_spline_) {
+		if(style_.hide_right_and_top_spline_) {
 			ax.attr("spines")["right"].attr("set_visible")(false);
 			ax.attr("spines")["top"].attr("set_visible")(false);
 		}
 
-		if(legend_)
+		if(style_.legend_)
 			ax.attr("legend")();
 
 		fig.attr("tight_layout")();
@@ -1324,8 +1319,10 @@ void Figure::save(const std::filesystem::path& path) const {
 		/* matplotlib infers PDF/PNG/SVG/etc. from the extension. */
 		py::dict save_kwargs;
 
-		if(save_dpi_) save_kwargs["dpi"] = *save_dpi_;
-		else          save_kwargs["dpi"] = "figure";
+		if(style_.save_dpi_.is_some())
+			save_kwargs["dpi"] = *style_.save_dpi_;
+		else
+			save_kwargs["dpi"] = "figure";
 
 		fig.attr("savefig")(path.string(), **save_kwargs);
 

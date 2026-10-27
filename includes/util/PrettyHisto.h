@@ -21,26 +21,9 @@
 #include "TLine.h"
 #include "TCanvas.h"
 
-#include "GaussFitMax.hxx"
-
-#if !defined(MND_INCLUDE_SPAN_IS_DEFINED)
-#define MND_INCLUDE_SPAN_IS_DEFINED
-#if __cplusplus >= 202000L 
-#	include <span>
-	namespace mnd {
-		template<typename T>
-		using span = std::span<T>;
-	}
-#elif __has_include("boost/beast/core/span.hpp")
-#	include "boost/beast/core/span.hpp"
-	namespace mnd {
-		template<typename T>
-		using span = boost::beast::span<T>;
-	}
-#else
-#	error "Neither C++20 given, nor boost span library found. Cannot proceed."
-#endif
-#endif // MND_INCLUDE_SPAN_IS_DEFINED
+#include "util/GaussFitMax.hxx"
+#include "util/Option.hxx"
+#include "monad/accessories/typedefs.hxx"
 
 namespace mnd::detail {
 
@@ -100,11 +83,11 @@ inline std::string nonalnum_to_underscore(std::string_view s) noexcept {
 
 namespace mnd::col {
 
-std::string ansi_rgb(uint8_t , uint8_t , uint8_t );
+std::string ansi_rgb(u8 , u8 , u8 );
 
 struct RGBA {
 	constexpr static double MAX_V
-		= static_cast<double>( std::numeric_limits<uint8_t>::max() );
+		= static_cast<double>( std::numeric_limits<u8>::max() );
 	
 	double r = 0.0;
 	double g = 0.0;
@@ -116,25 +99,25 @@ struct RGBA {
 	constexpr RGBA(double r_, double g_, double b_, double a_ = 1.0) :
 		r(r_), g(g_), b(b_), a(a_) {}
 	
-	constexpr RGBA(uint8_t r_, uint8_t g_, uint8_t b_, double a_ = 1.0) :
+	constexpr RGBA(u8 r_, u8 g_, u8 b_, double a_ = 1.0) :
 		r( r_ / MAX_V ), g( g_ / MAX_V ), b( b_ / MAX_V ), a(a_) {}
 
 	/* ROOT palette/index color, e.g. kRed+1. */
 	RGBA(Color_t );
-	/* No RBGA(uint32_t ) ctor, as that would be ambiguous. */
+	/* No RBGA(u32 ) ctor, as that would be ambiguous. */
 
 	/* Preserve the old ORGB packed representation: 0xTTRRGGBB, where
 	 * TT is transparency (0 = opaque, ff = fully transparent). */
-	inline constexpr static RGBA from_packed(uint32_t value) noexcept {
+	inline constexpr static RGBA from_packed(u32 value) noexcept {
 		const double b = (value & 0xffu) / MAX_V; value >>= 8;
 		const double g = (value & 0xffu) / MAX_V; value >>= 8;
 		const double r = (value & 0xffu) / MAX_V; value >>= 8;
 		const double a = std::max(1.0 - (value & 0xffu) / MAX_V, 0.0);
 		return {r, g, b, a};
 	}
-	static Color_t hex_to_col(uint32_t val) noexcept;
+	static Color_t hex_to_col(u32 val) noexcept;
 
-	uint32_t pack() const noexcept;
+	u32 pack() const noexcept;
 
 	/* Get the color code (Color_t) that ROOT color handlers expect. */
 	Int_t GetColorCode() const;
@@ -153,7 +136,7 @@ std::istream& operator>>(std::istream&, Opacity& );
 
 namespace literals {
 inline constexpr RGBA operator""_c(unsigned long long int value) noexcept {
-	return mnd::col::RGBA::from_packed(static_cast<uint32_t>(value));
+	return mnd::col::RGBA::from_packed(static_cast<u32>(value));
 }
 inline constexpr Opacity operator""_o(long double value) noexcept {
 	return { static_cast<double>(value) };
@@ -172,7 +155,7 @@ inline constexpr RGBA operator+(RGBA col, Opacity opacity) {
 }
 
 /* Get a sequential color code back */
-Color_t Col(uint32_t );
+Color_t Col(u32 );
 
 RGBA next_col();
 RGBA rand_col();
@@ -290,7 +273,7 @@ struct TH1P : public mnd::hist::TH1B {
 		double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
 		mnd::col::RGBA col = kRed,
 		Width_t line_width = 2, // type: short
-		uint32_t niter = 2,
+		u32 niter = 2,
 		Verbosity v = Verbosity::SILENT
 	) -> decltype( GaussFitMax(std::declval<TH1D*>()) ) {
 		auto fitresult   = GaussFitMax(&h, side_ratio, niter, v);
@@ -530,8 +513,8 @@ struct PLatex {
 	static constexpr double MAX_H = 0.9;
 	static constexpr double MIN_H = 0.1;
 	static constexpr double START_X = 0.1;
-	uint32_t N;
-	uint32_t current_text_index;
+	u32 N;
+	u32 current_text_index;
 	TLatex latex;
     std::string __temporary {};
 
@@ -607,9 +590,9 @@ struct PLatex {
 
 private:
 	template <typename T>
-	static uint32_t TextCount(const T& x) {
+	static u32 TextCount(const T& x) {
 		if constexpr(mnd::type_traits::is_text_sequence_v<T>) {
-			return static_cast<uint32_t>(x.size());
+			return static_cast<u32>(x.size());
 		} else {
 			return 1;
 		}
@@ -665,8 +648,6 @@ class TGraphErrors;
 
 namespace mnd::plot {
 
-template<typename T>
-using Maybe = std::optional<T>;
 using mnd::col::RGBA;
 
 enum class HistMode {
@@ -686,12 +667,12 @@ enum class GraphMode {
 };
 
 struct HistStyle {
-	Maybe<std::string> label_;
-	Maybe<double>      line_width_;
-	Maybe<std::string> line_style_;
-	Maybe<std::string> marker_;
-	Maybe<RGBA>        line_color_;
-	Maybe<RGBA>        fill_color_;
+	Option<std::string> label_;
+	Option<double>      line_width_;
+	Option<std::string> line_style_;
+	Option<std::string> marker_;
+	Option<RGBA>        line_color_;
+	Option<RGBA>        fill_color_;
 	HistMode mode_ = HistMode::stairs;
 
 	bool do_fill = false;
@@ -710,7 +691,7 @@ struct HistStyle {
 };
 
 struct Hist2DStyle {
-	Maybe<std::string> label_;
+	Option<std::string> label_;
 	bool colorbar_ = true;
 	Hist2DMode mode_ = Hist2DMode::mesh;
 
@@ -723,12 +704,12 @@ struct Hist2DStyle {
 };
 
 struct GraphStyle {
-	Maybe<std::string> label_;
-	Maybe<double> line_width_;
-	Maybe<std::string> line_style_;
-	Maybe<std::string> marker_;
-	Maybe<double> marker_size_;
-	Maybe<RGBA> color_;
+	Option<std::string> label_;
+	Option<double> line_width_;
+	Option<std::string> line_style_;
+	Option<std::string> marker_;
+	Option<double> marker_size_;
+	Option<RGBA> color_;
 	GraphMode mode_ = GraphMode::plot;
 
 	auto label(std::string ) && -> GraphStyle;
@@ -780,52 +761,63 @@ using Drawable = std::variant<
     GraphData
 >;
 
+struct FigureStyle {
+	std::string xlabel_;
+	std::string ylabel_;
+	std::string title_;
+	
+	Option<std::pair<u32, u32>> figsize_;
+	Option<double> save_dpi_;
+
+	Option<std::pair<double, double>> xlim_;
+	Option<std::pair<double, double>> ylim_;
+	bool hide_right_and_top_spline_ = true;
+
+	bool logx_ = false;
+	bool logy_ = false;
+	bool logz_ = false;
+	bool grid_ = false;
+	bool legend_ = false;
+
+	auto xlabel(std::string ) && -> FigureStyle;
+	auto xlabel(const TObject* ) && -> FigureStyle;
+	auto ylabel(std::string ) && -> FigureStyle;
+	auto ylabel(const TObject* ) && -> FigureStyle;
+	auto title(std::string ) && -> FigureStyle;
+	auto title(const TObject* ) && -> FigureStyle;
+	auto figsize(double , double ) && -> FigureStyle;
+	auto save_dpi(double ) && -> FigureStyle;
+
+	auto xlim(double , double ) && -> FigureStyle;
+	auto ylim(double , double ) && -> FigureStyle;
+
+	auto logx(bool = true) && -> FigureStyle;
+	auto logy(bool = true) && -> FigureStyle;
+	auto logz(bool = true) && -> FigureStyle;
+	auto grid(bool = true) && -> FigureStyle;
+	auto enable_right_top_spline(bool = true) && -> FigureStyle;
+	auto legend(bool = true) && -> FigureStyle;
+};
+
 struct Figure {
-	Figure() = default;
+	explicit Figure(FigureStyle style = {})
+		: style_(std::move(style)) {}
 
 	auto plot(const TH1& , HistStyle = {}) && -> Figure;
 	auto plot(const TH2& , Hist2DStyle = {}) && -> Figure;
 	auto plot(const TGraph& , GraphStyle = {}) && -> Figure;
 	auto plot(const TGraphErrors& , GraphStyle = {}) && -> Figure;
 
-	auto xlabel(std::string ) && -> Figure;
-	auto xlabel(const TObject* ) && -> Figure;
-	auto ylabel(std::string ) && -> Figure;
-	auto ylabel(const TObject* ) && -> Figure;
-	auto title(std::string ) && -> Figure;
-	auto title(const TObject* ) && -> Figure;
-	auto figsize(double , double ) && -> Figure;
-	auto save_dpi(double ) && -> Figure;
-
-	auto xlim(double , double ) && -> Figure;
-	auto ylim(double , double ) && -> Figure;
-
-	auto logx(bool = true) && -> Figure;
-	auto logy(bool = true) && -> Figure;
-	auto grid(bool = true) && -> Figure;
-	auto enable_right_top_spline(bool = true) && -> Figure;
-	auto legend(bool = true) && -> Figure;
-
 	auto save(const std::filesystem::path& ) const -> void;
 
 private:
+	struct Default {
+		std::string xlabel, ylabel, title;
+		void from(const TObject* );
+	};
+	Default default_;
+	FigureStyle style_;
 	std::vector<Drawable> objects_;
-
-	std::string xlabel_;
-	std::string ylabel_;
-	std::string title_;
-	
-	Maybe<std::pair<uint32_t, uint32_t>> figsize_;
-	Maybe<double> save_dpi_;
-
-	Maybe<std::pair<double, double>> xlim_;
-	Maybe<std::pair<double, double>> ylim_;
-	bool hide_right_and_top_spline_ = true;
-
-	bool logx_ = false;
-	bool logy_ = false;
-	bool grid_ = false;
-	bool legend_ = false;
 };
 
 } // namespace mnd::plot

@@ -4,7 +4,9 @@
 #include <unistd.h>
 
 #include "util/CLI.h"
-#include "util/MacroHelpers.h"
+#include "util/FilesystemUtils.h"
+#include "util/TextUtils.h"
+
 using namespace std::literals;
 
 extern const char* artsy;
@@ -22,6 +24,7 @@ int main(int argc, char* argv[]) {
 	bool ignore_global = false;
 	bool print_sections = false;
 	bool dump = false;
+	bool sim = false;
 	
 	add_logged_option<DisplayDefault::No>(app, "-p,--program", prog, "Program name")
 		->check(CLI::ExecPermissions);
@@ -32,6 +35,7 @@ int main(int argc, char* argv[]) {
 	add_logged_flag(app, "--ignore-global", ignore_global, "Ignore the GLOBAL sections. Just parse the named section.");
 	add_logged_flag(app, "-x,--print-sections", print_sections, "Print available sections and exit the program.");
 	add_logged_flag(app, "-d,--dump", dump, "Dump the contents of the requested section and exit the program.");
+	add_logged_flag(app, "-n,--sim", sim, "Dry run. Dump exactly how the delegated program would've been called.");
 	add_logged_flag(app, "-v", help_underlying, "Pass '--help' flag to the underlying process");
 
 	CLI11_PARSE(app, argc, argv);
@@ -70,22 +74,22 @@ int main(int argc, char* argv[]) {
 	}
 
 	/* Parse the config file. It throws here on bad parse.. */
-	const std::string cfg_contents = mnd::parse_file_to_string(config);
+	const std::string cfg_contents = mnd::fs::parse_file_to_string(config);
 
 	if(print_sections) {
 		std::cout << MND_RGB_COL(203,255,30) "\nAvailable sections:\n" KNRM;
-		for(const auto name : mnd::extract_available_sections("SECTION", cfg_contents))
+		for(const auto name : mnd::sdsl::extract_available_sections("SECTION", cfg_contents))
 			std::cout << name << '\n';
 		return 0;
 	}
 
 	/* Global contents, in the GLOBAL() block. */
-	auto g_contents = mnd::extract_text_body("GLOBAL", "", cfg_contents)
+	auto g_contents = mnd::sdsl::extract_text_body("GLOBAL", "", cfg_contents)
 		.filter([b=ignore_global](const auto& ){ return !b; } );
 
 	std::string_view sec_contents;
 	if(!section.empty()) {
-		const auto body = mnd::extract_text_body(
+		const auto body = mnd::sdsl::extract_text_body(
 			"SECTION", section, cfg_contents);
 		if(body.is_none())
 			MND_THROW("Contents empty, invalid or section 'SECTION(%s)' not found?\n", section.c_str());
@@ -101,6 +105,10 @@ int main(int argc, char* argv[]) {
 	std::string full_contents = std::string{g_contents.value_or("")} + "\n" + std::string{sec_contents};
 	
 	mnd::Argv fwd_argv = mnd::parse_argv(full_contents, prog);
+	if(sim) {
+		std::cout << fwd_argv << std::endl;
+		return 0;
+	}
 
 	WARN("Replacing the run script with '%s'\n%s%s%s\n", fwd_argv[0], BOLD, artsy, KNRM);
 	std::cout.flush();

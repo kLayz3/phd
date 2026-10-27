@@ -11,7 +11,7 @@ namespace mnd {
 
 /* Nicer repr of std::stoi, that will parse a character sequence
  * to int/unsigned int (stou), it will match the whole sequence to be parsable.
- * Is currenly accepting only standard C locale, as shown in example [3]
+ * Is currently accepting only standard C locale, as shown in example [3]
  * [1]: stoi("1234") -> Some{1234}
  * [2]: stoi(" 123") -> None
  * [3]: stoi("123'456") -> None
@@ -51,6 +51,30 @@ std::string ftos(
 	std::chars_format fmt = std::chars_format::fixed
 );
 
+/* Convert string to one of the floats: float|double|long double
+ * Is currently accepting only standard C locale, as shown in example [3]
+ * E.g., say we deal with `double` type:
+ * [ 1]: stof("1234")       -> Some{1234.0}
+ * [ 2]: stof("1234.0")     -> Some{1234.0}
+ * [ 3]: stof(" 123")       -> None
+ * [ 4]: stof("123'456.12") -> None
+ * [ 5]: stof("123text")    -> None
+ * [ 6]: stof("-12")        -> Some{-12.0}
+ * [ 7]: stof("-12.57348")  -> Some{-12.57348}
+ * [ 8]: stof("1.02e3")     -> Some{1020.0}
+ * [ 9]: stof("1.02 e3")    -> None , because of whitespace
+ * [10]: stof("-1.12345E3") -> Some{-1123.45}
+ * [11]: stof("1.02e400")   -> Some{std::numeric_limits<double>::infinity} , because of pos. overflow
+ * [12]: stof("-1.02e400")  -> Some{-std::numeric_limits<double>::infinity}, because of neg. overflow
+ * [13]: stof("NAN")        -> Some{NAN}
+ * [14]: stof("inf")        -> Some{std::numeric_limits<double>::infinity}
+ * [15]: stof("-inf")       -> Some{-std::numeric_limits<double>::infinity}
+ * [16]: stof("+1.02e3")    -> Some{1020.0}
+ * [17]: stof("++1.02e3")   -> None , same as other 2-sign combos --,+-,-+ 
+ * Is case insensitive, so NAN,nan,inf,INF etc are all accepted. Same for scientific notation e.
+ */
+template<typename T>
+Option<T> stof(std::string_view );
 
 /* Case where we wish to consume as many chars as possible.
  * On success, removes the parsed prefix and returns its value.
@@ -74,17 +98,4 @@ bool parse(std::string_view v, T& out) {
 }
 bool parse(std::string_view, bool& );
 
-/* Remove leading and trailing whitespaces from a view. Doesn't mutate the underlying buffer,
- * only returns the trimmed view object. */
-inline constexpr std::string_view trim(std::string_view sv) noexcept {
-	constexpr auto whitespace = " \t\n\r\f\v";
-
-	const auto first = sv.find_first_not_of(whitespace);
-	if(first == std::string_view::npos)
-		return {};
-
-	const auto last = sv.find_last_not_of(whitespace);
-	return sv.substr(first, last - first + 1);
-}
-
-}
+} // namespace mnd

@@ -1,5 +1,7 @@
 #include "util/MPhysics.h"
 #include "util/Geometry.h"
+#include "util/TextUtils.h"
+
 #include "monad/monad.hxx"
 
 #include <algorithm>

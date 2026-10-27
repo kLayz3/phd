@@ -109,7 +109,7 @@ inline bool operator<(const TrackCost& c, double max_cost) noexcept { return !(c
  *  and the offset vector `d_xy`. */
 void TFOOTHitProc::SetConversionMatrices(int ipair, const FOOTParam& px, const FOOTParam& py ) {
 	using std::cos; using std::sin;
-	double tx = px.delta_a * M_PI / 180.0, ty = py.delta_a * M_PI / 180.0;	
+	double tx = px.delta_a * M_PI / 180.0, ty = py.delta_a * M_PI / 180.0;
 	hm[ipair].A << cos(ty), -sin(tx),
 	               sin(ty),  cos(tx);
 	hm[ipair].A *= 1.0/cos(tx-ty);
@@ -117,7 +117,7 @@ void TFOOTHitProc::SetConversionMatrices(int ipair, const FOOTParam& px, const F
 	hm[ipair].dxy << px.delta_p, // already in [mm] scale, don't need to convert.
 	                 py.delta_p;
 	
-	::refl[ipair] << px.R(),
+	refl[ipair] << px.R(),
 	               py.R();
 }
 

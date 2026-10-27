@@ -3,6 +3,7 @@
 #include "util/CLI.h"
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.h"
+#include "util/TextUtils.h"
 
 #include "TApplication.h"
 

@@ -160,7 +160,7 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 
 	if(input.FOOT_N != out.FOOT_N)
 		ERROR(EMPH2(%s) ": mapping is wrong. Deduced output FOOT%d (from setup input), but processor's input is FOOT%d ?\n", 
-			_SELF_TYPE_CSTR, out.FOOT_N, input.FOOT_N);
+			MND_SELF_TYPE_CSTR, out.FOOT_N, input.FOOT_N);
 
 	/* Taken from setup file. Parsed in `TFOOTCalCont::Init()` */
 	X_CENTRE_THR = out.par.c_threshold;

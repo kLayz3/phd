@@ -52,7 +52,6 @@ struct TrackQ_ {
 	}
 	constexpr void reset() noexcept { val_.mu = nil; }
 
-	MND_OPTION_ADD_CHECKED_ACCESS
 	MND_OPTION_ADD_UNCHECKED_ACCESS
 
 private:
@@ -99,7 +98,7 @@ template <
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(i >= N)
 			ERROR("Requesting index: %zu, but currently combinator (%s) has %zu entries (capacity=%zu)",
-				i, _SELF_TYPE_CSTR, N, Capacity);
+				i, MND_SELF_TYPE_CSTR, N, Capacity);
 #endif
 		return buffer[i];
 	}
@@ -191,7 +190,6 @@ struct FTrack_ {
 	}
 	constexpr void reset() noexcept { val_.q.mu = nil; }
 	
-	MND_OPTION_ADD_CHECKED_ACCESS
 	MND_OPTION_ADD_UNCHECKED_ACCESS
 
 private:
@@ -246,7 +244,7 @@ template <
 		const size_t n_current = N();
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(n_current >= Capacity)
-			ERROR("Adding a point to '%s' object. Capacity %zu exceeded", _SELF_TYPE_CSTR, Capacity);
+			ERROR("Adding a point to '%s' object. Capacity %zu exceeded", MND_SELF_TYPE_CSTR, Capacity);
 #endif
 		zs[n_current] = z;
 		xs[n_current] = rhs.X();

@@ -10,7 +10,6 @@
 #include <sstream>
 #include <cmath>
 #include <stdexcept>
-#include <regex>
 
 #include "TROOT.h"
 #include "TCanvas.h"
@@ -61,75 +60,6 @@ using A2 = std::array<double, 2>;
 using A3 = std::array<double, 3>;
 template<typename T, size_t M, size_t N>
 using Arr2 = std::array<std::array<T,N>, M>;
-
-/* File names are often of the form: `main_0XXX_0YYY.root`, as such
- * metadata'ing multiple files can be concatenated e.g.:
- * => main_0123_0144.root
- * +  main_0145_0174.root
- * +  main_0175_0178.root
- * ----------------------
- * =  main_0123_0178.root
- * */
-
-namespace mnd::fs {
-
-using namespace std::literals;
-
-inline constexpr const char* file_prefix = "main";
-inline constexpr u32 nchars_run_number = 4;
-
-/* Generally, we expect files to be called with this PCRE2 format. E.g.:
- * main_0051_0085_dbg.root
- * Group 1: 0–4   main
- * Group 2: 5–9   0051
- * Group 3: 10–14 0085 */
-inline constexpr const char* filename_pattern
-	= R"(^(\w.+?)_(\d{1,4})(?:_(\d{1,4}))?(?:.+?)?\.root$)";
-
-/* If "main_0023_0144.root" => "main"s */
-std::string run_name(std::string_view );
-
-/* If "main_0023_0144.root" => 23 */
-u32 file_start_number(std::string_view );
-
-/* If "main_0023_0144.root" => 144 */
-u32 file_end_number(std::string_view );
-
-/* If "main_0023_0144.root" => { 23, 144 } */
-std::pair<u32, u32> file_number_bounds(std::string_view );
-
-/* If "main_0023_0144.root" => { "main"s, 23, 144 } */
-std::tuple<std::string, u32, u32>
-file_info(std::string_view );
-
-/* If { "main_0023_0144.root", "main_0145_0174.root" } => { 23, 174 }.
- * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
-std::pair<u32, u32> file_number_bounds(const std::vector<std::string>& );
-
-/* If `{ main_0023_0144.root, main_0145_0174.root }` => "main_0023_0174". Doesn't have the extension.
- * It doesn't internally sort the sequence. Assumes sequence comes already sorted. */
-std::string file_names_concatenated(const std::vector<std::string>& );
-
-/* Make a sequence of paths based on an iterable container.
- * E.g.: path_sequence{"foo", "bar", "baz.txt"} -> "foo/bar/baz.txt" */
-template<typename Range>
-std::filesystem::path path_sequence(Range const& parts) {
-	std::filesystem::path p;
-
-	for(auto const& part : parts)
-		p /= part;
-
-	return p;
-}
-
-/* Resolve a path object if it's a symlink. */
-std::filesystem::path resolve_maybe_symlink(const std::filesystem::path& );
-
-/* One liner to return a stem of the string representing a possible path.
- * If "caldir/foo/main_0012.root"sv => "main_0012" */
-std::string file_stem(std::string_view );
-
-} // namespace mnd::fs
 
 namespace canvas {
 
@@ -274,41 +204,6 @@ bool IsValid(const Option<std::array<T,N>>& bounds) {
 	static_assert(N >= 2, "Array size must be >= 2");
 	return bounds.is_some();
 }
-
-/* Parse a file first thru the GCC preprocessor, and then
- * try to parse the output as a sequence of lines.
- * Is not thread safe! */
-auto parse_file_to_string(const std::string& ) -> std::string;
-auto parse_file_to_lines (const std::string& ) -> std::vector<std::string>;
-
-/* {"hehe.txt", "heha.jpg", "hehe.mk"} -> "heh"s */
-auto longest_common_prefix(mnd::span<const std::string> ) -> std::string;
-
-/* Parse top-level SECTION(label) { body } blocks from preprocessed text.
- * Empty labels conform to GLOBAL().
- * Quoted/escaped braces do not affect nesting. Duplicates and malformed matching
- * blocks throw; an absent requested label returns None.
- * Both APIs return views into text. */
-auto extract_text_body(
-	std::string_view , // SECTION
-	std::string_view , // section name
-	std::string_view   // full text
-) -> mnd::Option<std::string_view>;
-auto extract_available_sections(
-	std::string_view , // SECTION
-	std::string_view
-) -> std::vector<std::string_view>;
-
-/* Split a string into smaller substrings. */
-auto split(const std::string& , char ) -> std::vector<std::string>  ;
-
-/* Return a vector of views to the underlying sequence of strings. */
-auto to_views(const std::vector<std::string>& ) -> std::vector<std::string_view> ;
-
-/* Split a string into smaller substrings, and return a view.
- * The reference could dangle! */
-auto split_view(std::string_view , char ) -> std::vector<std::string_view>;
-auto split_view(std::string&& , char ) -> std::vector<std::string_view> = delete;
 
 /* Invoke a function `func` over a range of objects, over nthreads.
  * `Range` here binds to any type that is indexable such as array/vector/span.

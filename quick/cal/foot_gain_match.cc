@@ -3,6 +3,7 @@
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.h"
 #include "util/FitSpline.h"
+#include "util/TextUtils.h"
 
 #include "TStyle.h"
 #include "TApplication.h"
@@ -412,55 +413,55 @@ int main(int argc, char* argv[]) {
 	canvas::save_all<canvas::Exe>(save, {
 		Form("FOOT%d", ifoot),
 		Form("Z_%d",  Q_target),
-		mnd::fs::file_stem(fileName),
+		mnd::file_stem(fileName),
 		ht_info
 	});
 
 	if(test_py) {
-		mnd::plot::Figure {}
-			.plot(
-				*h1_delta, mnd::plot::HistStyle{}
-					.stairs()
-					.label(R"($\delta$ distribution)")
-					.fill()
-					.line_width(2.2)
-			).xlabel(R"($\delta\,[-0.5,\,0.5]$)")
-			.ylabel(*h1_delta)
-			.grid()
-			.title(*h1_delta)
-			.legend()
-			.save(
+		using namespace mnd::plot;
+		Figure {
+			FigureStyle{}
+				.xlabel(R"($\delta\,[-0.5,\,0.5]$)")
+				.grid()
+				.legend()
+			}.plot(*h1_delta, HistStyle{}
+				.stairs()
+				.label(R"($\delta$ distribution)")
+				.fill()
+				.line_width(2.2)
+			).save(
 				fs::path{"autosave"} / mnd::fs::current_executable_name() / "pysave.png"
 			);
-		mnd::plot::Figure {}
-			.plot(
-				*h1_delta, mnd::plot::HistStyle{}
-					.stairs()
-					.label(R"($\delta$ distribution (pink-y color)")
-					.line_width(2.8)
-					.edgecolor(0xD800AD_c)
-			).xlabel(R"($\delta\,[-0.5,\,0.5]$)")
-			.ylabel(*h1_delta)
-			.grid()
-			.title("Delta, non-fill 'gram")
-			.legend()
-			.save(
+
+		Figure {
+			FigureStyle{}
+				.grid()
+				.title("Delta, non-fill 'gram")
+				.legend()
+				.xlabel(R"($\delta\,[-0.5,\,0.5]$)")
+			}.plot(*h1_delta, HistStyle{}
+				.stairs()
+				.label(R"($\delta$ distribution (pink-y color)")
+				.line_width(2.8)
+				.edgecolor(0xD800AD_c)
+			).save(
 				fs::path{"autosave"} / mnd::fs::current_executable_name() / "pysave_nf.png"
 			);
-		mnd::plot::Figure {}
-			.plot(
-				*h1_delta, mnd::plot::HistStyle{}
-					.points()
-					.label(R"($\delta$ distribution (green-ish color)")
-					.line_width(2.2)
-					.edgecolor(0x008B46_c)
-					.marker("^")
-			).xlabel(R"($\delta\,[-0.5,\,0.5]$)")
-			.ylabel("Count")
-			.grid()
-			.title("Delta, points 'gram")
-			.legend()
-			.save(
+
+		Figure {
+			FigureStyle{}
+				.xlabel(R"($\delta\,[-0.5,\,0.5]$)")
+				.ylabel("Count")
+				.grid()
+				.title("Delta, points histogram")
+				.legend()
+			}.plot(*h1_delta, HistStyle{}
+				.points()
+				.label(R"($\delta$ distribution (green-ish color)")
+				.line_width(2.2)
+				.edgecolor(0x008B46_c)
+				.marker("^")
+			).save(
 				fs::path{"autosave"} / mnd::fs::current_executable_name() / "pysave_pt.png"
 			);
 	}

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../monad/monad.hxx"
+#include "monad/monad.hxx"
 
 #include <cmath>
 #include <type_traits>
@@ -120,10 +120,10 @@ private:
 		"Underlying type `T` must have `y` field.");
 	static_assert(mnd::has_z_field<FOOTPair>::value,
 		"Underlying type `T` must have `z` field.");
-	using hit_type_x = typename mnd::is_indexable_range <
+	using hit_type_x = typename mnd::meta::is_indexable_range <
 		std::decay_t<decltype( std::declval<FOOTPair&>().x )>
 	>::underlying_type;
-	using hit_type_y = typename mnd::is_indexable_range <
+	using hit_type_y = typename mnd::meta::is_indexable_range <
 		std::remove_reference_t<std::remove_cv_t<
 			decltype( std::declval<FOOTPair&>().y )
 		>>

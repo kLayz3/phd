@@ -16,6 +16,8 @@
 #include "util/MPhysics.h"
 #include "ExperimentAssumptions.hh"
 #include "util/MPhysics.h"
+#include "util/TextUtils.h"
+#include "util/FilesystemUtils.h"
 
 #include "TFOOTHitCont.h"
 #include "TFRSHitCont.h"
@@ -30,8 +32,8 @@ using namespace indicators;
 using namespace mnd::col;
 using namespace mnd::col::literals;
 using namespace phy::literals;
-
 namespace fs = std::filesystem;
+
 using namespace std::string_view_literals;
 
 //#define MND_PHYSICS_PARANOIA
@@ -825,6 +827,7 @@ int main(int argc, char* argv[]) {
 	cs->cd(8); h1_sci22_cut2.Draw();
 	cs->cd(9); h1_sci31_cut2.Draw();
 
+	using mnd::operator<<; // shut up LSP you stupid dog
 	WARN("Info: "); std::cerr << MND_RGB_COL(140,85,255) << info << KNRM "\n";
 
 	canvas::save_all<canvas::Exe>( save, mnd::to_views(info) );
@@ -843,9 +846,9 @@ int main(int argc, char* argv[]) {
 		py_histstyle = std::move(py_histstyle)
 			.edgecolor(py_linecol.unwrap());
 	}
-
-	mnd::plot::Figure {}
-		.plot(*h1_angle_ex, py_histstyle)
+	using namespace mnd::plot;
+	Figure {
+		FigureStyle{}
 		.save_dpi(200)
 		.xlabel(
 			 !rho_xlabel.empty()
@@ -857,6 +860,8 @@ int main(int argc, char* argv[]) {
 			 !rho_title.empty()
 			? rho_title
 			: R"($\rho = \sqrt{\sum_{i} \theta_{\mathrm{HI}-p_{i}^2}$)")
+
+		}.plot(*h1_angle_ex, py_histstyle)
 		.save(
 			fs::path{"autosave"}
 			/ mnd::fs::current_executable_name()

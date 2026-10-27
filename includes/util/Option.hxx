@@ -4,6 +4,8 @@
 #include <utility>
 #include <functional>
 #include <type_traits>
+#include <string>
+#include <memory>
 
 #include <util/FloatAsserts.hxx>
 
@@ -102,6 +104,17 @@ Some(T) -> Some<T>;
  * best invested €38 ever. */
 namespace detail {
 
+inline constexpr const char* bad_option_def_msg = "bad optional access";
+class bad_option_access : public std::bad_optional_access {
+public:
+	bad_option_access() = default;
+	bad_option_access(std::string msg) : msg_(std::move(msg)) {}
+
+	inline const char* what() const noexcept override { return msg_.c_str(); }
+private:
+	std::string msg_ = bad_option_def_msg;
+};
+
 template<
 	typename Derived,
 	typename Repr
@@ -120,16 +133,36 @@ public:
 	constexpr bool is_none() const noexcept { return !is_some(); }
 
 	/* May panic (throw). Unlike Rust, returns back a reference when called on lvalue. */
-	constexpr const T&  unwrap() const&  { return data.value(); }
-	constexpr T&        unwrap() &       { return data.value(); }
-	constexpr T&&       unwrap() &&      { return std::move(data.value()); }
-	constexpr const T&& unwrap() const&& { return std::move(data.value()); }
-	
+	constexpr T&        unwrap(const char* msg = detail::bad_option_def_msg) & {
+		if(is_none()) throw detail::bad_option_access(msg ? msg : detail::bad_option_def_msg);
+		return *data;
+	}
+	constexpr const T&  unwrap(const char* msg = detail::bad_option_def_msg) const&  {
+		if(is_none()) throw detail::bad_option_access(msg ? msg : detail::bad_option_def_msg);
+		return *data;
+	}
+	constexpr T&&       unwrap(const char* msg = detail::bad_option_def_msg) &&      {
+		if(is_none()) throw detail::bad_option_access(msg ? msg : detail::bad_option_def_msg);
+		return *std::move(data);
+	}
+	constexpr const T&& unwrap(const char* msg = detail::bad_option_def_msg) const&& {
+		if(is_none()) throw detail::bad_option_access(msg ? msg : detail::bad_option_def_msg);
+		return *std::move(data);
+	}
+
 	/* Unchecked access. Delegates to inner's deref op, returns (hopefully) T& category. */
 	constexpr decltype(auto) operator*() &       noexcept { return *data; }
 	constexpr decltype(auto) operator*() const&  noexcept { return *data; }
 	constexpr decltype(auto) operator*() &&      noexcept { return *std::move(data); }
 	constexpr decltype(auto) operator*() const&& noexcept { return *std::move(data); }
+
+	/* Also unchecked access. */
+	constexpr T* operator->() noexcept {
+		return std::addressof(*data);
+	}
+	constexpr const T* operator->() const noexcept {
+		return std::addressof(*data);
+	}
 
 	/* Normally in STL, the functor type `F` is constrained by different concepts.
 	 * This call always returns by value. */
@@ -281,6 +314,24 @@ public:
 		return self();
 	}
 
+	/* Runs the callable if and only if the object is currently None. */
+	template<typename F>
+	constexpr Derived& operator|=(F&& factory) {
+		if(is_none())
+			self() = Some{ std::invoke(std::forward<F>(factory)) };
+
+		return self();
+	}
+	/* Runs the callable if and only if the object is currently Some, 
+	 * and replaces that value. */
+	template<typename F>
+	constexpr Derived& operator&=(F&& factory) {
+		if(is_some())
+			self() = Some{std::invoke(std::forward<F>(factory))};
+
+		return self();
+	}
+
 	/* Explicit comparison only allowed against another Option<U> types :) */
 	template <
 		typename D,
@@ -350,24 +401,6 @@ MND_UNSAFE_FORCE_INLINE constexpr f32 make_f32(u32 payload) noexcept {
 #undef MND_UNSAFE_FORCE_INLINE
 } // namespace unsafe
 
-#define MND_OPTION_ADD_CHECKED_ACCESS  \
-	inline constexpr decltype(auto) value() & { \
-		if(!has_value()) throw std::bad_optional_access(); \
-		return (val_); \
-	} \
-	inline constexpr decltype(auto) value() const& { \
-		if(!has_value()) throw std::bad_optional_access(); \
-		return (val_); \
-	} \
-	inline constexpr decltype(auto) value() && { \
-		if(!has_value()) throw std::bad_optional_access(); \
-		return std::move(val_); \
-	} \
-	inline constexpr decltype(auto) value() const && { \
-		if(!has_value()) throw std::bad_optional_access(); \
-		return std::move(val_); \
-	} \
-
 #define MND_OPTION_ADD_UNCHECKED_ACCESS \
     inline constexpr decltype(auto) operator*() & \
 		noexcept { return (val_); } \
@@ -401,22 +434,6 @@ struct pf##N { \
 	} \
 	inline constexpr void reset() noexcept { val_ = none_f##N; } \
 	\
-	inline constexpr decltype(auto) value() & { \
-		if(!has_value()) throw std::bad_optional_access(); \
-		return (val_); \
-	} \
-	inline constexpr decltype(auto) value() const& { \
-		if(!has_value()) throw std::bad_optional_access(); \
-		return (val_); \
-	} \
-	inline constexpr decltype(auto) value() && { \
-		if(!has_value()) throw std::bad_optional_access(); \
-		return std::move(val_); \
-	} \
-	inline constexpr decltype(auto) value() const && { \
-		if(!has_value()) throw std::bad_optional_access(); \
-		return std::move(val_); \
-	} \
 	inline constexpr decltype(auto) operator*() &       noexcept { return (val_); } \
 	inline constexpr decltype(auto) operator*() const&  noexcept { return (val_); } \
 	inline constexpr decltype(auto) operator*() &&      noexcept { return std::move(val_); } \
@@ -445,7 +462,6 @@ struct NonZero {
 	constexpr bool has_value() const noexcept { return val_ != nval_; }
 	constexpr void reset() noexcept { val_ = nval_; }
 	
-	MND_OPTION_ADD_CHECKED_ACCESS
 	MND_OPTION_ADD_UNCHECKED_ACCESS
 
 private:

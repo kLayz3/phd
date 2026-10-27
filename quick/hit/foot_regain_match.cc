@@ -3,6 +3,7 @@
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.h"
 #include "util/FitSpline.h"
+#include "util/TextUtils.h"
 
 #include "TStyle.h"
 #include "TApplication.h"
@@ -55,7 +56,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-f,--file", fileNames, "Pass one or more file name.")
 		->check(CLI::ReadPermissions)
         ->delimiter(',');
-	add_logged_option(app, "-i,--foot-id", ifoot, 
+	add_logged_option(app, "-i,--foot-id", ifoot,
 		"Select which FOOT detector.")
 		->check(CLI::Range(0, N_FOOT_DETECTORS-1));
 	add_logged_option(app, "-q,--charge", Q_target,
@@ -77,7 +78,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-b,--bins",bins_per_asic, "Binning Per ASIC")
 		->check([](const std::string& match) -> std::string {
 			int n = -1;
-			if(!mnd::parse(match, n) or (TFOOTCalCont::N_STRIPS % n != 0)) 
+			if(!mnd::parse(match, n) or (TFOOTCalCont::N_STRIPS % n != 0))
 				return mnd::msg("Must be integer parsable and evenly divisible by %d", TFOOTCalCont::N_STRIPS);
 			return "";
 		});
@@ -86,18 +87,18 @@ int main(int argc, char* argv[]) {
 		->type_name("INT[,INT...]")
 		->check(CLI::RangeOrEmpty(0,10));
 	add_logged_option(app, "--sratio", sratio, "Width ratio of raw histogram, how much to fit around the peak.")
-		->check(CLI::PositiveNumber); 
+		->check(CLI::PositiveNumber);
 	add_logged_option(app, "--niter", niter, "Gaussian TH1D fit, number of iterations for the peak finder.")
 		->check(CLI::PositiveNumber);
 	add_logged_option<DisplayDefault::No>(app, "--sci21",sci21_cut, "SCI21 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci22",sci22_cut, "SCI22 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
-	add_logged_option(app, "-t,--take", take, 
+		->delimiter(',');
+	add_logged_option(app, "-t,--take", take,
 		"Which type of projection fit to take. `gauss_fit_only` will only use gaussian spline for well sampled data.");
-	add_logged_option(app, "-s,--show-old", show_old, 
+	add_logged_option(app, "-s,--show-old", show_old,
 		"Sequence of Z charges (, sep) to overlay their current gain match curve on the canvas.")
 		->delimiter(',')
 		->type_name("INT[,INT...]");
@@ -117,10 +118,10 @@ int main(int argc, char* argv[]) {
 
 #ifdef MND_FOOTTRACK_DEBUG
 	const int foot_pair_id = ifoot / 2;
-	std::array<FOOTParam, 2> *_tmp_obj; 
+	std::array<FOOTParam, 2> *_tmp_obj;
 	{
 		auto f = std::make_unique<TFile>(fileNames.front().c_str(), "READ");
-		get_obj(f, _tmp_obj, Form("FOOT_%d_setup", foot_pair_id)); 
+		get_obj(f, _tmp_obj, Form("FOOT_%d_setup", foot_pair_id));
 	}
 	FOOTParam* const foot_param = &_tmp_obj->at(1);
 	const Orientation o = foot_param->GetOrientation();
@@ -136,12 +137,12 @@ int main(int argc, char* argv[]) {
 	auto* h1_sci21_cut = new TH1P("((h1_cut)) SCI21 QDC mean [QDC units]@With cut", 0x890389_c, 500, 300, 4000);
 	auto* h1_sci22_cut = new TH1P("((h1_cut)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, 500, 300, 4000);
 	auto* h1_sci31_cut = new TH1P("((h1_cut)) SCI31 QDC mean [QDC units]@With cut", 0x7DE69D_c, 500, 300, 4000);
-	auto* h1_delta     = new TH1P("((h1_d0))Delta [from -0.5, 0.5]", kGreen-2, 150, -0.499, 0.499); 
-	auto* h1_delta_cut_mid = new TH1P("((h1_d1_mid))Delta [from -0.5, 0.5]", kRed-7, 150, -0.499, 0.499); 
+	auto* h1_delta     = new TH1P("((h1_d0))Delta [from -0.5, 0.5]", kGreen-2, 150, -0.499, 0.499);
+	auto* h1_delta_cut_mid = new TH1P("((h1_d1_mid))Delta [from -0.5, 0.5]", kRed-7, 150, -0.499, 0.499);
 
-	auto* h1_foot_e_mid = new TH1P("((h1_e_mid))FOOT E [ADC units]@Central strip value", 0xB2FD30_c, (int)(1.5*foot_binning[0]), foot_binning[1], foot_binning[2]); 
+	auto* h1_foot_e_mid = new TH1P("((h1_e_mid))FOOT E [ADC units]@Central strip value", 0xB2FD30_c, (int)(1.5*foot_binning[0]), foot_binning[1], foot_binning[2]);
 
-	auto* hit_energy_mid = new TH2P(Form("((h2_mid))Cluster energy [ADC]:Strip number [0..640]@FOOT%d Raw, Requested Q=%d", ifoot, Q_target), 
+	auto* hit_energy_mid = new TH2P(Form("((h2_mid))Cluster energy [ADC]:Strip number [0..640]@FOOT%d Raw, Requested Q=%d", ifoot, Q_target),
 		bins_per_asic*10, 0,640, foot_binning[0], foot_binning[1], foot_binning[2]);
 
     u32 f_index = 1;
@@ -152,9 +153,9 @@ int main(int argc, char* argv[]) {
             auto foot = model->MakeField<RNFOOTHit>("FOOT");
             auto frs = model->MakeField<RNFRSHit>("FRS");
             auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
-            
+           
             const size_t nentries = ntuple->GetNEntries();
-            
+           
             ProgressBar bar {
                 option::BarWidth{50},
                     option::Start{"["},
@@ -180,7 +181,7 @@ int main(int argc, char* argv[]) {
                 if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
                 if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
                 if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
-                
+               
                 for(const auto& t : foot->track) {
                     if(!mnd::IsInside(t.Q, Q_interval)) continue;
 
@@ -188,10 +189,10 @@ int main(int argc, char* argv[]) {
                     const double delta = (o == Orientation::X)
                         ? t._delta_x[foot_pair_id]
                         : t._delta_y[foot_pair_id];
-                    
+                   
                     /* nil value is always mapped to a quiet nan */
                     if(!std::isfinite(delta)) continue;
-   
+  
                 }
             }
             bar.mark_as_completed();
@@ -217,9 +218,9 @@ int main(int argc, char* argv[]) {
         auto foot = model->MakeField<RNFOOTHit>("FOOT");
         auto frs = model->MakeField<RNFRSHit>("FRS");
         auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
-        
+       
         const size_t nentries = ntuple->GetNEntries();
-        
+       
         ProgressBar bar {
             option::BarWidth{50},
                 option::Start{"["},
@@ -241,7 +242,7 @@ int main(int argc, char* argv[]) {
             const auto& sci21 = frs->cal.sci[0];
             const auto& sci22 = frs->cal.sci[1];
             const auto& sci31 = frs->cal.sci[2];
-            
+           
             if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
             if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
             if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
@@ -261,7 +262,7 @@ int main(int argc, char* argv[]) {
                 const double delta = (o == Orientation::X)
                     ? t._delta_x[foot_pair_id]
                     : t._delta_y[foot_pair_id];
-                
+               
                 /* nil value is always mapped to a quiet nan */
                 if(!std::isfinite(delta)) continue;
 
@@ -271,13 +272,13 @@ int main(int argc, char* argv[]) {
                 const double e = (o == Orientation::X)
                     ? t._e0_x[foot_pair_id]
                     : t._e0_y[foot_pair_id];
-                
+               
                 h1_delta->Fill(delta);
-                    
+                   
                 if(mnd::IsInside(delta, delta_interval_1) or mnd::IsInside(delta, delta_interval_2)) {
                     h1_delta_cut_mid->Fill(delta);
                     hit_energy_mid->FillInside(i, e);
-                    h1_foot_e_mid->FillInside(e); 
+                    h1_foot_e_mid->FillInside(e);
                 }
             }
         }
@@ -290,7 +291,7 @@ int main(int argc, char* argv[]) {
 	 * lower values. Simply to line up the total cluster energy values to the average ADC, across the detector. */
 	
 	/* Do the small fit in the 1D plot. */	
-	TH1D* const h = *h1_foot_e_mid; 
+	TH1D* const h = *h1_foot_e_mid;
 	auto [fitr_mid, err_mid] = GaussFitMax(h, sratio, niter);
 	WARN("[CENTRAL HIT] 1D projection yields: max: %.2f, gauss fit max (around this max+-%.1f sigma): %.2f +- %.2f\n",
 		h->GetXaxis()->GetBinCenter( h->GetMaximumBin() ), sratio,
@@ -310,7 +311,7 @@ int main(int argc, char* argv[]) {
 	constexpr static int N_LOWEST_ENTRIES = 10;
 
 	/* Try to fit a spline(s) for some given ASICs. */
-	if(do_fit.is_some()) { 
+	if(do_fit.is_some()) {
 		FOOTGainParam pp = foot_param->gain;
 
 		const auto& v = do_fit.unwrap();
@@ -321,7 +322,7 @@ int main(int argc, char* argv[]) {
 			
 			FMultiPoly* mp = asic.GetPoly(Q_target);
 			if(!mp) {
-				asic.multi_poly.emplace_back(Q_target); 
+				asic.multi_poly.emplace_back(Q_target);
 				mp = &asic.multi_poly.back();
 			}
 			
@@ -329,65 +330,65 @@ int main(int argc, char* argv[]) {
 			double x_hi = (a+1) * 64 - 0.00001;
 			
 			if( contains(v, a) ) {
-				auto [rg, graw, gfit] = FitSpline<fit_info::GAUSS_MAX> ( 
+				auto [rg, graw, gfit] = FitSpline<fit_info::GAUSS_MAX> (
 					poly_deg, *hit_energy_mid, x_lo, x_hi, 40, sratio, niter /*, Verbosity::CHATTY */
-				); 
-				auto [rp, praw, pfit] = FitSpline<fit_info::PROFILE_MAX> ( 
-					poly_deg, *hit_energy_mid, x_lo, x_hi, 40 /*, whatever, Verbosity::CHATTY */ 
-				); 
-				gauss_fit.push_back(gfit); 
-				gauss_raw.push_back(graw); 
-				profile_fit.push_back(pfit); 
-				profile_raw.push_back(praw); 
+				);
+				auto [rp, praw, pfit] = FitSpline<fit_info::PROFILE_MAX> (
+					poly_deg, *hit_energy_mid, x_lo, x_hi, 40 /*, whatever, Verbosity::CHATTY */
+				);
+				gauss_fit.push_back(gfit);
+				gauss_raw.push_back(graw);
+				profile_fit.push_back(pfit);
+				profile_raw.push_back(praw);
 				
 				if(take == Take::gauss or take == Take::gauss_fit_only) {
-					mp->pol = std::vector<double>(rg.begin(), rg.end()); 
+					mp->pol = std::vector<double>(rg.begin(), rg.end());
 				} else {
 					mp->pol = std::vector<double>(rp.begin(), rp.end());
 				}
-			} 
+			}
 			else {
-				TAxis *xax = (*hit_energy_mid)->GetXaxis(); 
-				int firstbin = xax->FindBin(x_lo); 
-				int lastbin = xax->FindBin(x_hi); 
+				TAxis *xax = (*hit_energy_mid)->GetXaxis();
+				int firstbin = xax->FindBin(x_lo);
+				int lastbin = xax->FindBin(x_hi);
 
-				auto pasic = std::unique_ptr<TH1D>((*hit_energy_mid)->ProjectionY("__py", firstbin, lastbin)); 
-				pasic->SetDirectory(nullptr); 
+				auto pasic = std::unique_ptr<TH1D>((*hit_energy_mid)->ProjectionY("__py", firstbin, lastbin));
+				pasic->SetDirectory(nullptr);
 
-				double profile_mean, gauss_mean; 
-				if(pasic->Integral() >= N_NEEDED_ENTRIES) { /* If it contains more than 500 events, we can sample it. */ 
-					profile_mean = pasic->GetXaxis()->GetBinCenter( pasic->GetMaximumBin() ); 
-					auto [pg0, err_pg0] = GaussFitMax( pasic.get(), sratio );  
-					gauss_mean = pg0[1]; 
-				} else { /* No clue. Just take profile mean the mean, but gauss is invalidated. */ 
-					profile_mean = pasic->GetMean(); 
-					gauss_mean = mean_mid; 
+				double profile_mean, gauss_mean;
+				if(pasic->Integral() >= N_NEEDED_ENTRIES) { /* If it contains more than 500 events, we can sample it. */
+					profile_mean = pasic->GetXaxis()->GetBinCenter( pasic->GetMaximumBin() );
+					auto [pg0, err_pg0] = GaussFitMax( pasic.get(), sratio ); 
+					gauss_mean = pg0[1];
+				} else { /* No clue. Just take profile mean the mean, but gauss is invalidated. */
+					profile_mean = pasic->GetMean();
+					gauss_mean = mean_mid;
 				}
-				TGraph* gfit = new TGraph(60); 
-				TGraph* pfit = new TGraph(60); 
-				for(int i=0; i<60; ++i) { 
-					double x = x_lo + (i+0.00001) * (x_hi - x_lo)/59; 
-					gfit->SetPoint(i, x, gauss_mean); 
-					pfit->SetPoint(i, x, profile_mean); 
-				} 
-				if(pasic->Integral() >= N_NEEDED_ENTRIES) { 
-					gfit->SetLineColor(gCol_); gfit->SetLineWidth(4); 
-					pfit->SetLineColor(pCol_); pfit->SetLineWidth(4); 
-				} else { 
-					gfit->SetLineColor(gCol_ + 1); gfit->SetLineWidth(12); 
-					pfit->SetLineColor(pCol_ + 1); pfit->SetLineWidth(12); 
-				} 
-				gauss_fit.push_back(gfit); 
-				profile_fit.push_back(pfit); 
+				TGraph* gfit = new TGraph(60);
+				TGraph* pfit = new TGraph(60);
+				for(int i=0; i<60; ++i) {
+					double x = x_lo + (i+0.00001) * (x_hi - x_lo)/59;
+					gfit->SetPoint(i, x, gauss_mean);
+					pfit->SetPoint(i, x, profile_mean);
+				}
+				if(pasic->Integral() >= N_NEEDED_ENTRIES) {
+					gfit->SetLineColor(gCol_); gfit->SetLineWidth(4);
+					pfit->SetLineColor(pCol_); pfit->SetLineWidth(4);
+				} else {
+					gfit->SetLineColor(gCol_ + 1); gfit->SetLineWidth(12);
+					pfit->SetLineColor(pCol_ + 1); pfit->SetLineWidth(12);
+				}
+				gauss_fit.push_back(gfit);
+				profile_fit.push_back(pfit);
 
 				mp->pol = std::vector<double>(1);
 				if(pasic->Integral() < N_NEEDED_ENTRIES) {
-					if(take == Take::gauss) { mp->pol[0] = gauss_mean; } 
+					if(take == Take::gauss) { mp->pol[0] = gauss_mean; }
 					else if(pasic->Integral() >= N_LOWEST_ENTRIES) { mp->pol[0] = profile_mean; }
-					else { mp->pol[0] = gauss_mean; }; // in case if there are really no entries there... 
+					else { mp->pol[0] = gauss_mean; }; // in case if there are really no entries there...
 				}
 				else { // integral >= N_NEEDED_ENTRIES
-					mp->pol[0] = gauss_mean; 
+					mp->pol[0] = gauss_mean;
 				}
 			}
 
@@ -395,13 +396,13 @@ int main(int argc, char* argv[]) {
 		}
 
 		std::cout << "\"gain\": " << nlohmann::json(pp).dump(4) << std::endl;
-		WARN("Average value: %.5f (bin-center) and %.5f (gauss-fit-center)\n", 
+		WARN("Average value: %.5f (bin-center) and %.5f (gauss-fit-center)\n",
 			(*h1_foot_e_mid)->GetBinCenter((*h1_foot_e_mid)->GetMaximumBin()), mean_mid);
 	}
 
 	std::vector<TLine*> vlines;
 	for(int i = 1; i < 10; ++i) {
-		TLine* line = new TLine(i * 64, foot_binning[1], 
+		TLine* line = new TLine(i * 64, foot_binning[1],
 				                i * 64, foot_binning[2]);
 		line->SetLineColor(kRed);
 		line->SetLineStyle(2);
@@ -469,11 +470,11 @@ int main(int argc, char* argv[]) {
 		Form("Mean mid: %.2f", (take == Take::gauss or take == Take::gauss_fit_only) ? mean_mid
 			: h->GetXaxis()->GetBinCenter(h->GetMaximumBin()))
 	);
-    
-	canvas::save_all<canvas::Exe>(save, { 
-		Form("FOOT%d", ifoot), 
-		Form("Z_%d",  Q_target), 
-		mnd::fs::file_names_concatenated(fileNames)
+   
+	canvas::save_all<canvas::Exe>(save, {
+		Form("FOOT%d", ifoot),
+		Form("Z_%d",  Q_target),
+		mnd::rootfile_names_concatenated(fileNames)
 	});
 
 	WARN("End-of-main");
