@@ -1,6 +1,8 @@
 include includes/q.mk
 include includes/includes.mk
 
+.DEFAULT_GOAL := all
+
 BASE := $(CURDIR)
 SRC_DIR = $(BASE)/src
 BUILD_DIR = $(BASE)/build/$(BUILD_EXTENSION)

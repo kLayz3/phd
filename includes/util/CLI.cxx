@@ -86,6 +86,7 @@ mnd::Argv mnd::parse_argv(std::string_view text, std::string program_name) {
 						ERROR("unterminated double quote\n");
 
 					++i;
+					break;
 				}
 				default:
 					arg.push_back(text[i++]);

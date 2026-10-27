@@ -323,7 +323,7 @@ int main(int argc, char* argv[]) {
 		h1_footx[i]->Draw();
 		cpos->cd(i+1+ 1*N_PAIRS);
 		h1_footy[i]->Draw();
-		cpos->cd(i+1+ 3*N_PAIRS);
+		cpos->cd(i+1+ 2*N_PAIRS);
 		h1q[i]->Draw();
 	}
 	

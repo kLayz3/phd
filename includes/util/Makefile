@@ -1,6 +1,8 @@
 include ../q.mk
 include ../includes.mk
 
+.DEFAULT_GOAL := all
+
 SRC_DIR = $(shell pwd -P)
 BUILD_DIR = $(SRC_DIR)/$(BUILD_EXTENSION)
 

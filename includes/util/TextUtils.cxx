@@ -306,7 +306,7 @@ mnd::Option<std::string_view> mnd::sdsl::extract_text_body (
 
 	if(closing_brace == std::string_view::npos)
 		MND_THROW("mnd::extract_text_body: "
-			"Parse error: unterminated block-section %s(%.*s)\n",
+			"Parse error: unterminated block-section %.*s(%.*s)\n",
 			(int)block_keyword.size(), block_keyword.data(), (int)label.size(), label.data());
 	
 	result = Some{ text.substr(1, closing_brace-1) };
@@ -314,7 +314,7 @@ mnd::Option<std::string_view> mnd::sdsl::extract_text_body (
 	text = text.substr(closing_brace+1);
 
 	if(std::regex_search(text.begin(), text.end(), m, re))
-		MND_THROW("Duplicate instance of '%s(%.*s)' block found.\n",
+		MND_THROW("Duplicate instance of '%.*s(%.*s)' block found.\n",
 			(int)block_keyword.size(), block_keyword.data(), (int)label.size(), label.data());
 	
 	return result;

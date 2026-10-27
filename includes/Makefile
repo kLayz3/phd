@@ -1,6 +1,8 @@
 include q.mk
 include includes.mk
 
+.DEFAULT_GOAL := all
+
 # Go4 cflags needed for TFRSMap/TFOOTMap. Linking done in main Makefile tho.
 CXXFLAGS += $(GO4_CXXFLAGS)
 LIBS += $(GO4_LIBS)

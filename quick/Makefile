@@ -3,6 +3,8 @@ BASE := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 include $(BASE)/../includes/q.mk
 include $(BASE)/../includes/includes.mk
 
+.DEFAULT_GOAL := all
+
 # Keep Go4 include paths out of these programs.
 # Basically, adding this flag to the Go4 includes freaks the compiler out, lol.
 CXXFLAGS += -Wextra -I$(BASE)
