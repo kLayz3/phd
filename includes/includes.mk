@@ -16,7 +16,8 @@ COMPILER_VER := $(shell $(CXX) -dumpfullversion)
 # Also then, do not care about helper text and only take lines which are:
 # -feature value     and hash that.
 ifndef NATIVE_ARCH
-NATIVE_ARCH := $(shell opts=$$(LC_ALL=C $(CXX) -march=native -Q --help=target 2>/dev/null) && \
+NATIVE_ARCH := $(shell opts=$$(LC_ALL=C COLUMNS=300 \
+			   $(CXX) -march=native -Q --help=target 2>/dev/null) && \
 			   opts=$$(printf '%s' "$$opts" \
 			   		   | perl -ne 'print "$$1 $$2\n" if /^\s*(-m\S+)\s+(\S+)\s*$$/') \
 					&& test -n "$$opts" \
