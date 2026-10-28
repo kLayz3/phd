@@ -139,7 +139,7 @@ void save_all (
 			auto img = std::unique_ptr<TImage>{TImage::Create()};
 			if(!img) {
 				WARN("canvas::save_all: TImage::Create() failed for Canvas: '%s' (title: '%s'). "
-					"You can directly extract from the PDF: %spdftoppm -png -r 50 all.pdf canvas%s\n",
+					"You can directly extract from the PDF: %spdftoppm -png -r 300 all.pdf canvas%s\n",
 					c->GetName(), c->GetTitle(), BOLD, KNRM);
 				continue;
 			}

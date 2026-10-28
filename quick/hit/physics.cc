@@ -480,9 +480,9 @@ int main(int argc, char* argv[]) {
 	auto h1_foots_fired = TH1P{"Number of detector pairs fired@0..=4", kBlue-1,
 		RNFOOTHit::N_PAIRS+1, 0, RNFOOTHit::N_PAIRS+1};
 
-	auto h2_q_vs_mult = TH2P{"Track charge [Q]:Track multp@Full FOOT system",
+	auto h2_q_vs_mult = TH2P{"Track charge [Q]:Track multiplicity@Full FOOT system",
 		10, -0.5, 9.5, 40, 0,8};
-	auto h2_score_vs_mult = TH2P{"Track score [a.u.]:Track multp@Full FOOT system",
+	auto h2_score_vs_mult = TH2P{"Track score [a.u.]:Track multiplicity@Full FOOT system",
 		10, -0.5, 9.5, 300, 0, 50};
 	auto h1_track_q = TH1P{"Track charge [Q]@Full FOOT system", DEFAULT_FILL_COL_EX, q_binning[0], q_binning[1], q_binning[2] };
 	auto h2_track_distance = TH2P{"Track distances to vertex [mm]:Track Index [0,1,..N-1]@smaller x-axis means larger Q particle",
