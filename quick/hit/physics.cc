@@ -1,6 +1,7 @@
 /* Main program: on the track multp. vs charge graph do different cuts and look
  * at the resulting spectra... */
 
+#include "TFOOTCalCont.h"
 #include "util/CLI.h"
 #include "magic_enum/magic_enum.hpp"
 
@@ -476,6 +477,9 @@ int main(int argc, char* argv[]) {
 	if(vertex_dist_cut_given and sum_n_tracks_required > 0)
 		h1_track_mult.AppendToTitle(" 0 means event not viable.");
 
+	auto h1_foots_fired = TH1P{"Number of detector pairs fired@0..=4", kBlue-1,
+		RNFOOTHit::N_PAIRS+1, 0, RNFOOTHit::N_PAIRS+1};
+
 	auto h2_q_vs_mult = TH2P{"Track charge [Q]:Track multp@Full FOOT system",
 		10, -0.5, 9.5, 40, 0,8};
 	auto h2_score_vs_mult = TH2P{"Track score [a.u.]:Track multp@Full FOOT system",
@@ -574,6 +578,8 @@ int main(int argc, char* argv[]) {
 
 			ntuple->LoadEntry(entryId);
 
+			h1_foots_fired->Fill(foot->DataPresentCount());
+
 			const auto& sci21 = frs->cal.sci[RNFRSCal::SCI21_I];
 			const auto& sci22 = frs->cal.sci[RNFRSCal::SCI22_I];
 			const auto& sci31 = frs->cal.sci[RNFRSCal::SCI31_I];
@@ -597,7 +603,7 @@ int main(int argc, char* argv[]) {
 			* general vertexing, angles, some kind of rho, etc. */
 			if(!vertex_dist_cut_given) {
 				const size_t N = foot->track.size();
-				h1_track_mult->Fill( foot->HasData()? N: -1 );
+				h1_track_mult->Fill(foot->HasData() ? (double)N : -1.0);
 
 				std::vector<Line3D> tracks {};
 
@@ -608,6 +614,7 @@ int main(int argc, char* argv[]) {
 					h2_q_vs_mult->Fill(N, t.Q);
 					h2_score_vs_mult->Fill(N, t.score);
 					h1_track_q->Fill(t.Q);
+					h2_nlayers_hit->Fill(i, t.n);
 
 					tracks.push_back(*t);
 				}
@@ -766,10 +773,10 @@ int main(int argc, char* argv[]) {
 	cm->cd(1); h2_q_vs_mult.Draw("COLZ"); gPad->SetLogz();
 	cm->cd(2); h2_track_distance.Draw("COLZ"); gPad->SetLogz();
 	cm->cd(3); h2_score_vs_mult.Draw("COLZ"); gPad->SetLogz();
-	cm->cd(4); h1_track_mult.Draw();
-	cm->cd(5); h2_nlayers_hit.Draw("COLZ");
+	cm->cd(4); h1_track_mult.Draw(); gPad->SetLogy();
+	cm->cd(5); h2_nlayers_hit.Draw("COLZ"); gPad->SetLogz();
+	cm->cd(6);
 	if(!hide_platex_coeffs) {
-		cm->cd(6);
 		new PLatex(0.06,
 			"Coefficients: ",
 			Form("Cr = %.1f mm^-2", Cr),
@@ -778,7 +785,10 @@ int main(int argc, char* argv[]) {
 			Form("max cost for candidate: %.1f", max_cost),
 			Form("max cost for whole track: %.1f", max_cost_f)
 		);
+	} else {
+		h1_foots_fired.Draw(); gPad->SetLogy();
 	}
+
 	/* For the ρ-value histogram, add upper axis that is reflective on the transversal
 	 * part of the decay kinetic energy:
 	 *   ρ(T⟂) = 1/(beta*gamma) sqrt(2*T⟂ / (mp*c^2))

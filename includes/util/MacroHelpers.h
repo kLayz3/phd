@@ -138,8 +138,9 @@ void save_all (
 		if(extension == Extension::png) {
 			auto img = std::unique_ptr<TImage>{TImage::Create()};
 			if(!img) {
-				WARN("canvas::save_all: TImage::Create() failed for Canvas: \'%s\' (title: \'%s\')\n",
-					c->GetName(), c->GetTitle());
+				WARN("canvas::save_all: TImage::Create() failed for Canvas: '%s' (title: '%s'). "
+					"You can directly extract from the PDF: %spdftoppm -png -r 50 all.pdf canvas%s\n",
+					c->GetName(), c->GetTitle(), BOLD, KNRM);
 				continue;
 			}
 			img->FromPad(c);
