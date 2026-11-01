@@ -9,7 +9,6 @@
 #include "TFOOTMapCont.h"
 #include "util/json_struct_def.hh"
 #include "util/PolyFitter.h"
-#include "util/Tracking.h"
 #include "ExperimentAssumptions.hh"
 
 #include "TGraph.h"
@@ -620,18 +619,11 @@ struct RNFOOTCal {
 	RNFOOTCal();
 	void Clean() noexcept;
 
-    /* This API is written this way, bit unintuitive I admit - because adding a fresh single
-     * `bool` indicator will spill the alignment over into the next cache line. And to keep it
-     * all nice and tucked while also having room to */
-
-	/**
-	 * Return a fresh vector containing all the collected energies in the event.
-	 */
+	/* Return a fresh vector containing all the collected energies in the event. */
 	std::vector<double> E() const noexcept;
 
-	/**
-	 * Return a fresh vector containing all the collected energies in the event.
-	 */
+	/* Return a fresh vector containing all the collected cluster positions in the event.
+	 * It is in units of strips. */
 	std::vector<double> X() const noexcept;
 	inline void AddCluster(RNFOOTCluster cl) noexcept {
 		fCl.push_back(std::move(cl));

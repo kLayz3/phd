@@ -15,7 +15,7 @@
  * then it does a few step least-square optimization around that. */
 template<u32 N,
 	typename std::enable_if<(N < FOOTClusterFit::LARGE_CLUSTER_CUTOFF)>::type* = nullptr
-> 
+>
 void FitFOOTCluster(TFOOTCalProc& self, FOOTClusterFit* dest) {
 	static_assert(N > 3, "Called with cluster size < 3");
 	Eigen::Matrix<double,N,1> xs, ys;
@@ -30,15 +30,15 @@ void FitFOOTCluster(TFOOTCalProc& self, FOOTClusterFit* dest) {
 	/* Delta assigned in parent call. */
 }
 
-/* Assumption is that the `_buf` buffer is sorted in the position already. 
- * And is also guarded that the maximum element (in energy) is index'ed as [1]. 
+/* Assumption is that the `_buf` buffer is sorted in the position already.
+ * And is also guarded that the maximum element (in energy) is index'ed as [1].
  * 3 points form a perfect Gauss (chi^2 undefined), and can be calculated analytically. */
 template<>
 void FitFOOTCluster<3>(TFOOTCalProc& self, FOOTClusterFit* dest) {
 #ifdef FIT_ALL_WITH_3_POINTS
-	auto it_max = std::max_element(self._buf, self._buf + self._cl_cnt, 
-		[](const auto& l, const auto& r) { 
-			return l.e < r.e; 
+	auto it_max = std::max_element(self._buf, self._buf + self._cl_cnt,
+		[](const auto& l, const auto& r) {
+			return l.e < r.e;
 	});
 	auto [x_0, e_0] = *it_max;
 	int i0 = std::distance(it_max, self._buf);
@@ -67,7 +67,7 @@ void FitFOOTCluster<3>(TFOOTCalProc& self, FOOTClusterFit* dest) {
 /* For large clusters, just report the fit parameters as {μ,σ} = {CoG, sqrt(Var(CoG)) } */
 template<u32 N,
 	typename std::enable_if<(N == FOOTClusterFit::LARGE_CLUSTER_CUTOFF)>::type* = nullptr
-> 
+>
 void FitFOOTCluster(TFOOTCalProc& self, FOOTClusterFit* dest) {
 	/* Do brute force mu, sigma, a0 calculation. */
 	double sy = 0.;
@@ -98,10 +98,11 @@ void FitFOOTCluster(TFOOTCalProc& self, FOOTClusterFit* dest) {
 }
 
 std::ostream& operator<<(std::ostream& os, const TFOOTCalProc::TClustHit& cl) {
-	return os << "{" << cl.x << ", " << cl.e << "}"; 
+	return os << "{" << cl.x << ", " << cl.e << "}";
 }
 
 void TFOOTCalProc::PrintBuff() {
+	using mnd::operator<<;
 	std::cerr << mnd::as_span(_buf, _cl_cnt) << '\n';
 }
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int );
@@ -133,7 +134,7 @@ bool operator==(TFOOTCalProc::ClusterFullType& full, TFOOTCalProc::ClusterType t
 }
 
 bool operator!=(TFOOTCalProc::ClusterFullType& full, TFOOTCalProc::ClusterType t) {
-	return !(full == t) ; 
+	return !(full == t) ;
 }
 
 auto TFOOTCalProc::GetClusterType() -> ClusterType {
@@ -147,7 +148,7 @@ auto TFOOTCalProc::GetClusterType() -> ClusterType {
 }
 
 /* Input and output should be properly assigned a priori. */
-TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) : 
+TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 	TFOOTCalProc::Base(out, in)
 {
 	TFOOTMapCont& input = std::get<0>(this->in);
@@ -155,11 +156,11 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 		ERROR("Input sigma array not initialized? State (null|entries): \'%s\' . Did you call TFOOTMapCont::Setup() ?\n",
 				input.ped_s ? "null" : Form("%zu", input.ped_s->size()));
 
-	if(out.FOOT_N < 0 || out.par.N < 0) 
+	if(out.FOOT_N < 0 || out.par.N < 0)
 		ERROR("Output object (TFOOTCalCont): \'%s\' uninitialized. Did you call ::Setup?", out.GetName());
 
 	if(input.FOOT_N != out.FOOT_N)
-		ERROR(EMPH2(%s) ": mapping is wrong. Deduced output FOOT%d (from setup input), but processor's input is FOOT%d ?\n", 
+		ERROR(EMPH2(%s) ": mapping is wrong. Deduced output FOOT%d (from setup input), but processor's input is FOOT%d ?\n",
 			MND_SELF_TYPE_CSTR, out.FOOT_N, input.FOOT_N);
 
 	/* Taken from setup file. Parsed in `TFOOTCalCont::Init()` */
@@ -168,15 +169,15 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 
 	const auto& sigma = *input.ped_s;
 	for(int i=0; i<N_STRIPS; ++i) {
-		c_thr[i] = sigma[i] * X_CENTRE_THR; 
-		n_thr[i] = sigma[i] * X_NEIGHB_THR; 
+		c_thr[i] = sigma[i] * X_CENTRE_THR;
+		n_thr[i] = sigma[i] * X_NEIGHB_THR;
 	}
 
 	/* Bad/dead strips just label them with NAN'ed thresholds. */
 	const std::vector<int>& bad_strips = *input.bad_strips;
 	for(auto i : bad_strips) {
-		c_thr[i] = BAD_STRIP_THRESHOLD; 
-		n_thr[i] = BAD_STRIP_THRESHOLD; 
+		c_thr[i] = BAD_STRIP_THRESHOLD;
+		n_thr[i] = BAD_STRIP_THRESHOLD;
 	}
 
 	for(int i=0; i<N_STRIPS; ++i) {
@@ -223,8 +224,8 @@ void TFOOTCalProc::ProcessEntry() noexcept {
 void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold check. */ ) {
 	_ClearClust();
 
-	/* From the loop caller, it's assumed that previous two 
-	 * strips aren't part of this specific cluster. A.K.A, they're below the N-threshold. 
+	/* From the loop caller, it's assumed that previous two
+	 * strips aren't part of this specific cluster. A.K.A, they're below the N-threshold.
 	 * And that the current strip `i` is above the C-threshold. */
 	
 	ClusterType& _ct_neg = _ct.first;  /* Negative side. */
@@ -236,11 +237,11 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	_AddHit(i);
 	
 	/* The moment `e[i] > n_thr[i]` fails, a lookahead to i+1, or a lookbehind to i-1 occurs.
-	 * If the lookahead/behind finds a hit, e[i] is averaged out (geometric mean * small constant) 
+	 * If the lookahead/behind finds a hit, e[i] is averaged out (geometric mean * small constant)
 	 * between e[i-1] and e[i+1]. If it fails, means that both values `e[i]` and:
-	 *   e[i+1], in case of right traversing, 
+	 *   e[i+1], in case of right traversing,
 	 *   e[i-1], in case of left traversing,
-	 * fail the N-threshold cutoff and it constitutes a 
+	 * fail the N-threshold cutoff and it constitutes a
 	 * cluster end, for this respective side's traverse.  */
 
 	while((++i) < N_STRIPS and (e[i] > n_thr[i] || _IsAddibleToCluster<kPOS>(i)))  {
@@ -271,7 +272,7 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	 * However, possible that indeed there's a just-below-threshold effect for small
 	 * central hits. */
 	if(_cl_cnt == 1) {
-		/* Bad charge sharing can only be for MIP's, or if the 
+		/* Bad charge sharing can only be for MIP's, or if the
 		 * central strip somehow crossed a 'bad strip'. */
 		if(_buf[0].e > 3 * c_thr[i]) return;
 	}
@@ -280,7 +281,7 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	std::sort(_buf, _buf + _cl_cnt, [](const auto& l, const auto& r) { return l.x < r.x; });
 
 	/* Check if cluster is 'merged'. Meaning that in the cluster,
-	 * there exist two strips above C-threshold with 2 or more strips in-between 
+	 * there exist two strips above C-threshold with 2 or more strips in-between
 	 * which are below C-threshold. */
 	TClustHit* ref_hit = nullptr;
 	for(u32 i=0; i < _cl_cnt; ++i) {
@@ -295,8 +296,8 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	}
 
 	/* Handle the wavyness in the cluster. If it is fragmented/merged, then it's wavy by default.
-	 * Meaning that a cluster marked `kGOOD` has: first sequence (left-to-right) of collected strips 
-	 * energy must be monotonically increasing, while second sequence must have monotonically 
+	 * Meaning that a cluster marked `kGOOD` has: first sequence (left-to-right) of collected strips
+	 * energy must be monotonically increasing, while second sequence must have monotonically
 	 * decreasing energy values, as to yield a proper hit structure. */
 	if(_ct != ClusterType::kFRAGMENTED and _ct != ClusterType::kMERGED) {
 		double prev_e = 0;
@@ -326,9 +327,9 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	cl_wx /= cl_e;
 
 	/* Find the peak energy element in the cluster. */
-	auto it_max = std::max_element(_buf, _buf + _cl_cnt, 
-		[](const auto& l, const auto& r) { 
-			return l.e < r.e; 
+	auto it_max = std::max_element(_buf, _buf + _cl_cnt,
+		[](const auto& l, const auto& r) {
+			return l.e < r.e;
 		});
 	
 	ClusterType ct = this->GetClusterType();
@@ -340,7 +341,7 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	/* Debug massive clusters. This takes prio over isolated clusters. */
 	if(_cl_cnt >= MASSIVE_CLUSTER_CUTOFF) {
         out->w_ev_type = RNFOOTCal::EventType::MassiveCluster;
-        
+       
         if(!out->DebugAssigned())
 	        out->fRaw.assign(e, e + N_STRIPS);
 	}
@@ -391,7 +392,7 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		}
 		if(_cl_cnt != 3)
 			cl_fit.delta = cl_fit.mu - it_max->x;
-		/* Some cases cluster can generate delta outside of range [-0.5, 0.5]. 
+		/* Some cases cluster can generate delta outside of range [-0.5, 0.5].
 		 * This is the ultimate null indicator field for the fit. */
 		if(std::abs(cl_fit.delta) > 0.5) cl_fit.delta = NAN;
 #endif
@@ -412,9 +413,9 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 }
 
 /* When noisy strip is found in a middle of the cluster, extrapolate it's value based
- * on Gaussian extrapolation. Means we sampled point (x-1) and point (x+1). So from Gaussian 
- * distribution it follows: g(x) = sqrt( g(x-1) * g(x+1) ) * exp( 1/(2*σ²) ); 
- * For FOOT, for H/He the parameter is roughly: σ² = 0.295. 
+ * on Gaussian extrapolation. Means we sampled point (x-1) and point (x+1). So from Gaussian
+ * distribution it follows: g(x) = sqrt( g(x-1) * g(x+1) ) * exp( 1/(2*σ²) );
+ * For FOOT, for H/He the parameter is roughly: σ² = 0.295.
  * Note, for higher Z, σ² is much smaller, so the Gauss decays much faster.*/
 constexpr double SN_RATIO_FACTOR = 1.15; // exp( 1/(2*σ²) )
 constexpr double SN_RATIO_FACTOR_TO_MINUS_2 = 1 / (SN_RATIO_FACTOR * SN_RATIO_FACTOR);
@@ -444,15 +445,15 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int i /* 1, ...
 		e[i] = ( e[prev] + e[next] ) / 2;
 #endif
 
-		// Calling function will restore this hit, here just 'reassign' the energy.	
-		return true; 
+		// Calling function will restore this hit, here just 'reassign' the energy.
+		return true;
 	}
 #ifdef CL_E_TEST
 	// Possible that the current strip `i` is marked bad or 'noisy'.
 	// In this case just try to take the value as the average'd out
-	// between two previous ones. Assuming that the very-previous was already inside 
-	else if(int pprev = prev-1; 
-		pprev > 0 and e[pprev] > n_thr[pprev] and !std::isfinite(n_thr[i]) ) { 
+	// between two previous ones. Assuming that the very-previous was already inside
+	else if(int pprev = prev-1;
+		pprev > 0 and e[pprev] > n_thr[pprev] and !std::isfinite(n_thr[i]) ) {
 		e[i] = e[prev] * e[prev] / e[pprev] *  SN_RATIO_FACTOR_TO_MINUS_2;
 		
 		/* Check threshold versus the `n_thr` of previously added strip. */
@@ -485,14 +486,14 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int i /* 0, ...
 #endif
 		
 		// Calling function will restore this hit, here just 'reassign' the energy.
-		return true; 
+		return true;
 	}
 	// Possible that the current strip `i` is marked 'noisy'.
 	// In this case just try to take the value as the average'd out
 	// between two previous ones if they're part of the cluster.
 #ifdef CL_E_TEST
-	else if(int nnext = next+1; 
-		nnext < N_STRIPS and e[nnext] > n_thr[nnext] and !std::isfinite(n_thr[i]) ) { 
+	else if(int nnext = next+1;
+		nnext < N_STRIPS and e[nnext] > n_thr[nnext] and !std::isfinite(n_thr[i]) ) {
 		e[i] = e[next] * e[next] / e[nnext] *  SN_RATIO_FACTOR_TO_MINUS_2;
 
 		/* Check threshold versus the `n_thr` of previously added strip. */

@@ -1,13 +1,12 @@
-#include "magic_enum/magic_enum.hpp"
+#include "monad/accessories/formatting.hxx"
 #include "util/CLI.h"
-
 #include "util/PrettyHisto.h"
-#include "util/Tracking.h"
 #include "util/MacroHelpers.h"
 
 #include "TApplication.h"
 #include "TFOOTCalCont.h"
 #include "TFRSCalCont.h"
+#include <numeric>
 
 using namespace ROOT;
 using namespace ROOT::Experimental;
@@ -18,6 +17,8 @@ struct foot_enc {
 	std::shared_ptr<RNFOOTCal> cont;
 	FOOTParam* p;
 	double z;
+	double theta;
+	double dxy;
 	Orientation o;
 };
 std::ostream& operator<<(std::ostream& , const foot_enc& );
@@ -28,7 +29,9 @@ Calibrate non-referent FOOT detectors' angle+offsets, based on the 9C beam test 
 The first two pairs' fully calibrated measurement serve as a referent measurement to draw\n\
 particle tracks to match with other detectors in the sequence. "};
 	
-    constexpr static u32 N_REF_DET = 4;
+	constexpr u32 N_REF_PAIRS = 2;
+    constexpr u32 N_REF_DET = 2*N_REF_PAIRS;
+
 	std::string fileName = "";
 	u32 ifoot = 0;
 	A3 binning_x = {200,-30,30};
@@ -40,25 +43,25 @@ particle tracks to match with other detectors in the sequence. "};
 	size_t Npts = 1000;
     bool no_draw = false;
 	auto save = canvas::Extension::nil;
-    
+
 	add_logged_option(app, "-f,--file", fileName, "Pass a file name.")
 		->check(CLI::ReadPermissions);
-	add_logged_option(app, "-i,--foot-id", ifoot, 
+	add_logged_option(app, "-i,--foot-id", ifoot,
 		"Select which FOOT detector.")
 		->check(CLI::Range((int)N_REF_DET, N_FOOT_DETECTORS-1))
 		->mandatory();
-	add_logged_option(app, "-x,--bins-x",binning_x, "Binning X")
+	add_logged_option(app, "-x,--bins-x", binning_x, "Binning X")
 		->delimiter(',');
-	add_logged_option(app, "-y,--bins-y",binning_x, "Binning Y")
+	add_logged_option(app, "-y,--bins-y", binning_y, "Binning Y")
 		->delimiter(',');
 	add_logged_option(app, "-q,--foot-cut",foot_q_cut, "FOOT Q cut (charge)")
 		->delimiter(',');
-	add_logged_option<DisplayDefault::No>(app, "--sci21",sci21_cut, "SCI21 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
-	add_logged_option<DisplayDefault::No>(app, "--sci22",sci22_cut, "SCI22 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
-	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+	add_logged_option<DisplayDefault::No>(app, "--sci21", sci21_cut, "SCI21 QDC cut (also implying multiplicity 1). Default no cut.")
+		->delimiter(',');
+	add_logged_option<DisplayDefault::No>(app, "--sci22", sci22_cut, "SCI22 QDC cut (also implying multiplicity 1). Default no cut.")
+		->delimiter(',');
+	add_logged_option<DisplayDefault::No>(app, "--sci31", sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
+		->delimiter(',');
 	add_logged_option(app, "-N,--npts", Npts, "Amount of statistics required to issue a fit.");
     add_logged_flag(app, "--nodraw", no_draw, "Do not draw the histograms.");
 	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
@@ -73,6 +76,8 @@ particle tracks to match with other detectors in the sequence. "};
 	if(fileName.length() == 0) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
+	if(Npts < 10)
+		ERROR("Supply at least 10 points (-N,--npts). Is currently %zu.", Npts);
 	
 	TApplication rootApp("app", 0, 0);
 
@@ -87,18 +92,31 @@ particle tracks to match with other detectors in the sequence. "};
 		for(u32 i=0; i<N_REF_DET; ++i) {
             get_obj(f, rfoot[i].p, Form("FOOT%u_setup", i));
 			rfoot[i].z = box->GetFOOTZRel( rfoot[i].p );
+			rfoot[i].theta = rfoot[i].p->delta_a * M_PI / 180.0;
+			rfoot[i].dxy = rfoot[i].p->delta_p;
+			
 			Orientation o = rfoot[i].p->GetOrientation();
 			if(o == Orientation::UNKNOWN) ERROR("Referent FOOT%u orientation not specified. I won't allow it.\n", i);
 			rfoot[i].o = o;
 		}
         get_obj(f, foot.p, Form("FOOT%u_setup", ifoot));
         foot.z = box->GetFOOTZRel( foot.p );
+
         Orientation o = foot.p->GetOrientation();
         if(o == Orientation::UNKNOWN) ERROR("To-calibrate FOOT%d orientation not specified. I won't allow it.\n", ifoot);
         foot.o = o;
 	}
 	double z0 = foot.z;
 	const auto& binning = (foot.o == Orientation::X) ? binning_x : binning_y;
+
+	/* Verify that the referent detectors are indeed XY and properly set-up.
+	 * There *must* be two X- and two Y-measuring detectors. */
+	if(std::accumulate(std::begin(rfoot), std::end(rfoot), 0, [](int s, const auto& ref) {
+		return s + (int)(ref.o == Orientation::X); }) != 2)
+		ERROR("Expected %u X-measuring FOOTs in the %u referent pairs?", N_REF_PAIRS, N_REF_PAIRS);
+	if(std::accumulate(std::begin(rfoot), std::end(rfoot), 0, [](int s, const auto& ref) {
+		return s + (int)(ref.o == Orientation::Y); }) != 2)
+		ERROR("Expected %u Y-measuring FOOTs in the %u referent pairs?", N_REF_PAIRS, N_REF_PAIRS);
 
 	/* Reason these two enums are separate,
 	 * is so that the fitting library doesn't tag along any of the ROOT dependency. */
@@ -123,6 +141,27 @@ particle tracks to match with other detectors in the sequence. "};
         foot.z
 	);
 
+	/* The normal-line: (x0,ax,y0,ay) converts to the measurement u|v as:
+	 * u = ( cosθx_0     ,  zu*cosθx_0     , sinθx_0     , zu*sinθx_0) × (x0,ax,y0,ay) - offset
+	 * v = (-sinθy_0     , -zv*sinθy_0     , cosθy_0     , zv*cosθy_0) × (x0,ax,y0,ay) - offset
+	 */
+	Eigen::Matrix<double, N_REF_DET, 4> A;
+	Eigen::Vector<double, N_REF_DET> c;
+	for(u32 i=0; i<N_REF_DET; ++i) {
+		double t = rfoot[i].theta;
+		double z = rfoot[i].z;
+		if(rfoot[i].o == Orientation::X)
+			A.row(i) <<  cos(t),  z*cos(t), sin(t), z*sin(t);
+		else
+			A.row(i) << -sin(t), -z*sin(t), cos(t), z*cos(t);
+
+		c(i) = rfoot[i].dxy;
+	}
+	const auto qr = A.colPivHouseholderQr();
+	if(qr.rank() < 4)
+		ERROR("QR decomposition did not produce rank() >= 4. The referent FOOT part was:\n%s",
+			mnd::streamable(rfoot).c_str());
+
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000);
 	auto* h1_sci31 = new TH1P("SCI31 QDC mean [QDC units]", 0x009B2F_c, 500, 300, 4000);
@@ -144,18 +183,29 @@ particle tracks to match with other detectors in the sequence. "};
     foot.cont = model->MakeField<RNFOOTCal>(Form("FOOT%u", ifoot));
 
 	auto ntuple = RNTupleReader::Open(std::move(model), "h103", fileName);
+	const size_t nentries = ntuple->GetNEntries();
+	
+	if(nentries < 1000) ERROR("ROOT file with less than 1k entries?");
 
-	/* Containers for referent detector, Pair0 & Pair1 extrapolation. */
-	std::vector<double> xe, ye, zxe, zye;
+	/* Optimally Npts has to be at least 3 times less than nentries */
+	if(4*Npts > nentries) {
+		WARN("4x Npts > nentries ; (4x %zu > %zu). Will trim -N,--npts to %zu",
+			Npts, nentries, nentries/4);
+		Npts = nentries/4;
+	}
 
-	/* Containers for linear design problem. */
-	std::vector<double> xRef;
-	std::vector<double> yRef;
-	std::vector<double> xFOOT;
+	/* Containers for referent detector measurements. */
+	Eigen::Vector<double, N_REF_DET> ref_m;
 
-	std::vector<double> measurements_a;
-	std::vector<double> measurements_p;
-    std::vector<double> measurements_s; // scale factor
+	/* Containers for the final linear design problem. */
+	std::vector<double> referent_xs;
+	std::vector<double> referent_ys;
+	std::vector<double> actual_measurements;
+
+	/* Sequence of solved design problems. Stash their result here. */
+	std::vector<double> result_a;
+	std::vector<double> result_p;
+    std::vector<double> result_s; // scale factor
 
 	ROOT::EnableImplicitMT();
 	
@@ -178,29 +228,31 @@ particle tracks to match with other detectors in the sequence. "};
 		if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
 		if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
 
-		double xRef_  = NAN;
-		double yRef_  = NAN;
-		double mFOOT_ = NAN;
-		xe.clear(); ye.clear();	zxe.clear(); zye.clear();
-		
+		/* In an event, only a single valid FOOT cluster in the
+         * to-be-calibrated detector must be found. */
+		double m = NAN;
+		u32 foot_n_counted = 0;
+		for(const auto& hit : foot.cont->fCl) {
+			const double q = foot.p->Q( hit );
+			if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(q, foot_q_cut)) continue;
+			
+			m = foot.p->BarePosition(hit);
+			++foot_n_counted;
+		}
+		if(foot_n_counted != 1) continue;
+
 		/* Find the reference containers. */
         bool ref_is_good = true;
 		for(u32 i=0; i < N_REF_DET; ++i) {
 			const auto& ft = rfoot[i];
 		    u32 ncounted = 0;
-            
+
             for(const auto& hit : ft.cont->fCl) {
 				const double q = ft.p->Q( hit );
 				if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(q, foot_q_cut)) continue;
 
-				double hit_position = ft.p->X0(hit); // fully calibrated hit.
-				if(ft.o == Orientation::X) {
-					xe.push_back(hit_position);
-					zxe.push_back( ft.z );
-				} else {
-					ye.push_back(hit_position);
-					zye.push_back( ft.z );
-				}
+				const double u_or_v = ft.p->BarePosition(hit);
+				ref_m(i) = u_or_v;
 				++ncounted;
 			}
             /* In this case, just flag the entire event as unreliable. */
@@ -209,45 +261,43 @@ particle tracks to match with other detectors in the sequence. "};
                 break;
             }
 		}
-		if(!ref_is_good or xe.size() < 2 or ye.size() < 2) continue;
+		if(!ref_is_good) continue;
 
-		/* In an event, only a single valid FOOT cluster in the
-         * to-be-calibrated detector must be found. */
-		u32 foot_n_counted = 0;
-        mFOOT_ = NAN; // just in case
-		for(const auto& hit : foot.cont->fCl) {
-			const double q = foot.p->Q( hit );
-			if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(q, foot_q_cut)) continue;
-			
-			mFOOT_ = foot.p->BarePosition(hit);
-			++foot_n_counted;
-		}
-		if(foot_n_counted != 1) continue;
+		/* Solve the least squares problem:
+		 * Finding the least squares solution of Ax = b is equivalent to solving the normal equation (AᵀA)x = Aᵀb.
+		 * where b is ref_m + c. */
+		
+		const Eigen::Vector<double, N_REF_DET> b = ref_m + c;
+		const Eigen::Vector4d refline = qr.solve(b);
+		const auto [x0,ax,y0,ay] = refline;
 
-		const auto fx = PolyFit<1>(zxe, xe);
-		const auto fy = PolyFit<1>(zye, ye);
-		/* Extrapolated positions at the selected FOOT: */
-		xRef_ = fx[1]*z0 + fx[0];
-		yRef_ = fy[1]*z0 + fy[0];
+		/* Extrapolated TRUE positions at the selected FOOT: */
+		const double xRef = x0 + ax * z0;
+		const double yRef = y0 + ay * z0;
 
-		if(!mnd::IsInside(xRef_, binning_x)) continue;
-		if(!mnd::IsInside(yRef_, binning_y)) continue;
-		FillTrack(*h2_track_x, fx);
-		FillTrack(*h2_track_y, fy);
-		h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
-		h2_xy->Fill(xRef_, yRef_);
-		h1_foot->Fill(mFOOT_);
+		if(!mnd::IsInside(xRef, binning_x)) continue;
+		if(!mnd::IsInside(yRef, binning_y)) continue;
+		mnd::FillTrack(*h2_track_x, std::array{x0, ax});
+		mnd::FillTrack(*h2_track_y, std::array{y0, ay});
+
+		h2_ab->Fill(ax*1000.0, ay*1000); // [mrad]
+		h2_xy->Fill(xRef, yRef); // is already in [mm].
+		h1_foot->Fill(m);
 
 		/* Add this point to the design problem vector(s) */
-		xRef.push_back(xRef_);
-		yRef.push_back(yRef_);
-		xFOOT.push_back(mFOOT_);
+		referent_xs.push_back(xRef);
+		referent_ys.push_back(yRef);
+		actual_measurements.push_back(m);
 		
 		/* Once required statistics is reached, solve the design problem */
-		if(xFOOT.size() == Npts) {
+		if(actual_measurements.size() == Npts) {
 			double angle, offset, scale_factor;
 
-			AngleOffsetFitResult r = FitAngleOffset(xRef, yRef, xFOOT);
+			const AngleOffsetFitResult r = FitAngleOffset(
+				referent_xs,
+				referent_ys,
+				actual_measurements
+			);
 			
 			angle = r.t.Angle(df);
 			offset = r.c;
@@ -259,27 +309,29 @@ particle tracks to match with other detectors in the sequence. "};
 				"   a=%.4f, b=%.4f, a^2+b^2 = %.4f;\n",
 				++count, deg, offset, r.t.a, r.t.b, scale_factor);
 			
-			measurements_a.push_back(deg);
-			measurements_p.push_back(offset);
-            measurements_s.push_back(scale_factor);
+			result_a.push_back(deg);
+			result_p.push_back(offset);
+            result_s.push_back(scale_factor);
 
-			xRef.clear(); yRef.clear(); xFOOT.clear();
+			referent_xs.clear();
+			referent_ys.clear();
+			actual_measurements.clear();
 		}
 	} // for(auto entryId : *ntuple)
 
-	auto result_a = mnd::mean_var(measurements_a);
-	auto result_p = mnd::mean_var(measurements_p);
-    auto result_s = mnd::mean_var(measurements_s);
+	auto final_a = mnd::mean_var(result_a);
+	auto final_p = mnd::mean_var(result_p);
+    auto final_s = mnd::mean_var(result_s);
 
 	/* p is what the fit gives, but this is the offset, so detector is placed at -mean */
-	result_p.mean *= -1;
+	final_p.mean *= -1;
 	std::cout << "========== TO BE WRITTEN INTO PARAM FILE =======" BOLD "\n"
-		<< "Avg deg: " << result_a << "°\n"
-		<< "Avg off: " << result_p << " mm\n"
-        << Form("Scale factor (%u): ", ifoot) << result_s << KNRM "\n";
+		<< "Avg deg: " << final_a << "°\n"
+		<< "Avg off: " << final_p << " mm\n"
+        << Form("Scale factor (%u): ", ifoot) << final_s << KNRM "\n";
     nlohmann::json j;
-    j["delta_p"] = result_p.mean;
-    j["delta_a"] = result_a.mean;
+    j["delta_p"] = final_p.mean;
+    j["delta_a"] = final_a.mean;
     std::cerr << Form("\"FOOT%u\": ", foot.p->de10_index_) << j.dump(4) << std::endl;
 
     if(!no_draw) {
@@ -293,23 +345,23 @@ particle tracks to match with other detectors in the sequence. "};
         cs->cd(6); h1_sci31_cut->Draw();
         cs->cd(7); h2_track_x->Draw("COLZ");
         cs->cd(8); h2_track_y->Draw("COLZ");
-        
+
         TCanvas* cInfo = new TCanvas("Info", Form("Info-FOOT%d angle", ifoot), 2000, 1200);
         cInfo->Divide(2,2);
         cInfo->cd(1); h1_foot->Draw();
         cInfo->cd(2);
         new PLatex(0.08,
             "Referent track derived from FOOTs: 01&23",
-            Form("Number of measurements: %d", (int)measurements_a.size()),
+            Form("Number of measurements: %d", (int)result_a.size()),
             Form("Points per measurement: %zu", Npts),
-            Form("Result angle: (%s)#circ", result_a.lstring().c_str()),
-            Form("Result offset: (%s) mm", result_p.lstring().c_str())
+            Form("final angle: (%s)#circ", final_a.lstring().c_str()),
+            Form("final offset: (%s) mm", final_p.lstring().c_str())
         );
         cInfo->cd(3); h2_xy->Draw("COLZ");
         cInfo->cd(4); h2_ab->Draw("COLZ");
 
         canvas::save_all<canvas::Exe>(save, { Form("FOOT%d", ifoot) });
-        
+
         WARN("End-of-main");
         rootApp.Run();
     }
@@ -317,5 +369,10 @@ particle tracks to match with other detectors in the sequence. "};
 }
 
 std::ostream& operator<<(std::ostream& os, const foot_enc& foot) {
-    return os << foot.z << '(' << magic_enum::enum_name(foot.o) << ')';
+    return os 
+		<< "z: " << foot.z
+		<< "p: " << (foot.p ? mnd::ftos(foot.p->delta_p) + "mm" : "NULL")
+		<< "a: " << (foot.p ? mnd::ftos(foot.p->delta_a) + "º" : "NULL")
+		<< ", (" << magic_enum::enum_name(foot.o) << ')'
+		<< " ";
 }

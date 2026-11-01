@@ -4,7 +4,7 @@
 #include "util/PolyFitter.h"
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.h"
-#include "util/Tracking.h"
+
 #include "common/MacroCommon.hxx"
 
 #include "TApplication.h"
@@ -29,6 +29,8 @@ struct HistDrawer {
 
 
 int main(int argc, char* argv[]) {
+	using mnd::operator<<;
+
 	CLI::App app {
 		"Calibrate the TPC detectors, by:\n\
 		=> Defining referent (--ref) \"drift velocities\" for specific delay-lines (x-direction).\n\
@@ -253,8 +255,8 @@ int main(int argc, char* argv[]) {
                 h2_anode_mask->Fill(d, hit.AnodeMask());
             }
 
-            FillTrack(*h2_track_x, fx);
-            FillTrack(*h2_track_y, fy);
+			mnd::FillTrack(*h2_track_x, fx);
+            mnd::FillTrack(*h2_track_y, fy);
             h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
             h2_xy->Fill(mnd::mean(xRef), mnd::mean(yRef));
         }

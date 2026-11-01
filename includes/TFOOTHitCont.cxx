@@ -1,8 +1,11 @@
 #include "TFOOTHitCont.h"
+
+#include "monad/monad.hxx"
 #include "util/JSONParser.h"
 #include "util/Geometry.h"
-#include "TParameter.h"
 #include "util/FloatHacks.hxx"
+
+#include "TParameter.h"
 
 using json = nlohmann::json;
 
@@ -20,15 +23,15 @@ std::ostream& operator<<(std::ostream& os, const FOOTHit& rhs) noexcept {
 }
 
 bool RNFOOTPair::HasDataX() const noexcept {
-    return mnd::get_bit<_DATA_X_PRESENT_BITINDEX>(z);
+    return mnd::get_bit<_DATA_PRESENT_BITINDEX>(zx);
 }
 bool RNFOOTPair::HasDataY() const noexcept {
-    return mnd::get_bit<_DATA_Y_PRESENT_BITINDEX>(z);
+    return mnd::get_bit<_DATA_PRESENT_BITINDEX>(zy);
 }
 bool RNFOOTPair::HasData() const noexcept {
-    constexpr u64 mask = _DATA_X_PRESENT_BITMASK | _DATA_Y_PRESENT_BITMASK;
-    return mnd::get_fbits(z, mask) == mask;
+	return HasDataX() && HasDataY();
 }
+
 u32 RNFOOTHit::DataPresentCount() const noexcept {
 	u32 sum = 0;
 	mnd::static_for_each(pair, [&](const RNFOOTPair& fp) {
@@ -50,33 +53,35 @@ RNFOOTTrack::RNFOOTTrack (
 	std::size_t n_
 #ifdef MND_FOOTTRACK_DEBUG
 		,
-		const std::array<double, N_PAIRS>& _ox,
-		const std::array<double, N_PAIRS>& _oy,
-		const std::array<double, N_PAIRS>& _oz,
-		const std::array<double, N_PAIRS>& _oq,
-		const std::array<double, N_PAIRS>& _osq,
-		const std::array<double, N_PAIRS>& _oe0_x,
-		const std::array<double, N_PAIRS>& _odelta_x,
-		const std::array<u32,    N_PAIRS>& _oc0_x,
-		const std::array<double, N_PAIRS>& _oe0_y,
-		const std::array<double, N_PAIRS>& _odelta_y,
-		const std::array<u32,    N_PAIRS>& _oc0_y
+		const std::array<double, N_PAIRS>& u_,
+		const std::array<double, N_PAIRS>& v_,
+		const std::array<double, N_PAIRS>& zx_,
+		const std::array<double, N_PAIRS>& zy_,
+		const std::array<double, N_PAIRS>& q_,
+		const std::array<double, N_PAIRS>& sq_,
+		const std::array<double, N_PAIRS>& e0_x_,
+		const std::array<double, N_PAIRS>& delta_x_,
+		const std::array<u32,    N_PAIRS>& c0_x_,
+		const std::array<double, N_PAIRS>& e0_y_,
+		const std::array<double, N_PAIRS>& delta_y_,
+		const std::array<u32,    N_PAIRS>& c0_y_
 #endif
 ) : x0(xline[0]), y0(yline[0]), ax(xline[1]), ay(yline[1]),
 	Q(Q_), score(score_), n(n_)
 #ifdef MND_FOOTTRACK_DEBUG
 		,
-		_x(_ox),
-		_y(_oy),
-		_z(_oz),
-		_q(_oq),
-		_sq(_osq),
-		_e0_x(_oe0_x),
-		_delta_x(_odelta_x),
-		_c0_x(_oc0_x),
-		_e0_y(_oe0_y),
-		_delta_y(_odelta_y),
-		_c0_y(_oc0_y)
+		_u(u_),
+		_v(v_),
+		_zx(zx_),
+		_zy(zy_),
+		_q(q_),
+		_sq(sq_),
+		_e0_x(e0_x_),
+		_delta_x(delta_x_),
+		_c0_x(c0_x_),
+		_e0_y(e0_y_),
+		_delta_y(delta_y_),
+		_c0_y(c0_y_)
 #endif
 {}
 
@@ -105,6 +110,52 @@ mnd::geom::Line3D RNFOOTTrack::operator*() const noexcept {
 		y0,
 		ay
 	};
+}
+
+constexpr static u32 NP = RNFOOTHit::N_PAIRS;
+
+std::unique_ptr<TrackingGeometry<NP>>
+tg_from_stg(const STrackingGeometry& stg) {
+	auto result = std::make_unique<TrackingGeometry<NP>>();
+
+	for(u32 i = 0; i < NP; ++i) {
+		const auto& saved = stg.layer[i];
+		auto& layer = result->layer[i];
+		for(Eigen::Index row = 0; row < 2; ++row) {
+			for(Eigen::Index col = 0; col < 4; ++col)
+				layer.A(row, col) = saved.A[4 * row + col];
+			layer.dxy(row) = saved.dxy[row];
+			layer.z(row) = saved.z[row];
+		}
+	}
+
+	mnd::static_for<2, NP + 1>([&](auto K_) {
+		constexpr u32 K = decltype(K_)::value;
+		using DMatrix = DesignMatrix<NP, K>;
+		auto& cached = result->fit.template get<K>();
+
+		for(u32 index = 0; index < DMatrix::n_combinations; ++index) {
+			typename DMatrix::Matrix matrix;
+			typename DMatrix::Vector offsets;
+			const u32 mask = mnd::combi::combo_lookup_table<NP, K>[index];
+			Eigen::Index row = 0;
+			for(u32 i = 0; i < NP; ++i) {
+				if(mask & (u32{1} << i)) {
+					matrix.template middleRows<2>(row) = result->layer[i].A;
+					offsets.template segment<2>(row) = result->layer[i].dxy;
+					row += 2;
+				}
+			}
+
+			auto& parameters = cached.lookup_table[index];
+			parameters.first.compute(matrix);
+			parameters.second = offsets;
+			if(parameters.first.rank() != 4)
+				ERROR("tg_from_stg(): rank() !=4 for mask %#08x.", mask);
+		}
+	});
+
+	return result;
 }
 
 void TFOOTHitCont::Init(TDictInfo info) {
@@ -137,8 +188,10 @@ void TFOOTHitCont::Setup() {
 	diff_heavy_frag_vs_upstream = RegisterObject<TH1I>("diff_heavy_frag_vs_upstream",
 		"Distance heaviest fragment track to TPC track;d [mm]", 500, 0.0, 5);
 	
-	setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 	box = RegisterObject<FOOTBoxParam>("box", _box);
+	setupName = RegisterObject<std::string>("distinctup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
+	geometry = RegisterObject<STrackingGeometry>("geometry", mnd::noop_fn<STrackingGeometry>(), STrackingGeometry{});
+
 	cost_coeff = RegisterObject<A3>("cost_coeff", {}); // filled by Proc ctor
 	max_cost = RegisterObject<TParameter<double>>("max_cost", mnd::noop_fn<TParameter<double>>(), NAN); // filled by Proc ctor
 	max_cost_f = RegisterObject<TParameter<double>>("max_cost_f", mnd::noop_fn<TParameter<double>>(), NAN); // filled by Proc ctor
@@ -182,3 +235,6 @@ ClassImp(RNFOOTPair);
 ClassImp(RNFOOTTrack);
 ClassImp(RNFOOTHit);
 ClassImp(RNFOOTHit::Vertex);
+
+ClassImp(SFOOTLayerGeometry);
+ClassImp(STrackingGeometry);

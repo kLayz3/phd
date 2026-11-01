@@ -122,6 +122,13 @@ std::ostream& operator<<(std::ostream& os, const SphericalAngles& rhs) {
 
 /* ====================== 3D ====================== */
 
+bool Line3D::IsValid() const noexcept {
+	return std::all_of(p.begin(), p.end(),
+		[](double x) { return std::isfinite(x); }) &&
+	  std::all_of(v.begin(), v.end(),
+		[](double x) { return std::isfinite(x); }) &&
+	  v[2] != 0;
+}
 double Line3D::DistanceTo(const Point3D& pt) const noexcept {
 	const auto p = detail::mapv(this->p);
 	const auto v = detail::mapv(this->v);
@@ -252,6 +259,20 @@ SphericalAngles Line3D::GetSpherical() const noexcept {
 		.theta = std::acos( cos_theta ),
 		.phi   = (nv.y() > 0)? std::acos( cos_phi ): -std::acos( cos_phi )
 	};
+}
+Line3D::Normal Line3D::_NoCheckNormal() const noexcept {
+	const double ax = v[0] / v[2];
+	const double ay = v[1] / v[2];
+	return Normal{
+		p[0] - ax * p[2], ax,
+		p[1] - ay * p[2], ay
+	};
+}
+Line3D::Normal Line3D::normal() const noexcept {
+	if(!HasValue() || std::abs(v[2]) < 1e-20) {
+		return Normal{NAN,NAN,NAN,NAN};
+	}
+	return _NoCheckNormal();
 }
 
 bool mnd::geom::operator==(const Line3D& lhs, const Line3D& rhs) noexcept {

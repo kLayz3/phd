@@ -176,7 +176,7 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 		xT = poly::Eval(z0, fit_result);
 	}
 	if(y.size() >= 2) {
-		PolyFit<1>(zx, y, this->fit_result);
+		PolyFit<1>(zy, y, this->fit_result);
 		y0 = fit_result[0];
 		ay = fit_result[1];
 		yT = poly::Eval(z0, fit_result);
@@ -205,10 +205,14 @@ void TFRSHitProc::ProcessS2BT() noexcept {
 	bt.y0  = y0;
 	bt.ax  = ax;
 	bt.ay  = ay;
-	// bt.beta assigned in `ProcessTof()`.
+	// bt.beta assigned in `ProcessToF()`.
 	bt.code = code;
-
-	g_upstream_track = RNTrackToLine3D(bt); // could be null.
+	
+	if(std::isfinite(x0) && std::isfinite(ax) &&
+	   std::isfinite(y0) && std::isfinite(ay))
+		g_upstream_track = {x0, ax, y0, ay};
+	else
+		g_upstream_track = mnd::geom::Line3D::null;
 }
 
 void TFRSHitProc::ProcessS2AT() noexcept {

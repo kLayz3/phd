@@ -184,6 +184,10 @@ extern template void canvas::save_all<canvas::Macro>(std::vector<canvas::Extensi
 extern template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extension> , std::vector<std::string_view> );
 
 namespace mnd {
+namespace geom { struct Line2D; } // namespace geom
+
+void FillTrack(TH2D* , const std::array<double, 2>& , double = -HUGE_VAL, double = HUGE_VAL);
+void FillTrack(TH2D* , const geom::Line2D&, double = -HUGE_VAL, double = HUGE_VAL );
 
 /* Predicate if the value is inside a range spanned by last 2 elements of some array.
  * Note, variant state is *assumed* to be valued here, and isn't checked! */

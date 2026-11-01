@@ -12,6 +12,7 @@
 #include <limits>
 #include <numeric>
 
+#include "util/FTrack.h"
 #include "util/Geometry.h"
 #include "util/DirectedAGraph.hxx"
 #include "util/Verbosity.hxx"
@@ -138,9 +139,9 @@ struct TFOOTHitProc : TProcessor <
 	static Verbosity v;
 	static bool requires_valid_upstream_track;
 
-	double kr(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
-	double kq(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
-	double kt(const FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
+	double kr(const FLayerInfo::PredictionP& , const FHitMatrix::Entry& ) const noexcept;
+	double kq(const FLayerInfo::PredictionQ& , const FHitMatrix::Entry& ) const noexcept;
+	double kt(FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
 
 	void ProcessEntry() noexcept;
 
@@ -148,11 +149,16 @@ struct TFOOTHitProc : TProcessor <
 	using CandidatesBuffer = std::array<CostIndex, 50>;
 
 	void ProcessPair(const std::pair<const TFOOTCalCont&, const TFOOTCalCont&>&, i32) noexcept;
-	void ConstructObviousTracks() noexcept;
+
 	void ConstructDAG() noexcept;
 	void AnalyseDAG() noexcept;
 	void PreProcess() noexcept;
 	void PostProcess() noexcept;
+	
+	void ValidateParameters();
+	void AssignParameters();
+
+	STrackingGeometry stg_from_tg(const TrackingGeometry<N_PAIRS>& );
 
 #ifdef MND_FOOTTRACK_DEBUG
 	void ReplayCostCalculation(const DAG::DAGPath& ) noexcept;
@@ -162,9 +168,10 @@ struct TFOOTHitProc : TProcessor <
 	std::vector<mnd::geom::Line3D> lines;
 
 	DAG dag;
-	
 	std::array<FHitMatrix, N_PAIRS> hm; // hit matrices
-	void SetConversionMatrices(int , const FOOTParam& , const FOOTParam& );
+	
+	void SetPairConversionMatrices(int , const FOOTParam& , const FOOTParam& );
+	void SetFitConversionMatrices();
 
 	CandidatesBuffer path_specific_candidates_buf;
 

@@ -1,14 +1,17 @@
+/* This include is just to have LSP support when the define is present at compile-time
+ * but not during editing. */
+#define MND_DEBUG_ENABLED
+
+#include "util/FTrack.h"
+
 #include "TFRSCalCont.h"
 #include "util/CLI.h"
 #include "util/Geometry.h"
 #include "util/PrettyHisto.h"
-#include "util/Tracking.h"
 #include "util/MacroHelpers.h"
 #include "util/TextUtils.h"
 
-#include "TStyle.h"
 #include "TApplication.h"
-#include "TLegend.h"
 #include "TParameter.h"
 #include "TFOOTHitCont.h"
 #include "TFRSHitCont.h"
@@ -20,7 +23,7 @@ using namespace mnd::col::literals;
 
 int main(int argc, char* argv[]) {
 	TClass* _cl = TClass::GetClass(typeid(RNFOOTTrack));
-	if(!_cl or !_cl->GetDataMember("_x"))
+	if(!_cl or !_cl->GetDataMember("_u"))
 		ERROR("MND_FOOTTRACK_DEBUG not compiled in, when the ROOT file got generated. Can't proceed\n");
 
 	CLI::App app{"Gate on straight primary beam tracks, and try to estimate the corresponding Cq, Cp, Ct coefficients, \
@@ -44,9 +47,9 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-q,--cut-q", cut_q, Form("Charge (Z) cut on each FOOT index, index=0,1,..%u.", N_FOOT_DETECTORS));
 	add_logged_option(app, "--binning-q", binning_q, "Binning of the charge measurement, Q of each FOOT, in [Z].")
 		->delimiter(',');
-	add_logged_option(app, "--binning-dx", binning_dx, "Binning of the difference δX (foot - track), in [mm].")
+	add_logged_option(app, "--binning-dx", binning_dx, "Binning of the difference δu (foot - track), in [mm].")
 		->delimiter(',');
-	add_logged_option(app, "--binning-dy", binning_dy, "Binning of the difference δY (foot - track), in [mm].")
+	add_logged_option(app, "--binning-dy", binning_dy, "Binning of the difference δv (foot - track), in [mm].")
 		->delimiter(',');
 	add_logged_option(app, "--binning-dq", binning_dq, "Binning of the difference δQ (foot - track), in [Z].")
 		->delimiter(',');
@@ -71,6 +74,7 @@ int main(int argc, char* argv[]) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
 	constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
+	static_assert(N_PAIRS > 2, "To properly run this program must have N_PAIRS > 2.");
 	
 	TApplication rootApp("app", 0, 0);
 	
@@ -81,6 +85,7 @@ int main(int argc, char* argv[]) {
 	std::array<TH1I*, N_PAIRS> h1_acc_q;
 	std::array<TH1I*, N_PAIRS> h1_acc_r;
 	std::array<TH1I*, N_PAIRS> h1_acc_t;
+	std::unique_ptr<TrackingGeometry<N_PAIRS>> geometry;
 	{
 		A3* c;
 		TParameter<double>* m;
@@ -99,27 +104,31 @@ int main(int argc, char* argv[]) {
             get_obj(f, h1_acc_q.at( n), Form("FOOT_acc_q_%u", n));
             get_obj(f, h1_acc_t.at( n), Form("FOOT_acc_t_%u", n));
 		}
+		STrackingGeometry* stg;
+		get_obj(f, stg, "FOOT_geometry");
+		geometry = tg_from_stg(*stg);
 	}
+
 	
 	TH1P *resx[N_PAIRS], *resy[N_PAIRS], *resq[N_PAIRS], *h1q[N_PAIRS], *h1_footx[N_PAIRS], *h1_footy[N_PAIRS];
 	for(u32 i=0; i<N_PAIRS; ++i) {
-		resx[i] = new TH1P(Form("((h1_fitrx_%d))Fit residue [mm]@FOOT%d X", i, i),
+		resx[i] = new TH1P(Form("((h1_fitrx_%d))Fit residue [mm]@FOOT%d u", i, i),
 			kMagenta-9, binning_dx[0], binning_dx[1], binning_dx[2]);
-		resy[i] = new TH1P(Form("((h1_fitry_%d))Fit residue [mm]@FOOT%d Y", i, i),
+		resy[i] = new TH1P(Form("((h1_fitry_%d))Fit residue [mm]@FOOT%d v", i, i),
 			kYellow-9, binning_dy[0], binning_dy[1], binning_dy[2]);
 		resq[i] = new TH1P(Form("((h1_fitrq_%d))Fit residue [charge unit]@FOOT%d Q", i, i),
 			kCyan-9, binning_dq[0], binning_dq[1], binning_dq[2]);
 
 		h1q[i] = new TH1P(Form("((h1q_%d))Q value@FOOT%d", i, i),
 			kBlue-9, binning_q[0], binning_q[1], binning_q[2]);
-		h1_footx[i] = new TH1P(Form("((h1_footx_%d))FOOT%d X [mm]", i, i),
+		h1_footx[i] = new TH1P(Form("((h1_footx_%d))FOOT%d u [mm]", i, i),
 			kMagenta-9, 320, -50, 50);
-		h1_footy[i] = new TH1P(Form("((h1_footy_%d))FOOT%d Y [mm]", i, i),
+		h1_footy[i] = new TH1P(Form("((h1_footy_%d))FOOT%d v [mm]", i, i),
 			kMagenta-9, 320, -50, 50);
 	}
-	TH2P* h2_resx = new TH2P("((h2_fitrx))Fit residue:FOOT ID@X-orientation",
+	TH2P* h2_resx = new TH2P("((h2_fitrx))Fit residue:FOOT ID@u measurement",
 		N_PAIRS, -0.5, N_PAIRS-0.5, binning_dx[0], binning_dx[1], binning_dx[2]);
-	TH2P* h2_resy = new TH2P("((h2_fitry))Fit residue:FOOT ID@Y-orientation",
+	TH2P* h2_resy = new TH2P("((h2_fitry))Fit residue:FOOT ID@v measurement",
 		N_PAIRS, -0.5, N_PAIRS-0.5, binning_dy[0], binning_dy[1], binning_dy[2]);
 	TH2P* h2_resq = new TH2P("((h2_fitrq))Fit residue:FOOT ID@Charge (Q)",
 		N_PAIRS, -0.5, N_PAIRS-0.5, binning_dq[0], binning_dq[1], binning_dq[2]);
@@ -169,8 +178,9 @@ int main(int argc, char* argv[]) {
 	auto ntuple = RNTupleReader::Open(std::move(model), "h104", fileName);
     const size_t nentries = ntuple->GetNEntries();
 
-	/* Fitting containers, for the track made by the 3 FOOTs projecting onto the 4th. */
-	std::array<double, 3> xf, yf, zf, qf;
+	/* Fitting containers, for the track made by the other FOOT pairs. */
+	std::array<double, N_PAIRS-1> qf;
+
 	ProgressBar bar {
 		option::BarWidth{50},
 			option::Start{"["},
@@ -211,9 +221,12 @@ int main(int argc, char* argv[]) {
 		const double y0_upst = frs->yT;
 		
 		const mnd::geom::Line3D lu = RNTrackToLine3D( frs->s2_bt );
-		h1_has_upstream->Fill( static_cast<int>(lu.HasValue()) );
+		h1_has_upstream->Fill( static_cast<int>(lu.IsValid()) );
 
-		const RNFOOTTrack& t = foot->heavy_fragment;
+		if(foot->track.empty()) continue;
+
+		/* Heaviest track is always placed at the front. */
+		const RNFOOTTrack& t = foot->track.front();
 		if(t.n != N_PAIRS) continue;
 
 		/* Check if charge veto passed. */
@@ -227,37 +240,42 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		for(size_t i=0; i<N_PAIRS; ++i) {
-			double z = t._z[i];
+		for(u32 i=0; i<N_PAIRS; ++i) {
+			// Mask for which dets fired is all except one at bit i.
+			const u32 mask = ((1 << N_PAIRS) - 1) & ~(1 << i);
 			
-			int w=0;
-			
+			const auto& parameters =
+				geometry->fit.get<N_PAIRS - 1>().get_from_mask(mask);
+			using Scalar = FLayerInfo::EntryXYUnderlyingType; // double|long double
+			Eigen::Vector<Scalar, 2 * (N_PAIRS - 1)> rhs;
+			u32 w = 0;
+
 			/* Populate the arrays for N-1 fit. */
-			for(size_t j=0; j<N_PAIRS; ++j) {
+			for(u32 j=0; j<N_PAIRS; ++j) {
 				if(j == i) continue;
-				xf[w] = t._x[j];
-				yf[w] = t._y[j];
-				zf[w] = t._z[j];
+
+				rhs(2*w) = t._u[j];
+				rhs(2*w + 1) = t._v[j];
 				qf[w] = t._q[j];
 				++w;
-			} if(w != 3) ERROR("w must be 3, hello?");
-
-			auto fx = PolyFit<1>(zf, xf);
-			auto fy = PolyFit<1>(zf, yf);
-			//auto fx = std::array<double, 2> { t.x0, t.ax };	
-			//auto fy = std::array<double, 2> { t.y0, t.ay };
-
-			double x_extr = fx[0] + fx[1]*z;
-			double y_extr = fy[0] + fy[1]*z;
-			auto [q_extr, track_qvar] = mnd::mean_var(qf);
+			} if(w != N_PAIRS-1) ERROR("w must be %u, hello?", N_PAIRS-1);
 			
-			double dx = t._x[i] - x_extr;
-			double dy = t._y[i] - y_extr;
+			/* For the linear design problem, e.g. measurements to (x0,ax,y0,ay) track
+			 * need to add the offsets to the vector side. */
+			rhs += parameters.second;
+
+			const Eigen::Vector<Scalar, 4> normal = parameters.first.solve(rhs);
+			const Eigen::Vector<Scalar, 2> predicted =
+				geometry->layer[i].A * normal - geometry->layer[i].dxy;
+			auto [q_extr, track_qvar] = mnd::mean_var(qf);
+
+			double dx = t._u[i] - predicted.x();
+			double dy = t._v[i] - predicted.y();
 			double dq = t._q[i] - q_extr;
 			double sq = t._sq[i]; // is sigma == sqrt(var);
 
-			h1_footx[i]->Fill( t._x[i] );
-			h1_footy[i]->Fill( t._y[i] );
+			h1_footx[i]->Fill( t._u[i] );
+			h1_footy[i]->Fill( t._v[i] );
 			resx[i]->Fill(dx);
 			resy[i]->Fill(dy);
 			resq[i]->Fill(dq);
@@ -281,11 +299,12 @@ int main(int argc, char* argv[]) {
 		const double dx_dstr_ustr = r0_down.x - x0_upst;
 		const double dy_dstr_ustr = r0_down.y - y0_upst;
 		
-		h2_ktxy->Fill(dx_dstr_ustr, dy_dstr_ustr);
-		h1_kt->Fill(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr);
-		h1_kt_sqrt->Fill(sqrt(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr));
-
-		h1_diff_upstr_down-> Fill( ld.DistanceTo(lu) );
+		if(lu.IsValid() && std::isfinite(dx_dstr_ustr) && std::isfinite(dy_dstr_ustr)) {
+			h2_ktxy->Fill(dx_dstr_ustr, dy_dstr_ustr);
+			h1_kt->Fill(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr);
+			h1_kt_sqrt->Fill(sqrt(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr));
+			h1_diff_upstr_down->Fill(ld.DistanceTo(lu));
+		}
 		h1_score->Fill(t.score);
 
 		h1_sci21_cut2->Fill(sci21.E);

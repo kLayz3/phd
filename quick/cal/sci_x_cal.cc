@@ -3,7 +3,6 @@
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.h"
 #include "util/PolyFitter.h"
-#include "util/Tracking.h"
 #include "util/FitSpline.h"
 #include "common/MacroCommon.hxx"
 
@@ -169,8 +168,8 @@ int main(int argc, char* argv[]) {
 
         /* SCI's just measure the 'x' ... as such should be invariant relative to y.
          * but keep it anyway.. its w/e */
-        FillTrack(*h2_track_x, fx);
-        FillTrack(*h2_track_y, fy);
+		mnd::FillTrack(*h2_track_x, fx);
+        mnd::FillTrack(*h2_track_y, fy);
         h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
         h2_xy->Fill(xRef, yRef);
 

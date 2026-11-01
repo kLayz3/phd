@@ -100,8 +100,6 @@ struct Some {
 template<typename T>
 Some(T) -> Some<T>;
 
-/* Abusing CRTP. Lol. Check M. Bancilla, Template Metaprogramming with C++,
- * best invested €38 ever. */
 namespace detail {
 
 inline constexpr const char* bad_option_def_msg = "bad optional access";
@@ -115,6 +113,8 @@ private:
 	std::string msg_ = bad_option_def_msg;
 };
 
+/* Abusing CRTP. Lol. Check M. Bancilla, Template Metaprogramming with C++,
+ * best invested €38 ever. */
 template<
 	typename Derived,
 	typename Repr

@@ -1,7 +1,6 @@
 #include "util/CLI.h"
 
 #include "util/PrettyHisto.h"
-#include "util/Tracking.h"
 #include "util/MacroHelpers.h"
 
 #include "TApplication.h"
@@ -27,10 +26,10 @@ int main(int argc, char* argv[]) {
 Calibrate referent FOOT detectors' (FOOT 0/1/2/3) angle, based on either the 12C or 9C beam calibration run.\n\
 Due to the thick target, the position offsets shouldn't be touched directly, but rather make them 'agree'\n\
 to referent 0 by manually fitting on the calibration run. This is done by a different program."};
-	
+
 	std::string fileName = "";
 	u32 ifoot = 0;
-	std::vector<TPCRef> ref{}; 
+	std::vector<TPCRef> ref{};
 	std::array<double,3> binning_x = {200,-30,30};
 	std::array<double,3> binning_y = {200,-30,30};
 	std::array<double,2> foot_q_cut = {5.4, 6.6};
@@ -42,13 +41,13 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 
 	add_logged_option(app, "-f,--file", fileName, "Pass a file name.")
 		->check(CLI::ReadPermissions);
-	add_logged_option(app, "-i,--foot-id", ifoot, 
+	add_logged_option(app, "-i,--foot-id", ifoot,
 		"Select which FOOT detector.")
 		->check(CLI::Range(0,3))
 		->mandatory();
-	add_logged_option<DisplayDefault::No>(app, "-r, --ref", ref, 
-		"Select which TPC's (either with index: 0,1,2, or with a label: 21,22,23) make the reference. \
-		Select by '0/1' which delay lines get included into the measurement. ")
+	add_logged_option<DisplayDefault::No>(app, "-r, --ref", ref,
+		"Select which TPC's (either with index: 0,1,2, or with a label: 21,22,23) make the reference. "
+		"Select by '0/1' which delay lines get included into the measurement. ")
 		->type_name("[INT|LABEL:BOOL,BOOL;...]")
 		->delimiter(';');
 	add_logged_option(app, "-x,--bins-x",binning_x, "Binning X")
@@ -58,11 +57,11 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 	add_logged_option(app, "-q,--foot-cut",foot_q_cut, "FOOT Q cut (charge)")
 		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci21",sci21_cut, "SCI21 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci22",sci22_cut, "SCI22 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
-		->delimiter(','); 
+		->delimiter(',');
 	add_logged_option(app, "-N,--npts", Npts, "Amount of statistics required to issue a fit.");
 	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.");
 
@@ -72,7 +71,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 	CLI11_PARSE(app, argc, argv);
 	
 	if(test) return 0;
-	if(ref.size() < 2) 
+	if(ref.size() < 2)
 		ERROR("At least two valid referent TPC's must be given.\n");
 	if(fileName.length() == 0) {
 		WARN("To continue, must supply a valid file name!\n"); return 0;
@@ -80,13 +79,13 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 	for(const auto& tpc : ref) {
 		if(!tpc || !tpc.IsUpstream()) {
 			ERROR("TPC%s (n=%u) flagged invalid. Must be upstream and at least one dl flagged as valid.",
-                (tpc.n < RNFRSCal::N_VALID_TPC)? RNFRSCal::tpc_label[tpc.n]: "??", tpc.n); 
+                (tpc.n < RNFRSCal::N_VALID_TPC)? RNFRSCal::tpc_label[tpc.n]: "??", tpc.n);
 		}
 	}
 
 	TApplication rootApp("app", 0, 0);
 
-	foot_enc foot; 
+	foot_enc foot;
 	FOOTBoxParam *box;
     std::array<TPCParam, RNFRSCal::N_VALID_TPC> *tpc_params;
 	{
@@ -95,7 +94,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
         get_obj(f, box, "FOOT0_box");
 		get_obj(f, foot.p,  Form("FOOT%u_setup", ifoot));
         get_obj(f, tpc_params, "FRS_tpc_parameters");
-        
+
         // FOOT z assigned relative to FRS nominal Z, not the "box coordinates".
 		foot.z = box->GetFOOTZ( foot.p );
 		Orientation o = foot.p->GetOrientation();
@@ -104,19 +103,19 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 	}
 
     constexpr auto N_TPC = TPCParam::N_S2_TPC;
-	const Arr2<double, N_TPC, 2> zDL = TFRSCalCont::z_s2_tpc_delay_lines(tpc_params); 
+	const Arr2<double, N_TPC, 2> zDL = TFRSCalCont::z_s2_tpc_delay_lines(tpc_params);
     const std::array<double, N_TPC> zTPC = TFRSCalCont::z_s2_tpc(tpc_params);
 
-	const auto& binning = (foot.o == Orientation::X) ? binning_x : binning_y; 
+	const auto& binning = (foot.o == Orientation::X) ? binning_x : binning_y;
 
-	/* Reason these two enums are separate, 
-	 * is so that the fitting library doesn't tag along any of the ROOT dependency. */ 
+	/* Reason these two enums are separate,
+	 * is so that the fitting library doesn't tag along any of the ROOT dependency. */
 	auto df = (foot.o == Orientation::X)
 		? AngleFitResult::Direction::X
 		: AngleFitResult::Direction::Y;
 		
 	WARN("Heuristically identified:\n" BOLD
-		">> FOOT%d\n" 
+		">> FOOT%d\n"
 		">> DE10: %d\n"
 		">> Measuring: \'%s\'\n"
 		">> Inputted offset along measurement axis: %.2f mm\n"
@@ -137,9 +136,9 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
     auto* h2_track_x = new TH2P("((h2_track_x))Track density (X) [mm]:Depth z [mm]@S2 area", 800, 0, RNFRSCal::S2_LENGTH, 800, -60, 60);
     auto* h2_track_y = new TH2P("((h2_track_x))Track density (Y) [mm]:Depth z [mm]@S2 area", 800, 0, RNFRSCal::S2_LENGTH, 800, -60, 60);
 	auto* h2_ab = new TH2P("Y-angle [mrad]:X-angle [mrad]", 100, -20, 20, 100, -20, 20);
-	auto* h2_xy = new TH2P(Form("Referent y-position [mm]:Referent X-position [mm]@FOOT%d", ifoot), 
+	auto* h2_xy = new TH2P(Form("Referent y-position [mm]:Referent X-position [mm]@FOOT%d", ifoot),
 		binning_x[0],binning_x[1],binning_x[2],binning_y[0],binning_y[1],binning_y[2]);
-	auto* h1_foot = new TH1P("((h1_foot)) FOOT measurement [mm]", 0xC500CB_c, 
+	auto* h1_foot = new TH1P("((h1_foot)) FOOT measurement [mm]", 0xC500CB_c,
 		binning[0],binning[1],binning[2]);
 
 	auto model = RNTupleModel::Create();
@@ -193,9 +192,9 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
                 if(!id.use[d] or tpc.hits[d].size() != 1)
                     continue;
                 const RNTPCCal::Measurement& hits = tpc.hits[d].front();
-                const double x = hits.X(); 
-                const double y = hits.Y(); 
-                if(!std::isfinite(x) or !std::isfinite(y)) 
+                const double x = hits.X();
+                const double y = hits.Y();
+                if(!std::isfinite(x) or !std::isfinite(y))
                     continue;
                 xe.push_back(x);
                 ye.push_back(y);
@@ -203,7 +202,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
             }
 		}
 		if(xe.size() < 3 or ye.size() < 3) continue;
-		auto fx = PolyFit<1>(ze, xe);	
+		auto fx = PolyFit<1>(ze, xe);
 		auto fy = PolyFit<1>(ze, ye);
 
 		/* In an event, only a single valid FOOT cluster must be found. */
@@ -212,7 +211,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 			const double q = foot.p->Q( hit );
 			if(mnd::IsValid(foot_q_cut) and !mnd::IsInside(q, foot_q_cut)) continue;
 			
-			const double hit_position = foot.p->BarePosition(hit); 
+			const double hit_position = foot.p->BarePosition(hit);
 			
 			if( std::isfinite(xFOOT_) ) {
 				is_foot_event_valid = false; break; // Already found valid point in the event.
@@ -227,10 +226,10 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 		xRef_ = fx[1] * foot.z + fx[0];
 		yRef_ = fy[1] * foot.z + fy[0];
 
-		if(!mnd::IsInside(xRef_, binning_x)) continue; 
-		if(!mnd::IsInside(yRef_, binning_y)) continue; 
-		FillTrack(*h2_track_x, fx);
-		FillTrack(*h2_track_y, fy);
+		if(!mnd::IsInside(xRef_, binning_x)) continue;
+		if(!mnd::IsInside(yRef_, binning_y)) continue;
+		mnd::FillTrack(*h2_track_x, fx);
+		mnd::FillTrack(*h2_track_y, fy);
 		h2_ab->Fill(fx[1]*1000.0, fy[1]*1000);
 		h2_xy->Fill(xRef_, yRef_);
 		h1_foot->Fill(xFOOT_);
@@ -252,8 +251,8 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 			static int cnt = 0;
 			double deg = angle * 180 / M_PI;
 			WARN("#%2d, phi = %.3f° ; gamma = %.3f;"
-				"   a=%.4f, b=%.4f, a^2+b^2 = %.4f;\n", 
-				++cnt, deg, offset, r.t.a, r.t.b, r.t.a*r.t.a + r.t.b*r.t.b); 
+				"   a=%.4f, b=%.4f, a^2+b^2 = %.4f;\n",
+				++cnt, deg, offset, r.t.a, r.t.b, r.t.a*r.t.a + r.t.b*r.t.b);
 			
 			measurements_a.push_back(deg);
 			measurements_p.push_back(offset);

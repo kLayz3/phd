@@ -71,8 +71,8 @@ struct Line2D {
 	
 	static const Line2D null;
 
-	inline value_type& operator[](Arr::size_type pos) noexcept { return value[pos]; }
-	inline value_type const& operator[](Arr::size_type pos) const noexcept { return value[pos]; }
+	inline constexpr value_type& operator[](Arr::size_type pos) noexcept { return value[pos]; }
+	inline constexpr value_type const& operator[](Arr::size_type pos) const noexcept { return value[pos]; }
 
 	/* Predicate to see if the line is valid or null. */
 	inline bool HasValue() const noexcept { return std::isfinite(value[0]); }
@@ -113,12 +113,15 @@ struct SphericalAngles {
 
 /* Two ways to represent lines in 3D:
  * Usual experiment:
- * x(z) = a[0] + a[1]*z
- * y(z) = b[0] + b[1]*z
+ * x(z) = a[0] + a[1]*z , which is usually written as: x(z) = x0 + ax * z
+ * y(z) = b[0] + b[1]*z , which is usually written as: y(z) = y0 + ay * z
  * ... and also:
  * vec{r} = vec{p} + λ * vec{v}
- */
+ * The representation as a vector: {x0, ax, y0, ay} is called the _normal representation_ . */
 struct Line3D {
+	/* Normal representation: (x0, ax, y0, ay). */
+	using Normal = std::array<double, 4>;
+
 	static constexpr double ALMOST_PARALLEL  = 1e-4;
 	static constexpr double ALMOST_PARALLEL2 = ALMOST_PARALLEL*ALMOST_PARALLEL;
 
@@ -129,15 +132,22 @@ struct Line3D {
 		double b0_, /* offset y:z */
 		double b1_  /* slope  y:z */
 	) noexcept : p{a0_, b0_, 0}, v{a1_, b1_, 1} {}
+	
+	constexpr Line3D(const Normal& n) noexcept
+		: p{n[0], n[2], 0}, v{n[1], n[3], 1} {}
 
-	Line3D(std::array<double, 2> const& a_, std::array<double, 2> const& b_) :
+	constexpr Line3D(std::array<double, 2> const& a_, std::array<double, 2> const& b_) :
 		p{a_[0], b_[0], 0}, v{a_[1], b_[1], 1} {}
 
-	explicit Line3D(const Line2D& a_, const Line2D& b_ ) :
+	constexpr explicit Line3D(const Line2D& a_, const Line2D& b_ ) :
 		p{a_[0], b_[0], 0}, v{a_[1], b_[1], 1} {}
 
 	static const Line3D null;
-	inline bool HasValue() const noexcept { return std::isfinite( p[0] ); }
+	inline constexpr bool HasValue() const noexcept { return std::isfinite( p[0] ); }
+
+	/* Stronger validity check than HasValue(). Checks if *all* the entries have a non-NAN/inf value.
+	 * Also checks the normal representation is possible. I.e., that the line is not purely in XY plane. */
+	bool IsValid() const noexcept;
 	
 	double DistanceTo(const Point3D& ) const noexcept;
 	double DistanceTo(const Line3D& ) const noexcept;
@@ -189,13 +199,16 @@ struct Line3D {
 		const double b0 = p[1] - b1 * p[2];
 		return {b0, b1};
 	}
-
-	SphericalAngles GetSpherical() const noexcept;
 	[[ nodiscard ]] inline std::array<double,2> xarray() const noexcept { return XLine().array(); }
 	[[ nodiscard ]] inline std::array<double,2> yarray() const noexcept { return YLine().array(); }
 
-	std::array<double, 3> p {NAN,NAN,NAN}; // {a0, b0, 0} , nominally
-	std::array<double, 3> v {NAN,NAN,NAN}; // {a1, b1, 1} , nominally
+	[[ nodiscard ]] Normal _NoCheckNormal() const noexcept;
+	[[ nodiscard ]] Normal normal() const noexcept;
+
+	SphericalAngles GetSpherical() const noexcept;
+
+	std::array<double, 3> p {NAN,NAN,NAN}; // {a0, b0, 0} , normally
+	std::array<double, 3> v {NAN,NAN,NAN}; // {a1, b1, 1} , normally
 
 	/* Is a simple no-op. Needed to vertexing API later. */
 	inline Line3D&       operator*()       noexcept { return *this; }

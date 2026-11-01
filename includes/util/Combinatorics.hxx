@@ -6,6 +6,13 @@
 
 namespace mnd::combi {
 
+inline constexpr uint32_t invalid = UINT32_MAX;
+
+inline constexpr
+std::size_t two_pow_n(uint32_t n) {
+	return std::size_t{1} << n;
+}
+
 inline constexpr
 std::size_t n_choose_k(uint32_t n, uint32_t k) {
     if(k > n) return 0;
@@ -20,28 +27,26 @@ std::size_t n_choose_k(uint32_t n, uint32_t k) {
     return result;
 }
 
-/* Extract the i-th unique combination (subset) of size M.
- * For a range of size N, there are N_C_M unique combinations whose indices 
+/* Extract the i-th unique combination (subset) of size M, from total set size N>=M.
+ * For a range of size N, there are N_C_M unique combinations whose indices
  * {a(0), a(1), ..., a(M-1)} can be ordered lexicographically, and then
  * represented as a bitmask.
  * E.g for n=5, k=3, there are n_choose_k combinations == 10
  *
- *  [0] -> 00111  {0,1,2}
- *  [1] -> 01011  {0,1,3}
- *  [2] -> 10011  {0,1,4}
- *  [3] -> 01101  {0,2,3}
- *  [4] -> 10101  {0,2,4}
- *  [5] -> 11001  {0,3,4}
- *  [6] -> 01110  {1,2,3}
- *  [7] -> 10110  {1,2,4}
- *  [8] -> 11010  {1,3,4}
- *  [9] -> 11100  {2,3,4}
+ *  [0] -> 00111  {0,1,2},  return value:  7
+ *  [1] -> 01011  {0,1,3},  return value: 11
+ *  [2] -> 10011  {0,1,4},  return value: 19
+ *  [3] -> 01101  {0,2,3},  return value: 13
+ *  [4] -> 10101  {0,2,4},  return value: 21
+ *  [5] -> 11001  {0,3,4},  return value: 25
+ *  [6] -> 01110  {1,2,3},  return value: 14
+ *  [7] -> 10110  {1,2,4},  return value: 22
+ *  [8] -> 11010  {1,3,4},  return value: 26
+ *  [9] -> 11100  {2,3,4},  return value: 28
  */
-inline constexpr uint32_t combination (
-	uint32_t n,
-	uint32_t k,
-	std::size_t index
-) {
+inline constexpr auto combination (
+	uint32_t n, uint32_t k, uint32_t index
+) -> uint32_t /* Returns the combination value. */{
 	assert(n <= 32 && "mnd::combi::combination(), sequence size must be <= 32");
 	assert(k <= n && "mnd::combi::combination(), subset size > sequence size ?");
     assert(index < n_choose_k(n, k) && "mnd::combi::combination(), combi index > n combinations ?");
@@ -66,7 +71,7 @@ inline constexpr uint32_t combination (
 }
 
 template<uint32_t N, uint32_t K>
-constexpr auto make_combo_lookup_table() {
+constexpr auto make_combo_lookup_table() -> std::array<uint32_t, n_choose_k(N,K)> {
 	static_assert(N <= 32);
 	static_assert(K <= N);
 
@@ -77,9 +82,29 @@ constexpr auto make_combo_lookup_table() {
 
 	return result;
 }
-
 template<uint32_t N, uint32_t K>
 inline constexpr auto combo_lookup_table =
 	make_combo_lookup_table<N, K>();
+
+/* The inverse of the table above. We query it with a bitmask, and 
+ * get back the possible entry index. If bitmask doesnt match any of the combinations
+ * in (N,K) returns size_t(-1). */
+template<uint32_t N, uint32_t K>
+constexpr auto make_combo_index_table() -> std::array<uint32_t, two_pow_n(N)> {
+	static_assert(N < 32);
+	static_assert(K <= N);
+
+	std::array<uint32_t, two_pow_n(N)> result{};
+
+	for(auto& index : result)
+		index = invalid;
+	for(std::size_t i = 0; i < n_choose_k(N, K); ++i)
+		result[combo_lookup_table<N, K>[i]] = i;
+
+	return result;
+}
+template<uint32_t N, uint32_t K>
+inline constexpr auto combo_index_table =
+	make_combo_index_table<N,K>();
 
 } // namespace mnd::combi

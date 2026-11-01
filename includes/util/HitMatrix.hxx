@@ -1,28 +1,32 @@
 #pragma once
 
+#include "Eigen/Core"
 #include "monad/monad.hxx"
 
 #include <cmath>
 #include <type_traits>
 #include "../Eigen.h"
 
-
-#ifndef MND_HITMATRIX_DO_BOUNDS_CHECKmessed //#	define MND_HITMATRIX_DO_BOUNDS_CHECK
+#ifndef MND_HITMATRIX_DO_BOUNDS_CHECK
+//#	define MND_HITMATRIX_DO_BOUNDS_CHECK
 #endif
 
-template<typename FOOTPair> struct HitMatrix;
+
+template<typename> struct HitMatrix;
 
 namespace mnd { namespace hm {
 
 struct Q {
-	float qx, qy;
+	// Float chosen to have Data nicely aligned. Also precision isn't needed
+	using underlying_type = f32;
+	underlying_type qx, qy;
 
 	inline double mean() const noexcept { return 0.5*(qx+qy); }
 	inline double var() const noexcept {
 		double d = qx-qy;
 		return 0.5*d*d;
 	}
-	inline double s() const noexcept { return std::sqrt( var() ); } 
+	inline double s() const noexcept { return std::sqrt( var() ); }
 
 	inline bool HasValue() const noexcept { return std::isfinite(qx); }
 	inline explicit operator bool() const noexcept { return HasValue(); }
@@ -31,22 +35,24 @@ struct Q {
 		return os << rhs.mean() << "±" << rhs.s();
 	}
 };
-static_assert(sizeof(Q) == 2*sizeof(float));
+static_assert(sizeof(Q) == 2*sizeof(f32));
 
-/* Data cannot be packed as just (v,q) into std::optional, as also
+/* Data cannot be packed as just (pos,q) into std::optional, as also
  * the third state is required. So the type is extended a'la optional,
  * but with the third state present. Furthermore, std::optional<Data> would be padded to 64-byte wide. */
 struct Data {
 	using q_type = Q;
 	using xy_type = Eigen::Vector2d;
+	// Keep it general, since maybe in the future we move to long double
+	using xy_underlying_type = xy_type::Scalar; // double
 	
 	enum State : u32 {
 		UNEVALUATED, // ditto
 		READY,       // if the current entry is fully evaluated
-		POISONED     // if the current entry got plucked into a well defined track. 
+		POISONED     // if the current entry got plucked into a well defined track.
 	};
 
-	xy_type v;   // 16B
+	xy_type pos; // 16B
 	q_type q;    //  8B
 	State state; //  4B
 
@@ -54,17 +60,17 @@ struct Data {
 	inline bool has_value() const noexcept { return state != UNEVALUATED; }
 	inline bool is_poisoned() const noexcept { return state == POISONED; }
 		
-	inline double X() const noexcept { return v(0); }
-	inline double Y() const noexcept { return v(1); }
+	inline xy_underlying_type X() const noexcept { return pos(0); }
+	inline xy_underlying_type Y() const noexcept { return pos(1); }
 };
 static_assert(std::is_aggregate_v<Data> && sizeof(Data) == 32);
 
 inline std::ostream& operator<<(std::ostream& os, const Data& d) {
-	return os << '(' << d.v.transpose() << "; " << d.q << ')';
+	return os << '(' << d.pos.transpose() << "; " << d.q << ')';
 }
 
 struct Cached {
-	template<typename> friend struct ::HitMatrix; 
+	template<typename> friend struct ::HitMatrix;
 	using Storage = Eigen::Matrix<
 		Data,
 		Eigen::Dynamic,
@@ -92,7 +98,7 @@ struct Cached {
 private:
 	Storage cache;
 };
-} /* namespace hm */ 
+} /* namespace hm */
 
 #define DECL_TYPE_TRAIT_HAS_FIELD(FIELD) \
 	template<typename, typename = void> \
@@ -102,6 +108,19 @@ private:
 	struct has_##FIELD##_field<T, std::void_t<decltype(std::declval<T&>().FIELD)>> \
 		: std::true_type {}; \
 
+#define DECL_TYPE_TRAIT_HAS_CONST_METHOD(RETVAL, METHOD) \
+	template<typename, typename = void> \
+	struct has_const_##METHOD##_##RETVAL##_method : std::false_type {}; \
+	\
+	template<typename T> \
+	struct has_const_##METHOD##_##RETVAL##_method< \
+		T, \
+		std::void_t<decltype(std::declval<T&>().METHOD())> \
+	> : std::is_convertible< \
+		decltype(std::declval<const T&>().METHOD()), RETVAL \
+	> {};
+
+
 DECL_TYPE_TRAIT_HAS_FIELD(x)
 DECL_TYPE_TRAIT_HAS_FIELD(y)
 DECL_TYPE_TRAIT_HAS_FIELD(z)
@@ -109,7 +128,10 @@ DECL_TYPE_TRAIT_HAS_FIELD(Q)
 DECL_TYPE_TRAIT_HAS_FIELD(q)
 DECL_TYPE_TRAIT_HAS_FIELD(m)
 
-} /* namespace mnd */ 
+DECL_TYPE_TRAIT_HAS_CONST_METHOD(double, GetZx)
+DECL_TYPE_TRAIT_HAS_CONST_METHOD(double, GetZy)
+
+} /* namespace mnd */
 
 template<typename FOOTPair>
 struct HitMatrix {
@@ -118,19 +140,20 @@ private:
 		"Underlying type `T` must have `x` field.");
 	static_assert(mnd::has_y_field<FOOTPair>::value,
 		"Underlying type `T` must have `y` field.");
-	static_assert(mnd::has_z_field<FOOTPair>::value,
-		"Underlying type `T` must have `z` field.");
-	using hit_type_x = typename mnd::meta::is_indexable_range <
-		std::decay_t<decltype( std::declval<FOOTPair&>().x )>
+	static_assert(mnd::has_const_GetZx_double_method<FOOTPair>::value,
+		"Underlying type `T` must have double T::GetZx() const method.");
+	static_assert(mnd::has_const_GetZy_double_method<FOOTPair>::value,
+		"Underlying type `T` must have double T::GetZy() const method.");
+
+	using hit_type_x  = typename mnd::meta::is_indexable_range <
+		mnd::remove_cvref_t<decltype( std::declval<FOOTPair&>().x )>
 	>::underlying_type;
-	using hit_type_y = typename mnd::meta::is_indexable_range <
-		std::remove_reference_t<std::remove_cv_t<
-			decltype( std::declval<FOOTPair&>().y )
-		>>
+	using hit_type_y  = typename mnd::meta::is_indexable_range <
+		mnd::remove_cvref_t<decltype( std::declval<FOOTPair&>().y )>
 	>::underlying_type;
 
-	static_assert(std::is_same<hit_type_x, hit_type_y>::value,
-		"FOOTPair::x and FOOTPair::y must contain the same hit type");
+	static_assert(std::is_same<hit_type_x , hit_type_y >::value,
+		"FOOTPair::x and FOOTPair::y must contain the same hit type.");
 	static_assert(mnd::has_m_field<hit_type_x>::value,
 		"hit_type must have field .m");
 	static_assert(mnd::has_Q_field<hit_type_x>::value,
@@ -139,10 +162,11 @@ private:
 	using q_type_x = std::decay_t<decltype( std::declval<hit_type_x>().Q )>;
 	static_assert(mnd::has_q_field<q_type_x>::value,
 		"Q_type must have field .q");
-
+	
 public:
 	using hit_type = hit_type_x;
 	using q_type = q_type_x;
+	
 	using Entry = mnd::hm::Data;
 	using Cached  = mnd::hm::Cached;
 	using ActiveIndex = uint32_t;
@@ -156,10 +180,10 @@ public:
 
 	/* Evaluate c(i,j) element. */
 	Entry const& operator()(ActiveIndex i, ActiveIndex j) const noexcept {
-#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
-		if(i > static_cast<ActiveIndex>(GetN<X>()))
+#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
+		if(i >= static_cast<ActiveIndex>(GetN<X>()))
 			ERROR("HitMatrix::operator(i,j): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<X>());
-		if(j > static_cast<ActiveIndex>(GetN<Y>()))
+		if(j >= static_cast<ActiveIndex>(GetN<Y>()))
 			ERROR("HitMatrix::operator(i,j): Requested y-index %u out of bounds (%zu)", static_cast<u32>(j), GetN<Y>());
 #endif
 
@@ -168,12 +192,22 @@ public:
 			const hit_type& hx = p->x[i];
 			const hit_type& hy = p->y[j];
 			slot = Entry {
-				A * ( Eigen::Vector2d(hx.m, hy.m) + dxy ),
-				{hx.Q.q, hy.Q.q}, 
+				{ hx.m, hy.m },
+				{ hx.Q.q, hy.Q.q },
 				Entry::READY
-			}; 
+			};
 		}
 		return slot;
+	}
+
+	template<size_t L>
+	double GetZ() const noexcept {
+		if constexpr(L == X)
+			return p->GetZx();
+		else if constexpr(L == Y)
+			return p->GetZy();
+		else
+			static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
 	}
 	
 	/* Called at the start of tracking, to initialize the entry. */
@@ -184,10 +218,10 @@ public:
 	}
 
 	bool is_poisoned(ActiveIndex i, ActiveIndex j) const noexcept {
-#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
-		if(i > static_cast<ActiveIndex>(GetN<X>()) or j > static_cast<ActiveIndex>(GetN<Y>())) {
-			ERROR("HitMatrix::is_poisoned(): Requested %s-index %d/%d out of bounds (%zu/%zu)", 
-					"X/Y", i, j, GetN<X>(), GetN<Y>() );
+#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
+		if(i >= static_cast<ActiveIndex>(GetN<X>()) or j > static_cast<ActiveIndex>(GetN<Y>())) {
+			ERROR("HitMatrix::is_poisoned(): Requested %s-index %d/%d out of bounds (%zu/%zu)",
+				"X/Y", i, j, GetN<X>(), GetN<Y>() );
 		}
 #endif
 		return cache(i,j).is_poisoned();
@@ -199,18 +233,18 @@ public:
 		const size_t nx = GetN<X>();
 		const size_t ny = GetN<Y>();
 
-#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
-		if(i > static_cast<ActiveIndex>(nx) or j > static_cast<ActiveIndex>(ny)) {
-			ERROR("HitMatrix::poison(): Requested %s-index %d/%d out of bounds (%zu/%zu)", 
+#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
+		if(i >= static_cast<ActiveIndex>(nx) or j >= static_cast<ActiveIndex>(ny)) {
+			ERROR("HitMatrix::poison(): Requested %s-index %d/%d out of bounds (%zu/%zu)",
 				"X/Y", i, j, nx, ny);
 		}
 #endif
 		auto col = cache.cache.col(j); // Eigen::ColXpr
-		for(size_t i_ = 0; i_ < nx; ++i_) 
+		for(size_t i_ = 0; i_ < nx; ++i_)
 			col(i_).state = Entry::POISONED;
 
 		auto row = cache.cache.row(i); // Eigen::ColXpr
-		for(size_t j_ = 0; j_< ny; ++j_) 
+		for(size_t j_ = 0; j_< ny; ++j_)
 			row(j_).state = Entry::POISONED;
 
 		// Exact (i,j) entry addressed twice, but its fine.	
@@ -230,8 +264,8 @@ public:
 				const hit_type& hx = p->x[i];
 
 				cache(i,j) = Entry {
-					A * (Eigen::Vector2d(hx.m, hy.m) + dxy),
-					{ hx.Q.q, hy.Q.q }, 
+					{ hx.m, hy.m },
+					{ hx.Q.q, hy.Q.q },
 					Entry::READY
 				};
 			}
@@ -248,23 +282,20 @@ public:
 			return p->y.size();
 		else
 			static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");
-	}   
+	}
 
-	/* Extract a pointer pair to the requested underlying raw hit. 
+	/* Extract a pointer pair to the requested underlying raw hit.
 	 * Does not evaluate and cache the element. Returns always valid pointers for the lifetime. */
 	RawHitPairRef GetRaw(ActiveIndex i, ActiveIndex j) const noexcept {
-#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK) 
-		if(i > static_cast<ActiveIndex>(GetN<X>()))
+#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
+		if(i >= static_cast<ActiveIndex>(GetN<X>()))
 			ERROR("HitMatrix::GetRaw(i,j): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<X>());
-		if(j > static_cast<ActiveIndex>(GetN<Y>()))
+		if(j >= static_cast<ActiveIndex>(GetN<Y>()))
 			ERROR("HitMatrix::GetRaw(i,j): Requested y-index %u out of bounds (%zu)", static_cast<u32>(j), GetN<Y>());
 #endif
 		return { &p->x[i], &p->y[j] };
 	}
-
-	Eigen::Matrix2d A; // Rotation matrix, each detector might be rotated by an angle θx or θy
-	Eigen::Vector2d dxy; // Translation vector, each detector might be translated by dx/dy
-
+	
 	friend std::ostream& operator<<(std::ostream& os, const HitMatrix& hm) {
 		constexpr size_t X = HitMatrix<FOOTPair>::X;
 		constexpr size_t Y = HitMatrix<FOOTPair>::Y;
@@ -272,7 +303,7 @@ public:
 		const size_t nx =  hm.template GetN<X>();
 		const size_t ny =  hm.template GetN<Y>();
 
-		os << KBH_YEL 
+		os << KBH_YEL
 		   << " --- == |Y| ==> " << KNRM;
 		for(size_t j=0; j < ny; ++j) {
 			os << hm.p->y[j] << hm.template GetPoisonLabel<Y>(j);
@@ -280,7 +311,7 @@ public:
 			if(j != hm.template GetN<Y>()-1)
 				os << ", ";
 		}	
-		os << std::endl << KBH_YEL 
+		os << std::endl << KBH_YEL
 		   << " --- vv |X| vvv";
 		for(size_t i=0; i < nx; ++i) {
 			os << '\n' << hm.p->x[i] << hm.template GetPoisonLabel<X>(i);
@@ -289,7 +320,7 @@ public:
 		return os;
 	}
 
-private: 
+private:
 	const FOOTPair* p; /* Reassigned, event-by-event. */
 	mutable Cached cache;
 	

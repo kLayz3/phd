@@ -15,11 +15,13 @@ double FOOTDeltaFFT::Evaluate(const double x) const {
 }
 
 Orientation FOOTParam::GetOrientation() const noexcept {
+	MND_ASSERT(orientation.size() > 0 && "FOOTParam::GetOrientation() but orientation is not specified. Not allowed!");
 	if(orientation[0] == 'x' or (orientation.length() > 1 and orientation[1] == 'x')) return Orientation::X;
 	if(orientation[0] == 'y' or (orientation.length() > 1 and orientation[1] == 'y')) return Orientation::Y;
 	return Orientation::UNKNOWN;
 };
 double FOOTParam::R() const noexcept {
+	MND_ASSERT(orientation.size() > 0 && "FOOTParam::R() but orientation is not specified. Not allowed!");
 	if(orientation[0] == '-') return -1.0;
 	return 1.0;
 }
