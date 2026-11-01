@@ -215,7 +215,7 @@ static_assert(sizeof(Option<::FTrack>) == sizeof(::FTrack));
 
 } // namespace mnd
 
-/* Static information about a FOOT layer, namely its geometry: zx,zy, θx, θy */
+/* Static information about a FOOT layer, namely its geometry: zx,zy, θx,θy */
 struct FLayerInfo {
 	using Entry = mnd::hm::Data;
 	using EntryXYUnderlyingType = Entry::xy_underlying_type; // double | long double
@@ -236,7 +236,7 @@ struct FLayerInfo {
 	 * to these smaller blocks and stack them together as rows. Also transpose(A) never really gets called, so
 	 * SIMD likes the RowMajor alignment more. */
 	Eigen::Matrix<EntryXYUnderlyingType, 2, 4, Eigen::RowMajor> A;
-	Eigen::Vector<EntryXYUnderlyingType, 2> dxy; // Translation vector, each detector might be translated by dx/dy
+	Eigen::Vector<EntryXYUnderlyingType, 2> dxy; // Translation vector, each detector might be translated by dx|dy
 	Eigen::Vector<EntryXYUnderlyingType, 2> z;   // Raw z's of the two detectors in the layer.
 
 	/* This doesn't touch or evaluate any of the underlying mutable cache entries. So it is perfectly const.
@@ -324,6 +324,8 @@ public:
 	constexpr size_t size() const noexcept { return N; }
 };
 
+/* Only type really exported to be the static container.
+ * One ring to (hold) them all. */
 template<size_t Nlayers>
 struct TrackingGeometry {
 	std::array<FLayerInfo, Nlayers> layer;
@@ -457,8 +459,7 @@ template <
 	}
 
 private:
-	/* Main API: a nullable track can be constructed
-	 * from the currently samples sequence of points.
+	/* Main API: a nullable track can be constructed from the currently samples sequence of points.
 	 * This call is "heavy" since it must solve the linear design problem.
 	 * The prediction matrix which converts a normal-repr track: (x0,ax,y0,ay) to measurements:
 	 * A := ( cosθx_0     ,  zu*cosθx_0     , sinθx_0     , zu*sinθx_0
@@ -469,8 +470,8 @@ private:
 	 *        cosθx_(N-1) ,  zu*cosθx_(N-1) , sinθx_(N-1) , zu*sinθx_(N-1)
 	 *       -sinθy_(N-1) , -zv*sinθy_(N-1) , cosθy_(N-1) , zv*cosθy_(N-1)
 	 *      )
-	 * m := ( flatten(m[0]) , flat(m[1]) , ... flat(m[N-1]) )
-	 * c := ( flatten(hm[0]->dxy) , flat(hm[1]->dxy) , ... flat(hm[N-1]) )
+	 * m := ( flatten(m[0])       , flatten(m[1])       , ... flatten(m[N-1])       )
+	 * c := ( flatten(hm[0]->dxy) , flatten(hm[1]->dxy) , ... flatten(hm[N-1]->dxy) )
 	 *
 	 * Then solve for ν = (x0,ax,y0,ay)
 	 * (AᵀA)ν = Aᵀ(m + c)

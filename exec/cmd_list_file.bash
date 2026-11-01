@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 script_dir="$(dirname -- "$(readlink -f -- $0)")"
 . $script_dir/common.bash
 
@@ -47,7 +48,25 @@ register_opt f "file" handle_f 1
 parse_opts "$@"
 
 if (( do_cat )); then
-	exec cat -n $cmd_file | grep $cat_target
+	linenum=0
+	while IFS= read -r line || [[ -n "$line" ]]; do
+		((++linenum))
+		line="${line//❌}"
+		line="${line//✅}"
+		read -r -a words <<< "$line"
+		[[ "${words[0]}" == "./$cat_target" || "${words[0]}" == "$cat_target" ]] || continue
+
+		for ((i=1; i<${#words[@]}; ++i)); do
+			if [[ "${words[i-1]}" == -f || "${words[i-1]}" == -o ]]; then
+				if [[ -f "${words[i]}" ]]; then
+					words[i]+=✅
+				else
+					words[i]+=❌
+				fi
+			fi
+		done
+		printf '%6d\t%s\n' "$linenum" "${words[*]}"
+	done < "$cmd_file"
 elif (( do_exec )); then
 	line=$(sed -n "${linenum}p" "$cmd_file")
 	line="${line//❌}"
@@ -68,7 +87,7 @@ elif (( do_create )); then
 		[ -f mapdir/$fname ] && { has_output=✅; } || { has_output=❌; }
 		echo "./map.exe -f merged/$fname -o mapdir/$fname$has_output -d 300" | tee -a $cmd_file
 	done
-	echo | tee -a $cmd_file	
+	echo | tee -a $cmd_file
 	for fname in $(ls $dir/$ext); do
 		fname=$(basename "$fname")
 		[ -f mapdir/$fname ] && { has_input=✅; } || { has_input=❌; }

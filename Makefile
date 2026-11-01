@@ -17,6 +17,10 @@ LIBS += $(GO4_LIBS)
 
 SRC:=$(wildcard $(SRC_DIR)/*.cc)
 OBJ:=$(patsubst $(SRC_DIR)/%.cc, $(BUILD_DIR)/%.o, $(SRC))
+
+# We label the executable with .exe since by some weird miracle, I had
+# a header file on the same level, and doing #include <map> pastes the
+# executable into the source code. #feelsgoodman
 EXE:=$(patsubst $(SRC_DIR)/%.cc, $(BUILD_DIR)/%.exe, $(SRC))
 LINKS:=$(patsubst $(SRC_DIR)/%.cc, %.exe, $(SRC))
 

@@ -30,10 +30,9 @@ register_opt() {
 	fi
 }
 
-# NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
-# separately; see below.
+# NOTE: This requires GNU getopt.
 parse_opts() {
-	local parsed	
+	local parsed
 	parsed=$(getopt -o "$SHORT_SPEC" --long "$(IFS=,; echo "${LONG_SPEC[*]}")" -- "$@") || return 1
 	eval set -- "$parsed"
 

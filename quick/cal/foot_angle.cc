@@ -128,6 +128,7 @@ particle tracks to match with other detectors in the sequence. "};
 	for(u32 i=0; i<N_REF_DET; ++i) {
         std::cerr << rfoot[i] << "\n";
     }
+	
 	WARN("Wanted detector heuristically identified:\n" BOLD
 		">> FOOT%d\n"
 		">> DE10: %d\n"
@@ -139,7 +140,14 @@ particle tracks to match with other detectors in the sequence. "};
 		foot.p->orientation.c_str(),
 		foot.p->delta_p,
         foot.z
-	);
+	); {
+		nlohmann::json j;
+		j["delta_p"] = foot.p->delta_p;
+		j["delta_a"] = foot.p->delta_a;
+		std::cerr << "Before:\n" << MND_RGB_COL(201,129,255)
+			<< Form("\"FOOT%u\": ", foot.p->de10_index_)
+			<< j.dump(4) << KNRM << std::endl;
+	}
 
 	/* The normal-line: (x0,ax,y0,ay) converts to the measurement u|v as:
 	 * u = ( cosθx_0     ,  zu*cosθx_0     , sinθx_0     , zu*sinθx_0) × (x0,ax,y0,ay) - offset
@@ -325,14 +333,16 @@ particle tracks to match with other detectors in the sequence. "};
 
 	/* p is what the fit gives, but this is the offset, so detector is placed at -mean */
 	final_p.mean *= -1;
-	std::cout << "========== TO BE WRITTEN INTO PARAM FILE =======" BOLD "\n"
+	std::cout << "\n========== TO BE WRITTEN INTO PARAM FILE =======" BOLD "\n"
 		<< "Avg deg: " << final_a << "°\n"
 		<< "Avg off: " << final_p << " mm\n"
         << Form("Scale factor (%u): ", ifoot) << final_s << KNRM "\n";
     nlohmann::json j;
     j["delta_p"] = final_p.mean;
     j["delta_a"] = final_a.mean;
-    std::cerr << Form("\"FOOT%u\": ", foot.p->de10_index_) << j.dump(4) << std::endl;
+    std::cerr << MND_RGB_BOLD_COL(207,255,182)
+		<< Form("\"FOOT%u\": ", foot.p->de10_index_) << j.dump(4) 
+		<< KNRM << std::endl;
 
     if(!no_draw) {
         TCanvas* cs = new TCanvas("SCIs&Refs", "SCI21,22,31; FOOT Ref", 2150, 1400);
