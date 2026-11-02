@@ -210,13 +210,6 @@ void TFOOTHitCont::Setup() {
 			1000, 0, 200);
 		h1_diff_t[i] = RegisterObject<TH1I>(Form("diff_t_%u", i), Form("Difference in kt [mm^2] of candidates after layer %u", i),
 			1000,-0, 200);
-
-		h1_acc_q[i] = RegisterObject<TH1I>(Form("acc_q_%u", i), Form("Difference in kQ [Q^2] of candidates after layer %u, for acc tracks", i),
-			400, 0, 16);
-		h1_acc_r[i] = RegisterObject<TH1I>(Form("acc_r_%u", i), Form("Difference in kr [mm^2] of candidates after layer %u, for acc tracks", i),
-			1000, 0, 200);
-		h1_acc_t[i] = RegisterObject<TH1I>(Form("acc_t_%u", i), Form("Difference in kt [mm^m] of candidates after layer %u, for acc tracks", i),
-			1000, 0, 200);
 #endif
 	}
 }

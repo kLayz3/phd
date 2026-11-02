@@ -35,13 +35,13 @@ double Nucleus::mass_per_nucleon() const noexcept {
 	return mass() / A;
 }
 
-Option<uint32_t> Nucleus::charge_state() const noexcept {
-	return N_electrons.and_then([this](uint16_t ne) -> Option<uint32_t> {
+Option<u32> Nucleus::charge_state() const noexcept {
+	return N_electrons.and_then([this](u16 ne) -> Option<u32> {
 		if(ne > Z) return mnd::None;
 		return mnd::Some{Z - ne};
 	});
 }
-uint32_t Nucleus::Q() const noexcept {
+u32 Nucleus::Q() const noexcept {
 	return charge_state().value_or(Z);
 }
 
@@ -172,7 +172,7 @@ std::ostream& phy::operator<<(std::ostream& os, Nucleus const& n) {
 	
 	// E.g. 56Fe26+
 	return os << n.A << chem_symbols[n.Z]
-		<< n.charge_state().map([](uint32_t q) -> std::string {
+		<< n.charge_state().map([](u32 q) -> std::string {
 			return mnd::utos(q) + "+";
 		}).value_or("");
 }
@@ -191,7 +191,7 @@ Nucleus phy::operator&(Nucleus const& lhs, Nucleus const& rhs) {
 			if(rhs.N_electrons.is_some())
 				return mnd::Some{(u16)(value + rhs.N_electrons.unwrap())};
 				/* Thanks C++ for having a retarded-ass rule that
-				* uint16_t + uint16_t gives int. ROFLMAO.
+				* u16 + u16 gives int. ROFLMAO.
 				* If I'm too stupid to care for wrap-arounds then let me be stupid,
 				* not have this idiotic rule of IMPLICIT promotions on binary ops.
 				* Please God, get me to Rust I can't this anymore. */

@@ -1,6 +1,6 @@
 /* This include is just to have LSP support when the define is present at compile-time
  * but not during editing. */
-#define MND_DEBUG_ENABLED
+//#define MND_DEBUG_ENABLED
 
 #include "util/FTrack.h"
 
@@ -82,9 +82,6 @@ int main(int argc, char* argv[]) {
 	std::array<TH1I*, N_PAIRS> h1_diff_q;
 	std::array<TH1I*, N_PAIRS> h1_diff_r;
 	std::array<TH1I*, N_PAIRS> h1_diff_t;
-	std::array<TH1I*, N_PAIRS> h1_acc_q;
-	std::array<TH1I*, N_PAIRS> h1_acc_r;
-	std::array<TH1I*, N_PAIRS> h1_acc_t;
 	std::unique_ptr<TrackingGeometry<N_PAIRS>> geometry;
 	{
 		A3* c;
@@ -100,9 +97,6 @@ int main(int argc, char* argv[]) {
             get_obj(f, h1_diff_r.at(n), Form("FOOT_diff_r_%u", n));
 			get_obj(f, h1_diff_q.at(n), Form("FOOT_diff_q_%u", n));
             get_obj(f, h1_diff_t.at(n), Form("FOOT_diff_t_%u", n));
-            get_obj(f, h1_acc_r.at( n), Form("FOOT_acc_r_%u", n));
-            get_obj(f, h1_acc_q.at( n), Form("FOOT_acc_q_%u", n));
-            get_obj(f, h1_acc_t.at( n), Form("FOOT_acc_t_%u", n));
 		}
 		STrackingGeometry* stg;
 		get_obj(f, stg, "FOOT_geometry");
@@ -225,20 +219,26 @@ int main(int argc, char* argv[]) {
 
 		if(foot->track.empty()) continue;
 
-		/* Heaviest track is always placed at the front. */
-		const RNFOOTTrack& t = foot->track.front();
-		if(t.n != N_PAIRS) continue;
+		/* Find the heavy track. */
+		RNFOOTTrack const* t = nullptr;
+		for(const auto& track: foot->track) {
+			if(track.n != N_PAIRS) continue;
 
-		/* Check if charge veto passed. */
-		if(!std::all_of(cut_q.begin(), cut_q.end(),
-			[&t](const auto& e) -> bool {
-				const auto& [foot_i, cut] = e;
-				const double qv = t._q[ foot_i ];
-				return mnd::IsInside(qv, cut);
-			})
-		) {
-			continue;
+			/* Check if charge veto passed. */
+			if(!std::all_of(cut_q.begin(), cut_q.end(),
+				[&track](const auto& e) -> bool {
+					const auto& [foot_i, cut] = e;
+					const double qv = track._q[ foot_i ];
+					return mnd::IsInside(qv, cut);
+				})
+			) {
+				continue;
+			}
+			t = &track;
+			break;
 		}
+
+		if(!t) continue;
 
 		for(u32 i=0; i<N_PAIRS; ++i) {
 			// Mask for which dets fired is all except one at bit i.
@@ -254,9 +254,9 @@ int main(int argc, char* argv[]) {
 			for(u32 j=0; j<N_PAIRS; ++j) {
 				if(j == i) continue;
 
-				rhs(2*w) = t._u[j];
-				rhs(2*w + 1) = t._v[j];
-				qf[w] = t._q[j];
+				rhs(2*w) = t->_u[j];
+				rhs(2*w + 1) = t->_v[j];
+				qf[w] = t->_q[j];
 				++w;
 			} if(w != N_PAIRS-1) ERROR("w must be %u, hello?", N_PAIRS-1);
 			
@@ -269,13 +269,13 @@ int main(int argc, char* argv[]) {
 				geometry->layer[i].A * normal - geometry->layer[i].dxy;
 			auto [q_extr, track_qvar] = mnd::mean_var(qf);
 
-			double dx = t._u[i] - predicted.x();
-			double dy = t._v[i] - predicted.y();
-			double dq = t._q[i] - q_extr;
-			double sq = t._sq[i]; // is sigma == sqrt(var);
+			double dx = t->_u[i] - predicted.x();
+			double dy = t->_v[i] - predicted.y();
+			double dq = t->_q[i] - q_extr;
+			double sq = t->_sq[i]; // is sigma == sqrt(var);
 
-			h1_footx[i]->Fill( t._u[i] );
-			h1_footy[i]->Fill( t._v[i] );
+			h1_footx[i]->Fill( t->_u[i] );
+			h1_footy[i]->Fill( t->_v[i] );
 			resx[i]->Fill(dx);
 			resy[i]->Fill(dy);
 			resq[i]->Fill(dq);
@@ -283,17 +283,17 @@ int main(int argc, char* argv[]) {
 			h2_resy->Fill(i, dy);
 			h2_resq->Fill(i, dq);
 
-			h1q[i]->Fill(t._q[i]);
-			h2q->Fill(i, t._q[i]);
+			h1q[i]->Fill(t->_q[i]);
+			h2q->Fill(i, t->_q[i]);
 			
 			/* Find the 3-measurement 'test' track charge params.. */
 			h2_kq->Fill( i, dq*dq + sq*sq );
 			h2_kr->Fill( i, dx*dx + dy*dy );
 			h2_kq_sqrt->Fill( i, sqrt(dq*dq + sq*sq) );
 			h2_kr_sqrt->Fill( i, sqrt(dx*dx + dy*dy) );
-		} // end-of-loop over FOOT layers.
+		} // for(u32 i=0; i<N_PAIRS; ++i)
 
-		const mnd::geom::Line3D ld = RNTrackToLine3D( t );
+		const mnd::geom::Line3D ld = RNTrackToLine3D( *t );
 		const mnd::geom::Point2D r0_down = ld.Eval( TFOOTHitCont::TARGET_Z );
 
 		const double dx_dstr_ustr = r0_down.x - x0_upst;
@@ -305,7 +305,7 @@ int main(int argc, char* argv[]) {
 			h1_kt_sqrt->Fill(sqrt(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr));
 			h1_diff_upstr_down->Fill(ld.DistanceTo(lu));
 		}
-		h1_score->Fill(t.score);
+		h1_score->Fill(t->score);
 
 		h1_sci21_cut2->Fill(sci21.E);
 		h1_sci22_cut2->Fill(sci22.E);
@@ -385,30 +385,21 @@ int main(int argc, char* argv[]) {
 		mnd::as_span(resolutions)
 	);
 
-	TCanvas* cR = new TCanvas("RScore", "Individual R-score component", 2150, 1400);
-	TCanvas* cQ = new TCanvas("QScore", "Individual Q-score component", 2150, 1400);
-	TCanvas* cT = new TCanvas("TScore", "Individual T-score component", 2150, 1400);
+	TCanvas* cRQT = new TCanvas("R-Q-T-Score", "Individual R,Q,T-score components", 2150, 1400);
 #define DECORATE_HISTO(hshort, col) \
 	for(u32 n=0; n<N_PAIRS; ++n) { \
 		TH1I* h = h1_diff_##hshort.at(n); \
-		h->SetFillColor(col); h->SetLineColor(kBlack); h->SetLineWidth(1);  \
-		h = h1_acc_##hshort.at(n); \
 		h->SetFillColor(col); h->SetLineColor(kBlack); h->SetLineWidth(1);  \
 	}
 	DECORATE_HISTO(r, kRed-7);
 	DECORATE_HISTO(q, kCyan-4);
 	DECORATE_HISTO(t, kYellow-7);
-	cR->Divide(4,2);
-	cQ->Divide(4,2);
-	cT->Divide(4,2);
+	cRQT->Divide(4,3);
 	static_assert(N_PAIRS == 4);
 	for(u32 n=0; n<N_PAIRS; ++n) {
-		cR->cd(1 + n); h1_diff_r.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
-        cR->cd(5 + n); h1_acc_r.at( n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
-		cQ->cd(1 + n); h1_diff_q.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
-        cQ->cd(5 + n); h1_acc_q.at( n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
-		cT->cd(1 + n); h1_diff_t.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
-        cT->cd(5 + n); h1_acc_t.at( n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+		cRQT->cd(1 + n); h1_diff_r.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+		cRQT->cd(5 + n); h1_diff_q.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+		cRQT->cd(9 + n); h1_diff_t.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
 	}
 
 	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2150, 1400);

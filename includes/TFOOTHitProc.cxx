@@ -633,6 +633,13 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		dag.path.begin(),
 		dag.path.end(),
 		[this](const DAG::DAGPath& pl, const DAG::DAGPath& pr) -> bool {
+			/* OK this requires explaination. Basically we 'weigh' according to reduced chi2 from FTrack::GetScore(),
+			 * but a path making a 4-point track will also very very likely make a 3x 3-point tracks. Now the score 
+			 * R3 = 2*R4, but assuming the worst measurement, in like 2/3 of the cases, a 3-point track overtakes the 
+			 * main 4-point track and poisons the hitmatrix entry, thus forever pruning it. */
+			if(pl.Rank() != pr.Rank())
+				return pl.Rank() > pr.Rank();
+			
 			const FTrackOnline tl = this->GetPrelimTrackFromPath(pl);
 			const FTrackOnline tr = this->GetPrelimTrackFromPath(pr);
 			return tl.GetScore(geometry) < tr.GetScore(geometry);
@@ -715,7 +722,15 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		/* Poison the exported hitmatrix elements along their rows and columns.
 		 * This way, no other track can reuse either the same `x` or the same `y` entry. */
 		PoisonEntriesFromHMs(path);
-	}
+	
+	} // for(const DAG::DAGPath& path : dag.path)
+
+#ifdef MND_FOOTTRACK_DEBUG
+	/* At the end, replay the best scoring path, if it contains N_PAIRS measurements. */
+	if(!dag.path.empty() and dag.path.front().Rank() == N_PAIRS)
+		ReplayCostCalculation(dag.path.front());
+#endif
+
 } // void TFOOTHitProc::AnalyseDAG()
 
 /* High frequency call, decoding a DAGPath sequence into an online track. */
@@ -803,11 +818,11 @@ void TFOOTHitProc::ReplayCostCalculation(const DAG::DAGPath& path) noexcept {
 		const double kr = this->kr(prediction_p, e);
 		const double kt = this->kt(tau, e, n);
 
-		out.h1_acc_q[n]->Fill( kq / Cq );
-		out.h1_acc_r[n]->Fill( kr / Cr );
-		out.h1_acc_t[n]->Fill( kt / Ct );
+		if(std::isfinite(kq)) out.h1_diff_q[n]->Fill( kq / Cq );
+		if(std::isfinite(kr)) out.h1_diff_r[n]->Fill( kr / Cr );
+		if(std::isfinite(kt)) out.h1_diff_t[n]->Fill( kt / Ct );
 
-		// Add the node to the current online track.
+		// Add the node to the current 'fake' online track.
 		p.node[n] = path.node[n];
 	}
 }

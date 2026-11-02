@@ -841,7 +841,7 @@ int main(int argc, char* argv[]) {
 	ct2->Divide(2,2);
 	ct2->cd(1); h1_track_angle.Draw();
 	ct2->cd(2); h2_track_distance.Draw("COLZ");
-	ct2->cd(3); h1_track_q->Draw();
+	ct2->cd(3); h1_track_q.Draw();
 	ct2->cd(4); h1_track_distance.Draw();
 
 	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2150, 1400);

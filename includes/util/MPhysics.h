@@ -77,17 +77,17 @@ struct EKin_t {
 	double value;
 };
 struct A_t {
-	uint32_t value;
+	u32 value;
 };
 struct Z_t {
-	uint32_t value;
+	u32 value;
 };
 struct Q_t {
-	uint32_t value;
+	u32 value;
 };
 
 
-enum class AtomicNumber : uint32_t {
+enum class AtomicNumber : u32 {
 	H = 1, He,
 	Li, Be, B, C, N, O, F, Ne,
 	Na, Mg, Al, Si, P, S, Cl, Ar,
@@ -104,8 +104,8 @@ enum class AtomicNumber : uint32_t {
 	Rf, Db, Sg, Bh, Hs, Mt, Ds, Rg, Cn,
 	Nh, Fl, Mc, Lv, Ts, Og
 };
-inline constexpr uint32_t n_chem_symbols =
-	static_cast<uint32_t>(AtomicNumber::Og) + 1;
+inline constexpr u32 n_chem_symbols =
+	static_cast<u32>(AtomicNumber::Og) + 1;
 
 namespace detail {
 struct chem_symbol_table {
@@ -116,7 +116,7 @@ inline constexpr auto chem_symbol_storage_ = []() constexpr {
 	chem_symbol_table result{};
 
 	for(const auto& entry : magic_enum::enum_entries<AtomicNumber>()) {
-		const auto z = static_cast<uint32_t>(entry.first);
+		const auto z = static_cast<u32>(entry.first);
 		const auto name = entry.second;
 
 		if(z == 0 || z >= n_chem_symbols || name.empty() || name.size() > 2)
@@ -132,21 +132,21 @@ inline constexpr auto chem_symbol_storage_ = []() constexpr {
 
 inline constexpr auto& chem_symbols = detail::chem_symbol_storage_.data;
 
-inline constexpr mnd::Option<AtomicNumber> ToAtomicNumber(uint32_t value) noexcept {
-	if(value < static_cast<uint32_t>(AtomicNumber::H) ||
-	   value > static_cast<uint32_t>(AtomicNumber::Og))
+inline constexpr mnd::Option<AtomicNumber> ToAtomicNumber(u32 value) noexcept {
+	if(value < static_cast<u32>(AtomicNumber::H) ||
+	   value > static_cast<u32>(AtomicNumber::Og))
 		return mnd::None;
 
 	return mnd::Some{static_cast<AtomicNumber>(value)};
 }
 
-inline constexpr mnd::Option<uint32_t> GetZ(std::string_view symbol) noexcept {
+inline constexpr mnd::Option<u32> GetZ(std::string_view symbol) noexcept {
 	const char first  = symbol[0];
 	const char second = symbol.size() >= 2 ? symbol[1] : '\0';
 
 	/* Even tho strlen(chem_symbol[i]) can be 1, it's safe to access chem_symbol[1]
 	 * since it will be just the null-terminator. */
-	for(uint32_t z = 1; z < n_chem_symbols; ++z)
+	for(u32 z = 1; z < n_chem_symbols; ++z)
 		if(chem_symbols[z][0] == first && chem_symbols[z][1] == second)
 			return mnd::Some{z};
 
@@ -156,7 +156,7 @@ inline constexpr mnd::Option<uint32_t> GetZ(std::string_view symbol) noexcept {
 /* Return back atomic number based on the `string_view` object provided.
  * Will mutate the view and move it one past, based on how many (1 or 2)
  * characters it munched to deduce the chemical element. */
-inline constexpr mnd::Option<uint32_t> Z(std::string_view& symbol) noexcept {
+inline constexpr mnd::Option<u32> Z(std::string_view& symbol) noexcept {
 	if(symbol.size() >= 2) {
 		/* Try to match symbols with 2 characters. */
 		if(const auto z = GetZ(symbol.substr(0,2)); z.is_some()) {
@@ -177,14 +177,14 @@ inline constexpr mnd::Option<uint32_t> Z(std::string_view& symbol) noexcept {
 }
 
 struct Nucleus {
-	static constexpr uint32_t DEFAULT_A_PRIMARY = 0;
-	static constexpr uint32_t DEFAULT_Z_PRIMARY = 0;
+	static constexpr u32 DEFAULT_A_PRIMARY = 0;
+	static constexpr u32 DEFAULT_Z_PRIMARY = 0;
 
-	uint32_t A = DEFAULT_A_PRIMARY;
-	uint32_t Z = DEFAULT_Z_PRIMARY;
+	u32 A = DEFAULT_A_PRIMARY;
+	u32 Z = DEFAULT_Z_PRIMARY;
 
 	/* Number of electrons, possibly not given. */
-	Option<uint16_t> N_electrons;
+	Option<u16> N_electrons;
 
 	bool valid() const noexcept;
 
@@ -196,11 +196,11 @@ struct Nucleus {
 
 	/* Definitive charge state, based on N_electrons. If N_electrons is None, or
 	 * bigger than Z, then yields None, else is Z-N_electrons.unwrap(). */
-	Option<uint32_t> charge_state() const noexcept;
+	Option<u32> charge_state() const noexcept;
 
 	/* Charge state, based on N_electrons. If N_electrons is None, or invalid,
 	 * yields the fully stripped nucleus, aka Q = Z, else is Z-N_electrons.unwrap(). */
-	uint32_t Q() const noexcept;
+	u32 Q() const noexcept;
 
 	Option<AtomicNumber> ChemElem() const noexcept;
 	std::string to_string() const noexcept;

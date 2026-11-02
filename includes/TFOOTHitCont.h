@@ -260,9 +260,6 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	TH1I *h1_diff_q[N_PAIRS];
 	TH1I *h1_diff_r[N_PAIRS];
 	TH1I *h1_diff_t[N_PAIRS];
-	TH1I *h1_acc_q[N_PAIRS];
-	TH1I *h1_acc_r[N_PAIRS];
-	TH1I *h1_acc_t[N_PAIRS];
 #endif
 
 	TFOOTHitCont();
