@@ -2,6 +2,7 @@
  * at the resulting spectra... */
 
 #include "TFOOTCalCont.h"
+#include "TFRSCalCont.h"
 #include "util/CLI.h"
 #include "magic_enum/magic_enum.hpp"
 
@@ -36,6 +37,14 @@ using namespace phy::literals;
 namespace fs = std::filesystem;
 
 using namespace std::string_view_literals;
+
+struct SciMetaQDC {
+	constexpr static double lo = 300; constexpr static double hi = 4000;
+};
+struct SciMetaQ {
+	constexpr static double lo = 0; constexpr static double hi = 7;
+};
+static constexpr double sci_nbins = 500;
 
 //#define MND_PHYSICS_PARANOIA
 #define MND_MULTITHREADING_TOGGLE
@@ -89,6 +98,8 @@ int main(int argc, char* argv[]) {
 
 	std::vector<std::string> fileName, info;
 	double distance_cut = NAN;
+
+	bool sci_select_q = false;
 	Option<A2> sci21_cut;
 	Option<A2> sci22_cut;
 	Option<A2> sci31_cut;
@@ -96,6 +107,7 @@ int main(int argc, char* argv[]) {
 	u32 nthreads = 1;
 
 	Select selected{};
+	std::map<AtomicNumber, A2> charge_cvt;
 	bool do_scaling = false;
 	bool fmt_isotope = false;
 	std::vector<canvas::Extension> save = {};
@@ -120,15 +132,21 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-s,--select", selected, "Select which fragments to explicity gate upon, delimited by ':'")
 		->delimiter(':')
 		->type_name("ELEM,N | A,B,N");
+	add_logged_option(app, "-q,--charge", charge_cvt,
+		"User-defined gates for ranged of charges which are descretized by the FOOT. "
+		"Default taken from a comptime lookup-table. "
+		"E.g.: -q He:1.4,2.6 .");
 	add_logged_option<DisplayDefault::No>(app, "-d,--distance", distance_cut,
 		"Distance from vertex cut (all tracks must be below this threshold). Default no cut. "
 		"NOTE: not assigning this field will default to simple angles between all FOOT tracks.")
 		->check(CLI::Range(0.0, 2.0));
-	add_logged_option(app, "--sci21", sci21_cut, "SCI21 QDC cut (also implying multiplicity 1).")
+	add_logged_flag(app, "--sci-q,!--sci-qdc", sci_select_q,
+		"Toggle between SCI Q (fully calibrated) or cal level's QDC measurements for scintillators particle Z estimate.");
+	add_logged_option(app, "--sci21", sci21_cut, "SCI21 Q/QDC cut (also implying multiplicity-relatedty 1).")
 		->delimiter(',');
-	add_logged_option(app, "--sci22", sci22_cut, "SCI22 QDC cut (also implying multiplicity 1).")
+	add_logged_option(app, "--sci22", sci22_cut, "SCI22 Q/QDC cut (also implying multiplicity 1).")
 		->delimiter(',');
-	add_logged_option(app, "--sci31", sci31_cut, "SCI31 QDC cut (also implying multiplicity 1).")
+	add_logged_option(app, "--sci31", sci31_cut, "SCI31 Q/QDC cut (also implying multiplicity 1).")
 		->delimiter(',');
 	add_logged_flag(app, "--scaling", do_scaling, "Rescale the ρ angle based on the "
 		"calculated kinetic energy of the reaction inside the target");
@@ -285,7 +303,17 @@ int main(int argc, char* argv[]) {
 	for(auto& [nucleus, n_required, qcut] : selected) {
 		if(n_required == 0)
 			ERROR("Must require 1 or more tracks, cannot set to require 0 tracks. Stop that.");
-		qcut = elem_to_a2( nucleus.ChemElem().unwrap() );
+
+		const AtomicNumber e = nucleus.ChemElem().unwrap();
+		if(charge_cvt.count(e) != 0) {
+			qcut = charge_cvt.at(e);
+		} else {
+			qcut = elem_to_a2( nucleus.ChemElem().unwrap() );
+		}
+		if(!std::isfinite(qcut[0]) || !std::isfinite(qcut[1])
+			|| !(qcut[0] < qcut[1]))
+			ERROR("FOOT invalid charge interval set for %s : %s.",
+				std::string{magic_enum::enum_name(e)}.c_str(), mnd::streamable(qcut).c_str());
 	}
 	
 	/* Sort out the selected nuclei, in descending charge.
@@ -295,14 +323,6 @@ int main(int argc, char* argv[]) {
 	std::sort(selected.begin(), selected.end(),
 		/* Sort in descending order, according to the lower range boundary. */
 		[](const SingleSelect& lhs, const SingleSelect& rhs) {
-			if(lhs.qcut[0] > lhs.qcut[1]) {
-				WARN("Range: "); std::cerr << lhs.fragment << " qcut range isn't valid (lhs >= rhs)? Is: " << lhs.qcut;
-				throw std::runtime_error("Err");
-			}
-			if(rhs.qcut[0] > rhs.qcut[1]) {
-				WARN("Range: "); std::cerr << rhs.fragment << " qcut range isn't valid (rhs >= rhs)? Is: " << rhs.qcut;
-				throw std::runtime_error("Err");
-			}
 			return (lhs.fragment.Z == rhs.fragment.Z)
 			     ? (lhs.fragment.mass() > rhs.fragment.mass())
 			     : (lhs.fragment.Z > rhs.fragment.Z);
@@ -407,7 +427,7 @@ int main(int argc, char* argv[]) {
 					}
 				}
 				if(nprotons > 2) {
-					rho_expression_pythex += "\\big)";
+					rho_expression_pythex += "\\right)";
 					rho_expression_rootex += ")";
 				}
 				rho_expression_pythex += '}';
@@ -428,7 +448,7 @@ int main(int argc, char* argv[]) {
 			const auto nuc_label_rootex = nuc.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope);
 			const auto nuc_label_pythex = nuc.chem_to_string(phy::Nucleus::Represent::Pythex, fmt_isotope);
 
-			rho_expression_rootex += mnd::msg("#sqrt{#frac{m[%s]}{%u m[p]} #sqrt{",
+			rho_expression_rootex += mnd::msg("#sqrt{#frac{m[%s]}{%u m[p]}} #sqrt{",
 				nuc_label_rootex.c_str(), nitems);
 			rho_expression_pythex += mnd::msg("\\sqrt{\\frac{m_{%s}}{%u m_{\\mathrm{p}} }} \\sqrt{",
 				nuc_label_pythex.c_str(), nitems);
@@ -515,18 +535,20 @@ int main(int argc, char* argv[]) {
 	if(rho_ex_type ==  RhoExpressionType::p) {
 		const Nucleus& hi = nuclei.front();
 		h2_rho_vs_theta->GetXaxis()->SetTitle(
-			Form("#theta(p, %s)", hi.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope).c_str())
+			Form("#theta(p, %s) [mrad]", hi.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope).c_str())
 		);
 	}
-	auto h1_sci21 = TH1P{"SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000};
-	auto h1_sci22 = TH1P{"SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000};
-	auto h1_sci31 = TH1P{"SCI31 QDC mean [QDC units]", 0x009B2F_c, 500, 300, 4000};
-	auto h1_sci21_cut  = TH1P{"((h1_cut)) SCI21 QDC mean [QDC units]@With cut", 0x890389_c, 500, 300, 4000};
-	auto h1_sci22_cut  = TH1P{"((h1_cut)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, 500, 300, 4000};
-	auto h1_sci31_cut  = TH1P{"((h1_cut)) SCI31 QDC mean [QDC units]@With cut", 0x7DE69D_c, 500, 300, 4000};
-	auto h1_sci21_cut2 = TH1P{"((h1_cut2)) SCI21 QDC mean [QDC units]@With cut and FOOT selection", 0x890389_c, 500, 300, 4000};
-	auto h1_sci22_cut2 = TH1P{"((h1_cut2)) SCI22 QDC mean [QDC units]@With cut and FOOT selection", 0x6180FD_c, 500, 300, 4000};
-	auto h1_sci31_cut2 = TH1P{"((h1_cut2)) SCI31 QDC mean [QDC units]@With cut and FOOT selection", 0x7DE69D_c, 500, 300, 4000};
+#define SCI_HIST_SELECT_RANGE sci_nbins, sci_select_q ? SciMetaQ::lo: SciMetaQDC::lo, sci_select_q ? SciMetaQ::hi: SciMetaQDC::hi
+	const char* _sinfo = sci_select_q ? "Q" : "QDC units";
+	auto h1_sci21 = TH1P{Form("SCI21 %s mean [%s]", _sinfo, _sinfo), 0xCB00CB_c, SCI_HIST_SELECT_RANGE};
+	auto h1_sci22 = TH1P{Form("SCI22 %s mean [%s]", _sinfo, _sinfo), 0x0070DD_c, SCI_HIST_SELECT_RANGE};
+	auto h1_sci31 = TH1P{Form("SCI31 %s mean [%s]", _sinfo, _sinfo), 0x009B2F_c, SCI_HIST_SELECT_RANGE};
+	auto h1_sci21_cut  = TH1P{Form("((h1_cut1)) SCI21 %s mean [%s]@With cut", _sinfo, _sinfo), 0x890389_c, SCI_HIST_SELECT_RANGE};
+	auto h1_sci22_cut  = TH1P{Form("((h1_cut1)) SCI22 %s mean [%s]@With cut", _sinfo, _sinfo), 0x6180FD_c, SCI_HIST_SELECT_RANGE};
+	auto h1_sci31_cut  = TH1P{Form("((h1_cut1)) SCI31 %s mean [%s]@With cut", _sinfo, _sinfo), 0x7DE69D_c, SCI_HIST_SELECT_RANGE};
+	auto h1_sci21_cut2 = TH1P{Form("((h1_cut2)) SCI21 %s mean [%s]@With cut and FOOT selection", _sinfo, _sinfo), 0x890389_c, SCI_HIST_SELECT_RANGE};
+	auto h1_sci22_cut2 = TH1P{Form("((h1_cut2)) SCI22 %s mean [%s]@With cut and FOOT selection", _sinfo, _sinfo), 0x6180FD_c, SCI_HIST_SELECT_RANGE};
+	auto h1_sci31_cut2 = TH1P{Form("((h1_cut2)) SCI31 %s mean [%s]@With cut and FOOT selection", _sinfo, _sinfo), 0x7DE69D_c, SCI_HIST_SELECT_RANGE};
 
 	show_console_cursor(false);
 
@@ -583,19 +605,23 @@ int main(int argc, char* argv[]) {
 			const auto& sci21 = frs->cal.sci[RNFRSCal::SCI21_I];
 			const auto& sci22 = frs->cal.sci[RNFRSCal::SCI22_I];
 			const auto& sci31 = frs->cal.sci[RNFRSCal::SCI31_I];
-			
-			if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
-			if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
-			if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
-			
-			/* Skip the event entirely in case a SCI cut isn't met. */
-			if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
-			if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
-			if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
 
-			if(sci21.hits.size() >= 1) h1_sci21_cut->Fill(sci21.E);
-			if(sci22.hits.size() >= 1) h1_sci22_cut->Fill(sci22.E);
-			if(sci31.hits.size() >= 1) h1_sci31_cut->Fill(sci31.E);
+			const double sci21_q = sci_select_q ? frs->s2_bt.Q : sci21.E;
+			const double sci22_q = sci_select_q ? frs->s2_at.Q : sci22.E;
+			const double sci31_q = sci_select_q ? frs->s3.Q    : sci31.E;
+			
+			if(!sci21.hits.empty()) h1_sci21->Fill(sci21_q);
+			if(!sci22.hits.empty()) h1_sci22->Fill(sci22_q);
+			if(!sci31.hits.empty()) h1_sci31->Fill(sci31_q);
+			
+			/* Skip the event entirely in case a SCI cut is not met. */
+			if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21_q, sci21_cut))) continue;
+			if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22_q, sci22_cut))) continue;
+			if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31_q, sci31_cut))) continue;
+
+			if(sci21.hits.size() >= 1) h1_sci21_cut->Fill(sci21_q);
+			if(sci22.hits.size() >= 1) h1_sci22_cut->Fill(sci22_q);
+			if(sci31.hits.size() >= 1) h1_sci31_cut->Fill(sci31_q);
 			
 			bool valid_vertex_found = false;
 
@@ -750,9 +776,9 @@ int main(int argc, char* argv[]) {
 			} /* while(...) */ } // if(vertex_dist_cut_given)
 			
 			if(valid_vertex_found and vertex_dist_cut_given) {
-				h1_sci21_cut2->Fill(sci21.E);
-				h1_sci22_cut2->Fill(sci22.E);
-				h1_sci31_cut2.Fill(sci31.E);
+				h1_sci21_cut2.Fill(sci21_q);
+				h1_sci22_cut2.Fill(sci22_q);
+				h1_sci31_cut2.Fill(sci31_q);
 			}
 		} // for(size_t entryId{0}; entryId < nentries; ++entryId )
 

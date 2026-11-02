@@ -361,9 +361,17 @@ template<
 
 				K key{};
 				V value{};
+				
+				if constexpr(std::is_enum_v<K>) {
+					const auto converted = magic_enum::enum_cast<K>(key_text);
+					if(!converted)
+						fail("Invalid map key '" + key_text + "'.");
 
-				if(!CLI::detail::lexical_cast(key_text, key))
-					fail("Invalid map key '" + key_text + "'.");
+					key = *converted;
+				} else {
+					if(!CLI::detail::lexical_cast(key_text, key))
+						fail("Invalid map key '" + key_text + "'.");
+				}
 
 				/* Explicitly require every array element. */
 				if constexpr(mnd::meta::is_an_array_v<V>) {

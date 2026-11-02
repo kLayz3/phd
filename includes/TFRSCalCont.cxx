@@ -32,7 +32,7 @@ void SCIPrimary::Init() const noexcept {
 }
 
 double SCIPrimary::BetaCorrection(double b) const noexcept {
-	if(!std::isfinite(b) or !IsOk())
+	if(!(b > 0) or !IsOk()) // reject b=NAN, b<0 and if referent beta not given.
 		return 1.0;
 
 	if(MND_UNLIKELY(!qdc_ref.load_acq()))
@@ -70,24 +70,6 @@ TGraph* SCIPrimary::GetGraph(
 	return g; /* Draw via:
 	           * TGraph* g = GetGraph(); g->Draw("AL"); */
 }
-
-#if 0
-bool SCIDEIntoQConverter::matches_file(std::string_view fname) const {
-    /* `fname` could be with an extension, or with fullpath appended.
-     * In this case, just strip it out. */
-    std::regex re;
-    try {
-        re = std::regex{this->regex};
-    } catch(const std::exception& e) {
-        MND_THROW("SCIDEIntoQConverter::matches_file(...): "
-            "Compiling underlying regex: '%s' failed. Info: %s\n",
-            this->regex.c_str(), e.what());
-    }
-
-    /* Regex needs to just find a match on the fname. Thats it. */
-    return std::regex_search(fname.begin(), fname.end(), re);
-}
-#endif
 
 double SCIDEIntoQConverter::Q(double e) const noexcept {
     if( MND_UNLIKELY(!fit_.load_acq()) )

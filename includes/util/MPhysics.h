@@ -14,9 +14,14 @@
 #include "util/Option.hxx"
 #include "util/FromChars.h"
 #include "util/Geometry.h"
+#include "magic_enum/magic_enum_iostream.hpp"
 #include "StaticNuclearTable.hh"
 
 namespace phy {
+
+/* So that CLI.h can take std::map<K,V> key value as AtomicNumber.
+ * This is needed for quick/hit/physics.cc compilation. */
+using magic_enum::ostream_operators::operator<<;
 
 template<typename T>
 using Option = ::mnd::Option<T>;
@@ -104,6 +109,7 @@ enum class AtomicNumber : u32 {
 	Rf, Db, Sg, Bh, Hs, Mt, Ds, Rg, Cn,
 	Nh, Fl, Mc, Lv, Ts, Og
 };
+
 inline constexpr u32 n_chem_symbols =
 	static_cast<u32>(AtomicNumber::Og) + 1;
 

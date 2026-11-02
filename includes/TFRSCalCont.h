@@ -336,11 +336,13 @@ struct SCIParam {
 
     SCIParam() = default;
 
-	/* Returns the SCI final calibrated charge (after pedestal subtraction and β-correction). */
+	/* Returns the SCI final calibrated charge (after pedestal subtraction and β-correction).
+	 * If β is not found, simply returns non β-corrected value. */
     double Q(const RNSciCal& s, double beta = NAN) const noexcept;
 	
 	/* Returns the SCI final calibrated charge (after pedestal subtraction and β-correction).
-	 * Input is the preliminary energy measurement: sqrt((E_l - ped_l) * (E_r - ped_r)) .*/
+	 * Input is the preliminary energy measurement: E0 = sqrt((E_l - ped_l) * (E_r - ped_r)) .
+	 * If β is not found, simply returns non β-corrected value. */
     double Q(double E0, double beta = NAN) const noexcept;
 
 	/* Sci measured energy (ADC units) after pedestal subtraction. */
@@ -352,7 +354,8 @@ struct SCIParam {
 	/* Sci right-measured energy (ADC units) after pedestal subtraction. */
 	double E0_r(const RNSciCal& ) const noexcept;
 
-	/* Sci measured energy (ADC units) after pedestal subtraction and β-correction. */
+	/* Sci measured energy (ADC units) after pedestal subtraction and β-correction.
+	 * If β is not found, simply returns non β-corrected value. */
 	double E(const RNSciCal& , double beta=NAN ) const noexcept;
 
 public:
