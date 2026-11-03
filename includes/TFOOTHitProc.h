@@ -1,7 +1,7 @@
 #pragma once
 
 #include "monad/monad.hxx"
-#include "Eigen/Core"
+#include "Eigen.h"
 
 #include "TFOOTMapCont.h"
 #include "TFOOTCalCont.h"

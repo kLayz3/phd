@@ -8,10 +8,12 @@
 #	pragma GCC diagnostic push
 #	pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #	pragma GCC diagnostic ignored "-Wunused-variable"
+#	pragma GCC diagnostic ignored "-Warray-bounds"
 #elif defined(__clang__)
 #	pragma clang diagnostic push
 #	pragma clang diagnostic ignored "-Wunused-variable"
 #	pragma clang diagnostic ignored "-Wunused-variable"
+#	pragma clang diagnostic ignored "-Warray-bounds"
 #endif
 
 #include "Eigen/Dense"
