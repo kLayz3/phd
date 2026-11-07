@@ -15,7 +15,7 @@ struct TFOOTCalProc : TProcessor <
 	static constexpr int N_STRIPS    = TFOOTCalCont::N_STRIPS; /* 640 */
 	static constexpr int MAX_CL_SIZE = 40; /* Maximal allowed cluster size. */
 	static constexpr int MASSIVE_CLUSTER_CUTOFF = 20; /* After which multiplicity a cluster is called 'massive'. */
-    static constexpr f64 HEAVY_ISOLATED_CLUSTER_CUTOFF = 4.0; /* Central strip ADC [in units of c_thr] w/o neightbours to be called 'heavy isolated'. */
+    static constexpr f64 HEAVY_ISOLATED_CLUSTER_CUTOFF = 5.0; /* Central strip ADC [in units of c_thr] w/o neightbours to be called 'heavy isolated'. */
 
 	static constexpr f64 BAD_STRIP_THRESHOLD = INFINITY; /* Bad strips labelled in map step get assigned this thresholds. */
 

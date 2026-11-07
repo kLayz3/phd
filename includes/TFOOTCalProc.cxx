@@ -343,7 +343,7 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 
     /* `MassiveCluster` event state has priority over other states. */
 	if(out->w_ev_type != RNFOOTCal::EventType::MassiveCluster
-		&& (ct == ClusterType::kHEAVY_ISOLATED || ct == ClusterType::kISOLATED)) 
+		&& (ct == ClusterType::kHEAVY_ISOLATED || ct == ClusterType::kISOLATED))
 	{
         out->w_ev_type = RNFOOTCal::EventType::IsolatedStrip;
 
@@ -351,9 +351,6 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 			out.h1_dE_m3_heavy->Fill(it_max->x, it_max->e);
 		else
 			out.h1_dE_m3_light->Fill(it_max->x, it_max->e);
-
-        if(!out->DebugAssigned())
-		    out->fRaw.assign(e, e + N_STRIPS);
 	}
 	
 	out->AddCluster(cl_wx, cl_e, _cl_cnt, ct);
