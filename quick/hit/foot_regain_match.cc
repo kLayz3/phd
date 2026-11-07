@@ -60,6 +60,7 @@ int main(int argc, char* argv[]) {
 
 	u32 nthreads = 1;
 
+	bool add_asic_indicator = false;
 	Take take = Take::gauss_fit_only;
 	Option<std::vector<i32>> show_old = None;
 
@@ -119,6 +120,8 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-n,--nthreads", nthreads,
 		"Run the process multithreaded. One file per thread."
 	)->check(CLI::PositiveNumber);
+	add_logged_flag(app, "--add-asic-indicator", add_asic_indicator,
+		"add an \"asic\": NUM indicator to the output JSON. For easier navigation.");
 
 	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.")
 		->delimiter(',');
@@ -399,10 +402,12 @@ int main(int argc, char* argv[]) {
 			std::sort( asic.multi_poly.begin(), asic.multi_poly.end() );
 		}
 		auto j = nlohmann::json(pp);
-		auto& fits = j.at("fit");
-		int asic_i=0;
-		for(auto& fit : fits) {
-			fit["asic"] = asic_i++;
+		if(add_asic_indicator) {
+			auto& fits = j.at("fit");
+			int asic_i=0;
+			for(auto& fit : fits) {
+				fit["asic"] = asic_i++;
+			}
 		}
 
 		std::cout << "\"gain\": " << j.dump(4) << std::endl;
