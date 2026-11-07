@@ -74,11 +74,13 @@ struct RNFOOTMap {
 };
 
 struct TFOOTMapCont : TContainer<RNFOOTMap> {
-	static constexpr int N_STRIPS          = RNFOOTMap::N_STRIPS;          /* 640 */
-	static constexpr int N_ASIC            = RNFOOTMap::N_ASIC;            /* 10  */
-	static constexpr int N_STRIPS_PER_ASIC = RNFOOTMap::N_STRIPS_PER_ASIC; /* 64  */
-	static constexpr int N_GPED_CHANGE_TOLERANCE  = 5; /* Relative to intial gped, consecutive calculations can go +- 5 ADC units. */
-	static constexpr int N_GPED_BINS_IN_TOLERANCE = 20; /* How many bins does the tolerance window, +- 5 span. */ 
+	static constexpr i32 N_STRIPS          = RNFOOTMap::N_STRIPS;          /* 640 */
+	static constexpr i32 N_ASIC            = RNFOOTMap::N_ASIC;            /* 10  */
+	static constexpr i32 N_STRIPS_PER_ASIC = RNFOOTMap::N_STRIPS_PER_ASIC; /* 64  */
+	static constexpr i32 N_GPED_CHANGE_TOLERANCE  = 5; /* Relative to intial gped, consecutive calculations can go +- 5 ADC units. */
+	static constexpr i32 N_GPED_BINS_IN_TOLERANCE = 20; /* How many bins does the tolerance window, +- 5 span. */ 
+
+	static constexpr u32 MAX_ADC_VALUE = 4096;
 
 	i32 FOOT_N = -1;
 	

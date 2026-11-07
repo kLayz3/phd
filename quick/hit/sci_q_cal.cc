@@ -252,6 +252,9 @@ int main(int argc, char* argv[]) {
 			h2_de1_vs_beta->Fill(beta, e1);
 			h1_de1->Fill(e1);
 		}
+
+		if(!bar.is_completed())
+			bar.mark_as_completed();
 	});
 	show_console_cursor(true);
 

@@ -119,13 +119,13 @@ struct TFOOTHitProc : TProcessor <
 	using FHitMatrix = HitMatrix<RNFOOTPair>;
 	using FTrackOnline = Track<N_PAIRS, RNFOOTPair>;
 
-	static constexpr float CLUSTER_SIZE_ONE_Q_CUTOFF = 1.3; // when cluster size == 1 doesn't make sense anymore.
+	inline static constexpr float CLUSTER_SIZE_ONE_Q_CUTOFF = 3.0; // when cluster size == 1 doesn't make sense anymore.
 
 	/* Convention. In Kalman coordinates, place target's FOOT-facing edge nominally at 0.0.
 	 * Will be shifted back to "real" FRS coordinates later. */
-	static constexpr double TARGET_Z = TFOOTHitCont::TARGET_Z;
+	inline static constexpr double TARGET_Z = TFOOTHitCont::TARGET_Z;
 
-	static constexpr u32 MAX_CANDIDATES = 10; // To how many paths can a node branch to (at most)
+	inline static constexpr u32 MAX_CANDIDATES = 16; // To how many paths can a node branch to (at most)
 	using DAG = DirectedAGraph<u16, N_PAIRS>;
 
 	TFOOTHitProc(TFOOTHitCont& , BOOST_PP_ENUM(N_FOOT_DETECTORS, GEN_ARG_TYPE_FOOT, (const,&) ),

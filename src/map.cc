@@ -115,7 +115,7 @@ int main(i32 argc, char* argv[]) {
 		.MakePool<1>( 512 );
 
 	/* To register the initial FOOT global pedestals. */
-	pool.SendOneBatch( n_batch );
+	pool.SendOneBatch(0, n_batch);
 	WARN("Done with batching, going on to process (initial) guess for global pedestal in FOOT\n");
 
 	/* Loop over all workers, get their processes,

@@ -24,7 +24,7 @@ OBJ:=$(patsubst $(SRC_DIR)/%.cc, $(BUILD_DIR)/%.o, $(SRC))
 EXE:=$(patsubst $(SRC_DIR)/%.cc, $(BUILD_DIR)/%.exe, $(SRC))
 LINKS:=$(patsubst $(SRC_DIR)/%.cc, %.exe, $(SRC))
 
-.PHONY: all symlink remove clean list FORCE
+.PHONY: all symlink remove clean list dirlink FORCE
 
 all: symlink
 
@@ -63,3 +63,11 @@ list:
 	  | awk -v RS= -F: '/(^|\n)# Files(\n|$$)/,/(^|\n)# Finished Make data base/ {if ($$1 !~ "^[#.]") {print $$1}}' \
 	  | sort \
 	  | grep -E -v -e '^[^[:alnum:]]' -e '^$@$$'
+
+dirlink:
+	@case "$$(hostname -s)" in \
+		lxsecana01) dirpath=/srv/secana01/mbajzek ;; \
+		*)          dirpath=/d/sec1/mbajzek ;; \
+	esac; \
+	ln -sfn "$$dirpath" "$(BASE)/stash"
+

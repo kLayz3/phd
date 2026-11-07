@@ -35,7 +35,7 @@ namespace mnd::geom { struct Line3D; }
 struct FOOTQ {
 	using ClusterType = RNFOOTCluster::ClusterType;
 
-	float q; // nominal charge 'value'
+	float q; /* Calibrated charge value [e] */
 	u32 fCM = 0; /* Cluster multiplicity. */
 
 	/* Few fields taken from RNFOOTCluster.. */
@@ -47,14 +47,14 @@ struct FOOTQ {
 	
 	FOOTQ() = default;
 	FOOTQ(float q_, u32 fCM_
-#ifdef MND_FOOTTRACK_DEBUG
+	#ifdef MND_FOOTTRACK_DEBUG
 		, ClusterType fCT_, float d_, float e0_
-#endif
+	#endif
 	) :
 		q(q_), fCM(fCM_)
-#ifdef MND_FOOTTRACK_DEBUG
+	#ifdef MND_FOOTTRACK_DEBUG
 		, fCT(fCT_), delta(d_), e0(e0_)
-#endif
+	#endif
 	{}
 
 	virtual ~FOOTQ() = default;
@@ -69,17 +69,18 @@ struct FOOTHit {
 
 	FOOTQ Q;
 	double m; // measurement [ mm ], in the writeup corresponds to either `u` or `v` .
+	          // it is *only* converted to mm. There is no FOOT offset added here.
 	
 	FOOTHit() = default;
 	FOOTHit(double q_, u32 fCM_
-#ifdef MND_FOOTTRACK_DEBUG
+	#ifdef MND_FOOTTRACK_DEBUG
 		, ClusterType fCT_, float d_, float e0_
-#endif
+	#endif
 		, double m_) :
 		Q(q_, fCM_
-#ifdef MND_FOOTTRACK_DEBUG
+	#ifdef MND_FOOTTRACK_DEBUG
 			, fCT_, d_, e0_
-#endif
+	#endif
 		), m(m_) {}
 
 	virtual ~FOOTHit() = default;
@@ -98,8 +99,7 @@ struct RNFOOTPair {
      * `x` or the `y` foot are missing. This changes the precision by ~1e-14 or so
      * such that it doesn't really matter. Sane person would implement a separate flag, but I'm an
      * OCD masochist who likes alignment very much. Not safe for kids. :) */
-	f32 zx;
-	f32 zy;
+	f32 zx, zy;
 
 	RNFOOTPair() = default;
 
@@ -146,17 +146,17 @@ struct RNFOOTTrack {
 	std::array<double, N_PAIRS> _q;
 	std::array<double, N_PAIRS> _sq;
 
-	std::array<double, N_PAIRS> _e0_x;
+	std::array<double, N_PAIRS> _e0_x; // accumulated cluster energy
 	std::array<double, N_PAIRS> _delta_x;
-	std::array<u32,    N_PAIRS> _c0_x; // cluster peak value
-	std::array<double, N_PAIRS> _e0_y;
+	std::array<u32,    N_PAIRS> _c0_x; // cluster peak strip index
+	std::array<double, N_PAIRS> _e0_y; // accumulated cluster energy
 	std::array<double, N_PAIRS> _delta_y;
-	std::array<u32,    N_PAIRS> _c0_y; // cluster peak value
+	std::array<u32,    N_PAIRS> _c0_y; // cluster peak strip index
 #endif
 
 	RNFOOTTrack() = default;
 	RNFOOTTrack(const std::array<double, 2>& , const std::array<double, 2>& , double , double, std::size_t
-#ifdef MND_FOOTTRACK_DEBUG
+	#ifdef MND_FOOTTRACK_DEBUG
 		,
 		const std::array<double, N_PAIRS>& , // u
 		const std::array<double, N_PAIRS>& , // v
@@ -170,7 +170,7 @@ struct RNFOOTTrack {
 		const std::array<double, N_PAIRS>& , // e0_y
 		const std::array<double, N_PAIRS>& , // delta_y
 		const std::array<u32,    N_PAIRS>&   // c0_y
-#endif
+	#endif
 	);
 	virtual ~RNFOOTTrack() = default;
 	ClassDef(RNFOOTTrack, 1);

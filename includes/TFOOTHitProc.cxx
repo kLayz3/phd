@@ -337,6 +337,8 @@ TFOOTHitProc::TFOOTHitProc (
 	WARN("Cost coefficients [cr, cq, ct] = [%.2f, %.2f, %.2f]\n", Cr, Cq, Ct);
 	WARN("Max candidate allowed cost: %s%.2f%s , max complete track allowed cost %s%.2f%s\n",
 		BOLD, max_cost, KNRM, BOLD, max_cost_final_track, KRNM);
+	WARN("Cluster size==1 cutoff point is %.2f units of charge. Anything below that considered "
+		"pure noise and ignored\n", CLUSTER_SIZE_ONE_Q_CUTOFF);
 
 	AssignParameters();
 
@@ -404,15 +406,15 @@ void TFOOTHitProc::ProcessPair (
 
 		float q = static_cast<float>( px.Q(hit) );
 		
-		double xprime = refl[ipair].x() * (cx - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM;
+		const double u = refl[ipair].x() * (cx - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM;
 		// Cluster size 1 fucks with everything above Z >~ 1,
 		// so only care about it if its sitting at low energies..
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
 			output.x.emplace_back(q, mult
-#ifdef MND_FOOTTRACK_DEBUG
+			#ifdef MND_FOOTTRACK_DEBUG
 				, ctype, hit.Delta(), ce
-#endif
-				, xprime);
+			#endif
+				, u);
 	}
 
 	for(const RNFOOTCluster& hit : fy.fCl) {
@@ -420,13 +422,13 @@ void TFOOTHitProc::ProcessPair (
 
 		float q = static_cast<float>( py.Q(hit) );
 
-		double yprime = refl[ipair].y() * (cy - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM;
+		const double v = refl[ipair].y() * (cy - FOOTParam::DETECTOR_MIDPOINT) * FOOTParam::STRIP_TO_MM;
 		if(mult > 1 or q < CLUSTER_SIZE_ONE_Q_CUTOFF)
 			output.y.emplace_back(q, mult
-#ifdef MND_FOOTTRACK_DEBUG
+			#ifdef MND_FOOTTRACK_DEBUG
 				, ctype, hit.Delta(), ce
-#endif
-				, yprime);
+			#endif
+				, v);
 	}
 
 	/* Sort these vectors, in ascending values of average charge (Q) */
@@ -535,10 +537,10 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 		size_t graph_branch_factor = std::min(nx*ny, (size_t)MAX_CANDIDATES);
 		new_paths.reserve( graph_branch_factor * current_paths.size() ); // could be larger.
 
-#ifdef MND_FOOTTRACK_DEBUG
+	#ifdef MND_FOOTTRACK_DEBUG
 		if(v > 0)
 			WARN("[#%u] ConstructDAG(): new_paths to be reserved at size: %zu (size currently:%zu)\n", n, new_paths.capacity(), new_paths.size());
-#endif
+	#endif
 		/* Each path already draws (an optional) preliminary track.
 		 * Try to match some of the current layer's hitmatrix elements against that
 		 * specific preliminary test track. */
@@ -621,11 +623,11 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		);
 	});	
 
-#ifdef MND_FOOTTRACK_DEBUG
+	#ifdef MND_FOOTTRACK_DEBUG
 		if(v > 0) {
 			WARN(KBH_CYN "~~~> Valid %zu paths thru the tree.\n" KNRM, dag.path.size());
 		}
-#endif
+	#endif
 	/* Sort the sequence of paths through the graph according to their score.
 	 * Each paths's score anyway has to be evaluated to be robust. There's no way around this.
 	 * Heavy lifting call. */
@@ -669,7 +671,7 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		
 		const FTrack& t = tau.get(geometry); // Evaluate the actual track fit.
 
-#ifdef MND_FOOTTRACK_DEBUG
+	#ifdef MND_FOOTTRACK_DEBUG
 		auto us      = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto vs      = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto zxs     = mnd::make_filled_array<double, N_PAIRS>(NAN);
@@ -706,17 +708,17 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 				++valid;
 			}
 		}
-#endif
+	#endif // MND_FOOTTRACK_DEBUG
 
 		out.inner().track.emplace_back (
 			t.l.xarray(), t.l.yarray(), t.q.mean(), score, N
-#ifdef MND_FOOTTRACK_DEBUG
+		#ifdef MND_FOOTTRACK_DEBUG
 				,
 				us, vs, zxs, zys,
 				qm, sqm,
 				e0_x, delta_x, c0_x,
 				e0_y, delta_y, c0_y
-#endif
+		#endif
 		);
 		
 		/* Poison the exported hitmatrix elements along their rows and columns.
@@ -826,4 +828,4 @@ void TFOOTHitProc::ReplayCostCalculation(const DAG::DAGPath& path) noexcept {
 		p.node[n] = path.node[n];
 	}
 }
-#endif
+#endif // MND_FOOTTRACK_DEBUG

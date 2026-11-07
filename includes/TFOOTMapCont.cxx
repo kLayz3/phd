@@ -46,8 +46,10 @@ void TFOOTMapCont::Init(TDictInfo info) {
 void TFOOTMapCont::Setup() {
 	if(FOOT_N < 0) ERROR("FOOT index not set. It is %d. Did you call `Init` ?", FOOT_N);
 
-	h2_raw_tmp = RegisterObject<TH2I>("h2_raw_tmp" , Form("Raw FOOT%d Temp", FOOT_N), N_STRIPS, 0, N_STRIPS, 4096,0,4096);
-	h2_raw     = RegisterObject<TH2I>("h2_raw" , Form("Raw FOOT%d", FOOT_N), N_STRIPS, 0, N_STRIPS, 4096,0,4096);
+	h2_raw_tmp = RegisterObject<TH2I>("h2_raw_tmp" , Form("Raw FOOT%d Temp", FOOT_N),
+		N_STRIPS,0,N_STRIPS, MAX_ADC_VALUE,0,MAX_ADC_VALUE);
+	h2_raw     = RegisterObject<TH2I>("h2_raw" , Form("Raw FOOT%d", FOOT_N),
+		N_STRIPS,0,N_STRIPS, MAX_ADC_VALUE,0,MAX_ADC_VALUE);
 	h2_corr    = RegisterObject<TH2D>("h2_corr", Form("Corrected FOOT%d", FOOT_N), N_STRIPS, 0, N_STRIPS, 6000,-500,2500);
 
 	h2_gped  = RegisterObject<TH2D>("h2_gped", Form("Initial pedestal FOOT%d per strip", FOOT_N), 

@@ -7,8 +7,10 @@
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <array>
 #include <variant>
 #include <filesystem>
+#include <mutex>
 
 #include "RtypesCore.h"
 #include "TH1D.h"
@@ -174,6 +176,8 @@ protected:
 	
 	virtual ~TH1B() = default;
 	TH1B* _parent;
+
+	static std::mutex g_lock;
 };
 
 } // namespace mnd::hist
@@ -245,6 +249,11 @@ struct TH1P : public mnd::hist::TH1B {
 		h.SetLineColor(kBlack);
 		h.SetLineWidth(2);
 	}
+
+	/* The trick is to take array *by value*, so that it has better match than generic Ts&&. */
+	template<typename F, typename... Ts>
+	TH1P(const char* label, mnd::col::RGBA col, std::array<F,3> bounds_x, Ts&&... args)
+		: TH1P(label, col, bounds_x[0], bounds_x[1], bounds_x[2], std::forward<Ts>(args)...) {}
 
 	TH1P(const TH1P & );
 	TH1P& operator=(const TH1P & );
@@ -403,6 +412,19 @@ struct TH2P : public mnd::hist::TH1B {
 		h.SetTitle(Form("%s;%s;%s", title.str().c_str(), xlabel.c_str(), ylabel.c_str()) );
 		h.GetYaxis()->SetTitleOffset(1.0);
 	}
+	template<typename F1, typename F2, typename... Ts>
+	TH2P(const char* label, std::array<F1,3> bounds_x, std::array<F2,3> bounds_y, Ts&&... args)
+		: TH2P(label, bounds_x[0], bounds_x[1], bounds_x[2], bounds_y[0], bounds_y[1], bounds_y[2],
+			std::forward<Ts>(args)...) {}
+	template<typename F, typename N, typename L, typename H, typename... Ts>
+	TH2P(const char* label, std::array<F,3> bounds_x, N y_nbins, L y_lo, H y_hi, Ts&&... args)
+		: TH2P(label, bounds_x[0], bounds_x[1], bounds_x[2], y_nbins, y_lo, y_hi,
+			std::forward<Ts>(args)...) {}
+	template<typename N, typename L, typename H, typename F, typename... Ts>
+	TH2P(const char* label, N x_nbins, L x_lo, H x_hi, std::array<F,3> bounds_y, Ts&&... args)
+		: TH2P(label, x_nbins, x_lo, x_hi, bounds_y[0], bounds_y[1], bounds_y[2],
+			std::forward<Ts>(args)...) {}
+
 
 	TH2P(const TH2P & );
 	TH2P& operator=(const TH2P & );
@@ -498,7 +520,7 @@ struct is_text_sequence<T,
 				typename std::decay_t<T>::value_type const&,
 				std::string_view
 			>
-		> 
+		>
 	{};
 
 template<typename T>

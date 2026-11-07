@@ -4,8 +4,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sys/ioctl.h>
 
+#include "monad/monad.hxx"
 #include "util/FastGauss.hxx"
+
+static constexpr auto N_STRIPS  = TFOOTCalCont::N_STRIPS; /* 640 */
 
 // This will make all the fits be analytical from 3 points around the maximum
 // intensity strip.
@@ -46,7 +50,7 @@ void FitFOOTCluster<3>(TFOOTCalProc& self, FOOTClusterFit* dest) {
 	double e_left  = (it_max - 1)->e;
 	double e_right = (it_max + 1)->e;
 #else
-	auto [x_0, e_0] = self._buf[1];
+	auto [e_0, x_0, _] = self._buf[1];
 	double e_left  = self._buf[0].e;
 	double e_right = self._buf[2].e;
 #endif
@@ -108,7 +112,7 @@ void TFOOTCalProc::PrintBuff() {
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int );
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int );
 
-bool operator==(TFOOTCalProc::ClusterFullType& full, TFOOTCalProc::ClusterType t) {
+bool operator==(const TFOOTCalProc::ClusterFullType& full, TFOOTCalProc::ClusterType t) {
 	using E = TFOOTCalProc::ClusterType;
 	auto& l = full.first;
 	auto& r = full.second;
@@ -128,21 +132,28 @@ bool operator==(TFOOTCalProc::ClusterFullType& full, TFOOTCalProc::ClusterType t
 			);
 		case(E::kMERGED):
 			return (r == E::kMERGED or l == E::kMERGED);
+		case(E::kISOLATED):
+			return (r == E::kISOLATED && l != E::kHEAVY_ISOLATED) or
+			       (r != E::kHEAVY_ISOLATED && l == E::kISOLATED);
+		case(E::kHEAVY_ISOLATED):
+			return (r == E::kHEAVY_ISOLATED or l == E::kHEAVY_ISOLATED);
 		default:
 			return (l == E::kUNKNOWN or r == E::kUNKNOWN);
 	}
 }
 
-bool operator!=(TFOOTCalProc::ClusterFullType& full, TFOOTCalProc::ClusterType t) {
+bool operator!=(const TFOOTCalProc::ClusterFullType& full, TFOOTCalProc::ClusterType t) {
 	return !(full == t) ;
 }
 
 auto TFOOTCalProc::GetClusterType() -> ClusterType {
 	using E = TFOOTCalProc::ClusterType;
-	if(_ct == E::kGOOD)       return E::kGOOD;
-	if(_ct == E::kMERGED)     return E::kMERGED;
-	if(_ct == E::kFRAGMENTED) return E::kFRAGMENTED;
-	if(_ct == E::kWAVEY)      return E::kWAVEY;
+	if(_ct == E::kGOOD)           return E::kGOOD;
+	if(_ct == E::kMERGED)         return E::kMERGED;
+	if(_ct == E::kFRAGMENTED)     return E::kFRAGMENTED;
+	if(_ct == E::kWAVEY)          return E::kWAVEY;
+	if(_ct == E::kISOLATED)       return E::kISOLATED;
+	if(_ct == E::kHEAVY_ISOLATED) return E::kHEAVY_ISOLATED;
 	
 	return E::kUNKNOWN;
 }
@@ -163,28 +174,31 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 		ERROR(EMPH2(%s) ": mapping is wrong. Deduced output FOOT%d (from setup input), but processor's input is FOOT%d ?\n",
 			MND_SELF_TYPE_CSTR, out.FOOT_N, input.FOOT_N);
 
+	Double_t* c_thr_setter = &_hidden_c_thr[1];
+	Double_t* n_thr_setter = &_hidden_n_thr[1];
+
 	/* Taken from setup file. Parsed in `TFOOTCalCont::Init()` */
 	X_CENTRE_THR = out.par.c_threshold;
 	X_NEIGHB_THR = out.par.n_threshold;
 
 	const auto& sigma = *input.ped_s;
 	for(int i=0; i<N_STRIPS; ++i) {
-		c_thr[i] = sigma[i] * X_CENTRE_THR;
-		n_thr[i] = sigma[i] * X_NEIGHB_THR;
+		c_thr_setter[i] = sigma[i] * X_CENTRE_THR;
+		n_thr_setter[i] = sigma[i] * X_NEIGHB_THR;
 	}
 
-	/* Bad/dead strips just label them with NAN'ed thresholds. */
+	/* Bad/dead strips just label them with infinite thresholds. */
 	const std::vector<int>& bad_strips = *input.bad_strips;
 	for(auto i : bad_strips) {
-		c_thr[i] = BAD_STRIP_THRESHOLD;
-		n_thr[i] = BAD_STRIP_THRESHOLD;
+		c_thr_setter[i] = BAD_STRIP_THRESHOLD;
+		n_thr_setter[i] = BAD_STRIP_THRESHOLD;
 	}
 
 	for(int i=0; i<N_STRIPS; ++i) {
-		if(n_thr[i] < 0.1)
-			ERROR("FOOT[%d -> %d], strip = %d, n_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, n_thr[i]);
-		if(c_thr[i] < 0.1)
-			ERROR("FOOT[%d -> %d], strip = %d, c_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, c_thr[i]);
+		if(n_thr(i) < 0.1)
+			ERROR("FOOT[%d -> %d], strip = %d, n_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, n_thr(i));
+		if(c_thr(i) < 0.1)
+			ERROR("FOOT[%d -> %d], strip = %d, c_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, c_thr(i));
 	}
 	
 #define _ALTER_TITLE(x) \
@@ -193,7 +207,6 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 	_ALTER_TITLE(out.h1_mult);
 	_ALTER_TITLE(out.h1_X);
 	_ALTER_TITLE(out.h1_dE);
-	_ALTER_TITLE(out.h1_cl_sigma);
 }
 
 void TFOOTCalProc::ProcessEntry() noexcept {
@@ -211,8 +224,8 @@ void TFOOTCalProc::ProcessEntry() noexcept {
 	int i = 0;
 	/* Try to find a central 'seed' strip. */
 	for(; i < N_STRIPS; ++i) {
-		if(e[i] > c_thr[i]) {
-			MakeACluster(i);
+		if(e[i] > c_thr(i)) {
+			MakeACluster(i); // takes `i` by mutable ref
 		}
 	}
 
@@ -234,88 +247,69 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 	const int i_init = c0;
 	
 	int i = i_init;
-	_AddHit(i);
+	_AddHit(e[i], i, TClustHit::Flag::Seed);
 	
 	/* The moment `e[i] > n_thr[i]` fails, a lookahead to i+1, or a lookbehind to i-1 occurs.
-	 * If the lookahead/behind finds a hit, e[i] is averaged out (geometric mean * small constant)
+	 * If the lookahead/behind finds a valid hit, e[i] is averaged out (geometric mean)
 	 * between e[i-1] and e[i+1]. If it fails, means that both values `e[i]` and:
 	 *   e[i+1], in case of right traversing,
 	 *   e[i-1], in case of left traversing,
 	 * fail the N-threshold cutoff and it constitutes a
 	 * cluster end, for this respective side's traverse.  */
 
-	while((++i) < N_STRIPS and (e[i] > n_thr[i] || _IsAddibleToCluster<kPOS>(i)))  {
-		_AddHit(i);
+	while((++i) < N_STRIPS and (e[i] > n_thr(i) || _IsAddibleToCluster<kPOS>(i)))  {
+		_AddHit(e[i], i);
 	}
-	/* From here, `i` points to end of cluster. */
-	c0 = i;
+	/* To not have sharp cutoffs, we *always* take the next strip ADC value, which is *below* n_thr,
+	 * just to add a tiny bit of 'smearing'. Cluster sizes 1,2 never allowed! */
+	double pos_edge_v = (i < N_STRIPS) ? std::max(e[i], 0.0) : 0.0;
+	
+	/* Normalize it with respect to n_thr(i). It is asserted that pos_edge_v < n_thr(i). */
+	pos_edge_v *= ( (pos_edge_v) / n_thr(i) );
+
+	_AddHit(pos_edge_v, i, TClustHit::Flag::PosEdge | TClustHit::Flag::BelowThr);
 
 	/* In case this positive (right) side connected a fragment, restore the 'old' energy. */
 	if(_ct_pos == ClusterType::kFRAGMENTED) {
-		auto [_i, _e] = _frag;
-		this->e[_i] = _e;
+		auto [_e, _i, _] = _frag;
+		e[_i] = _e;
 	}
+
+	const auto right_count = _cl_cnt;
+
+	/* From here, `c0` points to end of cluster. */
+	c0 = i;
 
 	i = i_init;
-	while((--i) >= 0 and (e[i] > n_thr[i] || _IsAddibleToCluster<kNEG>(i))) {
-		_AddHit(i);
+	while((--i) >= 0 and (e[i] > n_thr(i) || _IsAddibleToCluster<kNEG>(i))) {
+		_AddHit(e[i], i);
 	}
+	/* To not have sharp cutoffs, we *always* take the edge strip ADC value, even if below n_thr,
+	 * just to add a tiny bit of 'smearing'. Cluster sizes 1,2 never allowed! */
+	double neg_edge_v = (i >= 0) ? std::max(e[i], 0.0) : 0.0;
 
+	/* Normalize it with respect to n_thr(i). It is asserted that pos_edge_v < n_thr(i). */
+	neg_edge_v *= ( (neg_edge_v) / n_thr(i) );
+
+	_AddHit(neg_edge_v, i, TClustHit::Flag::NegEdge | TClustHit::Flag::BelowThr);
+	
 	/* In case this negative (left) side connected a fragment, restore the 'old' energy. */
 	if(_ct_neg == ClusterType::kFRAGMENTED) {
-		auto [_i, _e] = _frag;
-		this->e[_i] = _e;
-	}
-	
-	/* Handle cluster size == 1.
-	 * Most of the time it's noise or some other weird effect.
-	 * However, possible that indeed there's a just-below-threshold effect for small
-	 * central hits. */
-	if(_cl_cnt == 1) {
-		/* Bad charge sharing can only be for MIP's, or if the
-		 * central strip somehow crossed a 'bad strip'. */
-		if(_buf[0].e > 3 * c_thr[i]) return;
+		auto [_e, _i, _] = _frag;
+		e[_i] = _e;
 	}
 
-	/* Sort by their position in the FOOT. */
-	std::sort(_buf, _buf + _cl_cnt, [](const auto& l, const auto& r) { return l.x < r.x; });
+	/* Sort by their position in the detector. */
+	auto first = std::begin(_buf);
+	auto split = first + right_count;
+	auto last  = first + _cl_cnt;
 
-	/* Check if cluster is 'merged'. Meaning that in the cluster,
-	 * there exist two strips above C-threshold with 2 or more strips in-between
-	 * which are below C-threshold. */
-	TClustHit* ref_hit = nullptr;
-	for(u32 i=0; i < _cl_cnt; ++i) {
-		const auto& [strip, adc_val] = _buf[i];
-		if( adc_val > c_thr[strip] ) {
-			if(ref_hit && (strip - ref_hit->x > 2)) {
-				_ct_pos = ClusterType::kMERGED;
-				break;
-			}
-			ref_hit = &_buf[i];
-		}
-	}
+	// If it is initially:              220 221 222 | 219 218; then:
+	std::reverse(split, last);       // 220 221 222 | 218 219
+	std::rotate(first, split, last); // 218 219 | 220 221 222
 
-	/* Handle the wavyness in the cluster. If it is fragmented/merged, then it's wavy by default.
-	 * Meaning that a cluster marked `kGOOD` has: first sequence (left-to-right) of collected strips
-	 * energy must be monotonically increasing, while second sequence must have monotonically
-	 * decreasing energy values, as to yield a proper hit structure. */
-	if(_ct != ClusterType::kFRAGMENTED and _ct != ClusterType::kMERGED) {
-		double prev_e = 0;
-		enum { rising, falling } curve = rising;
+	CharacterizeCurrentCluster();
 
-		for(u32 hit = 0; hit < _cl_cnt; ++hit) {
-			double curr_e = _buf[hit].e;
-			if(curve == rising and curr_e < prev_e) {
-				curve = falling;
-			}
-			else if(curve == falling and curr_e > prev_e) {
-				_ct_pos = ClusterType::kWAVEY;
-				break;
-			}
-			prev_e = curr_e;
-		}
-	}
-	
 	/* Integrate energy, and make a weighted average for position. */
 	double cl_e = 0, cl_wx = 0;
 	for(u32 hit = 0; hit < _cl_cnt; ++hit) {
@@ -333,95 +327,98 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 		});
 	
 	ClusterType ct = this->GetClusterType();
+
 	out.h1_mult->Fill(_cl_cnt);
 	out.h1_dE->Fill(cl_e);
 	out.h1_X->Fill(cl_wx);
 	out.h1_cl_type->Fill(ct);
 
-	/* Debug massive clusters. This takes prio over isolated clusters. */
+	/* Debug massive clusters. This takes prio over cherry-picking isolated clusters. */
 	if(_cl_cnt >= MASSIVE_CLUSTER_CUTOFF) {
         out->w_ev_type = RNFOOTCal::EventType::MassiveCluster;
-       
+
         if(!out->DebugAssigned())
 	        out->fRaw.assign(e, e + N_STRIPS);
 	}
 
-	switch(_cl_cnt) {
-		case 1:
-			out.h1_dE_m1->Fill(cl_e);
-			break;
-		case 2:
-			out.h1_dE_m2->Fill(cl_e);
-			break;
-		case 3:
-			out.h1_dE_m3->Fill(cl_e);
-			break;
-		default:
-			break;
-	}
-	
-	/* Check if it's a >3 strips cluster, then we can also do the cluster fit on the fly. */
-	FOOTClusterFit cl_fit;	
-	int imax = std::distance(&_buf[0], it_max); /* Index in the cluster. */
-	if(imax > 0 && imax+1 < (int)_cl_cnt) {
-#ifdef FIT_ALL_WITH_3_POINTS
-		FitFOOTCluster<3>(*this, &cl_fit);
-#else
-		switch(_cl_cnt) {
-			case 3: {
-				FitFOOTCluster<3>(*this, &cl_fit);
-				break;
-			}
-			case 4: {
-				FitFOOTCluster<4>(*this, &cl_fit);
-				break;
-			}
-			case 5: {
-				FitFOOTCluster<5>(*this, &cl_fit);
-				break;
-			}
-			case 6: {
-				FitFOOTCluster<6>(*this, &cl_fit);
-				break;
-			}
-			default: {
-				/* Just approximate via the initial trial. Can't do much about it. */
-				FitFOOTCluster<FOOTClusterFit::LARGE_CLUSTER_CUTOFF>(*this, &cl_fit);
-				break;
-			}
-		}
-		if(_cl_cnt != 3)
-			cl_fit.delta = cl_fit.mu - it_max->x;
-		/* Some cases cluster can generate delta outside of range [-0.5, 0.5].
-		 * This is the ultimate null indicator field for the fit. */
-		if(std::abs(cl_fit.delta) > 0.5) cl_fit.delta = NAN;
-#endif
-	}
-	
-	if(cl_fit.IsOk()) out.h1_cl_sigma->Fill(cl_fit.sigma);
-
-    /* `MassiveCluster`` event state has priority over other states. */
-	if(it_max->e > ISOLATED_CLUSTER_ADC_CUTOFF and _cl_cnt == 1 and
-	    out->w_ev_type != RNFOOTCal::EventType::MassiveCluster)
-    {
+    /* `MassiveCluster` event state has priority over other states. */
+	if(out->w_ev_type != RNFOOTCal::EventType::MassiveCluster
+		&& (ct == ClusterType::kHEAVY_ISOLATED || ct == ClusterType::kISOLATED)) 
+	{
         out->w_ev_type = RNFOOTCal::EventType::IsolatedStrip;
+
+		if(ct == ClusterType::kHEAVY_ISOLATED)
+			out.h1_dE_m3_heavy->Fill(it_max->x, it_max->e);
+		else
+			out.h1_dE_m3_light->Fill(it_max->x, it_max->e);
+
         if(!out->DebugAssigned())
 		    out->fRaw.assign(e, e + N_STRIPS);
 	}
 	
-	out->AddCluster(cl_wx, cl_e, _cl_cnt, ct, cl_fit);
+	out->AddCluster(cl_wx, cl_e, _cl_cnt, ct);
 }
 
-/* When noisy strip is found in a middle of the cluster, extrapolate it's value based
+void TFOOTCalProc::CharacterizeCurrentCluster() noexcept {
+	ClusterType& _ct_neg = _ct.first;  /* Negative side. */
+	ClusterType& _ct_pos = _ct.second; /* Positive side. */
+
+	/* Firstly, check if it's isolated cluster. Cluster size == 3 is ALWAYS isolated.
+	 * The edge-nodes are ALWAYS BelowThr. */
+	if(_cl_cnt == 3) { // BelowThr -> Seed -> BelowThr
+		const double cthr = c_thr( _buf[1].x );
+		if(_buf[1].e > HEAVY_ISOLATED_CLUSTER_CUTOFF * cthr) {
+			_ct_pos = _ct_neg = ClusterType::kHEAVY_ISOLATED;
+		} else {
+			_ct_pos = _ct_neg = ClusterType::kISOLATED;
+		}
+		return;
+	}
+
+	/* Check if cluster is 'merged'. Meaning that in the cluster, there exist two strips
+	 * above C-threshold with 2 or more strips in-between which are below C-threshold. */
+	TClustHit* ref_hit = nullptr;
+	for(u32 i=0; i < _cl_cnt; ++i) {
+		const auto& [adc_val, strip, _] = _buf[i];
+		// strip can be -1 or 640. Is well defined. Just directly evaluates to infinity. */
+		if(adc_val > c_thr(strip) ) {
+			if(ref_hit && (strip - ref_hit->x > 2)) {
+				_ct_pos = ClusterType::kMERGED;
+				break;
+			}
+			ref_hit = &_buf[i];
+		}
+	}
+
+	/* Handle the wavyness in the cluster. If it is fragmented/merged, then it's wavy by default.
+	 * Meaning that a cluster marked `kGOOD` has: first sequence (left-to-right) of collected strips
+	 * energy must be monotonically increasing, while second sequence must have monotonically
+	 * decreasing energy values, as to yield a proper hit structure. */
+	if(_ct != ClusterType::kFRAGMENTED && _ct != ClusterType::kMERGED) {
+		double prev_e = 0;
+		enum { rising, falling } curve = rising;
+
+		for(u32 hit = 0; hit < _cl_cnt; ++hit) {
+			double curr_e = _buf[hit].e;
+			if(curve == rising and curr_e < prev_e) {
+				curve = falling;
+			}
+			else if(curve == falling and curr_e > prev_e) {
+				_ct_pos = ClusterType::kWAVEY;
+				break;
+			}
+			prev_e = curr_e;
+		}
+	}
+}
+
+/* When noisy strip is found in a middle of the cluster, extrapolate its value based
  * on Gaussian extrapolation. Means we sampled point (x-1) and point (x+1). So from Gaussian
  * distribution it follows: g(x) = sqrt( g(x-1) * g(x+1) ) * exp( 1/(2*σ²) );
  * For FOOT, for H/He the parameter is roughly: σ² = 0.295.
  * Note, for higher Z, σ² is much smaller, so the Gauss decays much faster.*/
 constexpr double SN_RATIO_FACTOR = 1.15; // exp( 1/(2*σ²) )
 constexpr double SN_RATIO_FACTOR_TO_MINUS_2 = 1 / (SN_RATIO_FACTOR * SN_RATIO_FACTOR);
-
-/* Doesn't show improvement, even is a bit more scuffed than before... Rather keep it out. */
-//#define CL_E_TEST
 
 template<>
 bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int i /* 1, ... , 639 */) {
@@ -435,31 +432,15 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int i /* 1, ...
 	if(_ct_pos == ClusterType::kFRAGMENTED) return false;
 
 	int prev = i-1 /* <-- Is in cluster. */ , next = i+1;
-	if(next < N_STRIPS and e[next] > n_thr[next]) {
-		_frag = {i, e[i]};
+	if(next < N_STRIPS and e[next] > n_thr(next)) {
+		_frag = {e[i], i};
 		_ct_pos = ClusterType::kFRAGMENTED;
 
-#ifdef CL_E_TEST
-		e[i] = sqrt( e[prev] * e[next] ) * SN_RATIO_FACTOR;
-#else
-		e[i] = ( e[prev] + e[next] ) / 2;
-#endif
+		e[i] = sqrt( e[prev] * e[next] );
 
-		// Calling function will restore this hit, here just 'reassign' the energy.
+		// The caller will restore this hit, here just 'reassign' the energy.
 		return true;
 	}
-#ifdef CL_E_TEST
-	// Possible that the current strip `i` is marked bad or 'noisy'.
-	// In this case just try to take the value as the average'd out
-	// between two previous ones. Assuming that the very-previous was already inside
-	else if(int pprev = prev-1;
-		pprev > 0 and e[pprev] > n_thr[pprev] and !std::isfinite(n_thr[i]) ) {
-		e[i] = e[prev] * e[prev] / e[pprev] *  SN_RATIO_FACTOR_TO_MINUS_2;
-		
-		/* Check threshold versus the `n_thr` of previously added strip. */
-		if( e[i] > n_thr[prev] ) return true;
-	}
-#endif
 	return false;
 }
 
@@ -475,30 +456,14 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int i /* 0, ...
 	if(_ct_neg == ClusterType::kFRAGMENTED) return false;
 	
 	int next = i+1 /* <-- Is in cluster. */ , prev = i-1;
-	if(prev >= 0 and e[prev] > n_thr[prev]) {
-		_frag = {i, e[i]};
+	if(prev >= 0 and e[prev] > n_thr(prev)) {
+		_frag = {e[i], i};
 		_ct_neg = ClusterType::kFRAGMENTED;
 		
-#ifdef CL_E_TEST
-		e[i] = sqrt( e[prev] * e[next] ) * SN_RATIO_FACTOR;
-#else
-		e[i] = ( e[prev] + e[next] ) / 2;
-#endif
+		e[i] = sqrt( e[prev] * e[next] );
 		
-		// Calling function will restore this hit, here just 'reassign' the energy.
+		// The caller will restore this hit, here just 'reassign' the energy.
 		return true;
 	}
-	// Possible that the current strip `i` is marked 'noisy'.
-	// In this case just try to take the value as the average'd out
-	// between two previous ones if they're part of the cluster.
-#ifdef CL_E_TEST
-	else if(int nnext = next+1;
-		nnext < N_STRIPS and e[nnext] > n_thr[nnext] and !std::isfinite(n_thr[i]) ) {
-		e[i] = e[next] * e[next] / e[nnext] *  SN_RATIO_FACTOR_TO_MINUS_2;
-
-		/* Check threshold versus the `n_thr` of previously added strip. */
-		if( e[i] > n_thr[next] ) return true;
-	}
-#endif
 	return false;
 }

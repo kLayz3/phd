@@ -4,6 +4,7 @@ includes/util/build*
 includes/util/.*
 .nfs*
 includes/*.nfs
+*.pdf
 
 includes/test*
 includes/makeme*
@@ -20,6 +21,7 @@ mapdir
 caldir
 hitdir
 merged
+rn_merged
 stash
 info.yaml
 *.exe
@@ -27,6 +29,8 @@ exec/*.cmd
 log.txt
 .venv
 *.patch
+test
+converter/gen_rntuple
 
 quick/run
 quick/autosave

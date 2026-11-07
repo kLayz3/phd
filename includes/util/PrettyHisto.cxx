@@ -18,6 +18,7 @@
 #include "TROOT.h"
 
 /* First histogramming API that we left undefined.. */
+std::mutex mnd::hist::TH1B::g_lock {};
 
 #define APPEND_TO_TITLE_IMPL(THXP) \
 void THXP::AppendToTitle(std::string_view v) { \
@@ -68,13 +69,13 @@ void TH2P::AppendToAxisTitle<TH2P::Y>(std::string_view v) {
 /* This part is so hacked. There must be a nicer way, not to abuse
  * const cast haha. */
 TH1P::TH1P(const TH1P& rhs) {
-	_parent = &const_cast<TH1P&>(rhs);
+	this->_parent = &const_cast<TH1P&>(rhs);
 	h = rhs.h;
 	h.SetDirectory(nullptr);
 	h.Reset();
 }
 TH1P& TH1P::operator=(const TH1P& rhs) {
-	_parent = &const_cast<TH1P&>(rhs);
+	this->_parent = &const_cast<TH1P&>(rhs);
 	h = rhs.h;
 	h.SetDirectory(nullptr);
 	h.Reset();
@@ -95,17 +96,18 @@ TH1P::~TH1P() {
 			);
 			std::abort();
 		}
+		auto lock = std::lock_guard{TH1B::g_lock};
 		parent_dc->h.Add( &this->h );
 	}
 }
 TH2P::TH2P(const TH2P& rhs) {
-	_parent = &const_cast<TH2P&>(rhs);
+	this->_parent = &const_cast<TH2P&>(rhs);
 	h = rhs.h;
 	h.SetDirectory(nullptr);
 	h.Reset();
 }
 TH2P& TH2P::operator=(const TH2P& rhs) {
-	_parent = &const_cast<TH2P&>(rhs);
+	this->_parent = &const_cast<TH2P&>(rhs);
 	h = rhs.h;
 	h.SetDirectory(nullptr);
 	h.Reset();
@@ -121,6 +123,7 @@ TH2P::~TH2P() {
 			);
 			std::abort();
 		}
+		auto lock = std::lock_guard{TH1B::g_lock};
 		parent_dc->h.Add( &this->h );
 	}
 }

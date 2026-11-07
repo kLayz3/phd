@@ -98,6 +98,8 @@ void TFOOTMapProc::ProcessEntry() noexcept {
 	}
 }
 
+static constexpr i32 FIT_WIDTH = 8;
+
 /* By default, this isn't thread safe, so we guard it. */
 void TFOOTMapProc::CalcGlobalPedestal() {
 	TH2I* h = out.h2_raw_tmp;
@@ -111,19 +113,36 @@ void TFOOTMapProc::CalcGlobalPedestal() {
 		slice->SetDirectory(nullptr);
 		
 		int maxBin = slice->GetMaximumBin();
-		double fitMin = slice->GetBinCenter(maxBin - 10);
-		double fitMax = slice->GetBinCenter(maxBin + 10);
+		double fitMin = slice->GetBinCenter(maxBin - FIT_WIDTH);
+		double fitMax = slice->GetBinCenter(maxBin + FIT_WIDTH);
 
+		int fit_status = -1;
 		if(slice->GetEffectiveEntries() > 3)
-			slice->Fit("gaus", "Q", "", fitMin, fitMax);
+			fit_status = slice->Fit("gaus", "Q", "", fitMin, fitMax);
 
 		TF1* fitF = slice->GetFunction("gaus"); // Quiet null if no fit performed for empty data.
 		
-		double pedestal, sigma;
-		if(fitF == nullptr) {
+		double pedestal,sigma;
+		bool fit_ok = fit_status == 0 && fitF != nullptr;
+
+		/* Recheck the fit-sanity. */
+		if(fit_ok) {
+			const double mean  = fitF->GetParameter(1);
+			const double sigma = fitF->GetParameter(2);
+
+			fit_ok = std::isfinite(mean) && std::isfinite(sigma)
+				&& sigma > 0 && mean >= fitMin && mean <= fitMax;
+		}
+
+		if(!fit_ok) {
 			//WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of raw data? Skipping. "
 			//	"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
-			pedestal = slice->GetBinContent(maxBin);
+			pedestal = slice->GetBinCenter(maxBin);
+
+			// This pedestal can be garbage.. If it is not close to the previous pedestal, then just yeet it out.
+			if(initial_calculated && std::abs(pedestal - current_gped[i]) > 5)
+				pedestal = current_gped[i];
+
 			sigma    = BAD_STRIP_CUTOFF_HI + 10;
 		} else {
 			pedestal = fitF->GetParameter(1);
@@ -146,11 +165,12 @@ void TFOOTMapProc::CalcGlobalPedestal() {
 	for(int i=0; i < N_STRIPS; ++i) {
 		out.h2_gped_per_batch->Fill (
 			batch_index,
-			i * 2 * TFOOTMapCont::N_GPED_CHANGE_TOLERANCE 
+			i * 2 * TFOOTMapCont::N_GPED_CHANGE_TOLERANCE
 			+ (current_gped[i] - initial_gped[i]) + 0.000000001
 		);
 		// ^^^^^ last small increment is to prevent any double-rounding fiasco's.
 	}
+	++batch_index;
 }
 
 void TFOOTMapProc::ProcessInitialPedestal() noexcept {
@@ -203,7 +223,7 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 	 * --> adc[i] = _FOOTE[i] - gped[i] - o[i / N_STRIPS_PER_ASIC] */
 
 	/* Should be between 5..10 */
-#define N_TRIM_FINE_PED_LO 8
+#define N_TRIM_FINE_PED_LO 9
 #define N_TRIM_FINE_PED_HI 8
 
 	double ped_off_med, ped_off_avg, adc_final; 
@@ -223,13 +243,13 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 			ped_offset[strip] = data[iraw] - current_gped[i];
 		}
 
-		/* Initial strip #0 is uncoupled. It contributes nothing. 
+		/* Initial strip #0 is uncoupled. It contributes nothing.
 		 * Just remove it from the analysis. */
 		ped_offset[0] = -DBL_MAX;
 
 		std::sort(ped_offset.begin(), ped_offset.end());
 
-		ped_off_med = mnd::median( ped_offset ); 
+		ped_off_med = mnd::median( ped_offset );
 
 		ped_off_avg = std::accumulate (
 			ped_offset.cbegin() + N_TRIM_FINE_PED_LO, 
@@ -333,6 +353,7 @@ void TFOOTMapProc::CalcFinalPedestal() {
 		if(slice->GetEntries() < 100) {
 			WARN("FOOT%d, strip %d, found no entries in y-projection of calibrated data? Skipping.\n", N, i);
 			out.ped_s->at(i) = 10'000'000; /* Random number for high pedestal. */
+			out.bad_strips->push_back(i);
 			continue;
 		}
 		
@@ -340,11 +361,21 @@ void TFOOTMapProc::CalcFinalPedestal() {
 		double fitMin = slice->GetBinCenter(maxBin - 10);
 		double fitMax = slice->GetBinCenter(maxBin + 10);
 
-		slice->Fit("gaus", "Q", "", fitMin, fitMax);
+		int fit_status = slice->Fit("gaus", "Q", "", fitMin, fitMax);
 
-		TF1* fitF = slice->GetFunction("gaus"); // Quiet null if no fit performed for empty data.
+		TF1* fitF = slice->GetFunction("gaus"); // Quiet nullptr if no fit performed for empty data.
+		bool fit_ok = fit_status == 0 && fitF != nullptr;
 
-		if(fitF == nullptr) {
+		/* Recheck the fit-sanity, just as for the global pedestal. */
+		if(fit_ok) {
+			const double mean  = fitF->GetParameter(1);
+			const double sigma = fitF->GetParameter(2);
+
+			fit_ok = std::isfinite(mean) && std::isfinite(sigma)
+				&& sigma > 0 && mean >= fitMin && mean <= fitMax;
+		}
+
+		if(!fit_ok) {
 			WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of calibrated data? Skipping. "
 				"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
 			out.ped_s->at(i) = BAD_STRIP_CUTOFF_HI + 10;
@@ -352,8 +383,7 @@ void TFOOTMapProc::CalcFinalPedestal() {
 			out.ped_s->at(i) = fitF->GetParameter(2);
 		}
 	
-		if(out.ped_s->at(i) > BAD_STRIP_CUTOFF_HI or 
-			out.ped_s->at(i) < BAD_STRIP_CUTOFF_LO) {
+		if(out.ped_s->at(i) > BAD_STRIP_CUTOFF_HI || out.ped_s->at(i) < BAD_STRIP_CUTOFF_LO) {
 			out.bad_strips->push_back(i);
 		}
 	}

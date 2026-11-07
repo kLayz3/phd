@@ -223,21 +223,21 @@ struct FLayerInfo {
 	using PredictionQ = mnd::track::Q::value_type;
 	using PredictionP = Entry::xy_type;
 
-	/* What the (q,u,v) of the following layer should be. */
+	/* What the (q,(u,v)) of the following layer should be. */
 	using Prediction = std::pair<PredictionQ, PredictionP>;
 
 	/* Conversion matrix from a track vector normal repr: ν = (x0, ax, y0, ay)ᵀ into FOOT pair's measurement (u,v).
-	 * Each detector is rotated by an angle θx, and placed at different positions: zu and zv.
+	 * Each detector in the pair is rotated by an angle θx,θy and placed at different positions: zu,zv.
 	 * A = ( cosθx ,  zu*cosθx , sinθx , zu*sinθx
 	 *      -sinθy , -zv*sinθy , cosθy , zv*cosθy ) .
 	 * Then:  (u,v)ᵀ = Aν - dxy .
-	 * Since this becomes a submatrix of a bigger Nx4 design problem's A matrix, keep these rows
+	 * Since this becomes a submatrix of a bigger Nx4 design problem's A matrix, keep these matrices
 	 * row major, then the bigger Nx4 can just construct itself (as a row major) trivially from a sequence of references
 	 * to these smaller blocks and stack them together as rows. Also transpose(A) never really gets called, so
 	 * SIMD likes the RowMajor alignment more. */
-	Eigen::Matrix<EntryXYUnderlyingType, 2, 4, Eigen::RowMajor> A;
-	Eigen::Vector<EntryXYUnderlyingType, 2> dxy; // Translation vector, each detector might be translated by dx|dy
-	Eigen::Vector<EntryXYUnderlyingType, 2> z;   // Raw z's of the two detectors in the layer.
+	Eigen::Matrix<EntryXYUnderlyingType, 2, 4, Eigen::RowMajor> A; // Cache
+	Eigen::Vector<EntryXYUnderlyingType, 2> dxy; // Translation vector calib param; each detector might be translated by dx|dy
+	Eigen::Vector<EntryXYUnderlyingType, 2> z;   // Calib param; raw zx,zy of the two detectors in the layer.
 
 	/* This doesn't touch or evaluate any of the underlying mutable cache entries. So it is perfectly const.
 	 * Evaluate the ftrack vector normal repr: ν = (x0, ax, y0, ay)ᵀ, and charge combinator's mean from
@@ -257,7 +257,7 @@ struct FLayerInfo {
 
 /* The sequence of FLayerInfo objects corresponding to subsequent layers, builds up design matrices which are
  * used in the "heaviest" part of the Kalman algorithm. Nice thing is that
- * all these matrices can be mostly calculated up front and cached up. */
+ * all these matrices can be mostly calculated up front and looked up at main runtime. */
 template<size_t N, size_t K>
 struct DesignMatrix {
 	using Matrix = Eigen::Matrix<
@@ -294,8 +294,8 @@ struct DesignMatrix {
 };
 template<size_t N> struct DesignMatrix<N,0> {};
 template<size_t N> struct DesignMatrix<N,1> {};
+/* First two specs <0> and <1> not rly used but define them anyway. */
 
-/* First two tuple entries <0> and <1> are a simple unit structs. */
 template<size_t N>
 struct DesignMatrixCache {
 	static_assert(N >= 2);
@@ -325,7 +325,7 @@ public:
 };
 
 /* Only type really exported to be the static container.
- * One ring to (hold) them all. */
+ * *One ring to hold them all*. */
 template<size_t Nlayers>
 struct TrackingGeometry {
 	std::array<FLayerInfo, Nlayers> layer;
@@ -348,7 +348,8 @@ template <
 
 	using Point2D = mnd::geom::Point2D;
 	using Line3D = mnd::geom::Line3D;
-	
+
+	/* These are hard-coded. TODO: add it as a static runtime var instead? */
 	static constexpr double SP = 0.100 * 0.100; // [ mm^2 ]
 	static constexpr double SQ = 0.500 * 0.500; // [ Q^2 ; [Q] = one charge unit ]
 
@@ -475,8 +476,8 @@ private:
 	 *
 	 * Then solve for ν = (x0,ax,y0,ay)
 	 * (AᵀA)ν = Aᵀ(m + c)
-	 * Due to caching, a Track<> object itself *cannot* construct its own FTrack, it needs some
-	 * parameters that are then cached and look-up by a specific bitmask key from a DesignMatrixCache. */
+	 * Due to lack of params, a Track<> object itself *cannot* on its own construct its own FTrack, it needs
+	 * z/θ parameters which are cached and at runtime looked-up by a specific bitmask key from a DesignMatrixCache. */
 	void evaluate_track(const TrackingGeometry<Capacity>& geom) const noexcept {
 		using value_type = typename Entry::xy_underlying_type;
 
@@ -499,9 +500,9 @@ private:
 					const auto& design_matrix = geom.fit.template get<K>();
 					const auto& parameters = /* std::pair<QR, Eigen::Vector> */
 				#ifdef MND_DEBUG_ENABLED
-						design_matrix.get_from_mask(mask);
+					design_matrix.get_from_mask(mask);
 				#else
-						design_matrix.get_from_mask_unchecked(mask);
+					design_matrix.get_from_mask_unchecked(mask);
 				#endif
 					const auto& qr = parameters.first;
 					const auto& c  = parameters.second;

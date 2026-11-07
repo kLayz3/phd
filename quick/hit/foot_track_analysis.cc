@@ -36,6 +36,7 @@ int main(int argc, char* argv[]) {
 	A3 binning_dx = {100,-5,5};
 	A3 binning_dy = {100,-5,5};
 	A3 binning_dq = {120, -2.1, 2.1};
+	double fit_side_ratio = 2.0;
 	A2 sci21_cut = {NAN,NAN};
 	A2 sci22_cut = {NAN,NAN};
 	A2 sci31_cut = {NAN,NAN};
@@ -45,6 +46,9 @@ int main(int argc, char* argv[]) {
 		->check(CLI::ReadPermissions);
 
 	add_logged_option(app, "-q,--cut-q", cut_q, Form("Charge (Z) cut on each FOOT index, index=0,1,..%u.", N_FOOT_DETECTORS));
+	add_logged_option(app, "-s,--side-ratio", fit_side_ratio, "When fitting the residues, select how much of the σ-width of "
+		" the histogram should go into the fit. This is to enable precise targetted peak fitting, regardless of outlying bins.")
+		->check(CLI::PositiveNumber);
 	add_logged_option(app, "--binning-q", binning_q, "Binning of the charge measurement, Q of each FOOT, in [Z].")
 		->delimiter(',');
 	add_logged_option(app, "--binning-dx", binning_dx, "Binning of the difference δu (foot - track), in [mm].")
@@ -218,9 +222,10 @@ int main(int argc, char* argv[]) {
 		h1_has_upstream->Fill( static_cast<int>(lu.IsValid()) );
 
 		if(foot->track.empty()) continue;
+		
+		bool has_valid_track = false;
 
-		/* Find the heavy track. */
-		RNFOOTTrack const* t = nullptr;
+		/* Find the corresponding FOOT track(s). */
 		for(const auto& track: foot->track) {
 			if(track.n != N_PAIRS) continue;
 
@@ -234,82 +239,82 @@ int main(int argc, char* argv[]) {
 			) {
 				continue;
 			}
-			t = &track;
-			break;
+			has_valid_track = true;
+
+			// Loop over individual layers, check the residues..
+			for(u32 i=0; i<N_PAIRS; ++i) {
+				// Mask for which dets fired is all except one at bit i.
+				const u32 mask = ((1 << N_PAIRS) - 1) & ~(1 << i);
+				
+				const auto& parameters =
+					geometry->fit.get<N_PAIRS - 1>().get_from_mask(mask);
+				using Scalar = FLayerInfo::EntryXYUnderlyingType; // double|long double
+				Eigen::Vector<Scalar, 2 * (N_PAIRS - 1)> rhs;
+				u32 w = 0;
+
+				/* Populate the arrays for N-1 fit. */
+				for(u32 j=0; j<N_PAIRS; ++j) {
+					if(j == i) continue;
+
+					rhs(2*w) = track._u[j];
+					rhs(2*w + 1) = track._v[j];
+					qf[w] = track._q[j];
+					++w;
+				} if(w != N_PAIRS-1) ERROR("w must be %u, hello?", N_PAIRS-1);
+				
+				/* For the linear design problem, e.g. measurements to (x0,ax,y0,ay) track
+				* need to add the offsets to the vector side. */
+				rhs += parameters.second;
+
+				const Eigen::Vector<Scalar, 4> normal = parameters.first.solve(rhs);
+				const Eigen::Vector<Scalar, 2> predicted =
+					geometry->layer[i].A * normal - geometry->layer[i].dxy;
+				auto [q_extr, track_qvar] = mnd::mean_var(qf);
+
+				double dx = track._u[i] - predicted.x();
+				double dy = track._v[i] - predicted.y();
+				double dq = track._q[i] - q_extr;
+				double sq = track._sq[i]; // is sigma == sqrt(var);
+
+				h1_footx[i]->Fill( track._u[i] );
+				h1_footy[i]->Fill( track._v[i] );
+				resx[i]->Fill(dx);
+				resy[i]->Fill(dy);
+				resq[i]->Fill(dq);
+				h2_resx->Fill(i, dx);
+				h2_resy->Fill(i, dy);
+				h2_resq->Fill(i, dq);
+
+				h1q[i]->Fill(track._q[i]);
+				h2q->Fill(i, track._q[i]);
+				
+				/* Find the 3-measurement 'test' track charge params.. */
+				h2_kq->Fill( i, dq*dq + sq*sq );
+				h2_kr->Fill( i, dx*dx + dy*dy );
+				h2_kq_sqrt->Fill( i, sqrt(dq*dq + sq*sq) );
+				h2_kr_sqrt->Fill( i, sqrt(dx*dx + dy*dy) );
+			} // for(u32 i=0; i<N_PAIRS; ++i)
+
+			const mnd::geom::Line3D ld = RNTrackToLine3D(track);
+			const mnd::geom::Point2D r0_down = ld.Eval( TFOOTHitCont::TARGET_Z );
+
+			const double dx_dstr_ustr = r0_down.x - x0_upst;
+			const double dy_dstr_ustr = r0_down.y - y0_upst;
+			
+			if(lu.IsValid() && std::isfinite(dx_dstr_ustr) && std::isfinite(dy_dstr_ustr)) {
+				h2_ktxy->Fill(dx_dstr_ustr, dy_dstr_ustr);
+				h1_kt->Fill(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr);
+				h1_kt_sqrt->Fill(sqrt(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr));
+				h1_diff_upstr_down->Fill(ld.DistanceTo(lu));
+			}
+			h1_score->Fill(track.score);
+
 		}
-
-		if(!t) continue;
-
-		for(u32 i=0; i<N_PAIRS; ++i) {
-			// Mask for which dets fired is all except one at bit i.
-			const u32 mask = ((1 << N_PAIRS) - 1) & ~(1 << i);
-			
-			const auto& parameters =
-				geometry->fit.get<N_PAIRS - 1>().get_from_mask(mask);
-			using Scalar = FLayerInfo::EntryXYUnderlyingType; // double|long double
-			Eigen::Vector<Scalar, 2 * (N_PAIRS - 1)> rhs;
-			u32 w = 0;
-
-			/* Populate the arrays for N-1 fit. */
-			for(u32 j=0; j<N_PAIRS; ++j) {
-				if(j == i) continue;
-
-				rhs(2*w) = t->_u[j];
-				rhs(2*w + 1) = t->_v[j];
-				qf[w] = t->_q[j];
-				++w;
-			} if(w != N_PAIRS-1) ERROR("w must be %u, hello?", N_PAIRS-1);
-			
-			/* For the linear design problem, e.g. measurements to (x0,ax,y0,ay) track
-			 * need to add the offsets to the vector side. */
-			rhs += parameters.second;
-
-			const Eigen::Vector<Scalar, 4> normal = parameters.first.solve(rhs);
-			const Eigen::Vector<Scalar, 2> predicted =
-				geometry->layer[i].A * normal - geometry->layer[i].dxy;
-			auto [q_extr, track_qvar] = mnd::mean_var(qf);
-
-			double dx = t->_u[i] - predicted.x();
-			double dy = t->_v[i] - predicted.y();
-			double dq = t->_q[i] - q_extr;
-			double sq = t->_sq[i]; // is sigma == sqrt(var);
-
-			h1_footx[i]->Fill( t->_u[i] );
-			h1_footy[i]->Fill( t->_v[i] );
-			resx[i]->Fill(dx);
-			resy[i]->Fill(dy);
-			resq[i]->Fill(dq);
-			h2_resx->Fill(i, dx);
-			h2_resy->Fill(i, dy);
-			h2_resq->Fill(i, dq);
-
-			h1q[i]->Fill(t->_q[i]);
-			h2q->Fill(i, t->_q[i]);
-			
-			/* Find the 3-measurement 'test' track charge params.. */
-			h2_kq->Fill( i, dq*dq + sq*sq );
-			h2_kr->Fill( i, dx*dx + dy*dy );
-			h2_kq_sqrt->Fill( i, sqrt(dq*dq + sq*sq) );
-			h2_kr_sqrt->Fill( i, sqrt(dx*dx + dy*dy) );
-		} // for(u32 i=0; i<N_PAIRS; ++i)
-
-		const mnd::geom::Line3D ld = RNTrackToLine3D( *t );
-		const mnd::geom::Point2D r0_down = ld.Eval( TFOOTHitCont::TARGET_Z );
-
-		const double dx_dstr_ustr = r0_down.x - x0_upst;
-		const double dy_dstr_ustr = r0_down.y - y0_upst;
-		
-		if(lu.IsValid() && std::isfinite(dx_dstr_ustr) && std::isfinite(dy_dstr_ustr)) {
-			h2_ktxy->Fill(dx_dstr_ustr, dy_dstr_ustr);
-			h1_kt->Fill(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr);
-			h1_kt_sqrt->Fill(sqrt(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr));
-			h1_diff_upstr_down->Fill(ld.DistanceTo(lu));
+		if(has_valid_track) {
+			h1_sci21_cut2->Fill(sci21.E);
+			h1_sci22_cut2->Fill(sci22.E);
+			h1_sci31_cut2->Fill(sci31.E);
 		}
-		h1_score->Fill(t->score);
-
-		h1_sci21_cut2->Fill(sci21.E);
-		h1_sci22_cut2->Fill(sci22.E);
-		h1_sci31_cut2->Fill(sci31.E);
 	}
 
 	std::vector<std::string> resolutions {};
@@ -320,14 +325,14 @@ int main(int argc, char* argv[]) {
 	c1d->Divide(N_PAIRS, 3);
 	for(size_t i=0; i<N_PAIRS; ++i) {
 		c1d->cd(i+1);
-		auto [fit_result_x, _x_] = resx[i]->DrawAndFit(2.0, kMagenta + 2, 5, 4 /* niter */);
+		auto [fit_result_x, _x_] = resx[i]->DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
 		WARN("FOOT%zu X: " KBH_MAG "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_x[1], 1e3*fit_result_x[2]);
 		c1d->cd(i+1 + N_PAIRS);
-		auto [fit_result_y, _y_] = resy[i]->DrawAndFit(2.0, kMagenta + 2, 5, 4 /* niter */);
+		auto [fit_result_y, _y_] = resy[i]->DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
 		WARN("FOOT%zu Y: " KBH_YEL "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_y[1], 1e3*fit_result_y[2]);
 
 		c1d->cd(i+1 + 2*N_PAIRS);
-		auto [fit_result_q, _q_] = resq[i]->DrawAndFit(2.0, kMagenta + 2, 5, 4 /* niter */);
+		auto [fit_result_q, _q_] = resq[i]->DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
 		WARN("FOOT%zu Q: " KBH_CYN "%.3f, %.3f" KRNM " [Q]\n", i, fit_result_q[1], fit_result_q[2]);
 
 		resolutions.emplace_back (

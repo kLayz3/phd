@@ -25,7 +25,7 @@ struct TFOOTMapProc : TProcessor <
 	static constexpr int N_ASIC            = TFOOTMapCont::N_ASIC;            /* 10  */
 	static constexpr int N_STRIPS_PER_ASIC = TFOOTMapCont::N_STRIPS_PER_ASIC; /* 64  */
 	
-	static constexpr double BAD_STRIP_CUTOFF_HI = 2.8;	
+	static constexpr double BAD_STRIP_CUTOFF_HI = 2.8;
 	static constexpr double BAD_STRIP_CUTOFF_LO = 1.2;
 
 	static constexpr int N_BATCH_PEDESTAL = 20000;

@@ -28,7 +28,7 @@ struct FMultiPoly {
 	ADD_SERIALIZABLE_FIELD(i32, Z,   -1, 0);
 	ADD_SERIALIZABLE_FIELD(Vec, pol, {}, 1);
 
-	bool operator<(const FMultiPoly& rhs) const noexcept { return Z < rhs.Z; }
+	inline bool operator<(const FMultiPoly& rhs) const noexcept { return Z < rhs.Z; }
 	FMultiPoly() = default;
 	FMultiPoly(i32 Z_) : Z(Z_), pol{} {};
 
@@ -44,52 +44,23 @@ struct FOOTAsicGainParam {
 	/* Ordered vector, in `Z`. If not, analysis is fucked. Soothe paranoia w/ `IsSane()` method. */
 	ADD_SERIALIZABLE_FIELD(Vec, multi_poly, {}, 0);
 
-	inline const FMultiPoly* GetPoly(int Z) const noexcept {
-		for(const auto& p : multi_poly) { if(p.Z == Z) return &p; }
-		return nullptr;
-	}
-	inline FMultiPoly* GetPoly(int Z) noexcept {
-		for(auto& p : multi_poly) { if(p.Z == Z) return &p; }
-		return nullptr;
-	}
+	const FMultiPoly* GetPoly(int Z) const noexcept;
+	FMultiPoly* GetPoly(int Z) noexcept;
 
-	inline double GetReferentMeasurement(int Z, double x) const { // slow
-		const auto* p = GetPoly(Z);
-		if(!p) return NAN;
-		return poly::Eval(x, p->pol);
-	}
+	/* Get the correct polynomial for Z, and evaluate it with x. If polynomial not found, is NAN. */
+	double GetReferentMeasurement(int Z, double x) const;
 
-	inline bool IsSaneZ() const {
-		return std::is_sorted( multi_poly.begin(), multi_poly.end(),
-			[](const auto& lhs, const auto& rhs) { return lhs.Z < rhs.Z; }
-		);	
-	}
+	/* Check that poly's are sorted according to the Z attribute. */
+	bool IsSaneZ() const;
 
-	inline std::vector<int> GetZ() const {
-		std::vector<int> Zs{}; Zs.reserve(multi_poly.size());
-		std::transform(multi_poly.begin(), multi_poly.end(), std::back_inserter(Zs), [](const auto& x) { return x.Z; });
-		return Zs;
-	}
+	std::vector<int> GetZ() const;
 
-	inline bool IsSane(double x, std::vector<double>& evals) const {
-		/* Check for each 'x' that the each consecutive nominal energy evaluation along the `multi_poly` yields decreasing result.
-		 * AKA: that for some `x`, the nominal value of Z cannot be above the value of Z-1. */
-		evals.clear();
-		for(const auto& mp : multi_poly) {
-			evals.push_back(poly::Eval(x, mp.pol));	
-		}
-		return evals.size() > 0 and std::is_sorted(evals.begin(), evals.end());
-	}
+	/* Check for each 'x' that the each consecutive nominal energy evaluation along the `multi_poly` yields decreasing result.
+	 * AKA: that for some 'x', the nominal value of Z cannot be above the value of Z-1. */
+	bool IsSane(double x, std::vector<double>& evals) const noexcept;
 
 	/* Return an iterator to the first referent measurment line (along E; for set x) that has ref >= e */
-	inline auto GetMeasurementBound(double x, double e) const -> typename Vec::const_iterator {
-		return std::lower_bound( multi_poly.begin(), multi_poly.end(), std::pair{x,e},
-			[](const FMultiPoly& p, const std::pair<double, double>& q) noexcept {
-				const auto [x, e] = q;
-				return poly::Eval(x, p.pol) < e;
-			}
-		);
-	}
+	auto GetMeasurementBound(double x, double e) const -> typename Vec::const_iterator;
 	
 	FOOTAsicGainParam() = default;
 	virtual ~FOOTAsicGainParam() = default;
@@ -125,170 +96,33 @@ struct FOOTGainParam {
 	/* Throws on invalid access. */
 	inline const FOOTAsicGainParam& GetASIC(double x) const { return fit.at( x / N_STRIPS_PER_ASIC ); }
 
-	inline std::vector<int> GetNominalZ() const {
-		std::vector<int> Zs{}; Zs.reserve(nominal_value.size());
-		std::transform(nominal_value.begin(), nominal_value.end(), std::back_inserter(Zs), [](const auto& x) { return x.Z; });
-		return Zs;
-	}
+	std::vector<int> GetNominalZ() const noexcept;
+	bool IsSane() const noexcept;
+	double GetNominalValue(i32 Z) const noexcept;
 
-	inline bool IsSane() const {
-		std::vector<double> evals(20);
-		const auto nominalZ = GetNominalZ();
-
-		for(int i=0; i<TFOOTMapCont::N_ASIC; ++i) {
-			const auto& asic = fit[i];			
-			if(!asic.IsSaneZ()) return false;
-			
-			const auto Zs = asic.GetZ();
-			if(Zs != nominalZ) return false;
-
-			for(int n=0; n < TFOOTMapCont::N_STRIPS_PER_ASIC; ++n) {
-				double x = TFOOTMapCont::N_STRIPS_PER_ASIC*i + n + 0.5; // centre of the strip.
-				if(!asic.IsSane(x, evals)) return false;
-			}
-		}
-		/* Check also if the referent Z measurements are sorted, and all are unique. */	
-		return (
-			std::is_sorted(nominal_value.begin(), nominal_value.end()) and
-			std::adjacent_find(nominal_value.begin(), nominal_value.end(),
-				[](const auto& lo, const auto& hi) { return lo.Z == hi.Z; }) == nominal_value.end()
-		);
-	}
-
-	inline double GetNominalValue(i32 Z) const noexcept {
-		auto it = std::find_if( nominal_value.begin(), nominal_value.end(), [Z](const auto& x) { return x.Z == Z; });	
-		if(it == nominal_value.end()) return NAN;
-		return it->val;
-	}
-
-	double CorrectionFactor(double x, double e) const noexcept {
-		const auto& asic = GetASIC(x);
-		double gain;
-		
-		auto ref_hi = asic.GetMeasurementBound(x, e);
-		if(ref_hi == asic.multi_poly.begin()) { // `e` smaller than the lower bound.
-			const auto& [Z, poly] = *ref_hi;
-			double avg_val = GetNominalValue(Z);
-			double val_x = poly::Eval(x, poly);
-			gain = avg_val / val_x;
-		} else if(ref_hi == asic.multi_poly.end()) { // `e` bigger than the upper bound.
-			const auto& [Z, poly] = asic.multi_poly.back();
-			double avg_val = GetNominalValue(Z);
-			double val_x = poly::Eval(x, poly);
-			gain = avg_val / val_x;
-		}
-		else { // Iterator valid and not pointed at the range head.
-			const auto& [Z_lo, poly_lo] = *(ref_hi - 1);
-			const auto& [Z_hi, poly_hi] = *ref_hi;
-			
-			double nom_lo = GetNominalValue(Z_lo);
-			double nom_hi = GetNominalValue(Z_hi);
-			double evaluated_lo = poly::Eval(x, poly_lo);
-			double evaluated_hi = poly::Eval(x, poly_hi);
-			double gain_lo = nom_lo / evaluated_lo;
-			double gain_hi = nom_hi / evaluated_hi;
-			auto line = mnd::geom::GetLine2D( {evaluated_lo, gain_lo}, {evaluated_hi, gain_hi} );
-			gain = poly::Eval(e, line.array());
-		}
-		return gain;
-	}
+	/* Main call: get the correction factor g for the accumulated cluster energy e,
+	 * based on the position x. Then the corrected energy is: e' = g*e */
+	double CorrectionFactor(double x, double e) const;
 
 	/* Small helper function to plot what we're actually gain matching upon.
 	 * Highly inefficient, but it's w/e. */
-	[[ nodiscard ]] inline TH2D* GetHisto (
-		int nbins_x = 640,
-		int nbins_y = 500,
-		int lo_y    = 0,
-		int hi_y    = 2500
-	) const {
-		TH2D* h = new TH2D("_hFOOTGainParam", "FOOT Gain Parameter",
-			nbins_x, 0, TFOOTMapCont::N_STRIPS,
-			nbins_y, lo_y, hi_y );
-		
-		for(int ix = 1; ix <= h->GetNbinsX(); ++ix) {
-			double x = h->GetXaxis()->GetBinCenter(ix);
-			
-			for(int iy = 1; iy <= h->GetNbinsY(); ++iy) {
-				double y = h->GetYaxis()->GetBinCenter(iy);
+	[[ nodiscard ]] TH2D* GetHisto (
+		int nbins_x = 640, int nbins_y = 500,
+		int lo_y = 0, int hi_y = 2500
+	) const;
 
-				double value = this->CorrectionFactor(x, y);
-				h->SetBinContent(ix, iy, value);
-			}
-		}
-		h->GetXaxis()->SetTitle("Strip #");
-		h->GetYaxis()->SetTitle("Cluster ADC");
+	/* Get the 1D graph for a specific x-position. */
+	[[ nodiscard ]] std::pair<TGraph*, TGraph*> GetGraph (
+		const double x, int nbins_y = 500,
+		int lo_y = 0, int hi_y = 4000
+	) const;
 
-		return h; /* Draw via: `h->Draw("SURF1")`  :-)  */
-	}
+	[[ nodiscard ]] std::pair<TGraph*, TLine*> GetRefZGraph(
+		int Z, int Npts = 640
+	) const;
 
-	[[ nodiscard ]] inline std::pair<TGraph*, TGraph*> GetGraph (
-		const double x,
-		int nbins_y = 500,
-		int lo_y    = 0,
-		int hi_y    = 4000
-	) const {
-		TGraph* g = new TGraph(nbins_y);
-		const auto& asic = GetASIC(x);
-		for(int i=0; i<nbins_y; ++i) {
-			double y = lo_y + (i+0.5) * (hi_y - lo_y) / nbins_y; // centre
-			double value = this->CorrectionFactor(x, y);
-			g->SetPoint(i, y, value);
-		}
-		g->SetLineWidth(4);
-		g->SetLineColor(kRed + 2);
-		const std::vector<i32> Zs = this->GetNominalZ();
-		TGraph* gpts = new TGraph{};
-		for(i32 Z : Zs) {
-			double value = asic.GetReferentMeasurement(Z, x);
-			double gain = this->CorrectionFactor(x, value);
-			gpts->AddPoint(value, gain);
-		}
-
-		gpts->SetMarkerStyle(20);
-		gpts->SetMarkerSize(1.35);
-		return { gpts, g };
-		/* Draw via:
-		 * auto [pts, graph] = GetGraph();
-		 * graph->Draw("AL"); pts->Draw("P SAME"), ; */
-	}
-	[[ nodiscard ]] inline std::pair<TGraph*, TLine*> GetRefZGraph(
-		int Z,
-		int Npts = 640
-	) const {
-		const double nm = this->GetNominalValue(Z);
-		if(!std::isfinite(nm))
-			throw std::invalid_argument(Form("FOOTGainParam::GetRefZGraph, Passed Z=%d, which isn't found in the config.", Z));
-
-		double xlo = 0, xhi = 640;
-		TGraph* g = new TGraph(Npts);
-		TLine *lref = new TLine(xlo, nm, xhi, nm);
-		for(int i=0; i<Npts; ++i) {
-			double x = xlo + (i+0.5)*(xhi - xlo) / Npts;
-			const auto& asic = GetASIC(x);
-			double val = asic.GetReferentMeasurement(Z, x);
-			g->SetPoint(i, x, val);
-		}
-		constexpr double lwidth_ = 4.0;
-		g->SetLineWidth(lwidth_);
-		g->SetLineColor(kRed + 2);
-		lref->SetLineStyle(2);
-		lref->SetLineColor(kMagenta + 2);
-		lref->SetLineWidth(lwidth_);
-
-		return {g, lref};
-	}
-	[[ nodiscard ]]
-	inline std::vector <
-		std::tuple<i32, TGraph*, TLine*>
-	> GetAllRefZGraph(int Npts = 640) const {
-		std::vector<std::tuple<i32, TGraph*, TLine*>> r;
-		const auto nominalZ = GetNominalZ();
-		for(const i32 Z : nominalZ) {
-			auto [g,l] = GetRefZGraph(Z, Npts);
-			r.emplace_back(Z,g,l);
-		}
-		return r;
-	}
+	[[ nodiscard ]] std::vector<std::tuple<i32, TGraph*, TLine*>>
+	GetAllRefZGraph(int Npts = 640) const;
 
 	FOOTGainParam() = default;
 	virtual ~FOOTGainParam() = default;
@@ -305,22 +139,9 @@ struct FOOTDeltaFFT {
 	ADD_SERIALIZABLE_FIELD(Vec, c, {}, 1);
 
 	double Evaluate(const double delta) const;
-		
+	
 	/* Small helper function to plot what we're actually matching upon. */
-	[[ nodiscard ]] inline TGraph* GetGraph(int Npts = 60) const {
-		constexpr double x_lo = -0.5;
-		constexpr double x_hi =  0.5;
-
-		TGraph* g = new TGraph(Npts);	
-		for(int i=0; i<Npts; ++i) {
-			double x0 = x_lo + (i+0.5) * (x_hi - x_lo) / Npts;
-			double y0 = this->Evaluate(x0);
-			g->SetPoint(i, x0, y0);
-		}
-		g->SetLineColor(kRed);
-		g->SetLineWidth(3);
-		return g;
-	}
+	[[ nodiscard ]] TGraph* GetGraph(int Npts = 60) const;
 
 	FOOTDeltaFFT() = default;
 	virtual ~FOOTDeltaFFT() = default;
@@ -336,31 +157,13 @@ struct FOOTDeltaParam {
 	ADD_SERIALIZABLE_FIELD(FOOTDeltaFFT, f2, {},   2);
 
 	/* Factor in range <0,1] corresponding to the initial triangular spline. */
-	inline double CorrectionBasic(const double delta) const noexcept {
-		double x = std::min( std::abs(delta), s );
-		return 1 - (1-f) / s * x;
-	}
-	/* Total factor. Corrected cluster energy is then: e' = e / CorrectionFactor(δ) */
-	inline double CorrectionFactor(const double delta) const noexcept {
-		
-		double corr1 = this->CorrectionBasic(delta); // Interval [f, 1]
-		double corr2 = this->f2.Evaluate(delta); // ~approx. [-0.3, 0.3]
+	double CorrectionBasic(double delta) const noexcept;
 
-		return corr1 * (1 + corr2);
-	}
+	/* Total factor. Corrected cluster energy is then: e' = e / CorrectionFactor(δ) */
+	double CorrectionFactor(double delta) const noexcept;
 	
 	/* Small helper function to plot what we're actually matching upon. */
-	[[ nodiscard ]] inline TGraph* GetGraph(int Npts = 60, double x_lo = -0.5, double x_hi = 0.5) const {
-		TGraph* g = new TGraph(Npts);
-		for(int i=0; i<Npts; ++i) {
-			double x0 = x_lo + (i+0.5) * (x_hi - x_lo) / Npts;
-			double y0 = this->CorrectionFactor(x0);
-			g->SetPoint(i, x0, y0);
-		}
-		g->SetLineColor(kRed);
-		g->SetLineWidth(3);
-		return g;
-	}
+	[[ nodiscard ]] TGraph* GetGraph(int Npts = 60, double x_lo = -0.5, double x_hi = 0.5) const;
 
 	FOOTDeltaParam() = default;
 	virtual ~FOOTDeltaParam() = default;
@@ -404,7 +207,7 @@ struct FOOTParam {
 	/* Main method: convert cluster energy (E) to nominal charge (Q)
 	 * If the dependence is E(Q) = A * Q^a, then:
 	 * f = 1/A, c = 1/a <=> Q(E) = (f * E)^c
-	 * This energy, has to be properly both gain-matched and delta-corrected. */
+	 * This energy E, has to be properly both gain-matched and delta-corrected. */
 	double Q(double E) const noexcept;
 	double Q(const RNFOOTCluster& ) const noexcept;
 
@@ -414,6 +217,12 @@ struct FOOTParam {
 
 	/* Calculate the cluster hit position in millimeters, along the detector's axis. */
 	double X0(const RNFOOTCluster& ) const noexcept;
+
+	/* Convert bare measurement to strip number. Inverse of BarePosition. */
+	double BareToStripnum(double ) const noexcept;
+
+	/* Convert already offsetted measurement to strip number. Inverse of X0. */
+	double X0ToStripnum(double ) const noexcept;
 
 	/* Get params for the nominal dependence: E(Q) = <0> * Q ^ <1> */
 	template<size_t N>
@@ -545,7 +354,10 @@ struct FOOTClusterFit {
 	}
 
 	/* If true, all fit parameters are given. */
-	bool IsOk() const noexcept { return std::isfinite(delta); }
+	bool IsOk() const noexcept {
+		return mnd::isfinite(a0, mu, sigma, delta) &&
+			sigma > 0 && a0 > 0;
+	}
 
 	FOOTClusterFit() = default;
 	virtual ~FOOTClusterFit() = default;
@@ -560,18 +372,18 @@ struct RNFOOTCluster {
 		kFRAGMENTED = 2, /* One strip in noise; is missing between two sequences of the cluster. */
 		kWAVEY      = 3, /* Cluster such as: _/\/\_, initial sequence isn't strictly rising, latter isn't stricly falling. */
 		kMERGED     = 4, /* When two or more non-neighbouring distinct strips pass C-threshold check, and form a cluster. */
+		kISOLATED   = 5, /* When only a single strip passes C-threshold */
+		kHEAVY_ISOLATED = 6 /* When only a single strip passes C-threshold, far above the noise, Say 10σ above the noise. */
 	};
 
 	double fCX = 0; /* Cluster mean strip position. */
 	double fCE = 0; /* Cluster summed energy. */
 	u32    fCM = 0; /* Cluster multiplicity. */
 	ClusterType fCT{}; /* Cluster type. */
-	
-	FOOTClusterFit fit{};
 
 	inline double Delta() const noexcept { return mnd::rround<int>(fCX) - fCX; }
 
-	RNFOOTCluster(double, double, u32, ClusterType, FOOTClusterFit);
+	RNFOOTCluster(double, double, u32, ClusterType);
 	RNFOOTCluster() = default;
 	virtual ~RNFOOTCluster() = default;
 	ClassDef(RNFOOTCluster, 1);
@@ -628,8 +440,8 @@ struct RNFOOTCal {
 	inline void AddCluster(RNFOOTCluster cl) noexcept {
 		fCl.push_back(std::move(cl));
 	}
-	inline void AddCluster(double x, double e, u32 m, ClusterType ty, FOOTClusterFit f) noexcept {
-		fCl.emplace_back(x, e, m, ty, f);
+	inline void AddCluster(double x, double e, u32 m, ClusterType ty) noexcept {
+		fCl.emplace_back(x, e, m, ty);
 	}
     inline bool IsEmptyEvent() const noexcept {
         return w_ev_type == EventType::Empty;
@@ -651,6 +463,7 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	friend struct TFOOTCalProc;
 
 	constexpr static int N_STRIPS = RNFOOTCal::N_STRIPS;
+	constexpr static int N_ASIC = TFOOTMapCont::N_ASIC;
 	
 	int FOOT_N = -1; /* Comes from sort step, isn't in order. */
 
@@ -659,10 +472,9 @@ struct TFOOTCalCont  : TContainer<RNFOOTCal> {
 	TH1I* h1_X;
 	TH1I* h1_cl_type;
 
-	TH1I* h1_dE_m1;
-	TH1I* h1_dE_m2;
-	TH1I* h1_dE_m3;
-	TH1I* h1_cl_sigma;
+	TH2I* h1_dE_m3_light;
+	TH2I* h1_dE_m3_heavy;
+
 	TH2I* h2_mult_e;
 
 	FOOTParam* setup;

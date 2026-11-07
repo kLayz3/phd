@@ -1,23 +1,18 @@
-GO4_SRC_PATH = $(shell pwd -P)/../../go4/src
+CXX ?= g++
+ROOT_CONFIG ?= root-config
 
-CFLAGS = $(shell root-config --cflags) -I../includes \
-	   -I$(GO4SYS)/include \
-	   -I$(GO4_SRC_PATH) \
-	   -g -ggdb \
-	   -DGO4_SRC_PATH=\"$(GO4_SRC_PATH)\"
+ROOT_CXXFLAGS := $(shell $(ROOT_CONFIG) --cflags)
+ROOT_LIBS := $(shell $(ROOT_CONFIG) --libs --ldflags)
+CXXFLAGS ?= -O2 -g
+LDLIBS += -lROOTNTuple -lROOTNTupleUtil
 
-LIBS = $(shell root-config --libs --ldflags) \
-	 -lROOTNTuple -lROOTNTupleUtil
+TAR = gen_rntuple
 
-LIBS += -L$(GO4_SRC_PATH) \
-		-Wl,-rpath,$(GO4_SRC_PATH) -lGo4UserAnalysis \
-
-TAR = gen_rntuple gen_rntuple_frs
-
+.PHONY: all clean
 all: $(TAR)
 
 $(TAR): % : %.cxx
-	g++ -o $@ $^ $(CFLAGS) $(LIBS)
+	$(CXX) $(CPPFLAGS) $(ROOT_CXXFLAGS) $(CXXFLAGS) -o $@ $< $(LDFLAGS) $(ROOT_LIBS) $(LDLIBS)
 
 clean:
-	rm -rf $(TAR)
+	rm -f $(TAR)
