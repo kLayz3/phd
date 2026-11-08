@@ -9,6 +9,7 @@ BUILD_DIR = $(BASE)/build/$(BUILD_EXTENSION)
 
 STRUCT_DIR = $(INC_DIR)/$(BUILD_EXTENSION)
 STRUCT_LIB = $(STRUCT_DIR)/libStructures.so
+STRUCT_FILES = $(STRUCT_LIB) $(STRUCT_DIR)/StructuresDict_rdict.pcm $(STRUCT_DIR)/libStructures.rootmap
 
 CXXFLAGS += $(GO4_CXXFLAGS)
 LDFLAGS += -L$(STRUCT_DIR) \
@@ -23,6 +24,7 @@ OBJ:=$(patsubst $(SRC_DIR)/%.cc, $(BUILD_DIR)/%.o, $(SRC))
 # executable into the source code. #feelsgoodman
 EXE:=$(patsubst $(SRC_DIR)/%.cc, $(BUILD_DIR)/%.exe, $(SRC))
 LINKS:=$(patsubst $(SRC_DIR)/%.cc, %.exe, $(SRC))
+LINKS += $(notdir $(STRUCT_FILES))
 
 .PHONY: all symlink remove clean list dirlink FORCE
 
@@ -44,8 +46,8 @@ $(OBJ): $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cc
 	$(Q)$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 # Refresh symlinks.
-symlink: $(EXE)
-	$(Q)$(foreach exe, $(EXE), ln -sf $(exe) $(BASE)/$(notdir $(exe));)
+symlink: $(EXE) $(STRUCT_LIB)
+	$(Q)$(foreach file, $(EXE) $(STRUCT_FILES), ln -sfT "$(file)" "$(BASE)/$(notdir $(file))";)
 
 # Preserve objects in this build mode.
 remove:

@@ -198,7 +198,7 @@ std::pair<TGraph*, TLine*> FOOTGainParam::GetRefZGraph(
 
 	return {g, lref};
 }
-[[ nodiscard ]] std::vector<std::tuple<i32, TGraph*, TLine*>>
+std::vector<std::tuple<i32, TGraph*, TLine*>>
 FOOTGainParam::GetAllRefZGraph(int Npts) const {
 	std::vector<std::tuple<i32, TGraph*, TLine*>> r;
 	const auto nominalZ = GetNominalZ();
@@ -243,7 +243,7 @@ double FOOTDeltaParam::CorrectionFactor(double delta) const noexcept {
 }
 
 /* Small helper function to plot what we're actually matching upon. */
-[[ nodiscard ]] TGraph* FOOTDeltaParam::GetGraph(int Npts, double x_lo, double x_hi) const {
+TGraph* FOOTDeltaParam::GetGraph(int Npts, double x_lo, double x_hi) const {
 	TGraph* g = new TGraph(Npts);
 	for(int i=0; i<Npts; ++i) {
 		double x0 = x_lo + (i+0.5) * (x_hi - x_lo) / Npts;
@@ -269,7 +269,10 @@ double FOOTParam::R() const noexcept {
 double FOOTParam::Q(double E) const noexcept {
 	if( MND_UNLIKELY(!fit_.load_acq()) )
 		Init();
-	return std::pow(fit_->f*E, fit_->c);
+	
+	return std::visit([E](const auto& cvt) {
+		return cvt(E);
+	}, fit_->converter);
 }
 
 double FOOTParam::E(const RNFOOTCluster& clust) const noexcept {
@@ -309,15 +312,105 @@ void FOOTParam::Init() const {
 	// Another thread may have initialized it while waiting
 	if(fit_.load() == true)
 		return;
-	std::vector<double> x, y;
-	for(auto [Q,E] : gain.nominal_value) {
-		x.push_back( std::log(Q) );
-		y.push_back( std::log(E) );
+
+	const auto n = gain.nominal_value.size();
+	if(n < 2) {
+		fit_.publish(true);
+		return;
 	}
-	auto r = PolyFit<1>(x,y);
-	fit_->f = std::exp(-r[0]);
-	fit_->c = 1.0 / r[1];
+
+	std::vector<double> charge, energy;
+	for(auto [Q,E] : gain.nominal_value) {
+		charge.push_back( std::log(Q) );
+		energy.push_back( std::log(E) );
+	}
+
+	auto r = PolyFit<1>(energy, charge); // { intecept, slope }
+	fit_->raw_fit = mnd::PowerLaw{
+		.amplitude = std::exp( r[0] ),
+		.exponent  = r[1]
+	};
+
+	// In this case, the converter is the same as the raw fit. Have no choice.
+	if(n < 4) {
+		fit_->converter.emplace<mnd::PowerLaw<double>>(fit_->raw_fit);
+		fit_.publish(true);
+		return;
+	}
+
+	auto [a0, b0] = fit_->raw_fit;
+	// amplitude and exponent.
+
+	/* Next, initialize the interpolator. */
+	charge.clear(); energy.clear();
+	for(const auto& [Q,E] : gain.nominal_value) {
+		charge.push_back( Q );
+		energy.push_back( E );
+	}
+
+	const mnd::PowerLaw low {
+		.amplitude = charge.front() / std::pow(energy.front(), b0),
+		.exponent  = b0
+	};
+	const mnd::PowerLaw high = fit_->raw_fit;
+	
+	fit_->converter.emplace<InterpolatedCharge>(
+		std::move(energy), std::move(charge),
+		low, high,
+		mnd::bounds::MatchDerivative::Left |
+		mnd::bounds::MatchDerivative::Right
+	);
+
 	fit_.publish(true);
+}
+
+void FOOTParam::Reset() const noexcept {
+	auto lock = std::lock_guard{mtx_};
+	
+	fit_.reset();
+	fit_->raw_fit = mnd::PowerLaw<double>{NAN, NAN};
+	fit_->converter.emplace<mnd::InvalidFitter<double>>();
+	
+}
+
+std::pair<TGraph*, TGraph*> FOOTParam::GetQGraph (
+	int npts
+) const {
+	assert(npts > 5 && "Supply at least >5 pts");
+	const auto n = gain.nominal_value.size();
+
+	if( !fit_.load_acq() )
+		Init();
+
+	auto* gpts = new TGraph;
+	for(const auto& [Z,E] : gain.nominal_value)
+		gpts->AddPoint(Z, E);
+
+	auto* g = new TGraph;
+	if(n >= 2) {
+		const auto inverse = fit_->raw_fit.inverse();
+
+		const double el = 0;
+		const double eh = inverse( gain.nominal_value.back().Z + 0.5 );
+
+		for(int i=0; i<npts; ++i) {
+			double E = el + i*(eh - el) / (npts-1);
+			double Q = this->Q(E);
+			g->AddPoint(Q, E);
+		}
+	}
+
+	g->SetLineWidth(4);
+	g->SetLineColor(kRed + 2);
+
+	gpts->SetMarkerStyle(20);
+	gpts->SetMarkerSize(1.35);
+
+	
+	return { gpts, g };
+	/* Draw via:
+	 * auto [pts, graph] = GetGraph();
+	 * graph->Draw("AL"); pts->Draw("P SAME"), ; */
 }
 
 RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t) :

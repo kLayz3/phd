@@ -7,8 +7,11 @@
 #include <stdexcept>
 
 #include "TFOOTMapCont.h"
+
 #include "util/json_struct_def.hh"
 #include "util/PolyFitter.h"
+#include "util/Interpolator.hxx"
+
 #include "ExperimentAssumptions.hh"
 
 #include "TGraph.h"
@@ -205,8 +208,8 @@ struct FOOTParam {
 	double E(const RNFOOTCluster& ) const noexcept;
 
 	/* Main method: convert cluster energy (E) to nominal charge (Q)
-	 * If the dependence is E(Q) = A * Q^a, then:
-	 * f = 1/A, c = 1/a <=> Q(E) = (f * E)^c
+	 * If the dependence is E(Q) = B * Q^A, then:
+	 * B = 1/a, B = b^(-1/a) <=> Q(E) = b * E^a
 	 * This energy E, has to be properly both gain-matched and delta-corrected. */
 	double Q(double E) const noexcept;
 	double Q(const RNFOOTCluster& ) const noexcept;
@@ -224,28 +227,49 @@ struct FOOTParam {
 	/* Convert already offsetted measurement to strip number. Inverse of X0. */
 	double X0ToStripnum(double ) const noexcept;
 
-	/* Get params for the nominal dependence: E(Q) = <0> * Q ^ <1> */
+	/* Get params for the nominal dependence: E(Q) = <0> * Q ^ <1>,
+	 * what is cached is the inverse: Q(E) = b * E^(a) */
 	template<size_t N>
 	double GetQParam() const noexcept {
 		if(!fit_.load())
 			Init();
+		
+		const auto inverse = fit_->raw_fit.inverse();
+
 		if constexpr(N == 0) {
-			return 1.0 / fit_->f;
+			return inverse.amplitude;
 		} else if constexpr(N == 1) {
-			return 1.0 / fit_->c;
+			return inverse.exponent;
 		} else {
 			static_assert(N < 2, "Template param must be 0 or 1.");
 		}
 	}
-	inline void Reset() const noexcept {  fit_.reset(); }
+	void Reset() const noexcept;
+
+	/* Get the 1D graph for a specific x-position. */
+	[[ nodiscard ]] std::pair<TGraph*, TGraph*> GetQGraph (
+		int npts = 200
+	) const;
 
 protected:
 	/* Some cached values for quick Q- calculation.
 	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default
 	 * JSON propagator cannot know this. Meaning that `Reset()` has to be called manually. */
+
+	using InterpolatedCharge = mnd::Fitter<double, mnd::PowerLaw<double>, mnd::PowerLaw<double>>;
+	using ChargeConverter = std::variant<
+		mnd::InvalidFitter<double>, // [0,1] measurements (Z,E) available.
+		mnd::PowerLaw<double>,      // [2,3] measurements (Z,E).
+		InterpolatedCharge          // >= 4  measurements (Z,E).
+	>;
+
+	/* This is to convert from E to charge., e.g.: Q(E) power law. */
 	struct fit_coeff {
-		double f, c;
-		fit_coeff() : f{NAN}, c{NAN} {};
+		mnd::PowerLaw<double> raw_fit;
+		ChargeConverter converter;
+
+		// add default ctor so it leaves the other field uninitialized
+		fit_coeff() : raw_fit{NAN, NAN} {}
 	};
 	mutable mnd::cache<fit_coeff> fit_; //!
 	static std::mutex mtx_;
