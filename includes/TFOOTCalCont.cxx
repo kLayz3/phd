@@ -42,7 +42,7 @@ bool FOOTAsicGainParam::IsSane(double x, std::vector<double>& evals) const noexc
 	for(const auto& mp : multi_poly) {
 		evals.push_back(poly::Eval(x, mp.pol));
 	}
-	return evals.size() > 0 and std::is_sorted(evals.begin(), evals.end());
+	return evals.size() > 0 and mnd::is_strictly_ascending(evals);
 }
 
 /* Return an iterator to the first referent measurment line (along E; for set x) that has ref >= e */
