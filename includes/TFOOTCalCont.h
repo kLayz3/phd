@@ -56,7 +56,7 @@ struct FOOTAsicGainParam {
 	/* Check that poly's are sorted according to the Z attribute. */
 	bool IsSaneZ() const;
 
-	std::vector<int> GetZ() const;
+	std::vector<i32> GetZ() const;
 
 	/* Check for each 'x' that the each consecutive nominal energy evaluation along the `multi_poly` yields decreasing result.
 	 * AKA: that for some 'x', the nominal value of Z cannot be above the value of Z-1. */
@@ -64,6 +64,9 @@ struct FOOTAsicGainParam {
 
 	/* Return an iterator to the first referent measurment line (along E; for set x) that has ref >= e */
 	auto GetMeasurementBound(double x, double e) const -> typename Vec::const_iterator;
+
+	/* Return number of measurements, aka the size of the underlying multi_poly vector. */
+	inline auto GetNReferentMeasurements() const noexcept { return multi_poly.size(); }
 	
 	FOOTAsicGainParam() = default;
 	virtual ~FOOTAsicGainParam() = default;
@@ -78,6 +81,10 @@ struct FOOTReferentADCMeasurement {
 
 	inline bool operator<(const FOOTReferentADCMeasurement& rhs) const noexcept {
 		return (Z < rhs.Z) and (val < rhs.val);
+	}
+	inline bool Valid() const noexcept {
+		return Z > 0 && Z <= (i32)mnd::assume::primary.Z
+			&& std::isfinite(val) && val > 0.0;
 	}
 	
 	FOOTReferentADCMeasurement() = default;
@@ -99,13 +106,20 @@ struct FOOTGainParam {
 	/* Throws on invalid access. */
 	inline const FOOTAsicGainParam& GetASIC(double x) const { return fit.at( x / N_STRIPS_PER_ASIC ); }
 
-	std::vector<int> GetNominalZ() const noexcept;
+	std::vector<i32> GetNominalZ() const noexcept;
+	
+	MND_NEVER_INLINE void IsSaneThrowable() const;
 	bool IsSane() const noexcept;
+
+	void Reset() const noexcept;
+
 	double GetNominalValue(i32 Z) const noexcept;
 
 	/* Main call: get the correction factor g for the accumulated cluster energy e,
 	 * based on the position x. Then the corrected energy is: e' = g*e */
 	double CorrectionFactor(double x, double e) const;
+
+	double Q(double E) const noexcept;
 
 	/* Small helper function to plot what we're actually gain matching upon.
 	 * Highly inefficient, but it's w/e. */
@@ -127,9 +141,39 @@ struct FOOTGainParam {
 	[[ nodiscard ]] std::vector<std::tuple<i32, TGraph*, TLine*>>
 	GetAllRefZGraph(int Npts = 640) const;
 
+	/* Get the 1D graph for charge converter. Never returns invalid pointers, even
+	 * for empty calibration. Can throw on initializing the fitter. */
+	[[ nodiscard ]] std::pair<TGraph*, TGraph*> GetQGraph (
+		int npts = 200
+	) const;
+
 	FOOTGainParam() = default;
 	virtual ~FOOTGainParam() = default;
 	ClassDef(FOOTGainParam, 1);
+
+private:
+	/* Some cached values for quick Q- calculation.
+	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default
+	 * JSON propagator cannot know this. Meaning that `Reset()` has to be called manually. */
+	using InterpolatedCharge = mnd::Fitter<f64, mnd::PowerLaw<f64>, mnd::PowerLaw<f64>>;
+	using ChargeConverter = std::variant<
+		mnd::InvalidFitter<f64>, // [0] measurements (Z,E) available.
+		mnd::PowerLaw<f64>, // [1,2,3] measurements (Z,E). In case a single measurement, fix the exponent 0.5
+		InterpolatedCharge // >= 4  measurements (Z,E).
+	>;
+
+	/* This is to convert from E to charge., e.g.: Q(E) power law. */
+	struct fit_coeff {
+		mnd::PowerLaw<double> raw_fit;
+		ChargeConverter converter;
+
+		// add default ctor so it leaves the other field uninitialized
+		fit_coeff() : raw_fit{NAN, NAN} {}
+	};
+	mutable mnd::cache<fit_coeff> fit_; //!
+	mutable mnd::mutex mtx_; //!
+
+	void Init() const;
 };
 ADD_JSON_TYPE_RESOLUTION(FOOTGainParam, 1);
 
@@ -208,8 +252,6 @@ struct FOOTParam {
 	double E(const RNFOOTCluster& ) const noexcept;
 
 	/* Main method: convert cluster energy (E) to nominal charge (Q)
-	 * If the dependence is E(Q) = B * Q^A, then:
-	 * B = 1/a, B = b^(-1/a) <=> Q(E) = b * E^a
 	 * This energy E, has to be properly both gain-matched and delta-corrected. */
 	double Q(double E) const noexcept;
 	double Q(const RNFOOTCluster& ) const noexcept;
@@ -226,55 +268,6 @@ struct FOOTParam {
 
 	/* Convert already offsetted measurement to strip number. Inverse of X0. */
 	double X0ToStripnum(double ) const noexcept;
-
-	/* Get params for the nominal dependence: E(Q) = <0> * Q ^ <1>,
-	 * what is cached is the inverse: Q(E) = b * E^(a) */
-	template<size_t N>
-	double GetQParam() const noexcept {
-		if(!fit_.load())
-			Init();
-		
-		const auto inverse = fit_->raw_fit.inverse();
-
-		if constexpr(N == 0) {
-			return inverse.amplitude;
-		} else if constexpr(N == 1) {
-			return inverse.exponent;
-		} else {
-			static_assert(N < 2, "Template param must be 0 or 1.");
-		}
-	}
-	void Reset() const noexcept;
-
-	/* Get the 1D graph for a specific x-position. */
-	[[ nodiscard ]] std::pair<TGraph*, TGraph*> GetQGraph (
-		int npts = 200
-	) const;
-
-protected:
-	/* Some cached values for quick Q- calculation.
-	 * NB: if the object is re-evaluted, the values *need* to be recomputed, but the default
-	 * JSON propagator cannot know this. Meaning that `Reset()` has to be called manually. */
-
-	using InterpolatedCharge = mnd::Fitter<double, mnd::PowerLaw<double>, mnd::PowerLaw<double>>;
-	using ChargeConverter = std::variant<
-		mnd::InvalidFitter<double>, // [0,1] measurements (Z,E) available.
-		mnd::PowerLaw<double>,      // [2,3] measurements (Z,E).
-		InterpolatedCharge          // >= 4  measurements (Z,E).
-	>;
-
-	/* This is to convert from E to charge., e.g.: Q(E) power law. */
-	struct fit_coeff {
-		mnd::PowerLaw<double> raw_fit;
-		ChargeConverter converter;
-
-		// add default ctor so it leaves the other field uninitialized
-		fit_coeff() : raw_fit{NAN, NAN} {}
-	};
-	mutable mnd::cache<fit_coeff> fit_; //!
-	static std::mutex mtx_;
-
-	void Init() const;
 
 public:
 	int de10_index_ = -1;

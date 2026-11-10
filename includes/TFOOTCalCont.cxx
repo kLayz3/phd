@@ -1,14 +1,19 @@
 #include "TFOOTCalCont.h"
+
+#include "monad/accessories/formatting.hxx"
+#include "monad/accessories/meta.hxx"
+#include "monad/monad.hxx"
+
 #include "util/JSONParser.h"
-#include "nlohmann/json.hpp"
 #include "util/json_struct_def.hh"
 #include "util/FFT.h"
-#include "filesystem"
+#include "util/Interpolator.hxx"
+#include <algorithm>
+#include <filesystem>
+#include <iterator>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
-
-std::mutex FOOTParam::mtx_{};
 
 const FMultiPoly* FOOTAsicGainParam::GetPoly(int Z) const noexcept {
 	for(const auto& p : multi_poly) { if(p.Z == Z) return &p; }
@@ -26,15 +31,11 @@ double FOOTAsicGainParam::GetReferentMeasurement(int Z, double x) const { // slo
 }
 
 bool FOOTAsicGainParam::IsSaneZ() const {
-	return std::is_sorted( multi_poly.begin(), multi_poly.end(),
-		[](const auto& lhs, const auto& rhs) { return lhs.Z < rhs.Z; }
-	);	
+	return mnd::is_strictly_ascending(multi_poly);
 }
 
-std::vector<int> FOOTAsicGainParam::GetZ() const {
-	std::vector<int> Zs{}; Zs.reserve(multi_poly.size());
-	std::transform(multi_poly.begin(), multi_poly.end(), std::back_inserter(Zs), [](const auto& x) { return x.Z; });
-	return Zs;
+std::vector<i32> FOOTAsicGainParam::GetZ() const {
+	return mnd::map(multi_poly, [](const auto& x) { return x.Z; });
 }
 
 bool FOOTAsicGainParam::IsSane(double x, std::vector<double>& evals) const noexcept {
@@ -42,7 +43,9 @@ bool FOOTAsicGainParam::IsSane(double x, std::vector<double>& evals) const noexc
 	for(const auto& mp : multi_poly) {
 		evals.push_back(poly::Eval(x, mp.pol));
 	}
-	return evals.size() > 0 and mnd::is_strictly_ascending(evals);
+	return evals.size() > 0
+		&& std::all_of(evals.begin(), evals.end(), [](auto e) { return e > 0 && std::isfinite(e); })
+		&& mnd::is_strictly_ascending(evals);
 }
 
 /* Return an iterator to the first referent measurment line (along E; for set x) that has ref >= e */
@@ -55,33 +58,144 @@ auto FOOTAsicGainParam::GetMeasurementBound(double x, double e) const -> typenam
 	);
 }
 
-std::vector<int> FOOTGainParam::GetNominalZ() const noexcept {
-	std::vector<int> Zs{}; Zs.reserve(nominal_value.size());
-	std::transform(nominal_value.begin(), nominal_value.end(), std::back_inserter(Zs), [](const auto& x) { return x.Z; });
-	return Zs;
+/* ===SEND====HELP===SEND===HELP====SEND=====HELP=== */
+/* ===SEND========= FOOT_GAIN_PARAM =========HELP=== */
+/* ===SEND====HELP===SEND===HELP====SEND=====HELP=== */
+
+void FOOTGainParam::Reset() const noexcept {
+	auto lock = std::lock_guard{mtx_};
+	
+	fit_.reset();
+	fit_->raw_fit = mnd::PowerLaw<double>{NAN, NAN};
+	fit_->converter.emplace<mnd::InvalidFitter<double>>();
 }
-bool FOOTGainParam::IsSane() const noexcept {
-	std::vector<double> evals(20);
-	const auto nominalZ = GetNominalZ();
+
+void FOOTGainParam::Init() const {
+	auto lock = std::lock_guard{mtx_};
+	
+	// Another thread may have initialized it while waiting
+	if(fit_.load() == true)
+		return;
+
+	IsSaneThrowable();
+	const auto n = nominal_value.size();
+	if(n == 0) {
+		fit_.publish(true);
+		return;
+	}
+	if(n == 1) {
+		const auto [Z,E] = nominal_value.front();
+		fit_->raw_fit = mnd::PowerLaw{
+			.amplitude = Z / sqrt(E),
+			.exponent = 0.5
+		};
+		fit_->converter.emplace<mnd::PowerLaw<double>>(fit_->raw_fit);
+		fit_.publish(true);
+		return;
+	}
+
+	std::vector<double> charge, energy;
+	for(auto [Q,E] : nominal_value) {
+		charge.push_back( std::log(Q) );
+		energy.push_back( std::log(E) );
+	}
+
+	auto r = PolyFit<1>(energy, charge); // { intecept, slope }
+	fit_->raw_fit = mnd::PowerLaw{
+		.amplitude = std::exp( r[0] ),
+		.exponent  = r[1]
+	};
+
+	// In this case, the converter is the same as the raw fit. Have no choice.
+	if(n < 4) { // n = 2,3
+		fit_->converter.emplace<mnd::PowerLaw<double>>(fit_->raw_fit);
+		fit_.publish(true);
+		return;
+	}
+
+	auto [a0, b0] = fit_->raw_fit;
+	// amplitude and exponent.
+
+	/* Next, initialize the interpolator. */
+	charge.clear(); energy.clear();
+	for(const auto& [Q,E] : nominal_value) {
+		charge.push_back(Q);
+		energy.push_back(E);
+	}
+
+	const mnd::PowerLaw low {
+		.amplitude = charge.front() / std::pow(energy.front(), b0),
+		.exponent  = b0
+	};
+	const mnd::PowerLaw high = fit_->raw_fit;
+	
+	fit_->converter.emplace<InterpolatedCharge>(
+		std::move(energy), std::move(charge),
+		low, high,
+		mnd::bounds::MatchDerivative::Left |
+		mnd::bounds::MatchDerivative::Right
+	);
+
+	fit_.publish(true);
+}
+
+std::vector<int> FOOTGainParam::GetNominalZ() const noexcept {
+	return mnd::map(nominal_value, [](const auto& p) { return p.Z; });
+}
+
+/* Check that the gain parameter is completely sane. Slow diagnostic function. */
+void FOOTGainParam::IsSaneThrowable() const {
+	/* Empty measurements allowed. They just sprew NAN's everywhere. */
+	if(nominal_value.empty()) {
+		WARN("FOOTGainParam - nominal value vector left empty.");
+		return;
+	}
+	if(auto it = std::find_if_not(nominal_value.begin(), nominal_value.end(), [](const auto& m) -> bool {
+		return m.Valid();
+	}); it != nominal_value.end())
+		MND_THROW("FOOTGainParam - nominal value entry invalid: %s at position [%td]\n",
+			mnd::streamable(*it).c_str(), std::distance(nominal_value.begin() , it));
+
+	/* There has to be *exact same* amount of total detector nominal measurements,
+	 * and individual ASIC referent measurements. */
+	if(!mnd::is_strictly_ascending(nominal_value))
+		MND_THROW("FOOTGainParam - nominal value pairs are not strictly ascending in both Z and value.");
+
+	const auto n_nom = nominal_value.size();
+	std::vector<f64> evals(10);
+	const std::vector<i32> nominalZ = GetNominalZ();
 
 	for(int i=0; i<TFOOTMapCont::N_ASIC; ++i) {
 		const auto& asic = fit[i];
-		if(!asic.IsSaneZ()) return false;
+		if(asic.multi_poly.size() != n_nom)
+			MND_THROW("FOOTGainParam - ASIC[%i] marked bad - since it has "
+				"%zu!=%zu nominal detector measurements. Nominal measurements are: %s",
+				i, asic.multi_poly.size(), n_nom, mnd::streamable(nominal_value).c_str());
 
-		const auto Zs = asic.GetZ();
-		if(Zs != nominalZ) return false;
+		if(!asic.IsSaneZ())
+			MND_THROW("FOOTGainParam - ASIC[%i] has bad internal Z's : they aren't stricly ascending.", i);
+
+		const std::vector<i32> Zs = asic.GetZ();
+		if(Zs != nominalZ)
+			MND_THROW("FOOTGainParam - ASIC[%i] has mismatched Z's compared to nominal detector Z measurements. "
+				"ASIC: %s , nominal: %s.", i, mnd::streamable(Zs).c_str(), mnd::streamable(nominalZ).c_str());
 
 		for(int n=0; n < TFOOTMapCont::N_STRIPS_PER_ASIC; ++n) {
-			double x = TFOOTMapCont::N_STRIPS_PER_ASIC*i + n + 0.5; // centre of the strip.
-			if(!asic.IsSane(x, evals)) return false;
+			const f64 x = TFOOTMapCont::N_STRIPS_PER_ASIC*i + n + 0.5; // centre of the strip.
+			if(!asic.IsSane(x, evals))
+				MND_THROW("FOOTGainParam - ASIC[%i] has invalid slice at x=%.2f . Measurements are:\n"
+				"Z: %s\nE: %s", i, x, mnd::streamable(Zs).c_str(), mnd::streamable(evals).c_str());
 		}
 	}
-	/* Check also if the referent Z measurements are sorted, and all are unique. */	
-	return (
-		std::is_sorted(nominal_value.begin(), nominal_value.end()) and
-		std::adjacent_find(nominal_value.begin(), nominal_value.end(),
-			[](const auto& lo, const auto& hi) { return lo.Z == hi.Z; }) == nominal_value.end()
-	);
+}
+
+bool FOOTGainParam::IsSane() const noexcept {
+	try {
+		IsSaneThrowable();
+		return true;
+	} catch(...) {
+		return false;
+	}
 }
 
 double FOOTGainParam::GetNominalValue(i32 Z) const noexcept {
@@ -91,35 +205,75 @@ double FOOTGainParam::GetNominalValue(i32 Z) const noexcept {
 }
 
 double FOOTGainParam::CorrectionFactor(double x, double e) const {
-	const auto& asic = GetASIC(x);
-	double gain;
+	// If parameters aren't yet checked, do that first.
+	// This will be heavily optimized by the branch-predictor.
+	if( MND_UNLIKELY(!fit_.load_acq()) )
+		Init(); // can throw
 
-	auto ref_hi = asic.GetMeasurementBound(x, e);
-	if(ref_hi == asic.multi_poly.begin()) { // `e` smaller than the lower bound.
-		const auto& [Z, poly] = *ref_hi;
-		double avg_val = GetNominalValue(Z);
-		double val_x = poly::Eval(x, poly);
-		gain = avg_val / val_x;
-	} else if(ref_hi == asic.multi_poly.end()) { // `e` bigger than the upper bound.
-		const auto& [Z, poly] = asic.multi_poly.back();
-		double avg_val = GetNominalValue(Z);
-		double val_x = poly::Eval(x, poly);
-		gain = avg_val / val_x;
-	}
-	else { // Iterator valid and not pointed at the range head.
-		const auto& [Z_lo, poly_lo] = *(ref_hi - 1);
-		const auto& [Z_hi, poly_hi] = *ref_hi;
+	const size_t N = nominal_value.size();
+	if(N == 0) return NAN;
+	
+	const auto& asic = GetASIC(x); // can throw
+	if(N != asic.GetNReferentMeasurements())
+		ERROR("Huh?");
 
-		double nom_lo = GetNominalValue(Z_lo);
-		double nom_hi = GetNominalValue(Z_hi);
-		double evaluated_lo = poly::Eval(x, poly_lo);
-		double evaluated_hi = poly::Eval(x, poly_hi);
-		double gain_lo = nom_lo / evaluated_lo;
-		double gain_hi = nom_hi / evaluated_hi;
-		auto line = mnd::geom::GetLine2D( {evaluated_lo, gain_lo}, {evaluated_hi, gain_hi} );
-		gain = poly::Eval(e, line.array());
+	switch(N) {
+		case(0): mnd::unreachable();
+		case(1): {
+			// Just divide the values. Cannot do anything more.
+			const auto& pol = asic.multi_poly.front().pol;
+			const double e_avg = poly::Eval(x, pol);
+			const double e_nom = nominal_value.front().val;
+			return e_nom / e_avg;
+		}
+		default: {
+			std::vector<f64> e_list; e_list.reserve(N);
+			std::vector<f64> g_list; g_list.reserve(N);
+
+			for(size_t i=0; i<N; ++i) {
+				const auto& pol = asic.multi_poly[i].pol;
+				const double e_avg = poly::Eval(x, pol);
+				const double e_nom = nominal_value[i].val;
+				e_list.push_back(e_avg);
+				g_list.push_back(e_nom / e_avg);
+			}
+			
+			if(N < 4) { // N=2,3
+				// Do piecewise-linear interpolation.
+				const auto it = std::upper_bound(e_list.begin(), e_list.end(), e);
+				if(it == e_list.begin()) {
+					return g_list.front();
+				}
+				if(it == e_list.end()) {
+					return g_list.back();
+				}
+				
+				// Else it is sandwitched in between two measurements [i-1], [i]
+				i32 i = std::distance(e_list.begin(), it);
+				double slope = (g_list[i] - g_list[i-1]) / (e_list[i] - e_list[i-1]);
+				
+				return g_list[i-1] + slope * (e - e_list[i-1]);
+			}
+
+			// explicit Fitter(std::vector<T>, std::vector<T>, LoExtrapolator, HiExtrapolator, u32)
+			auto g = mnd::Fitter(
+				std::move(e_list), std::move(g_list),
+				[](double){ return 1.0; }, [](double){ return 1.0; }
+			);
+
+			// At the edges, it smoothens out into a constant gain.
+			return g(e);
+		}
 	}
-	return gain;
+}
+
+double FOOTGainParam::Q(double E) const noexcept {
+	if( MND_UNLIKELY(!fit_.load_acq()) )
+		Init();
+	
+	return std::visit([E](const auto& cvt) {
+		return cvt(E);
+	}, fit_->converter);
 }
 
 TH2D* FOOTGainParam::GetHisto (
@@ -209,6 +363,48 @@ FOOTGainParam::GetAllRefZGraph(int Npts) const {
 	return r;
 }
 
+std::pair<TGraph*, TGraph*> FOOTGainParam::GetQGraph (
+	int npts
+) const {
+	assert(npts > 5 && "Supply at least >5 pts");
+	const auto n = nominal_value.size();
+
+	if( !fit_.load_acq() )
+		Init();
+
+	auto* gpts = new TGraph;
+	for(const auto& [Z,E] : nominal_value)
+		gpts->AddPoint(Z, E);
+
+	auto* g = new TGraph;
+	if(n >= 1) {
+		const auto inverse = fit_->raw_fit.inverse();
+
+		const double el = 0;
+		const double eh = inverse( nominal_value.back().Z + 0.5 );
+
+		for(int i=0; i<npts; ++i) {
+			double E = el + i*(eh - el) / (npts-1);
+			double Q = this->Q(E);
+			g->AddPoint(Q, E);
+		}
+	}
+
+	g->SetLineWidth(4);
+	g->SetLineColor(kRed + 2);
+
+	gpts->SetMarkerStyle(20);
+	gpts->SetMarkerSize(1.35);
+
+	return { gpts, g };
+	/* Draw via:
+	 * auto [pts, graph] = GetGraph();
+	 * graph->Draw("AL"); pts->Draw("P SAME"), ; */
+}
+
+/* ================================================= */
+/* ================================================= */
+
 
 double FOOTDeltaFFT::Evaluate(const double x) const {
 	return FFTW::Evaluate(this->c, this->n, x, -0.5, 0.5);
@@ -267,12 +463,7 @@ double FOOTParam::R() const noexcept {
 	return 1.0;
 }
 double FOOTParam::Q(double E) const noexcept {
-	if( MND_UNLIKELY(!fit_.load_acq()) )
-		Init();
-	
-	return std::visit([E](const auto& cvt) {
-		return cvt(E);
-	}, fit_->converter);
+	return gain.Q(E);
 }
 
 double FOOTParam::E(const RNFOOTCluster& clust) const noexcept {
@@ -304,113 +495,6 @@ double FOOTParam::BareToStripnum(double m) const noexcept {
 double FOOTParam::X0ToStripnum(double x0) const noexcept {
 	double b = x0 - delta_p;
 	return BareToStripnum(b);
-}
-
-void FOOTParam::Init() const {
-	auto lock = std::lock_guard{mtx_};
-	
-	// Another thread may have initialized it while waiting
-	if(fit_.load() == true)
-		return;
-
-	const auto n = gain.nominal_value.size();
-	if(n < 2) {
-		fit_.publish(true);
-		return;
-	}
-
-	std::vector<double> charge, energy;
-	for(auto [Q,E] : gain.nominal_value) {
-		charge.push_back( std::log(Q) );
-		energy.push_back( std::log(E) );
-	}
-
-	auto r = PolyFit<1>(energy, charge); // { intecept, slope }
-	fit_->raw_fit = mnd::PowerLaw{
-		.amplitude = std::exp( r[0] ),
-		.exponent  = r[1]
-	};
-
-	// In this case, the converter is the same as the raw fit. Have no choice.
-	if(n < 4) {
-		fit_->converter.emplace<mnd::PowerLaw<double>>(fit_->raw_fit);
-		fit_.publish(true);
-		return;
-	}
-
-	auto [a0, b0] = fit_->raw_fit;
-	// amplitude and exponent.
-
-	/* Next, initialize the interpolator. */
-	charge.clear(); energy.clear();
-	for(const auto& [Q,E] : gain.nominal_value) {
-		charge.push_back( Q );
-		energy.push_back( E );
-	}
-
-	const mnd::PowerLaw low {
-		.amplitude = charge.front() / std::pow(energy.front(), b0),
-		.exponent  = b0
-	};
-	const mnd::PowerLaw high = fit_->raw_fit;
-	
-	fit_->converter.emplace<InterpolatedCharge>(
-		std::move(energy), std::move(charge),
-		low, high,
-		mnd::bounds::MatchDerivative::Left |
-		mnd::bounds::MatchDerivative::Right
-	);
-
-	fit_.publish(true);
-}
-
-void FOOTParam::Reset() const noexcept {
-	auto lock = std::lock_guard{mtx_};
-	
-	fit_.reset();
-	fit_->raw_fit = mnd::PowerLaw<double>{NAN, NAN};
-	fit_->converter.emplace<mnd::InvalidFitter<double>>();
-	
-}
-
-std::pair<TGraph*, TGraph*> FOOTParam::GetQGraph (
-	int npts
-) const {
-	assert(npts > 5 && "Supply at least >5 pts");
-	const auto n = gain.nominal_value.size();
-
-	if( !fit_.load_acq() )
-		Init();
-
-	auto* gpts = new TGraph;
-	for(const auto& [Z,E] : gain.nominal_value)
-		gpts->AddPoint(Z, E);
-
-	auto* g = new TGraph;
-	if(n >= 2) {
-		const auto inverse = fit_->raw_fit.inverse();
-
-		const double el = 0;
-		const double eh = inverse( gain.nominal_value.back().Z + 0.5 );
-
-		for(int i=0; i<npts; ++i) {
-			double E = el + i*(eh - el) / (npts-1);
-			double Q = this->Q(E);
-			g->AddPoint(Q, E);
-		}
-	}
-
-	g->SetLineWidth(4);
-	g->SetLineColor(kRed + 2);
-
-	gpts->SetMarkerStyle(20);
-	gpts->SetMarkerSize(1.35);
-
-	
-	return { gpts, g };
-	/* Draw via:
-	 * auto [pts, graph] = GetGraph();
-	 * graph->Draw("AL"); pts->Draw("P SAME"), ; */
 }
 
 RNFOOTCluster::RNFOOTCluster(double x, double e, u32 m, ClusterType t) :

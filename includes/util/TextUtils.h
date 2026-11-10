@@ -109,6 +109,7 @@ inline constexpr std::string_view trim(std::string_view sv) noexcept {
 	const auto last = sv.find_last_not_of(whitespace);
 	return sv.substr(first, last - first + 1);
 }
+void trim(std::string& ) noexcept;
 
 } // namespace mnd
 

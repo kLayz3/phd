@@ -21,7 +21,7 @@
  * __builtin_bit_cast(double, payload); */
 
 #include <cstring>
-#include <util/FloatAsserts.hxx>
+#include "monad/accessories/primitives.hxx"
 
 namespace mnd {
 

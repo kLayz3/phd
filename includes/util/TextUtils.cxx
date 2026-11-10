@@ -177,6 +177,10 @@ std::vector<std::string_view> mnd::to_views(const std::vector<std::string>& seq)
 	return views;
 }
 
+void mnd::trim(std::string& s) noexcept {
+	s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c){return std::isspace(c);}), s.end());
+}
+
 static const std::regex re {mnd::rootfile_pattern};
 
 std::tuple<std::string, u32, u32>

@@ -566,7 +566,7 @@ template <
 	return opt;
 }
 
-/* Append one parsed value per occurrence; no overriding or auth flags.
+/* Append parsed values from each occurrence; no overriding or auth flags.
  * Can't pass in tuples, option etc. Has to be a type natively understood by the CLI11. */
 template<typename T>
 CLI::Option* add_logged_option_seq (
@@ -575,13 +575,15 @@ CLI::Option* add_logged_option_seq (
 	std::vector<T>& variable,
 	const std::string& description
 ) {
-	auto* opt = app.add_option_function<T>(
+	auto* opt = app.add_option_function<std::vector<T>>(
 		name,
-		[&variable, name](const T& match) {
-			variable.push_back(match);
-			WARN("Appended option ");
-			std::cerr << KBH_YEL << name << KNRM << " as "
-				<< KBH_CYN << CLI::detail::to_string(match) << KNRM << '\n';
+		[&variable, name](const std::vector<T>& matches) {
+			for(const auto& match : matches) {
+				variable.push_back(match);
+				WARN("Appended option ");
+				std::cerr << KBH_YEL << name << KNRM << " as "
+					<< KBH_CYN << CLI::detail::to_string(match) << KNRM << '\n';
+			}
 		},
 		description
 	)->trigger_on_parse();

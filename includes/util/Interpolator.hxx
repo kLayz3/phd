@@ -115,6 +115,13 @@ private:
 	T ext_hi_offset;
 };
 
+template <
+	typename T,
+	typename LoExtrapolator,
+	typename HiExtrapolator
+> Fitter(::std::vector<T>, ::std::vector<T>, LoExtrapolator, HiExtrapolator, u32 = 0)
+	-> Fitter<T,LoExtrapolator,HiExtrapolator>;
+
 template<typename T>
 struct PowerLaw {
 	T amplitude;

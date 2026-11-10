@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
 	Take take = Take::gauss_fit_only;
 	Option<std::vector<i32>> show_old = None;
 
-	add_logged_option(app, "-f,--file", fileNames, "Pass one or more file name.")
+	add_logged_option_seq(app, "-f,--file", fileNames, "Pass one or more file name.")
 		->check(CLI::ReadPermissions)
         ->delimiter(',');
 	add_logged_option(app, "-i,--foot-id", ifoot,
@@ -366,7 +366,13 @@ int main(int argc, char* argv[]) {
 				if(pasic->Integral() >= N_NEEDED_ENTRIES) { /* If it contains more than 500 events, we can sample it. */
 					profile_mean = pasic->GetXaxis()->GetBinCenter( pasic->GetMaximumBin() );
 					auto [pg0, err_pg0] = GaussFitMax( pasic.get(), sratio );
-					gauss_mean = pg0[1];
+					
+					if(!std::isfinite(pg0[1])) {
+						WARN("ASIC[%d]: GaussFitMax produced non-finite mean value? Setting it to mean_mid.\n", a);
+						gauss_mean = mean_mid;
+					} else {
+						gauss_mean = pg0[1];
+					}
 				} else { /* No clue. Just take profile mean the mean, but gauss is invalidated. */
 					profile_mean = pasic->GetMean();
 					gauss_mean = mean_mid;

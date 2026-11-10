@@ -56,8 +56,8 @@ void get_obj(F&& fhandle, P& var, const char* label) {
 	if(!var) ERROR("get_obj(): cannot extract object: '%s'\n", label);
 }
 
-using A2 = std::array<double, 2>;
-using A3 = std::array<double, 3>;
+using A2 = std::array<f64, 2>;
+using A3 = std::array<f64, 3>;
 template<typename T, size_t M, size_t N>
 using Arr2 = std::array<std::array<T,N>, M>;
 
@@ -186,8 +186,8 @@ extern template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extensi
 namespace mnd {
 namespace geom { struct Line2D; } // namespace geom
 
-void FillTrack(TH2D* , const std::array<double, 2>& , double = -HUGE_VAL, double = HUGE_VAL);
-void FillTrack(TH2D* , const geom::Line2D&, double = -HUGE_VAL, double = HUGE_VAL );
+void FillTrack(TH2D* , const A2& , f64 = -HUGE_VAL, f64 = HUGE_VAL);
+void FillTrack(TH2D* , const geom::Line2D&, f64 = -HUGE_VAL, f64 = HUGE_VAL );
 
 /* Predicate if the value is inside a range spanned by last 2 elements of some array.
  * Note, variant state is *assumed* to be valued here, and isn't checked! */

@@ -11,6 +11,51 @@ std::ostream& operator<<(std::ostream& os, const FFTW::Coeff& coeff) {
 	os << '[' << coeff.a << ", " << coeff.b << ']';
 	return os;
 }
+FFTW::FFTW(int n_samples) :
+	n_full(n_samples),
+	n_freq(n_samples / 2 + 1), // Nyquist theorem :-)
+	data( (fftw_complex*) fftw_malloc(sizeof(fftw_complex)* n_freq) ),
+	coeff(n_freq)
+{
+	if(!data)
+		throw std::bad_alloc{};
+}
+
+FFTW::FFTW(FFTW&& rhs) noexcept :
+	n_full(rhs.n_full),
+	n_freq(rhs.n_freq),
+	data(rhs.data),
+	coeff(std::move(rhs.coeff)),
+	is_computed(rhs.is_computed)
+{
+	rhs.n_full = 0;
+	rhs.n_freq = 0;
+	rhs.data = nullptr;
+	rhs.is_computed = false;
+}
+
+FFTW& FFTW::operator=(FFTW&& rhs) noexcept {
+	if(this != &rhs) {
+		if(data) fftw_free(data);
+
+		n_full = rhs.n_full;
+		n_freq = rhs.n_freq;
+		data = rhs.data;
+		coeff = std::move(rhs.coeff);
+		is_computed = rhs.is_computed;
+
+		rhs.n_full = 0;
+		rhs.n_freq = 0;
+		rhs.data = nullptr;
+		rhs.is_computed = false;
+	}
+	return *this;
+}
+
+
+FFTW::~FFTW() {
+	if(data) fftw_free(data);
+}
 
 void FFTW::ComputeCoeffs(Verbosity v, int Q) {
 	// k = 0
@@ -23,7 +68,7 @@ void FFTW::ComputeCoeffs(Verbosity v, int Q) {
 
 		// Nyquist theorem :-)
 		if ((n_full % 2 == 0) && (k == n_full / 2)) {
-			coeff[k].a = Re / n_full; 
+			coeff[k].a = Re / n_full;
 			coeff[k].b = 0.0;
 		} else {
 			coeff[k].a =  2.0 * Re / n_full;
@@ -36,8 +81,8 @@ void FFTW::ComputeCoeffs(Verbosity v, int Q) {
 }
 
 void FFTW::Dump(int Q) const {
-	std::string s; 
-	Q = std::min(Q, (int)coeff.size()); 
+	std::string s;
+	Q = std::min(Q, (int)coeff.size());
 	
 	auto& os = std::cout;
 	os << "[FFTW::Dump(int Q=" << Q << "). N =" << n_full << std::endl << std::setprecision(6);
@@ -93,6 +138,10 @@ double FFTW::Evaluate(double x, double xmin, double xmax, int Q) {
 	return sum;
 }
 
+double FFTW::DC() const noexcept {
+	return coeff[0].a;
+}
+
 template<fit_info sliceType>
 std::tuple <
 	FFTW,
@@ -103,10 +152,11 @@ std::tuple <
 	double x_lo,
 	double x_hi,
 	double side_ratio,
-	int Q, // max harmonic 
+	int Q, // max harmonic
 	Verbosity v
 ) {
-	constexpr uint32_t NITER_GAUSS = 2;
+	constexpr uint32_t NITER_GAUSS = 3;
+
 	std::unique_ptr<TH1D> pfx;
 	TAxis* xax = h2->GetXaxis();
 	x_lo = std::max( xax->GetXmin(), x_lo );
@@ -127,13 +177,13 @@ std::tuple <
 		double xlast = xax->GetBinUpEdge(ibin_last);
 		int nbins = ibin_last - ibin_first + 1;
 		
-		if(v > 1) { 
+		if(v > 1) {
 			fprintf(stderr, "[DoFFT] %s: from \'%s\'; taking bin indices: [%d,%d], "
-				"with lo = %.1f, hi = %.1f, N=%d\n", 
+				"with lo = %.1f, hi = %.1f, N=%d\n",
 				module_name_, h2->GetTitle(), ibin_first, ibin_last, xfirst, xlast, nbins);
 		}
 
-		pfx = std::make_unique<TH1D>("pfx__", "pfx__", 
+		pfx = std::make_unique<TH1D>("pfx__", "pfx__",
 			nbins, xfirst, xlast);
 		pfx->SetDirectory(nullptr);
 		for(int ix = ibin_first, i=1; ix <= ibin_last; ++ix, ++i) {
@@ -149,7 +199,7 @@ std::tuple <
 	}
 	const int N = pfx->GetNbinsX();
 	
-	TGraphErrors* gerr = new TGraphErrors( pfx.get() ); 
+	TGraphErrors* gerr = new TGraphErrors( pfx.get() );
 	gerr->SetMarkerStyle(20);
 	gerr->SetMarkerSize(1.2);
 		
@@ -161,7 +211,7 @@ std::tuple <
 	for(int i=1; i <= N; ++i)
 		in[i-1] = pfx->GetBinContent(i);
 
-	FFTW out{N}; 
+	FFTW out{N};
 
 	fftw_plan plan = fftw_plan_dft_r2c_1d(N, in, out.data, FFTW_ESTIMATE);
 	if(!plan) {
@@ -183,7 +233,7 @@ std::tuple <
 	}
 	if constexpr(sliceType == fit_info::PROFILE_MAX) {
 		g->SetLineColor(pCol_);
-	} else { 
+	} else {
 		g->SetLineColor(gCol_);
 	}
 
@@ -194,7 +244,7 @@ std::tuple <
 	// `.Evaluate(...)` call
 }
 
-/* Directly instantiate the templates. 
+/* Directly instantiate the templates.
  * I don't really know if Cling can digest the raw fftw calls.
  * Rather blob everything up here and tuck it in, so that cling doesn't whine. */
 template std::tuple <
