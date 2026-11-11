@@ -139,7 +139,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option<DisplayDefault::No>(app, "-d,--distance", distance_cut,
 		"Distance from vertex cut (all tracks must be below this threshold). Default no cut. "
 		"NOTE: not assigning this field will default to simple angles between all FOOT tracks.")
-		->check(CLI::Range(0.0, 2.0));
+		->check(CLI::Range(0.0, 10.0));
 	add_logged_flag(app, "--sci-q,!--sci-qdc", sci_select_q,
 		"Toggle between SCI Q (fully calibrated) or cal level's QDC measurements for scintillators particle Z estimate.");
 	add_logged_option(app, "--sci21", sci21_cut, "SCI21 Q/QDC cut (also implying multiplicity-relatedty 1).")

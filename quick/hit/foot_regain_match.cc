@@ -73,8 +73,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-q,--charge", Q_target,
 		"Select which target charge to gate upon.")
 		->check(CLI::Range(1,6));
-	add_logged_option(app, "-w,--qwidth", Q_width,
-		"Select width of the target charge to gate upon.")
+	add_logged_option(app, "-w,--qwidth", Q_width, "Select width of the target charge to gate upon.")
 		->delimiter(',');
 	add_logged_flag(app, "-a,--all", require_all,
 		mnd::msg("Require all %u layers to participate in the selected tracks.", N_PAIRS));
@@ -84,11 +83,11 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-d,--delta", delta_cut,
 		"Select the delta cut which will be applied to gate on very central hits.")
 		->check(CLI::Range(0.01, 0.2));
-	add_logged_option(app, "--foot-binning",foot_binning, "FOOT ADC binning")
+	add_logged_option(app, "--foot-binning",foot_binning, "FOOT ADC binning.")
 		->delimiter(',');
-	add_logged_option(app, "--delta-binning",delta_binning, "δ- value binning")
+	add_logged_option(app, "--delta-binning",delta_binning, "δ- value binning.")
 		->delimiter(',');
-	add_logged_option(app, "--foot-q-binning",foot_q_binning, "FOOT ADC binning")
+	add_logged_option(app, "--foot-q-binning",foot_q_binning, "FOOT track charge (Q) binning.")
 		->delimiter(',');
 	add_logged_option(app, "-b,--bins",bins_per_asic, "Binning Per ASIC")
 		->check([](const std::string& match) -> std::string {

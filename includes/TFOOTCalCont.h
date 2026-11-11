@@ -212,6 +212,10 @@ struct FOOTDeltaParam {
 	/* Small helper function to plot what we're actually matching upon. */
 	[[ nodiscard ]] TGraph* GetGraph(int Npts = 60, double x_lo = -0.5, double x_hi = 0.5) const;
 
+	/* Small helper function to plot what we're actually matching upon.
+	 * First argument is the "central ADC" gain-matched value. */
+	[[ nodiscard ]] TGraph* GetGraphBasic(double E0 = 1.0, int Npts = 60) const;
+
 	FOOTDeltaParam() = default;
 	virtual ~FOOTDeltaParam() = default;
 	ClassDef(FOOTDeltaParam, 1);

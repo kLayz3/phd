@@ -37,8 +37,8 @@ public:
 		kINITIAL_BATCH,
 		kMAIN
 	} process_type = kINITIAL_BATCH;
-	enum class CableSwapped { 
-		NO = 0, 
+	enum class CableSwapped {
+		NO = 0,
 		YES = 1
 	} is_swapped = CableSwapped::NO;
 	
@@ -52,7 +52,7 @@ public:
 	uint32_t nsampled = 0;
 
 	TFOOTMapProc() = default;
-	TFOOTMapProc(TFOOTMapCont& out, const TFRSGo4Cont& in, 
+	TFOOTMapProc(TFOOTMapCont& out, const TFRSGo4Cont& in,
 		NBatchPedestal n_batch = { N_BATCH_PEDESTAL },
 		CableSwapped is_cabling_swapped = CableSwapped::NO, double dt_veto_ = NAN);
 
@@ -80,7 +80,7 @@ public:
 				"LoadBadStripsFile args must be std::ifstream or a path-like "
 				"(const char*, std::string, std::filesystem::path, std::string_view)");
 
-		std::ifstream f{}; 
+		std::ifstream f{};
 		try {
 			f = mnd::fs::get_maybe_ifstream(std::forward<T>(arg)).value();
 		} catch(const std::exception& e) {
@@ -95,7 +95,7 @@ public:
 			throw;
 		}
 		(LoadBadStripsFile(other), ...);
-	} 
+	}
 
 	/**
 	 * Call this at the end of the processing, to also write to the `bad_strips`

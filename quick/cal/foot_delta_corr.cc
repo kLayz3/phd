@@ -18,7 +18,6 @@ using namespace indicators;
 using namespace mnd::col::literals;
 
 using mnd::Option;
-using DoFit = Option<std::vector<i32>>;
 
 constexpr f64 DELTA_EDGE_DEFAULT = 0.4999;
 constexpr i32 Z0 = (i32)mnd::assume::primary.Z;
@@ -51,7 +50,6 @@ int main(int argc, char* argv[]) {
 	
 	std::vector<canvas::Extension> save{};
 	bool plot_gain = false;
-	DoFit do_fit {};
 
 	u32 nthreads = 1;
 
@@ -69,10 +67,6 @@ int main(int argc, char* argv[]) {
 		->delimiter(',');
 	add_logged_option(app, "-d,--delta-binning", delta_binning, "FOOT ADC binning")
 		->delimiter(',');
-	add_logged_option(app, "-l,--fit", do_fit, "Select which ASICs to fit.")
-		->delimiter(',')
-		->type_name("INT[,INT...]")
-		->check(CLI::RangeOrEmpty(0,10));
 	add_logged_option(app, "--sratio", sratio, "Width ratio of raw histogram, how much to fit around the peak.")
 		->check(CLI::PositiveNumber);
 	add_logged_option(app, "--niter", niter, "Gaussian TH1D fit, number of iterations for the peak finder.")
@@ -198,6 +192,8 @@ int main(int argc, char* argv[]) {
 
         for(auto entryId : *ntuple) {
 			ntuple->LoadEntry(entryId);
+            if(mnd::PrintProgress(bar, entryId, nentries, 1000))
+				progress.print_progress();
 
 			const auto& sci21 = frs->sci[0];
             const auto& sci22 = frs->sci[1];
@@ -227,9 +223,6 @@ int main(int argc, char* argv[]) {
 				double x = cl.fCX;
 				
 				e *= gain.CorrectionFactor(x, e);
-
-				/* Explicitly skip here so we don't deal with over/underflow bins */
-				if(!mnd::IsInside(e, foot_binning)) continue;
 
 				sum_energy_vs_delta -> Fill(delta, e);
 				sum_energy_vs_x -> Fill(x, e);
@@ -280,17 +273,9 @@ int main(int argc, char* argv[]) {
 			const auto& sci22 = frs->sci[1];
 			const auto& sci31 = frs->sci[2];
 			
-			if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
-			if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
-			if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
-
 			if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
 			if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
 			if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
-
-			if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
-			if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
-			if(sci31.hits.size() == 1) h1_sci31_cut->Fill(sci31.E);
 
 			for(const auto& cl : foot->fCl) {
 				if(cl.fCM == 1) continue;
@@ -349,13 +334,6 @@ int main(int argc, char* argv[]) {
 	cs->cd(4); h1_sci21_cut->Draw();
 	cs->cd(5); h1_sci22_cut->Draw();
 	cs->cd(6); h1_sci31_cut->Draw();
-
-	TCanvas* cs2 = new TCanvas("SCI2D", "SCI-Corr", 2200, 1400);
-	cs2->Divide(2,2);
-	// cs2->cd(1); h2_sci2v2->Draw("COLZ");
-	// cs2->cd(2); h2_sci3v2->Draw("COLZ");
-	// cs2->cd(3); h2_sci2v2_cut->Draw("COLZ");
-	// cs2->cd(4); h2_sci3v2_cut->Draw("COLZ");
 
 	if(plot_gain) {
 		TCanvas* gn = new TCanvas("gain", "Gain factor", 2000, 1300);
@@ -418,9 +396,20 @@ FOOTDeltaParam* GetDeltaParams(const TH2D& e_vs_delta, u32 niter) {
 	h1_e_m->SetDirectory(nullptr);
 
 	double side_ratio = 1;
-	A0 = GaussFitMax( h1_e_0.get(), side_ratio, niter, Verbosity::CHATTY ).first.at(1);
-	Ap = GaussFitMax( h1_e_p.get(), side_ratio, niter, Verbosity::CHATTY ).first.at(1);
-	Am = GaussFitMax( h1_e_m.get(), side_ratio, niter, Verbosity::CHATTY ).first.at(1);
+	const auto fit0 = GaussFitMax( h1_e_0.get(), side_ratio, niter, Verbosity::CHATTY );
+	const auto fitp = GaussFitMax( h1_e_p.get(), side_ratio, niter, Verbosity::CHATTY );
+	const auto fitm = GaussFitMax( h1_e_m.get(), side_ratio, niter, Verbosity::CHATTY );
+
+	if(!VerifyGaussFitMax(fit0))
+		ERROR("Central fit slice has non-convergent Gauss fit.");
+	if(!VerifyGaussFitMax(fitp))
+		ERROR("Positive-side fit slice has non-convergent Gauss fit.");
+	if(!VerifyGaussFitMax(fitm))
+		ERROR("Negative-side fit slice has non-convergent Gauss fit.");
+
+	A0 = fit0.first.at(1);
+	Ap = fitp.first.at(1);
+	Am = fitm.first.at(1);
 
 	double f = (Ap + Am) / (2 * A0);
 	result->f = f;

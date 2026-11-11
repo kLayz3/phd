@@ -132,7 +132,7 @@ template <
 	/* We don't know a priori if `T` directly derefs to `const Line3D&` or `Line3D`.
 	 * In our case, simply taking &*lines[i] and saving that pointer might dangle on the spot. */
 	detail::Line3DCache<T,N> buffer{lines};
-	std::array<Line3D const*, MAX_VERTEXING_MULTP> tmp;
+	std::array<Line3D const*, N> tmp;
 	
 	mnd::static_for<N,1>( [&](auto _K) { // N, N-1, ... 2
 		constexpr std::size_t K = decltype(_K)::value;
@@ -172,7 +172,7 @@ template <
 					reject = true;
 					break;
 				}
-				/* Score of a valid candidate combination is simply Σd(t(i), v)^2 */
+				/* Score of a valid candidate combination is simply Σd(t(i), v)² */
 				score += d*d;
 			}
 			
@@ -218,6 +218,7 @@ VertexingResult<T> FindVertexingTracks(::mnd::span<const T> lines, double const 
 		case 5: return detail::try_solve<T,5>(lines, D);
 		case 6: return detail::try_solve<T,6>(lines, D);
 		case 7: return detail::try_solve<T,7>(lines, D);
+		case 8: return detail::try_solve<T,8>(lines, D);
 		default: return {};
 	}
 }

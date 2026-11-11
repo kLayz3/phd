@@ -253,8 +253,7 @@ Point3D FindVertex(::mnd::span<const Line3D>  ) noexcept;
 Point3D FindVertex(::mnd::span<const Line3D*> ) noexcept;
 Point3D FindVertex(const Line3D&, const Line3D& ) noexcept;
 
-constexpr inline double VERTEXING_MIN_DISTANCE = 1.0;
-constexpr inline size_t MAX_VERTEXING_MULTP    = 7;
+inline constexpr double VERTEXING_MIN_DISTANCE = 0.5;
 
 template<typename T = Line3D>
 struct VertexingResult {

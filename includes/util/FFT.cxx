@@ -158,6 +158,7 @@ std::tuple <
 	constexpr uint32_t NITER_GAUSS = 3;
 
 	std::unique_ptr<TH1D> pfx;
+	std::vector<int> interpolated_bins;
 	TAxis* xax = h2->GetXaxis();
 	x_lo = std::max( xax->GetXmin(), x_lo );
 	x_hi = std::min( xax->GetXmax(), x_hi );
@@ -178,7 +179,7 @@ std::tuple <
 		int nbins = ibin_last - ibin_first + 1;
 		
 		if(v > 1) {
-			fprintf(stderr, "[DoFFT] %s: from \'%s\'; taking bin indices: [%d,%d], "
+			fprintf(stderr, "[DoFFT] %s: from '%s'; taking bin indices: [%d,%d], "
 				"with lo = %.1f, hi = %.1f, N=%d\n",
 				module_name_, h2->GetTitle(), ibin_first, ibin_last, xfirst, xlast, nbins);
 		}
@@ -196,13 +197,48 @@ std::tuple <
 				fprintf(stderr, "[%d]: %.2f +- %.2f\n", i, result[1], err[1]);
 			}
 		}
+
+		// A single NAN'ed bin makes the whole FFT produce NAN values. Sanitise it here..
+		std::vector<int> valid_bins; valid_bins.reserve(nbins);
+		for(int i = 1; i <= nbins; ++i) {
+			if(std::isfinite(pfx->GetBinContent(i)))
+				valid_bins.push_back(i);
+			else
+				interpolated_bins.push_back(i);
+		}
+		if(!interpolated_bins.empty()) {
+			if(valid_bins.size() < 2)
+				throw std::runtime_error("DoFFTW(): fewer than two valid Gaussian slice fits");
+
+			// Interpolate each gap between original valid samples, wrapping at the period boundary.
+			for(size_t j = 0; j < valid_bins.size(); ++j) {
+				const int left = valid_bins[j];
+				const int right = (j + 1 < valid_bins.size())
+					? valid_bins[j + 1] : valid_bins.front() + nbins;
+				if(right == left + 1) continue;
+				const double yl = pfx->GetBinContent(left);
+				const double yr = pfx->GetBinContent((right - 1) % nbins + 1);
+				std::fprintf(stderr,
+					"DoFFTW(): interpolating %d failed slice fit(s) between bins %d and %d (periodic)\n",
+					right - left - 1, left, (right - 1) % nbins + 1);
+				for(int k = left + 1; k < right; ++k) {
+					const int bin = (k - 1) % nbins + 1;
+					const double t = double(k - left) / (right - left);
+					pfx->SetBinContent(bin, (1 - t) * yl + t * yr);
+					pfx->SetBinError(bin, 0);
+				}
+			}
+		}
 	}
 	const int N = pfx->GetNbinsX();
 	
 	TGraphErrors* gerr = new TGraphErrors( pfx.get() );
+	// Replacements are FFT input, not measured Gaussian means.
+	for(auto it = interpolated_bins.rbegin(); it != interpolated_bins.rend(); ++it)
+		gerr->RemovePoint(*it - 1);
 	gerr->SetMarkerStyle(20);
 	gerr->SetMarkerSize(1.2);
-		
+	
 	double* in = (double*) fftw_malloc(sizeof(double) * N);
 	if(!in) {
 		throw std::bad_alloc{};

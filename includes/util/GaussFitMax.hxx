@@ -17,13 +17,15 @@
 
 constexpr double GAUSS_FIT_SIDE_RATIO_DEFAULT = 1.5;
 
+using GaussFitMaxResults = std::pair<std::array<double, 3>, std::array<double, 3>>;
+
 /* Fit a Gaussian around the dominant peak in the histogram's selected axis range.
  * The initial width uses the selected peak's local FWHM, with histogram stddev as fallback.
  * niter is a maximum: each iteration uses the previous fitted mean and sigma for its range.
  * Returns { {amplitude, mean, sigma}, {their standard errors} }, or all NaNs on failure.
  * With likelihood=true, use Poisson likelihood for unweighted, nonnegative count histograms.
  * Thread-unsafe ROOT fitting API. Kinda slow function, but very hardened... */
-inline std::pair<std::array<double, 3>, std::array<double, 3>> GaussFitMax (
+inline GaussFitMaxResults GaussFitMax (
     TH1D* h,
     double side_ratio = GAUSS_FIT_SIDE_RATIO_DEFAULT,
     uint32_t niter = 2,
@@ -33,7 +35,7 @@ inline std::pair<std::array<double, 3>, std::array<double, 3>> GaussFitMax (
 	constexpr const char* color_red = "\e[1;91m";
 	constexpr const char* color_grn = "\e[1;92m";
 	constexpr const char* color_cyn = "\e[1;96m";
-	constexpr const char* color_off = "\e[0;32m";
+	constexpr const char* color_off = "\e[0m";
 
     constexpr double invalid = std::numeric_limits<double>::quiet_NaN();
 
@@ -132,8 +134,7 @@ inline std::pair<std::array<double, 3>, std::array<double, 3>> GaussFitMax (
                          iter + 1, niter, h->GetName(), fit_min, fit_max, a, m, s);
 
         // [5] Explicitly reuse the seed and constrain the fit to a positive-width peak
-        // centered inside this window. The amplitude cap is a generous runaway guard.
-        // Do not register the TF1 globally or attach intermediate fits to the histogram.
+        // centered inside this window. The amplitude cap is a kinda runaway guard.
         // Q=quiet, N=no storage/drawing, S=return fit result, R=use function range,
         // B=keep our initialization/limits for predefined gaus; L=Poisson likelihood.
         TF1 f("gauss_fit_max", "gaus", fit_min, fit_max, TF1::EAddToList::kNo);
@@ -172,6 +173,17 @@ inline std::pair<std::array<double, 3>, std::array<double, 3>> GaussFitMax (
     }
     // Full covariant matrix I don't really care about. Trust the gauss-chan 🥺 👉👈
     return result;
+}
+
+inline bool VerifyGaussFitMax(const GaussFitMaxResults& fit) noexcept {
+	return std::isfinite(fit.first[0]) &&
+		std::isfinite(fit.first[1]) &&
+		std::isfinite(fit.first[2]) &&
+		std::isfinite(fit.second[0]) &&
+		std::isfinite(fit.second[1]) &&
+		std::isfinite(fit.second[2]) &&
+		fit.first[0] > 0.0 &&
+		fit.first[2] > 0.0;
 }
 
 enum class fit_info { PROFILE_MAX, GAUSS_MAX };

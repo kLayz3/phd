@@ -438,12 +438,28 @@ double FOOTDeltaParam::CorrectionFactor(double delta) const noexcept {
 	return corr1 * (1 + corr2);
 }
 
-/* Small helper function to plot what we're actually matching upon. */
 TGraph* FOOTDeltaParam::GetGraph(int Npts, double x_lo, double x_hi) const {
 	TGraph* g = new TGraph(Npts);
 	for(int i=0; i<Npts; ++i) {
 		double x0 = x_lo + (i+0.5) * (x_hi - x_lo) / Npts;
 		double y0 = this->CorrectionFactor(x0);
+		g->SetPoint(i, x0, y0);
+	}
+	g->SetLineColor(kRed);
+	g->SetLineWidth(3);
+	return g;
+}
+TGraph* FOOTDeltaParam::GetGraphBasic(double E0, int Npts) const {
+	if(!std::isfinite(E0) || E0 < 0)
+		ERROR("Do not troll - give proper positive E0.");
+
+	constexpr double x_lo = -0.4999999;
+	constexpr double x_hi =  0.4999999;
+
+	TGraph* g = new TGraph(Npts);
+	for(int i=0; i<Npts; ++i) {
+		double x0 = x_lo + (i+0.5) * (x_hi - x_lo) / Npts;
+		double y0 = E0 * this->CorrectionBasic(x0);
 		g->SetPoint(i, x0, y0);
 	}
 	g->SetLineColor(kRed);

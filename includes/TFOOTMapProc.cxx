@@ -3,10 +3,12 @@
 #include "TFRSGo4Cont.hxx"
 
 #include "util/TextUtils.h"
+#include "util/GaussFitMax.hxx"
 
 #include "TF1.h"
 #include "TGraph.h"
 #include "TParameter.h"
+#include "util/Verbosity.hxx"
 
 #include <algorithm>
 #include <cassert>
@@ -74,12 +76,12 @@ const TFOOTMapProc::FOOTView TFOOTMapProc::GetPtrs(const TFRSSortEvent* e, int N
 	}
 }
 
-TFOOTMapProc::TFOOTMapProc(TFOOTMapCont& out, const TFRSGo4Cont& in, 
-	NBatchPedestal n_batch, CableSwapped is_cabling_swapped, double dt_veto_) : Base(out, in), 
+TFOOTMapProc::TFOOTMapProc(TFOOTMapCont& out, const TFRSGo4Cont& in,
+	NBatchPedestal n_batch, CableSwapped is_cabling_swapped, double dt_veto_) : Base(out, in),
 	is_swapped(is_cabling_swapped),
 	n_batch_pedestal(n_batch),
 	dt_veto(1000 * dt_veto_),
-	N(out.FOOT_N) 
+	N(out.FOOT_N)
 	{
 		/* Write out the `dt_veto` into output TOnce object. */
 		out.dt_veto->SetVal(dt_veto_);
@@ -87,7 +89,7 @@ TFOOTMapProc::TFOOTMapProc(TFOOTMapCont& out, const TFRSGo4Cont& in,
 
 void TFOOTMapProc::ProcessEntry() noexcept {
 	switch(process_type) {
-		case kINITIAL_BATCH: 
+		case kINITIAL_BATCH:
 			ProcessInitialPedestal();
 			break;
 		case kMAIN:
@@ -177,7 +179,7 @@ void TFOOTMapProc::ProcessInitialPedestal() noexcept {
 	const TFRSSortEvent* sortev = std::get<0>( this->in ).raw();
 	
 	auto [_0, Tlo, _1, _2, footN, data] = GetPtrs(sortev, N);
-	if(footN == 0) return; 
+	if(footN == 0) return;
 
 	init_timing.assign(Tlo);
 	
@@ -186,7 +188,7 @@ void TFOOTMapProc::ProcessInitialPedestal() noexcept {
 	if(!std::isnan(dt_veto) and init_timing.initialized_ and init_timing.increment < dt_veto)
 		return;
 
-	int iraw;	
+	int iraw;
 	for(int i=0; i < N_STRIPS; ++i) {
 		iraw = (is_swapped == CableSwapped::YES) ? ((i + N_STRIPS/2) % N_STRIPS) : i;
 		out.h2_raw_tmp->Fill(i, data[iraw]);
@@ -224,11 +226,11 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 #define N_TRIM_FINE_PED_LO 9
 #define N_TRIM_FINE_PED_HI 8
 
-	double ped_off_med, ped_off_avg, adc_final; 
+	double ped_off_med, ped_off_avg, adc_final;
 	
 	for(int asic=0; asic < N_ASIC; ++asic) /* 0..=9 */ {
 		const int i0 = asic * N_STRIPS_PER_ASIC;
-		int i, iraw; 
+		int i, iraw;
 		
 		for(int strip=0; strip < N_STRIPS_PER_ASIC; ++strip) /* 0..=63 */ {
 			i = i0 + strip; // <--- 'true strip' : 0..=640
@@ -250,7 +252,7 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 		ped_off_med = mnd::median( ped_offset );
 
 		ped_off_avg = std::accumulate (
-			ped_offset.cbegin() + N_TRIM_FINE_PED_LO, 
+			ped_offset.cbegin() + N_TRIM_FINE_PED_LO,
 			ped_offset.cend()   - N_TRIM_FINE_PED_HI, (double)0.0
 		);
 		ped_off_avg /= (N_STRIPS_PER_ASIC - N_TRIM_FINE_PED_LO - N_TRIM_FINE_PED_HI);
@@ -268,13 +270,13 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 			
 			if(strip > 0) { /* The initial first strip in ASIC is uncoupled, just let it be. */
 				adc_final -=
-#ifdef CALC_OFFSET_FROM_MEDIAN
+			#ifdef CALC_OFFSET_FROM_MEDIAN
 				ped_off_med
-#else
+			#else
 				ped_off_avg
-#endif
-				; 
-			} 
+			#endif
+				;
+			}
 			else { /* Just for the initial strip that's uncoupled, wash away binning all the values into a single bin. */
 				adc_final += rand() / (double)RAND_MAX ;
 			}
@@ -282,12 +284,12 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 			out.h2_corr->Fill(i, adc_final);
 			out.inner().FOOTE[i] = adc_final;
 		}
-		out.inner().common_offset[asic] = 
-#ifdef CALC_OFFSET_FROM_MEDIAN
+		out.inner().common_offset[asic] =
+		#ifdef CALC_OFFSET_FROM_MEDIAN
 			ped_off_med
-#else
+		#else
 			ped_off_avg
-#endif
+		#endif
 		;
 	}
 
@@ -312,14 +314,14 @@ int TFOOTMapProc::ParseStaticBadStrips() {
 	if(auto it = _bad_strips.find(key); it != _bad_strips.end())
 		parse_json_as_int_vec(parsed, *it);
 	
-	std::vector<int>& v = *output.bad_strips; 
+	std::vector<int>& v = *output.bad_strips;
 	v.insert(v.end(),
 		parsed.begin(),
 		parsed.end()
 	);
 
 	/* Remove duplicates and sort it.
-	 * Faster than making a hashmap via ctor, 
+	 * Faster than making a hashmap via ctor,
 	 * check: https://stackoverflow.com/questions/1041620/whats-the-most-efficient-way-to-erase-duplicates-and-sort-a-vector
 	 * */
 	std::unordered_set<int> s;
@@ -338,7 +340,7 @@ int TFOOTMapProc::ParseStaticBadStrips() {
 
 void TFOOTMapProc::CalcFinalPedestal() {
 	if(out.h2_corr->GetEntries() == 0) {
-		WARN("Ran over the data, but found 0 events with calibrated data? Setting all pedestals ridiculously high." 
+		WARN("Ran over the data, but found 0 events with calibrated data? Setting all pedestals ridiculously high."
 			EMPH(FOOT: %d\n), N);
 		for(int i=0; i < N_STRIPS; ++i) out.ped_s->at(i) = 10'000;
 		return;
@@ -355,30 +357,20 @@ void TFOOTMapProc::CalcFinalPedestal() {
 			continue;
 		}
 		
-		int maxBin = slice->GetMaximumBin();
-		double fitMin = slice->GetBinCenter(maxBin - 10);
-		double fitMax = slice->GetBinCenter(maxBin + 10);
+		const int maxBin = slice->GetMaximumBin();
 
-		int fit_status = slice->Fit("gaus", "Q", "", fitMin, fitMax);
-
-		TF1* fitF = slice->GetFunction("gaus"); // Quiet nullptr if no fit performed for empty data.
-		bool fit_ok = fit_status == 0 && fitF != nullptr;
+		const auto fit_result = GaussFitMax(slice.get(),
+			  /*side_ratio=*/2.0, /*niter=*/5, Verbosity::SILENT, /*likelihood=*/1);
 
 		/* Recheck the fit-sanity, just as for the global pedestal. */
-		if(fit_ok) {
-			const double mean  = fitF->GetParameter(1);
-			const double sigma = fitF->GetParameter(2);
-
-			fit_ok = std::isfinite(mean) && std::isfinite(sigma)
-				&& sigma > 0 && mean >= fitMin && mean <= fitMax;
-		}
+		const bool fit_ok = VerifyGaussFitMax(fit_result);
 
 		if(!fit_ok) {
 			WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of calibrated data? Skipping. "
 				"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
 			out.ped_s->at(i) = BAD_STRIP_CUTOFF_HI + 10;
 		} else {
-			out.ped_s->at(i) = fitF->GetParameter(2);
+			out.ped_s->at(i) = fit_result.first[2];
 		}
 	
 		if(out.ped_s->at(i) > BAD_STRIP_CUTOFF_HI || out.ped_s->at(i) < BAD_STRIP_CUTOFF_LO) {
@@ -407,7 +399,7 @@ void TFOOTMapProc::parse_json_string(std::vector<int>& out, std::string s) {
 	/* Strings can be passed either as:
 	 * 1) raw numbers
 	 * 2) range x1..x2 (x2 excluded) or x1..=x2 (x2 included)
-	 * 3) sequence: an+b ('a', 'b' are the parameters, '+b' optional; 'n' fixed token). 
+	 * 3) sequence: an+b ('a', 'b' are the parameters, '+b' optional; 'n' fixed token).
 	 *    Meaning: strips: b, a+b, 2*a+b, etc. */
 	std::smatch m;
 	if(std::regex_match(s, m, re_num)) {
@@ -419,7 +411,7 @@ void TFOOTMapProc::parse_json_string(std::vector<int>& out, std::string s) {
 	} else if(std::regex_match(s, m, re_range)) {
 		int a = std::stoi(m[1].str());
 		int b = std::stoi(m[3].str());
-		if(a > b) ERROR("%d < %d found while parsing json: \'%s\'\n", a,b,s.c_str());
+		if(a > b) ERROR("%d < %d found while parsing json: '%s'\n", a,b,s.c_str());
 		for(int i=a; i<b; ++i) out.push_back(i);
 		if(m[2].matched) out.push_back(b);
 	} else if(std::regex_match(s, m, re_seq)) {
@@ -428,7 +420,7 @@ void TFOOTMapProc::parse_json_string(std::vector<int>& out, std::string s) {
 		for(int i=b; i < 640; i+=a)
 			out.push_back(i);
 	} else {
-		WARN("String \'%s\' doesn't match a: number, range or sequence regular expression.", s.c_str());
+		WARN("String '%s' doesn't match a: number, range or sequence regular expression.", s.c_str());
 	}
 }
 
@@ -446,7 +438,7 @@ void TFOOTMapProc::parse_json_as_int_vec(std::vector<int>& out, const json& j) {
 	}
 	else if(j.is_array()) {
 		out.reserve(j.size());
-		for(const auto& jsub : j) 
+		for(const auto& jsub : j)
 			parse_json_as_int_vec(out, jsub);
 	}
 	else ERROR("Passed a json object '%s' which isn't: string/array/number.\n", j.dump().c_str());
@@ -454,9 +446,9 @@ void TFOOTMapProc::parse_json_as_int_vec(std::vector<int>& out, const json& j) {
 
 void TFOOTMapProc::append_flat_json(json& dst, const json& src) {
 	if(!dst.empty() && !dst.is_object())
-		ERROR("Destination object \'%s\' cannot store sources appended to it. Non-empty and not-an-object!", dst.dump().c_str());
+		ERROR("Destination object '%s' cannot store sources appended to it. Non-empty and not-an-object!", dst.dump().c_str());
 	if(!src.is_object())
-		ERROR("Source json: \'%s\' must be an object.", src.dump().c_str());
+		ERROR("Source json: '%s' must be an object.", src.dump().c_str());
 
 	for(const auto& [k, v] : src.items()) {
 		auto it = dst.find(k);
