@@ -18,8 +18,9 @@
 #include "util/Combinatorics.hxx"
 
 static constexpr u32 N_PAIRS = TFOOTHitCont::N_PAIRS;
+using namespace mnd::geom;
 
-extern thread_local mnd::geom::Line3D g_upstream_track; // extern'ed from `includes/TFRSHitProc.cxx`
+extern thread_local Line3D g_upstream_track; // extern'ed from `includes/TFRSHitProc.cxx`
 using mnd::fmt::operator<<; // to shut up the whiney-ass LSP :X
 
 /* These following values are assigned only once; at the TFOOTHitProc ctor.
@@ -448,47 +449,69 @@ constexpr auto X = FHitMatrix::X;
 constexpr auto Y = FHitMatrix::Y;
 using Entry = FHitMatrix::Entry;
 
+TFOOTHitProc::Prediction TFOOTHitProc::get_prediction(const FTrack& ft, u32 n) const noexcept {
+	// Prediction { (u,v), q } at the following layer
+	return geometry.layer[n].prediction(ft);
+}
+
 double TFOOTHitProc::kr(const FLayerInfo::PredictionP& predicted, const FHitMatrix::Entry& candidate) const noexcept {
 	const Eigen::Vector2d& measured = candidate.pos; // (u,v);
 
 	if(! predicted.array().isFinite().all() ) // power of expression templates! :)
 		return TrackCost::NIL_VALUE;
 	return Cr * ((predicted - measured).squaredNorm());
+
+	/* Even if (u,v) may not be perfectly orthogonal, they are still two independent measurements from two 
+	 * neighbouring detectors. As such this cost is reasonable, and does *not* necessarily indicate some radial difference
+	 * scaled by the Cr coefficient. */
 }
 
 /* kQ = Cq || Qij - Qn ||^2
  * ==== Cq( [ mean(Qij) - mean(Qtrack) ]^2 + variance_ij ) 
  * Can *never* return a nil value. */
 double TFOOTHitProc::kq(const FLayerInfo::PredictionQ& predicted, const FHitMatrix::Entry& candidate) const noexcept {
-
-	// Cost starts at the difference for the layers x,y measurements
+	/* Cost starts at the difference for the layers x,y measurements, to 'punish' entries that have vastly different
+	 * charge in the two detectors, but by chance average out to the correct prediction. */
 	double cost = candidate.q.var();
-	if(std::isfinite(predicted)) { // Track is non-null
-		double diff = predicted - candidate.q.mean();
-		cost += diff*diff;
+	
+	if(std::isfinite(predicted)) {// Track is non-null
+		const auto qd = predicted - candidate.q.mean();
+		cost += qd*qd;
 	}
+
 	cost *= Cq;
 	return cost;
 }
 
-double TFOOTHitProc::kt(FTrackOnline& ft, const FHitMatrix::Entry& candidate, u32 layer) const noexcept {
-	/* If event has no upstream track or
-	 * if currently 0 measurements are available in the online track, can't do anything. */
-	if( !upstream_hit_loc.eigen_view().allFinite() || ft.N() == 0)
-		return TrackCost::NIL_VALUE;
+Point2D TFOOTHitProc::extrapolate_to_target_with_update(
+	FTrackOnline& tau,
+	const FHitMatrix::Entry& candidate,
+	u32 layer
+) const noexcept {
+	FTrack ft_current = tau.get(geometry);
 
-	FTrack current_track = ft.get(geometry);
-	
-	ft.Add(candidate, layer);
-	const auto target_point = ft.get(geometry).l.Eval(TARGET_Z); // This next call cannot throw, so pop_back() always gets executed.
+	tau.Add(candidate, layer);
+	const Point2D target_point = tau.get(geometry).l.Eval(TARGET_Z); // This next call cannot throw, so pop_back() always gets executed.
 
 #ifdef MND_FOOTTRACK_DEBUG
 	if(v > 3) {
-		fprintf(stderr, "TFOOTHitProc::kt: Updated test track: ");
-		std::cerr << ft << " :: value at target: " << target_point << std::endl;
+		fprintf(stderr, "TFOOTHitProc::extrapolate_to_target_with_update(..) : Updated test track: ");
+		std::cerr << tau << " :: value at target: " << target_point << std::endl;
 	}
 #endif
-	ft.pop_back( std::move(current_track) );
+
+	tau.pop_back( std::move(ft_current) );
+	return target_point;
+}
+
+double TFOOTHitProc::kt(FTrackOnline& tau, const FHitMatrix::Entry& candidate, u32 layer) const noexcept {
+	/* If event has no upstream track or
+	 * if currently 0 measurements are available in the online track, can't do anything. */
+	if( !upstream_hit_loc.eigen_view().allFinite() || tau.N() == 0)
+		return TrackCost::NIL_VALUE;
+
+	Point2D target_point = extrapolate_to_target_with_update(tau, candidate, layer);
+	
 
 	if(!target_point.eigen_view().allFinite())
 		return TrackCost::NIL_VALUE;
@@ -550,10 +573,8 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 			FTrackOnline tau = this->GetPrelimTrackFromPath(path);
 			const FTrack& ftrack = tau.get(geometry);
 			
-			// Prediction (u,v) at the following layer
-			FLayerInfo::Prediction prediction = geometry.layer[n].prediction(ftrack);
-			const auto& prediction_q = prediction.first;
-			const auto& prediction_p = prediction.second;
+			// Prediction { (u,v),Q } at the following layer
+			const auto& [prediction_p, prediction_q] = get_prediction(ftrack, n);
 			u32 ncounted = 0;
 			
 			// FHitMatrix::Cached is column-major (Eigen::Matrix convention).
@@ -676,8 +697,8 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		auto vs      = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto zxs     = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto zys     = mnd::make_filled_array<double, N_PAIRS>(NAN);
-		auto qm      = mnd::make_filled_array<double, N_PAIRS>(NAN);
-		auto sqm     = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto qx      = mnd::make_filled_array<double, N_PAIRS>(NAN);
+		auto qy      = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto e0_x    = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto delta_x = mnd::make_filled_array<double, N_PAIRS>(NAN);
 		auto c0_x    = mnd::make_filled_array<u32,    N_PAIRS>(-1);
@@ -691,8 +712,8 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 				vs[layer] = tau.m[valid].y();
 				zxs[layer] = geometry.layer[layer].z.x();
 				zys[layer] = geometry.layer[layer].z.y();
-				qm[layer] = tau.q[valid].mean();
-				sqm[layer] = tau.q[valid].s();
+				qx[layer] = tau.q[valid].qx;
+				qy[layer] = tau.q[valid].qy;
 				
 				// Is asserted to return a value based on the `if` block, but CBA changing the API.
 				mnd::Maybe<FHitMatrix::RawHitPairRef> p = GetHitFromPath(layer, path);
@@ -714,8 +735,7 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 			t.l.xarray(), t.l.yarray(), t.q.mean(), score, N
 		#ifdef MND_FOOTTRACK_DEBUG
 				,
-				us, vs, zxs, zys,
-				qm, sqm,
+				us, vs, zxs, zys, qx, qy,
 				e0_x, delta_x, c0_x,
 				e0_y, delta_y, c0_y
 		#endif
@@ -789,7 +809,7 @@ void TFOOTHitProc::PostProcess() noexcept {
 	}
 	lines.push_back( g_upstream_track ); // copy-ctor
 
-	mnd::geom::Point3D vertex = FindVertex( mnd::as_span(lines) );
+	Point3D vertex = FindVertex( mnd::as_span(lines) );
 	out.inner().vertex = RNFOOTHit::Vertex{ vertex };
 
 	if(lines.size() >= 2) {	
@@ -807,22 +827,35 @@ void TFOOTHitProc::ReplayCostCalculation(const DAG::DAGPath& path) noexcept {
 		if(!i) continue; // possible that it is null?
 		
 		const mnd::hm::Data& e = hm[n]( i[0], i[1] );
+		const double dq_xy = e.q.qx - e.q.qy;
+
 		FTrackOnline tau = this->GetPrelimTrackFromPath(p);
 		const FTrack& ftrack = tau.get(geometry);
 	
-		// Prediction (u,v) at the following layer
-		FLayerInfo::Prediction prediction = geometry.layer[n].prediction(ftrack);
-		const auto& prediction_q = prediction.first;
-		const auto& prediction_p = prediction.second;
+		// Prediction { (u,v),Q } at this layer, layer n.
+		const auto& [prediction_p, prediction_q] = get_prediction(ftrack, n);
 
-		/* Calculate cost of the current path `p`, if I add the node `index` from i'th layer. */
-		const double kq = this->kq(prediction_q, e);
-		const double kr = this->kr(prediction_p, e);
-		const double kt = this->kt(tau, e, n);
-
-		if(std::isfinite(kq)) out.h1_diff_q[n]->Fill( kq / Cq );
-		if(std::isfinite(kr)) out.h1_diff_r[n]->Fill( kr / Cr );
-		if(std::isfinite(kt)) out.h1_diff_t[n]->Fill( kt / Ct );
+		/* Calculate cost calculations of the current path `p`, if I add the node `index` from i'th layer. */
+		const auto dq = e.q.mean() - prediction_q;
+		const auto dp = e.pos - prediction_p; // is already in FOOT coordinates.
+		const double du = dp.x();
+		const double dv = dp.y();
+		
+		const auto target_point = extrapolate_to_target_with_update(tau, e, n);
+		const mnd::geom::Vector2D dt = target_point - upstream_hit_loc;
+	
+		if( mnd::isfinite(dq, dq_xy) ) {
+			out.h1_diff_q[n]->Fill( dq );
+			out.h2_diff_q[n]->Fill( dq_xy, dq);
+		}
+		if( dp.allFinite() ) {
+			out.h1_diff_r[n]->Fill( std::sqrt(du*du + dv*dv) );
+			out.h2_diff_r[n]->Fill( du, dv );
+		}
+		if( dt.eigen_view().allFinite() ) {
+			out.h1_diff_t[n]->Fill( dt.eigen_view().norm() );
+			out.h2_diff_t[n]->Fill( dt.x, dt.y );
+		}
 
 		// Add the node to the current 'fake' online track.
 		p.node[n] = path.node[n];

@@ -31,6 +31,14 @@ struct Point2D {
 	Eigen::Map<Eigen::Vector2d> eigen_view() & noexcept { return Eigen::Map<Eigen::Vector2d>{&x}; }
 	Eigen::Map<const Eigen::Vector2d> eigen_view() const& noexcept { return Eigen::Map<const Eigen::Vector2d>{&x}; }
 
+	/* Keep syntax like standard mathematical R² vectors: b-a => vector from a to b. */
+	[[nodiscard]] friend Point2D operator-(const Point2D& end, const Point2D& start) {
+		return Point2D {
+			.x = end.x - start.x,
+			.y = end.y - start.y
+		};
+	}
+
 	double x, y;
 };
 
@@ -127,10 +135,10 @@ struct Line3D {
 
 	constexpr Line3D() = default;
 	constexpr Line3D (
-		double a0_, /* offset x:z */
-		double a1_, /* slope  x:z */
-		double b0_, /* offset y:z */
-		double b1_  /* slope  y:z */
+		double a0_, /* offset x:z , x0 */
+		double a1_, /* slope  x:z , ax */
+		double b0_, /* offset y:z , y0 */
+		double b1_  /* slope  y:z , ay */
 	) noexcept : p{a0_, b0_, 0}, v{a1_, b1_, 1} {}
 	
 	constexpr Line3D(const Normal& n) noexcept

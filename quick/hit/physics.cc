@@ -42,24 +42,23 @@ struct SciMetaQDC {
 	constexpr static double lo = 300; constexpr static double hi = 4000;
 };
 struct SciMetaQ {
-	constexpr static double lo = 0; constexpr static double hi = 7;
+	constexpr static double lo = 0; constexpr static double hi = mnd::assume::primary.Z + 1.0;
 };
 static constexpr double sci_nbins = 500;
 
 //#define MND_PHYSICS_PARANOIA
-#define MND_MULTITHREADING_TOGGLE
 
 using phy::AtomicNumber, phy::Nucleus, phy::RhoExpressionType;
 
 constexpr A2 elem_to_a2(AtomicNumber e) {
 	switch(e) {
-		case AtomicNumber::H:  return A2{0.6, 1.5};
-		case AtomicNumber::He: return A2{1.5, 2.5};
-		case AtomicNumber::Li: return A2{2.5, 3.5};
-		case AtomicNumber::Be: return A2{3.5, 4.5};
-		case AtomicNumber::B:  return A2{4.5, 5.4};
-		case AtomicNumber::C:  return A2{5.4, 6.5};
-		case AtomicNumber::N:  return A2{6.5, 7.5};
+		case AtomicNumber::H:  return A2{0.60, 1.70};
+		case AtomicNumber::He: return A2{1.80, 2.80};
+		case AtomicNumber::Li: return A2{2.80, 3.55};
+		case AtomicNumber::Be: return A2{3.55, 4.50};
+		case AtomicNumber::B:  return A2{4.50, 5.40};
+		case AtomicNumber::C:  return A2{5.40, 6.50};
+		case AtomicNumber::N:  return A2{6.50, 7.50};
 		default: throw std::invalid_argument("elem_to_a2: bad atomic number?");
 	}
 	return A2{};
@@ -114,7 +113,8 @@ int main(int argc, char* argv[]) {
 
 	A3 theta_binning = {200,0,200};
 	A3 rho_binning = {300,0,300};
-	A3 q_binning = {50,0,8};
+	A3 q_binning = {80, 0, 7.5};
+	A3 all_q_binning = {700, 0, 7.5};
 	
 	rho_pad_config_t rho_config{ 132, 0.045, false };
 	/* Few params really only related to the pyplot histogram. */
@@ -135,7 +135,8 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-q,--charge", charge_cvt,
 		"User-defined gates for ranged of charges which are descretized by the FOOT. "
 		"Default taken from a comptime lookup-table. "
-		"E.g.: -q He:1.4,2.6 .");
+		"E.g.: -q He:1.4,2.6 ."
+		"rg -F 'elem_to_a2(A' -A10");
 	add_logged_option<DisplayDefault::No>(app, "-d,--distance", distance_cut,
 		"Distance from vertex cut (all tracks must be below this threshold). Default no cut. "
 		"NOTE: not assigning this field will default to simple angles between all FOOT tracks.")
@@ -157,13 +158,14 @@ int main(int argc, char* argv[]) {
 		->delimiter(',');
 	add_logged_option(app, "-n,--nthreads", nthreads,
 		"Run the process multithreaded. One file per thread."
-#ifndef MND_MULTITHREADING_TOGGLE
-		BOLD " Parameter ignored. Compiled purely singlethreaded." KNRM
-#endif // !MND_MUL
 		)->check(CLI::PositiveNumber);
 	add_logged_option(app, "--rho-binning", rho_binning, "Binning of the ρ-value, in mrad.")
 		->delimiter(',');
 	add_logged_option(app, "--q-binning", q_binning, "Binning of the FOOT tracks' charge values.")
+		->delimiter(',');
+	add_logged_option(app, "--total-q-binning", all_q_binning,
+		"Binning of the wholesome FOOT tracks' charge values. "
+		"Done before any FOOT selection; events just need to pass SCI selection.")
 		->delimiter(',');
 	add_logged_option(app, "--theta-binning", theta_binning,
 		"Binning of the θ values, in mrad. This represents the angle between heavy fragment and all the lighter ones.")
@@ -504,7 +506,8 @@ int main(int argc, char* argv[]) {
 		10, -0.5, 9.5, 40, 0,8};
 	auto h2_score_vs_mult = TH2P{"Track score [a.u.]:Track multiplicity@Full FOOT system",
 		10, -0.5, 9.5, 300, 0, 50};
-	auto h1_track_q = TH1P{"Track charge [Q]@Full FOOT system", DEFAULT_FILL_COL_EX, q_binning[0], q_binning[1], q_binning[2] };
+	auto h1_foot_q  = TH1P{"FOOT Track Q [e]@Only SCI cuts, full data", 0xFF7C0A_c, all_q_binning};
+	auto h1_track_q = TH1P{"Track charge [Q]@Full FOOT system", DEFAULT_FILL_COL_EX, q_binning };
 	auto h2_track_distance = TH2P{"Track distances to vertex [mm]:Track Index [0,1,..N-1]@smaller x-axis means larger Q particle",
 		(vertex_dist_cut_given && sum_n_tracks_required>0)? sum_n_tracks_required: 10,
 		-0.5,
@@ -513,7 +516,6 @@ int main(int argc, char* argv[]) {
 	auto h1_track_distance = TH1P{"Track distances to common vertex [mm]", 0x99004c_c,
 		200, 0, vertex_dist_cut_given? (2*distance_cut): 5.0};
 
-	auto h1_track_angle = TH1P{"#theta(HI,LI) [mrad]@Between one heavy and all lighter tracks", kMagenta+1, 200, 0, 100};
 	auto h1_angle_ex = TH1P{"((h1_angle_ex)) #rho [mrad]@#rho value", DEFAULT_FILL_COL_EX,
 		rho_binning[0], rho_binning[1], rho_binning[2]
 	};
@@ -552,25 +554,15 @@ int main(int argc, char* argv[]) {
 
 	show_console_cursor(false);
 
-#ifdef MND_MULTITHREADING_TOGGLE
 	DynamicProgress<ProgressBar> progress;
 	mnd::parallel_process(fileName, nthreads, [=, &progress](size_t i, auto fname) mutable {
-#else
-	for(size_t i=0; i<fileName.size(); ++i) {
-		const auto& fname = fileName[i];
-#endif
 		auto model = RNTupleModel::Create();
 		auto foot = model->MakeField<RNFOOTHit>("FOOT");
 		auto frs = model->MakeField<RNFRSHit>("FRS");
 		auto ntuple = RNTupleReader::Open(std::move(model), "h104", fname);
 		const size_t nentries = ( (max_events < ntuple->GetNEntries()) ? max_events : ntuple->GetNEntries() );
 
-#ifdef MND_MULTITHREADING_TOGGLE
-		auto _bar_ptr = std::make_unique<ProgressBar>
-#else
-	auto bar = ProgressBar
-#endif
-		(
+		auto _bar_ptr = std::make_unique<ProgressBar>(
 			option::BarWidth{55},
 			option::Start{"["},
 			option::Fill{"="},
@@ -585,18 +577,12 @@ int main(int argc, char* argv[]) {
 			option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 		);
 
-#ifdef MND_MULTITHREADING_TOGGLE
 		auto idx = progress.push_back(std::move(_bar_ptr));
 		auto& bar = progress[idx];
-#endif
 	
 		for(size_t entryId{0}; entryId < nentries; ++entryId ) {
-#ifdef MND_MULTITHREADING_TOGGLE
 			if( mnd::PrintProgress(bar, entryId, nentries, 1000) )
 				progress.print_progress();
-#else
-			mnd::PrintProgress(bar, entryId, nentries, 1000);
-#endif
 
 			ntuple->LoadEntry(entryId);
 
@@ -624,6 +610,8 @@ int main(int argc, char* argv[]) {
 			if(sci31.hits.size() >= 1) h1_sci31_cut->Fill(sci31_q);
 			
 			bool valid_vertex_found = false;
+			for(const RNFOOTTrack& t : foot->track)
+				h1_foot_q->Fill(t.Q);
 
 			/* In this case, don't cut on any charges etc,.. just take the whole event and try to do
 			* general vertexing, angles, some kind of rho, etc. */
@@ -653,13 +641,12 @@ int main(int argc, char* argv[]) {
 					h1_track_distance->Fill(dist);
 				}
 				double sum2 = 0;
-				double theta;
 				const Line3D heavy_track = tracks.front();
 				for(size_t i=1; i < N; ++i) {
-					theta = phy::MRAD_CVT * tracks[i].AngleRelativeTo( heavy_track );
+					double theta = phy::MRAD_CVT * tracks[i].AngleRelativeTo( heavy_track );
 					sum2 += theta*theta;
-					h1_track_angle->Fill( theta );
 				}
+
 				const double invariant_theta = sqrt(sum2);
 				h1_angle_ex->Fill( invariant_theta );
 				h2_vertex_z->Fill( vertex.z, invariant_theta);
@@ -767,7 +754,6 @@ int main(int argc, char* argv[]) {
 				const mnd::geom::Line3D& heavy_track = tracks.front();
 				for(u32 i=1; i < n_tracks_selected; ++i) {
 					double theta = phy::MRAD_CVT * tracks[i].AngleRelativeTo( heavy_track );
-					h1_track_angle->Fill( theta );
 					h2_rho_vs_theta->Fill(theta, rho_val);
 				}
 				h1_track_mult->Fill(n_tracks_selected);
@@ -782,15 +768,9 @@ int main(int argc, char* argv[]) {
 			}
 		} // for(size_t entryId{0}; entryId < nentries; ++entryId )
 
-#ifdef MND_MULTITHREADING_TOGGLE
 		if(!bar.is_completed())
 			bar.mark_as_completed();
-#endif
-	}
-
-#ifdef MND_MULTITHREADING_TOGGLE
-); // parallel_process
-#endif
+	});
 
 	show_console_cursor(true);
 
@@ -865,7 +845,7 @@ int main(int argc, char* argv[]) {
 
 	TCanvas* ct2 = new TCanvas("Physics2", "Recognized tracks and more", 2150, 1400);
 	ct2->Divide(2,2);
-	ct2->cd(1); h1_track_angle.Draw();
+	ct2->cd(1); h1_foot_q.Draw();
 	ct2->cd(2); h2_track_distance.Draw("COLZ");
 	ct2->cd(3); h1_track_q.Draw();
 	ct2->cd(4); h1_track_distance.Draw();

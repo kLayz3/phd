@@ -57,8 +57,8 @@ RNFOOTTrack::RNFOOTTrack (
 		const std::array<double, N_PAIRS>& v_,
 		const std::array<double, N_PAIRS>& zx_,
 		const std::array<double, N_PAIRS>& zy_,
-		const std::array<double, N_PAIRS>& q_,
-		const std::array<double, N_PAIRS>& sq_,
+		const std::array<double, N_PAIRS>& qx_,
+		const std::array<double, N_PAIRS>& qy_,
 		const std::array<double, N_PAIRS>& e0_x_,
 		const std::array<double, N_PAIRS>& delta_x_,
 		const std::array<u32,    N_PAIRS>& c0_x_,
@@ -66,7 +66,7 @@ RNFOOTTrack::RNFOOTTrack (
 		const std::array<double, N_PAIRS>& delta_y_,
 		const std::array<u32,    N_PAIRS>& c0_y_
 #endif
-) : x0(xline[0]), y0(yline[0]), ax(xline[1]), ay(yline[1]),
+) : x0(xline[0]), ax(xline[1]), y0(yline[0]), ay(yline[1]),
 	Q(Q_), score(score_), n(n_)
 #ifdef MND_FOOTTRACK_DEBUG
 		,
@@ -74,8 +74,8 @@ RNFOOTTrack::RNFOOTTrack (
 		_v(v_),
 		_zx(zx_),
 		_zy(zy_),
-		_q(q_),
-		_sq(sq_),
+		_qx(qx_),
+		_qy(qy_),
 		_e0_x(e0_x_),
 		_delta_x(delta_x_),
 		_c0_x(c0_x_),
@@ -101,15 +101,6 @@ bool operator==(const RNFOOTTrack& l, const RNFOOTTrack& r) noexcept {
 	       l.ax == r.ax &&
 	       l.ay == r.ay;
 #endif
-}
-
-mnd::geom::Line3D RNFOOTTrack::operator*() const noexcept {
-	return {
-		x0,
-		ax,
-		y0,
-		ay
-	};
 }
 
 constexpr static u32 NP = RNFOOTHit::N_PAIRS;
@@ -203,14 +194,21 @@ void TFOOTHitCont::Setup() {
 
 	for(u32 i=0; i<N_PAIRS; ++i) {
 		foot_param[i] = RegisterObject<FOOTParams>(Form("%u_setup", i), {});
-#ifdef MND_FOOTTRACK_DEBUG
-		h1_diff_q[i] = RegisterObject<TH1I>(Form("diff_q_%u", i), Form("Difference in kQ [Q^2] of candidates after layer %u", i),
-			400, 0, 16);
-		h1_diff_r[i] = RegisterObject<TH1I>(Form("diff_r_%u", i), Form("Difference in kr / [mm^2] of candidates after layer %u", i),
-			1000, 0, 200);
-		h1_diff_t[i] = RegisterObject<TH1I>(Form("diff_t_%u", i), Form("Difference in kt [mm^2] of candidates after layer %u", i),
-			1000,-0, 200);
-#endif
+	#ifdef MND_FOOTTRACK_DEBUG
+		h1_diff_q[i] = RegisterObject<TH1I>(Form("h1_diff_q_%u", i),
+			Form("Innovation difference dq [e] after layer %u", i), 400,-2,2);
+		h1_diff_r[i] = RegisterObject<TH1I>(Form("h1_diff_r_%u", i),
+			Form("Innovation difference |dr| [mm] after layer %u", i), 1000,0,2);
+		h1_diff_t[i] = RegisterObject<TH1I>(Form("h1_diff_t_%u", i),
+			Form("Projected track's matching to upstream at target [mm] after layer %u", i), 500,0,100);
+
+		h2_diff_q[i] = RegisterObject<TH2I>(Form("h2_diff_q_%u", i),
+			Form("Innovation difference de [q] after layer %u vs. dQ in layer %u", i, i), 400,-2,2, 400,-2,2);
+		h2_diff_r[i] = RegisterObject<TH2I>(Form("h2_diff_r_%u", i),
+			Form("Innovation difference dy [mm] vs. dx [mm] after layer %u", i), 500,-2,2, 500,-2,2);
+		h2_diff_t[i] = RegisterObject<TH2I>(Form("h2_diff_t_%u", i),
+			Form("Innovation in projected track's matching dx vs. dy [mm] after layer %u", i), 500,-20, 20, 500,-20,20);
+	#endif
 	}
 }
 

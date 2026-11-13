@@ -133,7 +133,7 @@ int main(int argc, char* argv[]) {
 	if(test) return 0;
 
 	if(fileNames.size() == 0) {
-		WARN("To continue, must supply a valid file name!\n"); return 0;
+		WARN("To continue, must supply atleast one valid file name!\n"); return 0;
 	}
 
 #ifdef MND_FOOTTRACK_DEBUG

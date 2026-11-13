@@ -121,8 +121,9 @@ struct RNFOOTPair {
 static_assert(sizeof(RNFOOTPair) == 64, "Alignment obsession, friends.");
 
 struct RNFOOTTrack {
-	double x0, y0;
-	double ax, ay;
+	/* Lay them out in memory just like the Normal repr of Line3D expects. */
+	double x0, ax;
+	double y0, ay;
 	double Q;
 
 	double score;
@@ -134,7 +135,8 @@ struct RNFOOTTrack {
 
 	/* Comparison and deref operators required for Vertexing API in Geometry.h */
 	friend bool operator==(const RNFOOTTrack& , const RNFOOTTrack &) noexcept;
-	mnd::geom::Line3D operator*() const noexcept;
+	inline constexpr mnd::geom::Line3D operator*() const noexcept { return {x0,ax,y0,ay}; };
+	inline constexpr mnd::geom::Line3D::Normal Normal() const noexcept { return {x0,ax,y0,ay}; }
 
 #ifdef MND_FOOTTRACK_DEBUG
 	static constexpr u32 N_PAIRS = N_FOOT_DETECTORS / 2;
@@ -143,8 +145,8 @@ struct RNFOOTTrack {
 	std::array<double, N_PAIRS> _v;
 	std::array<double, N_PAIRS> _zx;
 	std::array<double, N_PAIRS> _zy;
-	std::array<double, N_PAIRS> _q;
-	std::array<double, N_PAIRS> _sq;
+	std::array<double, N_PAIRS> _qx;
+	std::array<double, N_PAIRS> _qy;
 
 	std::array<double, N_PAIRS> _e0_x; // accumulated cluster energy
 	std::array<double, N_PAIRS> _delta_x;
@@ -162,8 +164,8 @@ struct RNFOOTTrack {
 		const std::array<double, N_PAIRS>& , // v
 		const std::array<double, N_PAIRS>& , // zx
 		const std::array<double, N_PAIRS>& , // zy
-		const std::array<double, N_PAIRS>& , // q
-		const std::array<double, N_PAIRS>& , // sq
+		const std::array<double, N_PAIRS>& , // qx
+		const std::array<double, N_PAIRS>& , // qy
 		const std::array<double, N_PAIRS>& , // e0_x
 		const std::array<double, N_PAIRS>& , // delta_x
 		const std::array<u32,    N_PAIRS>& , // c0_x
@@ -257,9 +259,14 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	TH1I* diff_heavy_frag_vs_upstream;
 
 #ifdef MND_FOOTTRACK_DEBUG
-	TH1I *h1_diff_q[N_PAIRS];
-	TH1I *h1_diff_r[N_PAIRS];
-	TH1I *h1_diff_t[N_PAIRS];
+	/* Few histograms to allow for logging subsequent "innovations" in the Kalman procedure. */
+	TH1I *h1_diff_q[N_PAIRS]; // Innovation in the difference: Qpair - Qpredicted
+	TH1I *h1_diff_r[N_PAIRS]; // Innovation in the difference: |vec(r)_pair - vec(r)_predicted|
+	TH1I *h1_diff_t[N_PAIRS]; // Innovation in the projected track's matching to upstream at target (distance)
+	
+	TH2I *h2_diff_q[N_PAIRS]; // Innovation in the difference: Qpair - Qpredicted *versus* (Qpair(x) - Qpair(y))
+	TH2I *h2_diff_r[N_PAIRS]; // Innovation in the difference: vec(r)_pair - vec(r)_predicted
+	TH2I *h2_diff_t[N_PAIRS]; // Innovation in the projected track's matching to upstream at target (vector)
 #endif
 
 	TFOOTHitCont();

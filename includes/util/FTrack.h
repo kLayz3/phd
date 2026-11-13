@@ -220,11 +220,14 @@ struct FLayerInfo {
 	using Entry = mnd::hm::Data;
 	using EntryXYUnderlyingType = Entry::xy_underlying_type; // double | long double
 
-	using PredictionQ = mnd::track::Q::value_type;
 	using PredictionP = Entry::xy_type;
+	using PredictionQ = mnd::track::Q::value_type; // float|double|long double
 
 	/* What the (q,(u,v)) of the following layer should be. */
-	using Prediction = std::pair<PredictionQ, PredictionP>;
+	struct Prediction {
+		PredictionP p;
+		PredictionQ q;
+	};
 
 	/* Conversion matrix from a track vector normal repr: ν = (x0, ax, y0, ay)ᵀ into FOOT pair's measurement (u,v).
 	 * Each detector in the pair is rotated by an angle θx,θy and placed at different positions: zu,zv.
@@ -241,16 +244,16 @@ struct FLayerInfo {
 
 	/* This doesn't touch or evaluate any of the underlying mutable cache entries. So it is perfectly const.
 	 * Evaluate the ftrack vector normal repr: ν = (x0, ax, y0, ay)ᵀ, and charge combinator's mean from
-	 * the sequence (q1,q2,..) into "prediction" for this layers' measurement (Q,(u,v)). */
+	 * the sequence (q1,q2,..) into "prediction" for this layers' measurement ((u,v),Q). */
 	inline Prediction prediction(const FTrack& ft) const noexcept {
 		const auto nl = ft.l.normal();
-		ft.q.mean();
 		static_assert(mnd::size<decltype(nl)>() == 4, "Normal representation must be statically sized with 4 elements.");
+
 		Eigen::Map<const Eigen::Vector4d> mapv = Eigen::Map<const Eigen::Vector4d>{ nl.data() };
 
 		return {
-			ft.q.mean(),
-			A*mapv - dxy
+			.p = A*mapv - dxy,
+			.q = ft.q.mean()
 		};
 	}
 };
@@ -393,10 +396,10 @@ template <
 
 	void Add(const Entry& entry, u32 layer) noexcept {
 		const size_t n_current = N();
-#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
+	#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(n_current >= Capacity)
 			ERROR("Adding a point to '%s' object. Capacity %zu exceeded", MND_SELF_TYPE_CSTR, Capacity);
-#endif
+	#endif
 		layer_i[n_current] = static_cast<hm_key_type>(layer);
 		m[n_current] = entry.pos;
 		q += entry.q; // increments n_current
@@ -410,8 +413,9 @@ template <
 		t.reset();
 	}
 	void pop_back(FTrack&& replacement) {
-		if(N() != 0)
-			q.pop_back(); // will mutate N();
+		if(N() == 0) return; // throw away replacement in this case. It cannot be valid either way.
+		
+		q.pop_back(); // will mutate N();
 		t = mnd::Some{std::move(replacement)};
 	}
 
@@ -430,14 +434,14 @@ template <
 		const FTrack& ftrack = get(geom);
 		
 		for(size_t i=0; i < n_current; ++i) {
-			const auto predicted = /* std::pair<PredictionQ, PredictionP> */
+			const auto predicted = /* Prediction = { PredictionP, PredictionQ } */
 				geom.layer[ layer_i[i]  ].prediction(ftrack);
 
-			const double dr2 = (predicted.second - m[i]).squaredNorm();
+			const double dr2 = (predicted.p - m[i]).squaredNorm();
 			sp += dr2;
 
-			double dqx = q[i].qx - predicted.first;
-			double dqy = q[i].qy - predicted.first;
+			double dqx = q[i].qx - predicted.q;
+			double dqy = q[i].qy - predicted.q;
 			
 			sq += dqx*dqx + dqy*dqy;
 		}

@@ -32,10 +32,10 @@ struct TrackCost {
 	 * sqrt(kr) is anything between 1-5mm (worst case, probably I messed up alignment. 
 	 * Should be ~1mm on a good day. */
 
-	// For k==3 degrees of freedom: total Chi^2 of about 12 is 99% confidence. 
+	// For k==3 degrees of freedom: total Chi^2 of about 12 is 99% confidence.
 	// In ideal world... but both `kt` and `kq` can dance like crazy. */
 	static constexpr double DEFAULT_MAX_CANDIDATE_COST = 500;
-	static constexpr double DEFAULT_MAX_FINAL_COST = 20;
+	static constexpr double DEFAULT_MAX_FINAL_COST = 10;
 
 	static constexpr double NIL_VALUE = NAN;
 	
@@ -138,6 +138,21 @@ struct TFOOTHitProc : TProcessor <
 	
 	static Verbosity v;
 	static bool requires_valid_upstream_track;
+
+	using PredictionQ = FLayerInfo::PredictionQ;
+	using PredictionP = FLayerInfo::PredictionP;
+	using PredictionT = mnd::geom::Point2D;
+	using Prediction  = FLayerInfo::Prediction; // { PredictionP, PredictionQ }
+
+	/* These next method is slow-ish, especially the space variable predictors.
+	 * Based on the current online track, make a prediction on the layer n. */
+	Prediction get_prediction(const FTrack& , u32 ) const noexcept;
+	
+	// Add an entry to the online track, and extrapolate back to target. Then remove the entry and restore
+	// the state of the online track as it was before the call. We take by mutable reference, even tho
+	// the call 'promises' to return the state as it was before. TODO: use const_cast instead?
+	mnd::geom::Point2D extrapolate_to_target_with_update(
+		FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
 
 	double kr(const FLayerInfo::PredictionP& , const FHitMatrix::Entry& ) const noexcept;
 	double kq(const FLayerInfo::PredictionQ& , const FHitMatrix::Entry& ) const noexcept;

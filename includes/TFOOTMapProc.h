@@ -49,7 +49,7 @@ public:
 	double dt_veto = NAN; /* Optionally given. */
 
 	int N; // Corresponds to FOOT_N from the output container.
-	uint32_t nsampled = 0;
+	u32 nsampled = 0;
 
 	TFOOTMapProc() = default;
 	TFOOTMapProc(TFOOTMapCont& out, const TFRSGo4Cont& in,
@@ -69,16 +69,14 @@ public:
 
 	static nlohmann::json _bad_strips; //!
 	
-	/**
-	 * Pass either std::ifstream file handles, or filesystem paths or just raw strings
+	/* Pass either std::ifstream file handles, or filesystem paths or just raw strings
 	 * Each argument represents a separate JSON file.
-	 * JSON file inputs must be ASCII, not binary. Parser will throw on binary.
-	 */
+	 * JSON file inputs must be ASCII, not binary. Parser will throw on binary. */
 	template<typename T, typename... Ts>
 	static void LoadBadStripsFile(T&& arg, Ts&&... other) {
 		static_assert(mnd::meta::is_pathlike_arg_v<T>,
-				"LoadBadStripsFile args must be std::ifstream or a path-like "
-				"(const char*, std::string, std::filesystem::path, std::string_view)");
+			"LoadBadStripsFile args must be std::ifstream or a path-like "
+			"(const char*, std::string, std::filesystem::path, std::string_view)");
 
 		std::ifstream f{};
 		try {
@@ -89,7 +87,7 @@ public:
 
 		try {
 			nlohmann::json j = nlohmann::json::parse(f);
-			append_flat_json(TFOOTMapProc::_bad_strips, j);	
+			append_flat_json(TFOOTMapProc::_bad_strips, j);
 		} catch(std::exception const& e) {
 			WARN("Json parsing failed. Reason: %s\n", e.what());
 			throw;
@@ -97,10 +95,8 @@ public:
 		(LoadBadStripsFile(other), ...);
 	}
 
-	/**
-	 * Call this at the end of the processing, to also write to the `bad_strips`
-	 * the strips passed by the user, which are stored in the static JSON field.
-	 */
+	/* Call this at the end of the processing, to also write to the `bad_strips`
+	 * the strips passed by the user, which are stored in the static JSON field. */
 	int ParseStaticBadStrips();
 
 private:

@@ -109,7 +109,7 @@ int main(int argc, char* argv[]) {
 		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci31",sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
 		->delimiter(',');
-	add_logged_option(app, "--sci-binning",sci_binning, "Scintillator QDC binning")
+	add_logged_option(app, "--sci-binning",sci_binning, "Scintillator QDC binning.")
 		->delimiter(',');
 	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.")
 		->delimiter(',');

@@ -1,16 +1,14 @@
 #pragma once
 
-#include "Eigen/Core"
+#include "Eigen.h"
 #include "monad/monad.hxx"
 
 #include <cmath>
 #include <type_traits>
-#include "../Eigen.h"
 
 #ifndef MND_HITMATRIX_DO_BOUNDS_CHECK
 //#	define MND_HITMATRIX_DO_BOUNDS_CHECK
 #endif
-
 
 template<typename> struct HitMatrix;
 
