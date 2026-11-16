@@ -48,6 +48,9 @@ quick/hit/*
 !quick/hit/cfg/**/*.cfg
 
 sim/build
+*.md
+!README.md
+typst/*
 
 exec/*.txt
 autosave

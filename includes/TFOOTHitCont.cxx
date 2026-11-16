@@ -208,6 +208,15 @@ void TFOOTHitCont::Setup() {
 			Form("Innovation difference dy [mm] vs. dx [mm] after layer %u", i), 500,-2,2, 500,-2,2);
 		h2_diff_t[i] = RegisterObject<TH2I>(Form("h2_diff_t_%u", i),
 			Form("Innovation in projected track's matching dx vs. dy [mm] after layer %u", i), 500,-20, 20, 500,-20,20);
+
+
+		h1_diff_q[i]->GetXaxis()->SetTitle("dq [e]");    h1_diff_q[i]->GetYaxis()->SetTitle("count");
+		h1_diff_r[i]->GetXaxis()->SetTitle("|dr| [mm]"); h1_diff_r[i]->GetYaxis()->SetTitle("count");
+		h1_diff_t[i]->GetXaxis()->SetTitle("diff [mm]"); h1_diff_t[i]->GetYaxis()->SetTitle("count");
+
+		h2_diff_q[i]->GetXaxis()->SetTitle("Qu - Qv [e]");        h2_diff_q[i]->GetYaxis()->SetTitle("Innovation dq [e]");
+		h2_diff_r[i]->GetXaxis()->SetTitle("Innovation dx [mm]"); h2_diff_r[i]->GetYaxis()->SetTitle("Innovation dy [mm]");
+		h2_diff_t[i]->GetXaxis()->SetTitle("diff x [mm]");        h2_diff_t[i]->GetYaxis()->SetTitle("diff y [mm]");
 	#endif
 	}
 }

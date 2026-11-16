@@ -437,9 +437,9 @@ int main(int argc, char* argv[]) {
 		cRQT ->cd(0*N_PAIRS + 1+n); h1_diff_r.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
 		cRQT ->cd(1*N_PAIRS + 1+n); h1_diff_q.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
 		cRQT ->cd(2*N_PAIRS + 1+n); h1_diff_t.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
-		cRQT2->cd(0*N_PAIRS + 1+n); h2_diff_r.at(n)->Draw("COLZ"); gPad->SetLogz();
-		cRQT2->cd(1*N_PAIRS + 1+n); h2_diff_q.at(n)->Draw("COLZ"); gPad->SetLogz();
-		cRQT2->cd(2*N_PAIRS + 1+n); h2_diff_t.at(n)->Draw("COLZ"); gPad->SetLogz();
+		cRQT2->cd(0*N_PAIRS + 1+n); h2_diff_r.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
+		cRQT2->cd(1*N_PAIRS + 1+n); h2_diff_q.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
+		cRQT2->cd(2*N_PAIRS + 1+n); h2_diff_t.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
 	}
 
 	if(draw_sci) {
