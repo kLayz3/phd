@@ -68,6 +68,27 @@ inline u32 get_fbits(f32 value, u32 bitmask) noexcept {
 	std::memcpy(&repr, &value, sizeof repr);
 	return repr & bitmask;
 }
+
+/* Extract the lowest `nbits` from the mantissa of the floating point argument. */
+template<u32 nbits>
+u64 get_low_bits(f64 value) noexcept {
+	static_assert(nbits > 0 && nbits <= 52, "Must request to get between 1 and 52 bits.");
+	
+	constexpr u64 mask = (u64{1} << nbits) - 1;
+	u64 repr;
+	std::memcpy(&repr, &value, sizeof repr);
+	return repr & mask;
+}
+template<u32 nbits>
+u32 get_low_bits(f32 value) noexcept {
+	static_assert(nbits > 0 && nbits <= 23, "Must request to get between 1 and 52 bits.");
+	
+	constexpr u32 mask = (u32{1} << nbits) - 1;
+	u32 repr;
+	std::memcpy(&repr, &value, sizeof repr);
+	return repr & mask;
+}
+
 template<typename T, typename U>
 auto get_fbits(T , U ) = delete;
 

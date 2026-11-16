@@ -556,15 +556,15 @@ void TFOOTCalCont::Init(TDictInfo info) {
 		ERROR("For key \"%s\", value found: " EMPH(%s) " but unparsable to integer. Err: %s", id_key, it->second.c_str(), e.what());
 	}
 
-	it = info.find("Setup");	
+	it = info.find("Setup");
 	if(it == info.end())
-		ERROR("TFOOTCalCont::Init(): \"Setup\" key not found for info (%s).\n" 
+		ERROR("TFOOTCalCont::Init(): \"Setup\" key not found for info (%s).\n"
 			, mnd::type_name<TDictInfo>().c_str());
 	const std::string& file_name = it->second;
 	json j = ParseJSON(file_name);
 	
 	auto j_it = j.find(Form("FOOT%d", FOOT_N));
-	if(j_it == j.end()) 
+	if(j_it == j.end())
 		ERROR("Trying to set up FOOT[%d] cal, but setup file doesn't contain the key \"FOOT%d\".", FOOT_N, FOOT_N);
 	
 	json& jf = j_it.value();
@@ -590,7 +590,7 @@ void TFOOTCalCont::Init(TDictInfo info) {
 			fs::path pfull = fs::canonical(file_name);
 			full_setup_file_name = pfull.c_str();
 		} catch(std::filesystem::filesystem_error const& e) {
-			ERROR("Fetching full path from: \'%s\' failed? Reason: %s", file_name.c_str(), e.what());
+			ERROR("Fetching full path from: '%s' failed? Reason: %s", file_name.c_str(), e.what());
 		}
 	}
 }
@@ -615,7 +615,7 @@ void TFOOTCalCont::Setup() {
 	/* In the cal step, box object not used. It's just written down for helper scripts to process stuff. */
 	if(should_register_box_) {
 		box = RegisterObject<FOOTBoxParam>("box", this->bpar);
-		setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), full_setup_file_name); 
+		setupName = RegisterObject<std::string>("setup_file", mnd::noop_fn<std::string>(), full_setup_file_name);
 	}
 }
 

@@ -84,15 +84,15 @@ auto has_prefix(std::string_view , std::string_view ) -> bool;
  * and treating backslash as escaping the next character everywhere.
  * A literal backslash must be doubled; a dangling backslash throws.
  * Quoted or escaped whitespace is preserved.
- * Example: split( R"(Bleebloop\,,   '1,2,3'"4,5", '(1,2,3)\'')"sv )
+ * Example: split( R"(Bleebloop\,,   '1,2,3'"4,5", '(1,2,3)\'')"sv , ',' )
  * => ["Bleebloop,", "1,2,34,5", "(1,2,3)'"] */
-[[nodiscard]] auto split(std::string_view , char ) -> std::vector<std::string>  ;
+[[nodiscard]] auto split(std::string_view , char = ' ') -> std::vector<std::string>  ;
 
 /* Same rules as split(), just w/ views instead. Passing rvalue here will dangle badly.
- * Since this cannot mutate the original view, the escape chars are still present here.
- * Example: split_view( R"(Bleebloop\,,   '1,2,3','(1,2,3)\'')" )
+ * Since this cannot mutate the original view, the escape chars '\' are still present here.
+ * Example: split_view( R"(Bleebloop\,,   '1,2,3','(1,2,3)\'')" , ',' )
  * => [R"(Bleebloop\,)"sv, R"(   '1,2,3')"sv, R"('(1,2,3)\'')"sv] */
-[[nodiscard]] auto split_view(std::string_view , char ) -> std::vector<std::string_view>;
+[[nodiscard]] auto split_view(std::string_view , char  = ' ') -> std::vector<std::string_view>;
 
 /* Return a vector of views to the underlying sequence of strings. */
 auto to_views(const std::vector<std::string>& ) -> std::vector<std::string_view> ;

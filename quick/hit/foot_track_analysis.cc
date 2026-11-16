@@ -1,6 +1,6 @@
 /* This include is just to have LSP support when the define is present at compile-time
  * but not during editing. */
-//#define MND_DEBUG_ENABLED
+// #define MND_DEBUG_ENABLED
 
 #include "util/FTrack.h"
 #include "util/CLI.h"
@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
 	CLI::App app{"Gate on straight primary beam tracks, and try to estimate the corresponding Cq, Cp, Ct coefficients, \
 	              Based on already preliminary results from the Kalman filter. Basically, here we can gate explicitly \
                   on specific \'Z\' tracks (can be wrong z tho)"};
-	
+
 	std::vector<std::string> fileNames {};
 	std::map<u32, A2> cut_q = {};
 	A3 binning_q = {120, 0.0, 7.5};
@@ -41,10 +41,11 @@ int main(int argc, char* argv[]) {
 	A2 sci31_cut = {NAN,NAN};
 	bool draw_sci = false;
 	A3 sci_binning = {500, 300, 4000};
+	A3 sci_q_binning = {500, 0.0, 6.7};
 
 	std::vector<canvas::Extension> save = {};
 	u32 nthreads = 1;
-	
+
 	add_logged_option(app, "-f,--file", fileNames, "Pass one or more file names, delimited by ','")
 		->delimiter(',')
 		->check(CLI::ReadPermissions);
@@ -66,7 +67,9 @@ int main(int argc, char* argv[]) {
 		->delimiter(',');
 	add_logged_option<DisplayDefault::No>(app, "--sci31", sci31_cut, "SCI31 QDC cut (also implying multiplicity 1). Default no cut.")
 		->delimiter(',');
-	add_logged_option(app, "--sci-binning",sci_binning, "Scintillator QDC binning.")
+	add_logged_option(app, "--sci-binning", sci_binning, "Scintillator QDC binning.")
+		->delimiter(',');
+	add_logged_option(app, "--sci-q-binning", sci_q_binning, "Scintillator Q (charge value) binning.")
 		->delimiter(',');
 	add_logged_flag(app, "--draw-sci", draw_sci, "Draw sci histograms.");
 	add_logged_option(app, "-o,--save", save, "Save the resulting histogram as an extension.")
@@ -74,12 +77,12 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-n,--nthreads", nthreads,
 		"Run the process multithreaded. One file per thread."
 	)->check(CLI::PositiveNumber);
-	
+
 	bool test = false;
 	add_logged_flag(app, "--test", test, "Test the CLI. Once parsed, just exit the program.");
 
 	CLI11_PARSE(app, argc, argv);
-	
+
 	if(test) return 0;
 
 #ifdef MND_FOOTTRACK_DEBUG
@@ -88,93 +91,120 @@ int main(int argc, char* argv[]) {
 	}
 	constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
 	static_assert(N_PAIRS > 2, "To properly run this program must have N_PAIRS > 2.");
-	
-	double Cr, Cq, Ct, max_cost, max_cost_f;
-	std::array<TH1I*, N_PAIRS> h1_diff_q;
-	std::array<TH1I*, N_PAIRS> h1_diff_r;
-	std::array<TH1I*, N_PAIRS> h1_diff_t;
-	std::array<TH2I*, N_PAIRS> h2_diff_q;
-	std::array<TH2I*, N_PAIRS> h2_diff_r;
-	std::array<TH2I*, N_PAIRS> h2_diff_t;
+
+	double Cr, Ct, max_cost, max_cost_f;
+	struct ReplayHistos {
+		std::array<std::unique_ptr<TH1I>, N_PAIRS> h1_diff_q, h1_diff_r, h1_diff_t;
+		std::array<std::unique_ptr<TH2I>, N_PAIRS> h2_diff_q, h2_diff_r, h2_diff_t;
+	};
+	std::array<ReplayHistos, 2> replay;
+	const std::array<const char*, 2> replay_names {"full_rank", "half_rank"};
+
 	std::shared_ptr<TrackingGeometry<N_PAIRS>> geometry;
+	using FOOTQCovs = std::array<FOOTQCov, N_PAIRS>;
+	std::shared_ptr<FOOTQCovs> qcov;
 	{
 		A3* c;
 		TParameter<double>* m;
 		auto f = std::make_unique<TFile>(fileNames.front().c_str(), "READ");
 		get_obj(f, c, "FOOT_cost_coeff");
 		get_obj(f, m, "FOOT_max_cost");
-		Cr = c->at(0); Cq = c->at(1); Ct = c->at(2);
+		Cr = c->at(0); Ct = c->at(2);
 		max_cost = m->GetVal();
 		get_obj(f, m, "FOOT_max_cost_f");
 		max_cost_f = m->GetVal();
-		for(u32 n=0; n<N_PAIRS; ++n) {
-            get_obj(f, h1_diff_r.at(n), Form("FOOT_h1_diff_r_%u", n));
-			get_obj(f, h1_diff_q.at(n), Form("FOOT_h1_diff_q_%u", n));
-            get_obj(f, h1_diff_t.at(n), Form("FOOT_h1_diff_t_%u", n));
-
-            get_obj(f, h2_diff_r.at(n), Form("FOOT_h2_diff_r_%u", n));
-			get_obj(f, h2_diff_q.at(n), Form("FOOT_h2_diff_q_%u", n));
-            get_obj(f, h2_diff_t.at(n), Form("FOOT_h2_diff_t_%u", n));
-		}
 		STrackingGeometry* stg;
 		get_obj(f, stg, "FOOT_geometry");
 		geometry = std::move( tg_from_stg(*stg) );
+
+		qcov = get_obj<FOOTQCovs>(f, "FOOT_qcov");
 	}
-	// Add all the other objects into h1_* and h2_* histograms. The cost values should be the same, regardless.
-	for(size_t i=1; i<fileNames.size(); ++i) {
-		
+	// These replay histograms describe all accepted hit.exe tracks, before the cuts.
+	for(size_t i=0; i<fileNames.size(); ++i) {
 		auto f = std::make_unique<TFile>(fileNames[i].c_str(), "READ");
-		for(u32 n=0; n<N_PAIRS; ++n) {
-            auto h1_diff_r_tmp = get_obj<TH1I>(f, Form("FOOT_h1_diff_r_%u", n));
-			auto h1_diff_q_tmp = get_obj<TH1I>(f, Form("FOOT_h1_diff_q_%u", n));
-            auto h1_diff_t_tmp = get_obj<TH1I>(f, Form("FOOT_h1_diff_t_%u", n));
-
-            auto h2_diff_r_tmp = get_obj<TH2I>(f, Form("FOOT_h2_diff_r_%u", n));
-			auto h2_diff_q_tmp = get_obj<TH2I>(f, Form("FOOT_h2_diff_q_%u", n));
-            auto h2_diff_t_tmp = get_obj<TH2I>(f, Form("FOOT_h2_diff_t_%u", n));
-
-			h1_diff_r.at(n)->Add( h1_diff_r_tmp.get() );
-			h2_diff_r.at(n)->Add( h2_diff_r_tmp.get() );
-			h1_diff_q.at(n)->Add( h1_diff_q_tmp.get() );
-			h2_diff_q.at(n)->Add( h2_diff_q_tmp.get() );
-			h1_diff_t.at(n)->Add( h1_diff_t_tmp.get() );
-			h2_diff_t.at(n)->Add( h2_diff_t_tmp.get() );
+		for(size_t rank=0; rank<replay.size(); ++rank) {
+			for(u32 n=0; n<N_PAIRS; ++n) {
+				auto load = [&](auto& destination, const char* name) {
+					using H = typename std::decay_t<decltype(destination)>::element_type;
+					auto h = get_obj<H>(f, Form("FOOT_%s_%s_%u", replay_names[rank], name, n));
+					if(destination) destination->Add(h.get());
+					else destination = std::move(h);
+				};
+				auto& h = replay[rank];
+				load(h.h1_diff_q[n], "h1_diff_q");
+				load(h.h1_diff_r[n], "h1_diff_r");
+				load(h.h1_diff_t[n], "h1_diff_t");
+				load(h.h2_diff_q[n], "h2_diff_q");
+				load(h.h2_diff_r[n], "h2_diff_r");
+				load(h.h2_diff_t[n], "h2_diff_t");
+			}
 		}
 	}
-	
-	std::vector<TH1P> resx, resy, resq;
-	resx.reserve(N_PAIRS); resy.reserve(N_PAIRS); resq.reserve(N_PAIRS);
-	
-	std::vector<TH1P> h1_q, h1_dq;
-	std::vector<TH2P> h2_qxy;
-	h1_q.reserve(N_PAIRS); h1_dq.reserve(N_PAIRS);
-	h2_qxy.reserve(N_PAIRS);
-	std::vector<TH1P> h1_footx, h1_footy;
-	h1_footx.reserve(N_PAIRS); h1_footy.reserve(N_PAIRS);
-	for(u32 i=0; i<N_PAIRS; ++i) {
-		resx.emplace_back(Form("((h1_fitrx_%d))Fit residue [mm]@FOOT%d u", i, i), kMagenta-9, binning_dx);
-		resy.emplace_back(Form("((h1_fitry_%d))Fit residue [mm]@FOOT%d v", i, i), kYellow-9, binning_dy);
-		resq.emplace_back(Form("((h1_fitrq_%d))Fit residue [charge unit]@FOOT%d Q", i, i), kCyan-9, binning_dq);
 
-		h1_q.emplace_back(Form("((h1_q_%d))Q value@FOOT%d", i, i), 0xE3FF50_c, binning_q);
-		h1_dq.emplace_back(Form("((h1_dq_%d))Difference Qx-Qy@FOOT%d", i, i), kBlue-9, binning_dq);
-		h2_qxy.emplace_back(Form("((h2_q_%d))Q value y-detector [e]:Q value x-detector [e]@FOOT%d", i, i), binning_q, binning_q);
+	struct TrackHistos {
+		std::vector<TH1P> resx, resy, resq;
+		std::vector<TH1P> h1_q, h1_dq, h1_charge_innovation, h1_footx, h1_footy;
+		std::vector<TH2P> h2_qxy, h2_charge_innovation;
+		TH2P h2_kq = TH2P{"Kq cost [Q^2]:FOOT ID", RNFOOTHit::N_PAIRS, -0.5, RNFOOTHit::N_PAIRS-0.5, 500, 0, 1};
+		TH2P h2_kr = TH2P{"Kr cost [mm^2]:FOOT ID", RNFOOTHit::N_PAIRS, -0.5, RNFOOTHit::N_PAIRS-0.5, 400, 0, 10};
+		TH2P h2_kq_sqrt = TH2P{"sqrt_Kq cost [Q]:FOOT ID", RNFOOTHit::N_PAIRS, -0.5, RNFOOTHit::N_PAIRS-0.5, 500, 0, 1};
+		TH2P h2_kr_sqrt = TH2P{"sqrt_Kr cost [mm]:FOOT ID", RNFOOTHit::N_PAIRS, -0.5, RNFOOTHit::N_PAIRS-0.5, 400, 0, 3.1628};
+		TH1P h1_kt = TH1P{"Kt cost [mm^2]", kYellow-3, 400, 0, 10};
+		TH1P h1_kt_sqrt = TH1P{"sqrt_Kt cost [mm]", kYellow-3, 400, 0, 3.162};
 
-		h1_footx.emplace_back(Form("((h1_footx_%d))FOOT%d u [mm]", i, i), kMagenta-9, 320, -50, 50);
-		h1_footy.emplace_back(Form("((h1_footy_%d))FOOT%d v [mm]", i, i), kMagenta-9, 320, -50, 50);
-	}
+		TH2P h2_ktxy = TH2P{"FOOT - Upstream Y [mm]:FOOT - Upstream x [mm]@target", 400,-10,10, 400,-10,10};
+		TH1P h1_diff_upstr_down = TH1P{"Distance Upstream to Downstream track [mm]", kGreen-1, 400, 0, 100};
+		TH1P h1_score = TH1P{"Track score [a.u.]", kGreen-1, 500, 0, 50};
 
-	auto h2_kq = TH2P{"Kq cost [Q^2]:FOOT ID", N_PAIRS, -0.5, N_PAIRS-0.5, 500, 0, 1};
-	auto h2_kr = TH2P{"Kr cost [mm^2]:FOOT ID", N_PAIRS, -0.5, N_PAIRS-0.5, 400, 0, 10};
-	auto h2_kq_sqrt = TH2P{"sqrt_Kq cost [Q]:FOOT ID", N_PAIRS, -0.5, N_PAIRS-0.5, 500, 0, 1};
-	auto h2_kr_sqrt = TH2P{"sqrt_Kr cost [mm]:FOOT ID", N_PAIRS, -0.5, N_PAIRS-0.5, 400, 0, 3.1628};
-	auto h1_kt = TH1P{"Kt cost [mm^2]", kYellow-3, 400, 0, 10};
-	auto h1_kt_sqrt = TH1P{"sqrt_Kt cost [mm]", kYellow-3, 400, 0, 3.162};
+		TrackHistos(u32 npairs, const A3& binning_q, const A3& binning_dx, const A3& binning_dy, const A3& binning_dq) {
+			resx.reserve(RNFOOTHit::N_PAIRS); resy.reserve(RNFOOTHit::N_PAIRS); resq.reserve(RNFOOTHit::N_PAIRS);
 
-	auto h2_ktxy = TH2P{"FOOT - Upstream Y [mm]:FOOT - Upstream x [mm]@target", 400,-10,10, 400,-10,10};
-	auto h1_diff_upstr_down = TH1P{"Distance Upstream to Downstream track [mm]", kGreen-1, 400, 0, 100};
+			h1_q.reserve(RNFOOTHit::N_PAIRS); h1_dq.reserve(RNFOOTHit::N_PAIRS);
+			h2_qxy.reserve(RNFOOTHit::N_PAIRS);
+			h2_charge_innovation.reserve(RNFOOTHit::N_PAIRS);
+			h1_charge_innovation.reserve(RNFOOTHit::N_PAIRS);
+			h1_footx.reserve(RNFOOTHit::N_PAIRS); h1_footy.reserve(RNFOOTHit::N_PAIRS);
+			for(u32 i=0; i<RNFOOTHit::N_PAIRS; ++i) {
+				resx.emplace_back(Form("((h1_fitrx_%d))Fit residue [mm]@FOOT%d u", i, i), kMagenta-9, binning_dx);
+				resy.emplace_back(Form("((h1_fitry_%d))Fit residue [mm]@FOOT%d v", i, i), kYellow-9, binning_dy);
+				resq.emplace_back(Form("((h1_fitrq_%d))Fit residue [charge unit]@FOOT%d Q", i, i), kCyan-9, binning_dq);
+
+				h1_q.emplace_back(Form("((h1_q_%d))Q value@FOOT%d", i, i), 0xE3FF50_c, binning_q);
+				h1_dq.emplace_back(Form("((h1_dq_%d))Difference Qx-Qy@FOOT%d", i, i), kBlue-9, binning_dq);
+				h2_qxy.emplace_back(Form("((h2_q_%d))Q value y-detector [e]:Q value x-detector [e]@FOOT%d", i, i), binning_q, binning_q);
+
+				h1_charge_innovation.emplace_back(
+					Form("((h1_charge_innovation_%u))r = Qpair - Qprevious [e]@Layer %u selected tracks", i, i),
+					kCyan-9, binning_dq);
+				h2_charge_innovation.emplace_back(
+					Form("((h2_charge_innovation_%u))r = Qpair - Qprevious [e]:d = Qx - Qy [e]@Layer %u selected tracks", i, i),
+					binning_dq, binning_dq);
+				// Keep exact fill moments, including tails outside the plotted range, for covariance estimation.
+				h1_charge_innovation.back()->SetStatOverflows(TH1::kConsider);
+				h2_charge_innovation.back()->SetStatOverflows(TH1::kConsider);
+
+				h1_footx.emplace_back(Form("((h1_footx_%d))FOOT%d u [mm]", i, i), kMagenta-9, 320, -50, 50);
+				h1_footy.emplace_back(Form("((h1_footy_%d))FOOT%d v [mm]", i, i), kMagenta-9, 320, -50, 50);
+			}
+			auto label = [npairs](auto& wrapper) {
+				auto& h = wrapper.h;
+				h.SetName(Form("%s_N%u", h.GetName(), npairs));
+				h.SetTitle(Form("%s [%u pairs]", h.GetTitle(), npairs));
+			};
+			for(auto* group: {&resx, &resy, &resq, &h1_q, &h1_dq, &h1_charge_innovation, &h1_footx, &h1_footy})
+				for(auto& h: *group) label(h);
+			for(auto* group: {&h2_qxy, &h2_charge_innovation})
+				for(auto& h: *group) label(h);
+			label(h2_kq); label(h2_kr); label(h2_kq_sqrt); label(h2_kr_sqrt);
+			label(h1_kt); label(h1_kt_sqrt); label(h2_ktxy); label(h1_diff_upstr_down); label(h1_score);
+
+		}
+	};
+	std::array<TrackHistos, 2> histos {{
+		{N_PAIRS, binning_q, binning_dx, binning_dy, binning_dq},
+		{N_PAIRS-1, binning_q, binning_dx, binning_dy, binning_dq}
+	}};
 	auto h1_has_upstream = TH1P{"Upstream track present [0=false, 1=true]", kYellow-3, 4, -0.75, 1.25};
-	auto h1_score = TH1P{"Track score [a.u.]", kGreen-1, 500, 0, 50};
 
 	auto h1_sci21 = TH1P{"SCI21 QDC mean [QDC units]", 0xCB00CB_c, sci_binning};
 	auto h1_sci22 = TH1P{"SCI22 QDC mean [QDC units]", 0x0070DD_c, sci_binning};
@@ -186,22 +216,38 @@ int main(int argc, char* argv[]) {
 	auto h1_sci22_cut2 = TH1P{"((h1_cut2)) SCI22 QDC mean [QDC units]@With cut", 0x6180FD_c, sci_binning};
 	auto h1_sci31_cut2 = TH1P{"((h1_cut2)) SCI31 QDC mean [QDC units]@With cut", 0xCC80FD_c, sci_binning};
 
+	auto h1_sci21_q = TH1P{"SCI21 Charge [e]", 0xCB00CB_c, sci_q_binning};
+	auto h1_sci22_q = TH1P{"SCI22 Charge [e]", 0x0070DD_c, sci_q_binning};
+	auto h1_sci31_q = TH1P{"SCI31 Charge [e]", 0xCC70DD_c, sci_q_binning};
+	auto h1_sci21_q_cut  = TH1P{"((h1_cut)) SCI21 Q value [e]@With cut", 0x890389_c, sci_q_binning};
+	auto h1_sci22_q_cut  = TH1P{"((h1_cut)) SCI22 Q value [e]@With cut", 0x6180FD_c, sci_q_binning};
+	auto h1_sci31_q_cut  = TH1P{"((h1_cut)) SCI31 Q value [e]@With cut", 0xCC80FD_c, sci_q_binning};
+
+	auto h1_missing_layer = TH1P{Form("Missing layer [0..%u]@Selected three-pair tracks", N_PAIRS-1),
+		0xC559E1_c, N_PAIRS, -0.5, N_PAIRS-0.5};
+	auto h1_layers_fired = TH1P{Form("Layers fired [%u..%u]", N_PAIRS-1, N_PAIRS),
+		0x00A7A0_c, 2, N_PAIRS-1.5, N_PAIRS+0.5};
+
 	for(const auto& [foot_i, _] : cut_q) {
 		if(foot_i >= N_PAIRS)
 			ERROR("Supplied index: %u >= %u as Q-cut pair index.\n", foot_i, N_PAIRS);
 	}
-	
+
 	TApplication rootApp("app", 0, 0);
 	DynamicProgress<ProgressBar> progress;
 	mnd::parallel_process(fileNames, nthreads, [=, &progress](size_t i, auto fname) mutable {
+		// ROOT copies reset this policy; enable it on the actual worker histograms before filling.
+		for(auto& h: histos) {
+			for(u32 layer=0; layer<N_PAIRS; ++layer) {
+				h.h1_charge_innovation[layer]->SetStatOverflows(TH1::kConsider);
+				h.h2_charge_innovation[layer]->SetStatOverflows(TH1::kConsider);
+			}
+		}
 		auto model = RNTupleModel::Create();
 		auto foot = model->MakeField<RNFOOTHit>("FOOT");
 		auto frs = model->MakeField<RNFRSHit>("FRS");
 		auto ntuple = RNTupleReader::Open(std::move(model), "h104", fname);
 		const size_t nentries = ntuple->GetNEntries();
-
-		/* Fitting containers, for the track made by the other FOOT pairs. */
-		std::array<double, N_PAIRS-1> qf;
 
 		auto _bar_ptr = std::make_unique<ProgressBar>(
 			option::BarWidth{50},
@@ -230,103 +276,135 @@ int main(int argc, char* argv[]) {
 			const auto& sci21 = frs->cal.sci[RNFRSCal::SCI21_I];
 			const auto& sci22 = frs->cal.sci[RNFRSCal::SCI22_I];
 			const auto& sci31 = frs->cal.sci[RNFRSCal::SCI31_I];
-			
-			if(sci21.hits.size() >= 1) h1_sci21->Fill(sci21.E);
-			if(sci22.hits.size() >= 1) h1_sci22->Fill(sci22.E);
-			if(sci31.hits.size() >= 1) h1_sci31->Fill(sci31.E);
-			
+
+			if(sci21.hits.size() >= 1) {
+				h1_sci21.Fill(sci21.E);
+				h1_sci21_q.Fill(frs->s2_bt.Q);
+			}
+			if(sci22.hits.size() >= 1) {
+				h1_sci22.Fill(sci22.E);
+				h1_sci22_q.Fill(frs->s2_at.Q);
+			}
+			if(sci31.hits.size() >= 1) {
+				h1_sci31.Fill(sci31.E);
+				h1_sci31_q.Fill(frs->s3.Q);
+			}
 			/* Skip the event entirely in case a SCI cut isn't met. */
 			if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
 			if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
 			if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
 
-			if(sci21.hits.size() >= 1) h1_sci21_cut->Fill(sci21.E);
-			if(sci22.hits.size() >= 1) h1_sci22_cut->Fill(sci22.E);
-			if(sci31.hits.size() >= 1) h1_sci31_cut->Fill(sci31.E);
+			if(sci21.hits.size() >= 1) h1_sci21_cut.Fill(sci21.E);
+			if(sci22.hits.size() >= 1) h1_sci22_cut.Fill(sci22.E);
+			if(sci31.hits.size() >= 1) h1_sci31_cut.Fill(sci31.E);
 
 			const double x0_upst = frs->xT;
 			const double y0_upst = frs->yT;
-			
+
 			const mnd::geom::Line3D lu = RNTrackToLine3D( frs->s2_bt );
 			h1_has_upstream->Fill( static_cast<int>(lu.IsValid()) );
 
 			if(foot->track.empty()) continue;
-			
+
 			bool has_valid_track = false;
 
 			/* Find the corresponding FOOT track(s). */
 			for(const auto& track: foot->track) {
-				if(track.n != N_PAIRS) continue;
-
-				/* Check if charge veto passed. Must pass for all the detectors. */
+				if(track.n != N_PAIRS && track.n != N_PAIRS-1)
+					ERROR("This should not happen!");
+				
+				const u32 which_layers_fired = track.LayerMask();
+				if(__builtin_popcount(which_layers_fired) != track.n)
+					ERROR("Track layer mask does not match its pair count; regenerate the hit file.\n");
+				auto& h = histos[track.n == N_PAIRS ? 0 : 1];
+				/* Check if charge veto passed. Must pass for all the detectors which constitute the track. */
 				if(!std::all_of(cut_q.begin(), cut_q.end(),
-					[&track](const auto& e) -> bool {
+					[&track, which_layers_fired](const auto& e) -> bool {
 						const auto& [foot_i, cut] = e;
+						if(!(which_layers_fired & (1U << foot_i))) return true;
 						const double qx = track._qx[ foot_i ];
 						const double qy = track._qy[ foot_i ];
 						const double q  = (qx + qy)/2;
-						return mnd::IsInside(q, cut);
+						return std::isfinite(q) && mnd::IsInside(q, cut);
 					})
 				) {
 					continue;
 				}
 				has_valid_track = true;
 
+				for(u32 i=0; i<N_PAIRS; ++i) {
+					if(!(which_layers_fired & (1U << i)))
+						h1_missing_layer->Fill(i);
+				}
+				h1_layers_fired->Fill(track.n);
+
+				// Accumulate only preceding layers that belong to this track.
+				double previous_charge_sum = 0;
+				u32 previous_pairs = 0;
 				// Loop over individual layers, check the residues..
 				for(u32 i=0; i<N_PAIRS; ++i) {
+					if(!(which_layers_fired & (1U << i))) continue;
 					const double qx = track._qx[i];
 					const double qy = track._qy[i];
 					const double qmean = (qx + qy) / 2;
 					const double qdiff = qx - qy;
 					const double qvar = 0.5*qdiff*qdiff;
 
-					// Mask for which dets fired is all except one at bit i.
-					const u32 mask = ((1 << N_PAIRS) - 1) & ~(1 << i);
-					
-					const auto& parameters =
-						geometry->fit.get<N_PAIRS - 1>().get_from_mask(mask);
-					using Scalar = FLayerInfo::EntryXYUnderlyingType; // double|long double
-					Eigen::Vector<Scalar, 2 * (N_PAIRS - 1)> rhs;
-					u32 w = 0;
+					// Signed sequential innovation, unlike the leave-one-pair-out residual dq below.
+					if(previous_pairs > 0) {
+						const double qprevious = previous_charge_sum / (2 * previous_pairs);
+						const double innovation = qmean - qprevious;
+						if(std::isfinite(qdiff) && std::isfinite(innovation)) {
+							h.h1_charge_innovation[i].Fill(innovation);
+							h.h2_charge_innovation[i].Fill(qdiff, innovation);
+						}
+					}
+					previous_charge_sum += qx + qy;
+					++previous_pairs;
 
-					/* Populate the arrays for N-1 fit. */
-					for(u32 j=0; j<N_PAIRS; ++j) {
-						if(j == i) continue;
-
-						rhs(2*w) = track._u[j];
-						rhs(2*w + 1) = track._v[j];
-						qf[w] = (track._qx[j] + track._qy[j]) / 2;
-						++w;
-					} if(w != N_PAIRS-1) ERROR("w must be %u, hello?", N_PAIRS-1);
-					
-					/* For the linear design problem, e.g. measurements to (x0,ax,y0,ay) track
-					* need to add the offsets to the vector side. */
-					rhs += parameters.second;
-
-					const Eigen::Vector<Scalar, 4> normal = parameters.first.solve(rhs);
-					const Eigen::Vector<Scalar, 2> predicted =
-						geometry->layer[i].A * normal - geometry->layer[i].dxy;
-					auto [q_extr, track_qvar] = mnd::mean_var(qf);
+					const u32 mask = which_layers_fired & ~(1U << i);
+					using Scalar = FLayerInfo::EntryXYUnderlyingType;
+					Eigen::Vector<Scalar, 2> predicted;
+					double q_extr = NAN;
+					mnd::static_for<2, N_PAIRS>([&](auto K_) {
+						constexpr u32 K = decltype(K_)::value;
+						if(track.n - 1 != K) return;
+						const auto& parameters = geometry->fit.get<K>().get_from_mask(mask);
+						Eigen::Vector<Scalar, 2*K> rhs;
+						double qsum = 0;
+						u32 w = 0;
+						for(u32 j=0; j<N_PAIRS; ++j) {
+							if(!(mask & (1U << j))) continue;
+							rhs(2*w) = track._u[j];
+							rhs(2*w+1) = track._v[j];
+							qsum += (track._qx[j] + track._qy[j])/2;
+							++w;
+						}
+						rhs += parameters.second;
+						const Eigen::Vector<Scalar, 4> normal = parameters.first.solve(rhs);
+						predicted = geometry->layer[i].A * normal - geometry->layer[i].dxy;
+						q_extr = qsum/K;
+					});
 
 					double dx = track._u[i] - predicted.x();
 					double dy = track._v[i] - predicted.y();
 					double dq = qmean - q_extr;
 
-					h1_footx[i].Fill( track._u[i] );
-					h1_footy[i].Fill( track._v[i] );
-					resx[i].Fill(dx);
-					resy[i].Fill(dy);
-					resq[i].Fill(dq);
+					h.h1_footx[i].Fill( track._u[i] );
+					h.h1_footy[i].Fill( track._v[i] );
+					h.resx[i].Fill(dx);
+					h.resy[i].Fill(dy);
+					h.resq[i].Fill(dq);
 
-					h1_q[i].Fill(qmean);
-					h1_dq[i].Fill(qdiff);
-					h2_qxy[i].Fill(qx, qy);
-					
-					/* Find the 3-measurement 'test' track charge params.. */
-					h2_kq.Fill( i, dq*dq + qvar );
-					h2_kr.Fill( i, dx*dx + dy*dy );
-					h2_kq_sqrt.Fill( i, sqrt(dq*dq + qvar) );
-					h2_kr_sqrt.Fill( i, sqrt(dx*dx + dy*dy) );
+					h.h1_q[i].Fill(qmean);
+					h.h1_dq[i].Fill(qdiff);
+					h.h2_qxy[i].Fill(qx, qy);
+
+					/* Leave-one-pair-out residual diagnostics. */
+					h.h2_kq.Fill( i, dq*dq + qvar );
+					h.h2_kr.Fill( i, dx*dx + dy*dy );
+					h.h2_kq_sqrt.Fill( i, sqrt(dq*dq + qvar) );
+					h.h2_kr_sqrt.Fill( i, sqrt(dx*dx + dy*dy) );
 				} // for(u32 i=0; i<N_PAIRS; ++i)
 
 				const mnd::geom::Line3D ld = RNTrackToLine3D(track);
@@ -334,20 +412,29 @@ int main(int argc, char* argv[]) {
 
 				const double dx_dstr_ustr = r0_down.x - x0_upst;
 				const double dy_dstr_ustr = r0_down.y - y0_upst;
-				
+
 				if(lu.IsValid() && std::isfinite(dx_dstr_ustr) && std::isfinite(dy_dstr_ustr)) {
-					h2_ktxy->Fill(dx_dstr_ustr, dy_dstr_ustr);
-					h1_kt->Fill(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr);
-					h1_kt_sqrt->Fill(sqrt(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr));
-					h1_diff_upstr_down->Fill(ld.DistanceTo(lu));
+					h.h2_ktxy->Fill(dx_dstr_ustr, dy_dstr_ustr);
+					h.h1_kt->Fill(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr);
+					h.h1_kt_sqrt->Fill(sqrt(dx_dstr_ustr*dx_dstr_ustr + dy_dstr_ustr*dy_dstr_ustr));
+					h.h1_diff_upstr_down->Fill(ld.DistanceTo(lu));
 				}
-				h1_score->Fill(track.score);
+				h.h1_score->Fill(track.score);
 
 			}
 			if(has_valid_track) {
-				h1_sci21_cut2->Fill(sci21.E);
-				h1_sci22_cut2->Fill(sci22.E);
-				h1_sci31_cut2->Fill(sci31.E);
+				if(sci21.hits.size() >= 1) {
+					h1_sci21_cut2.Fill(sci21.E);
+					h1_sci21_q_cut.Fill(frs->s2_bt.Q);
+				}
+				if(sci22.hits.size() >= 1) {
+					h1_sci22_cut2.Fill(sci22.E);
+					h1_sci22_q_cut.Fill(frs->s2_at.Q);
+				}
+				if(sci31.hits.size() >= 1) {
+					h1_sci31_q_cut.Fill(frs->s3.Q);
+					h1_sci31_cut2.Fill(sci31.E);
+				}
 			}
 		}
 
@@ -355,105 +442,169 @@ int main(int argc, char* argv[]) {
 			bar.mark_as_completed();
     });
 
-	std::vector<std::string> resolutions {};
-	
-	/* Around each residue, also fit a teeny-weeny gauss-chan 🥺 👉👈
-	 * Its' width is what we label as detector resolution. */
-	TCanvas* c1d = new TCanvas("FitResidue1D", "Fit residues 1D", 2150, 1650);
-	c1d->Divide(N_PAIRS, 3);
-	for(size_t i=0; i<N_PAIRS; ++i) {
-		c1d->cd(i+1);
-		auto [fit_result_x, _x_] = resx[i].DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
-		WARN("FOOT%zu X: " KBH_MAG "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_x[1], 1e3*fit_result_x[2]);
-		c1d->cd(i+1 + N_PAIRS);
-		auto [fit_result_y, _y_] = resy[i].DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
-		WARN("FOOT%zu Y: " KBH_YEL "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_y[1], 1e3*fit_result_y[2]);
+	TCanvas* cmissing = new TCanvas("MissingLayer", "Missing layer in selected three-pair tracks", 1300, 700);
+	cmissing->Divide(2,1);
+	cmissing->cd(1); h1_missing_layer.Draw();
+	cmissing->cd(2); h1_layers_fired.Draw();
 
-		c1d->cd(i+1 + 2*N_PAIRS);
-		auto [fit_result_q, _q_] = resq[i].DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
-		WARN("FOOT%zu Q: " KBH_CYN "%.3f, %.3f" KRNM " [Q]\n", i, fit_result_q[1], fit_result_q[2]);
+	for(size_t rank=0; rank<histos.size(); ++rank) {
+		auto& h = histos[rank];
+		const u32 npairs = N_PAIRS - rank;
+		TCanvas* ccharge = new TCanvas(Form("ChargeInnovation_N%u", npairs), Form("Selected tracks: charge disagreement and sequential innovation (%u pairs)", npairs), 2100, 1400);
+		ccharge->Divide(N_PAIRS - 1, 3);
+		for(u32 i = 1; i < N_PAIRS; ++i) {
+			ccharge->cd(i);
+			h.h1_charge_innovation[i].Draw();
+			gPad->SetLogy();
+			ccharge->cd(N_PAIRS - 1 + i);
+			h.h2_charge_innovation[i].Draw("COLZ");
+			gPad->SetLogz();
 
-		resolutions.emplace_back (
-			Form("FOOT%zu (X,Y): (%s%.2f%s, %s%.2f%s) um",
-				i, KRED, 1e3*fit_result_x[2], KNRM, KBLU, 1e3*fit_result_y[2], KNRM)
+			const auto& moments = h.h2_charge_innovation[i].h;
+			const double count = moments.GetEntries();
+			if(count < 2) {
+				WARN("Charge innovation layer %u: fewer than two finite samples; covariance unavailable.\n", i);
+				continue;
+			}
+			// ROOT stores population moments; convert to the unbiased sample covariance (unit weights).
+			const double correction = count / (count - 1);
+			const double mean_d = moments.GetMean(1), mean_r = moments.GetMean(2);
+			const double var_d = correction * moments.GetCovariance(1, 1);
+			const double var_r = correction * moments.GetCovariance(2, 2);
+			const double cov_dr = correction * moments.GetCovariance(1, 2);
+			const double correlation = (var_d > 0 && var_r > 0)
+				? cov_dr / (sqrt(var_d) * sqrt(var_r)) : NAN;
+			WARN("Charge innovation layer %u (selected %u-pair tracks, all finite fills including overflow):\n"
+			     "  d = Qx - Qy; r = Qpair - Qprevious; N = %.0f\n"
+			     "  mean(d,r) [e] = [%.6g, %.6g]\n"
+			     "  covariance(d,r) [e^2] = [[%.6g, %.6g], [%.6g, %.6g]]; corr = %.6g\n",
+			     i, npairs, count, mean_d, mean_r, var_d, cov_dr, cov_dr, var_r, correlation);
+			ccharge->cd(2 * (N_PAIRS - 1) + i);
+			PLatex(0.08,
+				"d = Qx - Qy; r = Qpair - Qprevious",
+				Form("N = %.0f (including overflow)", count),
+				Form("Mean d, r [e]: %.4g, %.4g", mean_d, mean_r),
+				Form("Var(d), Var(r) [e^{2}]: %.4g, %.4g", var_d, var_r),
+				Form("Cov(d,r) [e^{2}]: %.4g", cov_dr),
+				Form("Correlation: %.4g", correlation)
+			);
+		}
+
+		std::vector<std::string> resolutions {};
+
+		/* Around each residue, also fit a teeny-weeny gauss-chan 🥺 👉👈
+		 * Its width includes the uncertainty of the prediction from the other pairs. */
+		TCanvas* c1d = new TCanvas(Form("FitResidue1D_N%u", npairs), Form("Fit residues 1D (%u pairs)", npairs), 2150, 1650);
+		c1d->Divide(N_PAIRS, 3);
+		for(size_t i=0; i<N_PAIRS; ++i) {
+			c1d->cd(i+1);
+			auto [fit_result_x, _x_] = h.resx[i].DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
+			WARN("FOOT%zu X: " KBH_MAG "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_x[1], 1e3*fit_result_x[2]);
+			c1d->cd(i+1 + N_PAIRS);
+			auto [fit_result_y, _y_] = h.resy[i].DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
+			WARN("FOOT%zu Y: " KBH_YEL "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_y[1], 1e3*fit_result_y[2]);
+
+			c1d->cd(i+1 + 2*N_PAIRS);
+			auto [fit_result_q, _q_] = h.resq[i].DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
+			WARN("FOOT%zu Q: " KBH_CYN "%.3f, %.3f" KRNM " [Q]\n", i, fit_result_q[1], fit_result_q[2]);
+
+			resolutions.emplace_back (
+				Form("FOOT%zu (X,Y): (%s%.2f%s, %s%.2f%s) um",
+					i, KRED, 1e3*fit_result_x[2], KNRM, KBLU, 1e3*fit_result_y[2], KNRM)
+			);
+		}
+		TCanvas* cpos = new TCanvas(Form("foot_xyq_N%u", npairs), Form("FOOT absolute positions/charge (%u pairs)", npairs), 2150, 1650);
+		cpos->Divide(N_PAIRS, 2);
+		for(size_t i=0; i<N_PAIRS; ++i) {
+			cpos->cd(i+1+ 0*N_PAIRS); h.h1_footx[i].Draw();
+			cpos->cd(i+1+ 1*N_PAIRS); h.h1_footy[i].Draw();
+		}
+		TCanvas *cq = new TCanvas(Form("foot_q_N%u", npairs), Form("FOOT charge-related histograms (%u pairs)", npairs), 2150, 1650);
+		cq->Divide(N_PAIRS, 3);
+		for(size_t i=0; i<N_PAIRS; ++i) {
+			cq->cd(i+1+ 0*N_PAIRS); h.h1_q[i].Draw();
+			cq->cd(i+1+ 1*N_PAIRS); h.h1_dq[i].Draw();
+			cq->cd(i+1+ 2*N_PAIRS); h.h2_qxy[i].Draw("COLZ");
+		}
+
+		TCanvas* ckv = new TCanvas(Form("CostValues2D_N%u", npairs), Form("Cost Values 2D (%u pairs)", npairs), 2200, 1400);
+		ckv->Divide(4, 2);
+		ckv->cd(1); h.h2_kq.Draw("COLZ");
+		ckv->cd(5); h.h2_kq_sqrt.Draw("COLZ");
+		ckv->cd(2); h.h2_kr.Draw("COLZ");
+		ckv->cd(6); h.h2_kr_sqrt.Draw("COLZ");
+		ckv->cd(3); h.h1_kt.Draw();
+		ckv->cd(7); h.h1_kt_sqrt.Draw();
+
+		ckv->cd(4); h.h2_ktxy.Draw("COLZ");
+		ckv->cd(8); h.h1_diff_upstr_down.Draw();
+
+		TCanvas* cscore = new TCanvas(Form("Score_N%u", npairs), Form("Score of the recognized tracks (%u pairs)", npairs), 1200, 800);
+		cscore->Divide(2,2);
+		cscore->cd(1); h.h1_score.Draw();
+		std::vector<std::string> cost_labels {
+			"Search parameters (first input file):",
+			mnd::msg("Cr = %.3g; Ct = %.3g", Cr, Ct),
+			mnd::msg("max cost: %.3g; max cost_f: %.3g", max_cost, max_cost_f),
+			"Charge scales: sd, sr [e]; corr dimensionless"
+		};
+		for(u32 i = 0; i < N_PAIRS; ++i) {
+			const auto& q = qcov->at(i);
+			cost_labels.emplace_back(mnd::msg("Pair %u: sd=%.3g; sr=%.3g; corr=%.3g",
+				i + 1, q.sd, q.sr, q.corr));
+		}
+		cscore->cd(2); PLatex(0.045, mnd::as_span(cost_labels));
+		cscore->cd(3); h1_has_upstream.Draw();
+		cscore->cd(4); PLatex(0.08,
+			"Leave-one-pair-out residual widths: ",
+			mnd::as_span(resolutions)
 		);
-	}
-	TCanvas* cpos = new TCanvas("foot_xyq", "FOOT absolute positions/charge", 2150, 1650);
-	cpos->Divide(N_PAIRS, 2);
-	for(size_t i=0; i<N_PAIRS; ++i) {
-		cpos->cd(i+1+ 0*N_PAIRS); h1_footx[i].Draw();
-		cpos->cd(i+1+ 1*N_PAIRS); h1_footy[i].Draw();
-	}
-	TCanvas *cq = new TCanvas("foot_q", "FOOT charge-related histograms", 2150, 1650);
-	cq->Divide(N_PAIRS, 3);
-	for(size_t i=0; i<N_PAIRS; ++i) {
-		cq->cd(i+1+ 0*N_PAIRS); h1_q[i].Draw();
-		cq->cd(i+1+ 1*N_PAIRS); h1_dq[i].Draw();
-		cq->cd(i+1+ 2*N_PAIRS); h2_qxy[i].Draw("COLZ");
-	}
 
-	TCanvas* ckv = new TCanvas("CostValues2D", "Cost Values 2D", 2200, 1400);
-	ckv->Divide(4, 2);
-	ckv->cd(1); h2_kq.Draw("COLZ");
-	ckv->cd(5); h2_kq_sqrt.Draw("COLZ");
-	ckv->cd(2); h2_kr.Draw("COLZ");
-	ckv->cd(6); h2_kr_sqrt.Draw("COLZ");
-	ckv->cd(3); h1_kt.Draw();
-	ckv->cd(7); h1_kt_sqrt.Draw();
-
-	ckv->cd(4); h2_ktxy.Draw("COLZ");
-	ckv->cd(8); h1_diff_upstr_down.Draw();
-
-	TCanvas* cscore = new TCanvas("Score", "Score of the recognized tracks", 1200, 800);
-	cscore->Divide(2,2);
-	cscore->cd(1); h1_score.Draw();
-	cscore->cd(2); new PLatex(0.08,
-		"Coefficients: ",
-		Form("Cr = %.1f", Cr),
-		Form("Cq = %.1f", Cq),
-		Form("Ct = %.1f", Ct),
-		Form("max cost: %.1f", max_cost),
-		Form("max cost_f: %.1f", max_cost_f)
-	);
-	cscore->cd(3); h1_has_upstream.Draw();
-	cscore->cd(4); new PLatex(0.08,
-		"Position resolution: ",
-		mnd::as_span(resolutions)
-	);
-
-	TCanvas* cRQT = new TCanvas("R-Q-T-Score", "Individual R,Q,T-score components", 2150, 1400);
-	cRQT->Divide(N_PAIRS, 3);
-	TCanvas* cRQT2 = new TCanvas("R-Q-T-Score, 2D", "Individual R,Q,T-score components in 2D", 2150, 1400);
-	cRQT2->Divide(N_PAIRS, 3);
+		TCanvas* cRQT = new TCanvas(Form("R-Q-T-Score_N%u", npairs), Form("Individual R,Q,T-score components (%u pairs)", npairs), 2150, 1400);
+		cRQT->Divide(N_PAIRS, 3);
+		TCanvas* cRQT2 = new TCanvas(Form("R-Q-T-Score, 2D_N%u", npairs), Form("Individual R,Q,T-score components in 2D (%u pairs)", npairs), 2150, 1400);
+		cRQT2->Divide(N_PAIRS, 3);
 #define DECORATE_HISTO(hshort, col) \
-	for(u32 n=0; n<N_PAIRS; ++n) { \
-		TH1I* h = h1_diff_##hshort.at(n); \
-		h->SetFillColor(col); h->SetLineColor(kBlack); h->SetLineWidth(1);  \
-	}
-	DECORATE_HISTO(r, kRed-7);
-	DECORATE_HISTO(q, kCyan-4);
-	DECORATE_HISTO(t, kYellow-7);
-	for(u32 n=0; n<N_PAIRS; ++n) {
-		cRQT ->cd(0*N_PAIRS + 1+n); h1_diff_r.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
-		cRQT ->cd(1*N_PAIRS + 1+n); h1_diff_q.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
-		cRQT ->cd(2*N_PAIRS + 1+n); h1_diff_t.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
-		cRQT2->cd(0*N_PAIRS + 1+n); h2_diff_r.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
-		cRQT2->cd(1*N_PAIRS + 1+n); h2_diff_q.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
-		cRQT2->cd(2*N_PAIRS + 1+n); h2_diff_t.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
+		for(u32 n=0; n<N_PAIRS; ++n) { \
+			TH1I* h = replay[rank].h1_diff_##hshort.at(n).get(); \
+			h->SetFillColor(col); h->SetLineColor(kBlack); h->SetLineWidth(1);  \
+		}
+		DECORATE_HISTO(r, kRed-7);
+		DECORATE_HISTO(q, kCyan-4);
+		DECORATE_HISTO(t, kYellow-7);
+#undef DECORATE_HISTO
+		for(u32 n=0; n<N_PAIRS; ++n) {
+			cRQT ->cd(0*N_PAIRS + 1+n); replay[rank].h1_diff_r.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+			cRQT ->cd(1*N_PAIRS + 1+n); replay[rank].h1_diff_q.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+			cRQT ->cd(2*N_PAIRS + 1+n); replay[rank].h1_diff_t.at(n)->Draw(); gPad->SetGrid(); gPad->SetLogy();
+			cRQT2->cd(0*N_PAIRS + 1+n); replay[rank].h2_diff_r.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
+			cRQT2->cd(1*N_PAIRS + 1+n); replay[rank].h2_diff_q.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
+			cRQT2->cd(2*N_PAIRS + 1+n); replay[rank].h2_diff_t.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
+		}
+
 	}
 
 	if(draw_sci) {
 		TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2150, 1400);
 		cs->Divide(3,3);
-		cs->cd(1); h1_sci21->Draw();
-		cs->cd(2); h1_sci22->Draw();
-		cs->cd(3); h1_sci31->Draw();
-		cs->cd(4); h1_sci21_cut->Draw();
-		cs->cd(5); h1_sci22_cut->Draw();
-		cs->cd(6); h1_sci31_cut->Draw();
-		cs->cd(7); h1_sci21_cut2->Draw();
-		cs->cd(8); h1_sci22_cut2->Draw();
-		cs->cd(9); h1_sci31_cut2->Draw();
+		cs->cd(1); h1_sci21.Draw();
+		cs->cd(2); h1_sci22.Draw();
+		cs->cd(3); h1_sci31.Draw();
+		cs->cd(4); h1_sci21_cut.Draw();
+		cs->cd(5); h1_sci22_cut.Draw();
+		cs->cd(6); h1_sci31_cut.Draw();
+		cs->cd(7); h1_sci21_cut2.Draw();
+		cs->cd(8); h1_sci22_cut2.Draw();
+		cs->cd(9); h1_sci31_cut2.Draw();
+
+		TCanvas* csq = new TCanvas("SCIs-Q", "SCI21,22,31 charge", 2150, 1400);
+		csq->Divide(3,2);
+		csq->cd(1); h1_sci21_q.Draw();
+		csq->cd(2); h1_sci22_q.Draw();
+		csq->cd(3); h1_sci31_q.Draw();
+		csq->cd(4); h1_sci21_q_cut.Draw();
+		csq->cd(5); h1_sci22_q_cut.Draw();
+		csq->cd(6); h1_sci31_q_cut.Draw();
 	}
 
 	double qvg = cut_q.size() > 0

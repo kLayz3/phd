@@ -587,7 +587,7 @@ struct PLatex {
 	}
 
 	inline void ParseProperTLatex() {
-		static std::pair<const char*, const char*> rules[] {
+		static const std::pair<const char*, std::string> rules[] {
 			{ "\e[0m", "}" }, // normal
 			{"\e[0;30m", Form("#color[%d]{", kBlack )},
 			{"\e[0;31m", Form("#color[%d]{", kRed    + 2)},
@@ -598,7 +598,7 @@ struct PLatex {
 			{"\e[0;36m", Form("#color[%d]{", kCyan   + 2)}
 		};
 		for(const auto& [raw, rep] : rules)
-			PLatex::replace_all(__temporary, raw, rep);
+			PLatex::replace_all(__temporary, raw, rep.c_str());
 	}
 	inline static void replace_all(std::string& s, const char* sub, const char* rep) {
 		if(!sub || !*sub) return;

@@ -4,12 +4,16 @@
 #include "util/JSONParser.h"
 #include "util/Geometry.h"
 #include "util/FloatHacks.hxx"
+#include "util/TextUtils.h"
 
 #include "TParameter.h"
+#include "util/json_struct_def.hh"
+#include <memory>
 
 using json = nlohmann::json;
 
 static nlohmann::json setup {};
+static std::array<FOOTQCov, RNFOOTHit::N_PAIRS> cov_setup;
 static FOOTBoxParam _box {};
 
 double g_expert_target_z {};
@@ -85,6 +89,10 @@ RNFOOTTrack::RNFOOTTrack (
 #endif
 {}
 
+u32 RNFOOTTrack::LayerMask() const noexcept {
+	return (u32)mnd::get_low_bits<RNFOOTHit::N_PAIRS>(score);
+}
+
 /* Ok, hacks. Usually two tracks compare equal if their geometry is the same.
  * We can trust it's almost impossible for two distinct tracks to have exactly the same geometry.
  * Then this minimizes to comparison of 4 doubles. As long as we don't fuck around with the member order! */
@@ -149,26 +157,67 @@ tg_from_stg(const STrackingGeometry& stg) {
 	return result;
 }
 
+std::unique_ptr<
+	Eigen::Matrix<double, 2,2>
+> FOOTQCov::matrix() const noexcept {
+	const double sdr = corr*sd*sr;
+	auto m = std::make_unique<Eigen::Matrix<double, 2, 2>>();
+	*m << sd*sd, sdr,
+	      sdr,   sr*sr;
+	return m;
+}
+
 void TFOOTHitCont::Init(TDictInfo info) {
-auto it = info.find("Setup");
+	auto it = info.find("Setup");
 	if(it == info.end())
-		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
+		ERROR("Setup key not found for info (%s) passed to TFOOTHitCont.\n", mnd::type_name<TDictInfo>().c_str());
 	const std::string& file_name = it->second;
 	
 	setup = ParseJSON(file_name);
 	setup["file_name"] = file_name;
 	
-	if(!setup.contains("box")) ERROR("\'box\' key not found in JSON file: %s\n", file_name.c_str());
-
+	if(!setup.contains("box")) ERROR("'box' key not found in JSON file: %s\n", file_name.c_str());
 	UNROLL_JSON_PARAM(_box, setup["box"], 7);
 
 	/* Single global to be shipped over to TFRSHitProc */
 	g_expert_target_z = _box.GetTargetZ();
+
+	constexpr const char* cv_key = "Covariance Setup";
+
+	if(it = info.find(cv_key); it != info.end()) {
+		auto j = ParseJSON(it->second);
+		auto jit = j.find("values");
+		if(jit != j.end()) {
+			for(const auto& [k,v]: jit->items()) {
+				const auto s = mnd::split_view(k);
+				/* Try to convert whatever is s.back() to an index-1. If it throws, propagates
+				 * all the way to termination with the message. Is fine. */
+				u32 n = mnd::stou(s.back()).unwrap(
+					mnd::msg("Could not convert '%.*s' to u32.", (int)s.back().length(), s.back().data()) )
+					-1;
+				if(n >= N_PAIRS) {
+					WARN("Passed in %u index for pair, is not < N_PAIRS=%u. Ignored.", n, N_PAIRS);
+					continue;
+				}
+				auto& item = cov_setup[n];
+				if(v.contains("charge")) {
+					UNROLL_JSON_PARAM(item, v.at("charge"), 2);
+				}
+			}
+		}
+	} else {
+		WARN("'%s' key not found for info (%s) passed to TFOOTHitCont::Init(). Not a problem. "
+			"Will just use all the defaulted values: %s\n", cv_key,
+			mnd::type_name<TDictInfo>().c_str(), mnd::streamable(cov_setup.back()).c_str());
+	}
 }
 
 using FOOTParams = std::array<FOOTParam, 2>;
+using QCovs = std::array<FOOTQCov, RNFOOTHit::N_PAIRS>;
+
 using A3 = std::array<double,3>;
 template<> void Add(FOOTParams&, const FOOTParams&) {}
+template<> void Add(QCovs&, const QCovs&) {}
 template<> void Add(A3&, const A3& ) {}
 
 void TFOOTHitCont::Setup() {
@@ -182,7 +231,7 @@ void TFOOTHitCont::Setup() {
 	box = RegisterObject<FOOTBoxParam>("box", _box);
 	setupName = RegisterObject<std::string>("distinctup_file", mnd::noop_fn<std::string>(), setup["file_name"].get_ref<const std::string&>());
 	geometry = RegisterObject<STrackingGeometry>("geometry", mnd::noop_fn<STrackingGeometry>(), STrackingGeometry{});
-
+	qcov = RegisterObject<QCovs>("qcov", cov_setup); // copy ctor
 	cost_coeff = RegisterObject<A3>("cost_coeff", {}); // filled by Proc ctor
 	max_cost = RegisterObject<TParameter<double>>("max_cost", mnd::noop_fn<TParameter<double>>(), NAN); // filled by Proc ctor
 	max_cost_f = RegisterObject<TParameter<double>>("max_cost_f", mnd::noop_fn<TParameter<double>>(), NAN); // filled by Proc ctor
@@ -195,28 +244,35 @@ void TFOOTHitCont::Setup() {
 	for(u32 i=0; i<N_PAIRS; ++i) {
 		foot_param[i] = RegisterObject<FOOTParams>(Form("%u_setup", i), {});
 	#ifdef MND_FOOTTRACK_DEBUG
-		h1_diff_q[i] = RegisterObject<TH1I>(Form("h1_diff_q_%u", i),
-			Form("Innovation difference dq [e] after layer %u", i), 400,-2,2);
-		h1_diff_r[i] = RegisterObject<TH1I>(Form("h1_diff_r_%u", i),
-			Form("Innovation difference |dr| [mm] after layer %u", i), 1000,0,2);
-		h1_diff_t[i] = RegisterObject<TH1I>(Form("h1_diff_t_%u", i),
-			Form("Projected track's matching to upstream at target [mm] after layer %u", i), 500,0,100);
 
-		h2_diff_q[i] = RegisterObject<TH2I>(Form("h2_diff_q_%u", i),
-			Form("Innovation difference de [q] after layer %u vs. dQ in layer %u", i, i), 400,-2,2, 400,-2,2);
-		h2_diff_r[i] = RegisterObject<TH2I>(Form("h2_diff_r_%u", i),
-			Form("Innovation difference dy [mm] vs. dx [mm] after layer %u", i), 500,-2,2, 500,-2,2);
-		h2_diff_t[i] = RegisterObject<TH2I>(Form("h2_diff_t_%u", i),
-			Form("Innovation in projected track's matching dx vs. dy [mm] after layer %u", i), 500,-20, 20, 500,-20,20);
-
-
-		h1_diff_q[i]->GetXaxis()->SetTitle("dq [e]");    h1_diff_q[i]->GetYaxis()->SetTitle("count");
-		h1_diff_r[i]->GetXaxis()->SetTitle("|dr| [mm]"); h1_diff_r[i]->GetYaxis()->SetTitle("count");
-		h1_diff_t[i]->GetXaxis()->SetTitle("diff [mm]"); h1_diff_t[i]->GetYaxis()->SetTitle("count");
-
-		h2_diff_q[i]->GetXaxis()->SetTitle("Qu - Qv [e]");        h2_diff_q[i]->GetYaxis()->SetTitle("Innovation dq [e]");
-		h2_diff_r[i]->GetXaxis()->SetTitle("Innovation dx [mm]"); h2_diff_r[i]->GetYaxis()->SetTitle("Innovation dy [mm]");
-		h2_diff_t[i]->GetXaxis()->SetTitle("diff x [mm]");        h2_diff_t[i]->GetYaxis()->SetTitle("diff y [mm]");
+	#define REGISTER_HISTOS(LABEL) \
+		LABEL.h1_diff_q[i] = RegisterObject<TH1I>(Form("%s_h1_diff_q_%u", #LABEL, i), \
+			Form("Innovation difference dq [e] after layer %u", i), 400,-2,2); \
+		LABEL.h1_diff_r[i] = RegisterObject<TH1I>(Form("%s_h1_diff_r_%u", #LABEL, i), \
+			Form("Innovation difference |dr| [mm] after layer %u", i), 1000,0,2); \
+		LABEL.h1_diff_t[i] = RegisterObject<TH1I>(Form("%s_h1_diff_t_%u", #LABEL, i), \
+			Form("Projected track's matching to upstream at target [mm] after layer %u", i), 500,0,100); \
+		\
+		LABEL.h2_diff_q[i] = RegisterObject<TH2I>(Form("%s_h2_diff_q_%u", #LABEL, i), \
+			Form("Innovation difference de [q] after layer %u vs. dQ in layer %u", i, i), 400,-2,2, 400,-2,2); \
+		LABEL.h2_diff_r[i] = RegisterObject<TH2I>(Form("%s_h2_diff_r_%u", #LABEL, i), \
+			Form("Innovation difference dy [mm] vs. dx [mm] after layer %u", i), 500,-2,2, 500,-2,2); \
+		LABEL.h2_diff_t[i] = RegisterObject<TH2I>(Form("%s_h2_diff_t_%u", #LABEL, i), \
+			Form("Innovation in projected track's matching dx vs. dy [mm] after layer %u", i), 500,-20, 20, 500,-20,20); \
+		\
+		\
+		LABEL.h1_diff_q[i]->GetXaxis()->SetTitle("dq [e]");    LABEL.h1_diff_q[i]->GetYaxis()->SetTitle("count"); \
+		LABEL.h1_diff_r[i]->GetXaxis()->SetTitle("|dr| [mm]"); LABEL.h1_diff_r[i]->GetYaxis()->SetTitle("count"); \
+		LABEL.h1_diff_t[i]->GetXaxis()->SetTitle("diff [mm]"); LABEL.h1_diff_t[i]->GetYaxis()->SetTitle("count"); \
+		\
+		LABEL.h2_diff_q[i]->GetXaxis()->SetTitle("Qu - Qv [e]");        LABEL.h2_diff_q[i]->GetYaxis()->SetTitle("Innovation dq [e]"); \
+		LABEL.h2_diff_r[i]->GetXaxis()->SetTitle("Innovation dx [mm]"); LABEL.h2_diff_r[i]->GetYaxis()->SetTitle("Innovation dy [mm]"); \
+		LABEL.h2_diff_t[i]->GetXaxis()->SetTitle("diff x [mm]");        LABEL.h2_diff_t[i]->GetYaxis()->SetTitle("diff y [mm]");
+	
+	REGISTER_HISTOS(full_rank)
+	REGISTER_HISTOS(half_rank)
+	#undef REGISTER_HISTOS
+	
 	#endif
 	}
 }
@@ -238,3 +294,4 @@ ClassImp(RNFOOTHit::Vertex);
 
 ClassImp(SFOOTLayerGeometry);
 ClassImp(STrackingGeometry);
+ClassImp(FOOTQCov);

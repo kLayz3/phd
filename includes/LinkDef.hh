@@ -60,5 +60,6 @@
 #pragma link C++ class RNFOOTHit::Vertex+;
 #pragma link C++ class SFOOTLayerGeometry+;
 #pragma link C++ class STrackingGeometry+;
+#pragma link C++ class FOOTQCov+;
 
 #endif

@@ -154,9 +154,9 @@ struct TFOOTHitProc : TProcessor <
 	mnd::geom::Point2D extrapolate_to_target_with_update(
 		FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
 
-	double kr(const FLayerInfo::PredictionP& , const FHitMatrix::Entry& ) const noexcept;
-	double kq(const FLayerInfo::PredictionQ& , const FHitMatrix::Entry& ) const noexcept;
-	double kt(FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
+	double kr(const FLayerInfo::PredictionP& , const FHitMatrix::Entry& , u32 ) const noexcept;
+	double kq(const FLayerInfo::PredictionQ& , const FHitMatrix::Entry& , u32 ) const noexcept;
+	double kt(FTrackOnline& ,                  const FHitMatrix::Entry& , u32 ) const noexcept;
 
 	void ProcessEntry() noexcept;
 

@@ -10,6 +10,7 @@
 
 #include "TParameter.h"
 
+#include "monad/accessories/meta.hxx"
 #include "util/DirectedAGraph.hxx"
 #include "util/FTrack.h"
 #include "util/Geometry.h"
@@ -27,6 +28,15 @@ using mnd::fmt::operator<<; // to shut up the whiney-ass LSP :X
  * Later access is read-only, as such safe to be non thread_local. */
 static std::array<Eigen::Vector2d, N_PAIRS> refl; // +-1 based on the on each of the `orientation` params
 static TrackingGeometry<N_PAIRS> geometry;
+
+/* This is a read-only container containing variances from TFOOTCalCont::qcov,
+ * aka FOOTQCov entries. It just squares them in the TFOOTHitProc::TFOOTHitProc(...) ctor.
+ * https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Bivariate_case */
+struct QCost {
+	double Qdd, Qrr, Qdr;
+	double scale_norm;
+};
+static std::array<QCost, N_PAIRS> qcost;
 
 #define GEN_ARG_INSTANCE_FOOT(z, n, data) \
 	const TFOOTCalCont& in_##n
@@ -195,6 +205,22 @@ void TFOOTHitProc::AssignParameters() {
 	SetFitConversionMatrices();
 
 	*out.geometry = stg_from_tg(geometry);
+
+	for(u32 n=0; n<N_PAIRS; ++n) {
+		const auto& [sd, sr, corr] = out.qcov->operator[](n);
+		if(!mnd::is_positive(sd, sr) ||
+			!std::isfinite(corr) || std::abs(corr) >= 1.0
+		) {
+			ERROR("FOOT pair:%u one of the FOOTQCov elements is <0 or correlation not [0,1)? It is: %s\n",
+				n, mnd::streamable(out.qcov->operator[](n)).c_str());
+		}
+		::qcost[n] = {
+			.Qdd = 1/(sd*sd),
+			.Qrr = 1/(sr*sr),
+			.Qdr = 2*corr / (sd*sr),
+			.scale_norm = 1/(1 - corr*corr),
+		};
+	}
 	_called_set_cv_mat = true;
 }
 
@@ -454,7 +480,13 @@ TFOOTHitProc::Prediction TFOOTHitProc::get_prediction(const FTrack& ft, u32 n) c
 	return geometry.layer[n].prediction(ft);
 }
 
-double TFOOTHitProc::kr(const FLayerInfo::PredictionP& predicted, const FHitMatrix::Entry& candidate) const noexcept {
+double TFOOTHitProc::kr(
+	const FLayerInfo::PredictionP& predicted,
+	const FHitMatrix::Entry& candidate,
+	u32 n
+) const noexcept {
+	(void)n;
+
 	const Eigen::Vector2d& measured = candidate.pos; // (u,v);
 
 	if(! predicted.array().isFinite().all() ) // power of expression templates! :)
@@ -469,17 +501,24 @@ double TFOOTHitProc::kr(const FLayerInfo::PredictionP& predicted, const FHitMatr
 /* kQ = Cq || Qij - Qn ||^2
  * ==== Cq( [ mean(Qij) - mean(Qtrack) ]^2 + variance_ij ) 
  * Can *never* return a nil value. */
-double TFOOTHitProc::kq(const FLayerInfo::PredictionQ& predicted, const FHitMatrix::Entry& candidate) const noexcept {
+double TFOOTHitProc::kq(
+	const FLayerInfo::PredictionQ& predicted,
+	const FHitMatrix::Entry& candidate,
+	u32 n
+) const noexcept {
 	/* Cost starts at the difference for the layers x,y measurements, to 'punish' entries that have vastly different
 	 * charge in the two detectors, but by chance average out to the correct prediction. */
-	double cost = candidate.q.var();
+	const double d = candidate.q.qx - candidate.q.qy;
+
+	double cost = d*d * qcost[n].Qdd;
 	
 	if(std::isfinite(predicted)) {// Track is non-null
-		const auto qd = predicted - candidate.q.mean();
-		cost += qd*qd;
+		const double r = candidate.q.mean() - predicted;
+		cost += r*r * qcost[n].Qrr;
+		cost -= r*d * qcost[n].Qdr;
+		cost *= qcost[n].scale_norm;
 	}
 
-	cost *= Cq;
 	return cost;
 }
 
@@ -583,8 +622,8 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 					const mnd::hm::Data& e = h(i,j);
 			
 			        TrackCost cost(tau.N());
-					cost.set<TrackCost::KQ>( kq(prediction_q, e) );
-					cost.set<TrackCost::KR>( kr(prediction_p, e) );
+					cost.set<TrackCost::KQ>( kq(prediction_q, e, n) );
+					cost.set<TrackCost::KR>( kr(prediction_p, e, n) );
 					if(cost > max_cost) continue;
 					/* Even though the other cost(s) aren't yet evaluated, `kr` is the stictest.
 					 * If that one already fails here, no need evaluate further costs. */
@@ -688,8 +727,11 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 		/* Export the track. */
 		FTrackOnline tau = this->GetPrelimTrackFromPath(path);
 		const size_t N = tau.N();
-		const double score = tau.GetScore(geometry);
-		
+		const u32 lmask = tau.LayerMask();
+
+		double score = tau.GetScore(geometry);
+		mnd::set_low_bits<N_PAIRS>(score, (u64)lmask); // TODO: is this legal hehe.. ?
+
 		const FTrack& t = tau.get(geometry); // Evaluate the actual track fit.
 
 	#ifdef MND_FOOTTRACK_DEBUG
@@ -740,18 +782,16 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 				e0_y, delta_y, c0_y
 		#endif
 		);
+
+	#ifdef MND_FOOTTRACK_DEBUG
+		ReplayCostCalculation(path);
+	#endif
 		
 		/* Poison the exported hitmatrix elements along their rows and columns.
 		 * This way, no other track can reuse either the same `x` or the same `y` entry. */
 		PoisonEntriesFromHMs(path);
 	
 	} // for(const DAG::DAGPath& path : dag.path)
-
-#ifdef MND_FOOTTRACK_DEBUG
-	/* At the end, replay the best scoring path, if it contains N_PAIRS measurements. */
-	if(!dag.path.empty() and dag.path.front().Rank() == N_PAIRS)
-		ReplayCostCalculation(dag.path.front());
-#endif
 
 } // void TFOOTHitProc::AnalyseDAG()
 
@@ -821,10 +861,14 @@ void TFOOTHitProc::PostProcess() noexcept {
 
 #ifdef MND_FOOTTRACK_DEBUG
 void TFOOTHitProc::ReplayCostCalculation(const DAG::DAGPath& path) noexcept {
+	auto& h = (path.Rank() == N_PAIRS)
+		? out.full_rank
+		: out.half_rank;
+
 	DAG::DAGPath p{};
 	for(u32 n = 0; n < N_PAIRS; ++n) {
 		const DAG::Index& i = path.node[n];
-		if(!i) continue; // possible that it is null?
+		if(!i) continue; // possible that it is null
 		
 		const mnd::hm::Data& e = hm[n]( i[0], i[1] );
 		const double dq_xy = e.q.qx - e.q.qy;
@@ -845,16 +889,16 @@ void TFOOTHitProc::ReplayCostCalculation(const DAG::DAGPath& path) noexcept {
 		const mnd::geom::Vector2D dt = target_point - upstream_hit_loc;
 	
 		if( mnd::isfinite(dq, dq_xy) ) {
-			out.h1_diff_q[n]->Fill( dq );
-			out.h2_diff_q[n]->Fill( dq_xy, dq);
+			h.h1_diff_q[n]->Fill( dq );
+			h.h2_diff_q[n]->Fill( dq_xy, dq);
 		}
 		if( dp.allFinite() ) {
-			out.h1_diff_r[n]->Fill( std::sqrt(du*du + dv*dv) );
-			out.h2_diff_r[n]->Fill( du, dv );
+			h.h1_diff_r[n]->Fill( std::sqrt(du*du + dv*dv) );
+			h.h2_diff_r[n]->Fill( du, dv );
 		}
 		if( dt.eigen_view().allFinite() ) {
-			out.h1_diff_t[n]->Fill( dt.eigen_view().norm() );
-			out.h2_diff_t[n]->Fill( dt.x, dt.y );
+			h.h1_diff_t[n]->Fill( dt.eigen_view().norm() );
+			h.h2_diff_t[n]->Fill( dt.x, dt.y );
 		}
 
 		// Add the node to the current 'fake' online track.

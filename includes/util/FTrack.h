@@ -378,7 +378,8 @@ template <
 	/* ======================== METHODS ======================== */
 	size_t N() const noexcept { return q.size(); }
 	
-	u32 layer_mask() const noexcept {
+	/* From the current state of the online track, find which layers it currently contains. */
+	u32 LayerMask() const noexcept {
 		const size_t n_current = N();
 		u32 mask = 0x0;
 		for(size_t i=0; i < n_current; ++i) {
@@ -495,7 +496,7 @@ private:
 				(*t).q = q.get();
 				break;
 			case 2 ... Capacity: {
-				const u32 mask = layer_mask();
+				const u32 mask = LayerMask();
 			
 				mnd::static_for<2, Capacity + 1>([&](auto K_) {
 					constexpr size_t K = decltype(K_)::value;

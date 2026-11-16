@@ -1,8 +1,8 @@
 #pragma once
 
 #include "monad/monad.hxx"
-#include "TFOOTMapCont.h"
 #include "util/json_struct_def.hh"
+
 #include "TFOOTCalCont.h"
 
 class TH2I;
@@ -126,9 +126,13 @@ struct RNFOOTTrack {
 	double y0, ay;
 	double Q;
 
+	/* Score also contains the bitmask in lowest 4-bits of the mantissa,
+	 * which layers consitituted the track. */
 	double score;
-	std::size_t n = 0; // number of collected pairs, size_t anyway chosen as it will be aligned to 8-byte
 
+	u32 LayerMask() const noexcept;
+	size_t n = 0; // number of collected pairs, size_t anyway chosen as it will be aligned to 8-byte
+	
 	inline bool operator<(const RNFOOTTrack& rhs) const noexcept {
 		return Q > rhs.Q; // descending charge.
 	}
@@ -237,6 +241,46 @@ struct STrackingGeometry {
 
 std::unique_ptr<TrackingGeometry<RNFOOTHit::N_PAIRS>> tg_from_stg(const STrackingGeometry& );
 
+/* Each layer in the Kalman gives out 4 independent measurements:
+ * (u, v, Qu, Qv). Where (u,v) gets converted to true lab coordinates (x,y) with the layer's
+ * geometry matrix `A`.
+ * Each detector in the pair is rotated by an angle θx,θy and placed at different positions: zu,zv.
+ * A = ( cosθx ,  zu*cosθx , sinθx , zu*sinθx
+ *      -sinθy , -zv*sinθy , cosθy , zv*cosθy ) .
+ * Then:  (u,v)ᵀ = Aν - dxy .
+ *
+ * Problem then becomes, in the Kalman weighing, how to associate errors to the different measurements. */
+
+namespace Eigen {
+	template<typename Scalar_, int Rows_, int Cols_, int Options_, int MaxRows_, int MaxCols_>
+	class Matrix;
+};
+/* Will directly impact how d = Qu-Qv is and r = Qmean - Qtrack is related. */
+struct FOOTQCov {
+	inline static constexpr f64 SD_DEFAULT   = 0.5;
+	inline static constexpr f64 SR_DEFAULT   = 0.28;
+	inline static constexpr f64 CORR_DEFAULT = 0.0;
+
+	GET_HELP_AUX_IMPL;
+	ADD_SERIALIZABLE_FIELD(f64, sd,   SD_DEFAULT,   0);
+	ADD_SERIALIZABLE_FIELD(f64, sr,   SR_DEFAULT,   1);
+	ADD_SERIALIZABLE_FIELD(f64, corr, CORR_DEFAULT, 2);
+
+	/* PIMPL it out, so that interpreter won't go kaboom when
+	 * reading this type's streamer.. Lol. */
+	std::unique_ptr<
+		Eigen::Matrix<double, 2,2>
+	> matrix() const noexcept;
+
+	FOOTQCov() = default;
+	FOOTQCov(double sd_, double sr_, double corr_ = 0.0)
+		: sd(sd_), sr(sr_), corr(corr_) {}
+
+	virtual ~FOOTQCov() = default;
+	ClassDef(FOOTQCov, 1);
+};
+ADD_JSON_TYPE_RESOLUTION(FOOTQCov, 2);
+
 struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	static constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
 
@@ -247,6 +291,8 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 	FOOTBoxParam* box;
 	std::array<FOOTParam, 2>* foot_param[N_PAIRS];
 	STrackingGeometry* geometry;
+
+	std::array<FOOTQCov, N_PAIRS>* qcov;
 
 	std::string* setupName;
 
@@ -260,13 +306,15 @@ struct TFOOTHitCont : TContainer<RNFOOTHit> {
 
 #ifdef MND_FOOTTRACK_DEBUG
 	/* Few histograms to allow for logging subsequent "innovations" in the Kalman procedure. */
-	TH1I *h1_diff_q[N_PAIRS]; // Innovation in the difference: Qpair - Qpredicted
-	TH1I *h1_diff_r[N_PAIRS]; // Innovation in the difference: |vec(r)_pair - vec(r)_predicted|
-	TH1I *h1_diff_t[N_PAIRS]; // Innovation in the projected track's matching to upstream at target (distance)
-	
-	TH2I *h2_diff_q[N_PAIRS]; // Innovation in the difference: Qpair - Qpredicted *versus* (Qpair(x) - Qpair(y))
-	TH2I *h2_diff_r[N_PAIRS]; // Innovation in the difference: vec(r)_pair - vec(r)_predicted
-	TH2I *h2_diff_t[N_PAIRS]; // Innovation in the projected track's matching to upstream at target (vector)
+	struct KalmanReplayHistos {
+		TH1I *h1_diff_q[N_PAIRS]; // Innovation in the difference: Qpair - Qpredicted
+		TH1I *h1_diff_r[N_PAIRS]; // Innovation in the difference: |vec(r)_pair - vec(r)_predicted|
+		TH1I *h1_diff_t[N_PAIRS]; // Innovation in the projected track's matching to upstream at target (distance)
+		
+		TH2I *h2_diff_q[N_PAIRS]; // Innovation in the difference: Qpair - Qpredicted *versus* (Qpair(x) - Qpair(y))
+		TH2I *h2_diff_r[N_PAIRS]; // Innovation in the difference: vec(r)_pair - vec(r)_predicted
+		TH2I *h2_diff_t[N_PAIRS]; // Innovation in the projected track's matching to upstream at target (vector)
+	} full_rank, half_rank;
 #endif
 
 	TFOOTHitCont();

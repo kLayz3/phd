@@ -9,6 +9,7 @@
 #include "TFOOTHitCont.h"
 #include "TFOOTHitProc.h"
 
+#include "monad/monad.hxx"
 #include "util/CLI.h"
 #include "util/Verbosity.hxx"
 #include "util/RunsheetParser.h"
@@ -44,6 +45,7 @@ int main(int argc, char* argv[]) {
 	double kalman_cost_ct = TrackCost::DEFAULT_COST_T;
 
 	std::string frsSetupFile, footSetupFile;
+	std::string footQcov = PROG_PATH "/params/foot_cov.json";
 
 	add_logged_option<DisplayDefault::No>(app, "-f,--file", fileName, "Input ROOT file")
 		->required()
@@ -87,6 +89,7 @@ int main(int argc, char* argv[]) {
 		->check(CLI::NonNegativeNumber);
 	add_logged_option(app, "-r,--max-cost-final", kalman_max_cost_f, "Maximum cost that the final track can have. Use 0 for infinite cost.")
 		->check(CLI::NonNegativeNumber);
+	add_logged_option(app, "--foot-qcov", footQcov, "Pass in the JSON file name with FOOT pair's charge measurement covariances.");
 
 	CLI11_PARSE(app, argc, argv);
 
@@ -115,7 +118,10 @@ int main(int argc, char* argv[]) {
 	}
 
 	TFOOTHitCont hfoot;
-	hfoot.Init( {{"Setup", footSetupFile }} );
+	hfoot.Init({
+		{ "Setup", footSetupFile },
+		{ "Covariance Setup", footQcov }
+	});
 	hfoot.Setup();
 	footSetupFile.clear();
 
