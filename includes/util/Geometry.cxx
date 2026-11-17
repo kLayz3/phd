@@ -410,8 +410,10 @@ std::ostream& operator<<(std::ostream& os, const Point3D& rhs) {
 	return os << '(' << rhs.x << ", " << rhs.y << ", " << rhs.z << ')';
 }
 std::ostream& operator<<(std::ostream& os, const Line2D&  rhs) {
+	using mnd::fmt::operator<<;
 	return os << rhs.value;
 }
 std::ostream& operator<<(std::ostream& os, const Line3D&  rhs) {
+	using mnd::fmt::operator<<;
 	return os << '(' << rhs.xarray() << ", " << rhs.yarray() << ')';
 }

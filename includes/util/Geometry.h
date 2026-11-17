@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <vector>
 #include "json_struct_def.hh" // std::ostream& operator<<(std::ostream&, array<T,N> const&)
-#include "../monad/monad.hxx"
+#include "monad/monad.hxx"
 #include "../Eigen.h"
 
 #define MND_FORMAT_ANGLES_IN_RADIANS

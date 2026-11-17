@@ -128,3 +128,10 @@ G4FORCENUMBEROFTHREADS=16 ./c9be9 run.mac
 
 The environment variable overrides the run-manager/UI thread count in an MT
 build.
+
+## FOOT telescope transport
+
+A separate `foot_transport` target reuses the EM transport infrastructure for
+the eight silicon planes, without the fragmentation process. See
+[transport/README.md](transport/README.md) for inputs, build commands, truth output
+and validation scope.

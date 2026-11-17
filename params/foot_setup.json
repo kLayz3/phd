@@ -1,4 +1,13 @@
 {
+	// Common FOOT detector parameters.
+	"DSSSD": {
+		"composition": [
+			{
+				"material": "Si",
+				"thickness": 150e-6 // in meters
+			}
+		]
+	},
 	// Common FOOT box parameters.
 	// Some from Chamber_ASM_dwg_v3_1, some from more thorough calibration.
 	"box" : {

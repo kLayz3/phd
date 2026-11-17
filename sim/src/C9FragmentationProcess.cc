@@ -73,10 +73,10 @@ C9FragmentationProcess::Resonance
 C9FragmentationProcess::SampleResonance(G4double thresholdEx) {
     if (G4UniformRand() < cfg::state1Probability) {
         return {1, SampleTruncatedBreitWigner(
-            cfg::ex1, cfg::width1, thresholdEx)};
+            cfg::ex1, cfg::width1, thresholdEx), cfg::width1};
     }
     return {2, SampleTruncatedBreitWigner(
-        cfg::ex2, cfg::width2, thresholdEx)};
+        cfg::ex2, cfg::width2, thresholdEx), cfg::width2};
 }
 
 G4VParticleChange* C9FragmentationProcess::PostStepDoIt(

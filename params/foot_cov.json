@@ -4,28 +4,71 @@
 			"charge": {
 				"sd": 0.50,
 				"sr": 0.28
-			}
+			},
+			"position": [
+				{
+					"ion": "9C",
+					"residue": { // in υm
+						"u": 69.8,
+						"v": 70.1
+					}
+				},
+				{
+					"ion": "4He",
+					"residue": { // in υm
+						"u": 69.2,
+						"v": 72.6
+					}
+				}
+			]
 		},
 
 		"pair 2": {
 			"charge": {
 				"sd": 0.50,
 				"sr": 0.28
-			}
+			},
+			"position": [
+				{
+					"ion": "9C",
+					"residue": { // in υm
+						"u": 46.2,
+						"v": 44.8
+					}
+				}
+			]
 		},
 
 		"pair 3": {
 			"charge": {
 				"sd": 0.50,
 				"sr": 0.28
-			}
+			},
+			"position": [
+				{
+					"ion": "9C",
+					"residue": { // in υm
+						"u": 42.4,
+						"v": 40.8
+					}
+				}
+			]
 		},
 
 		"pair 4": {
 			"charge": {
 				"sd": 0.50,
 				"sr": 0.28
-			}
+			},
+			"position": [
+				{
+					"ion": "9C",
+					"residue": { // in υm
+						"u": 83.9,
+						"v": 81.3
+					}
+				}
+			]
 		}
 	}
 }
