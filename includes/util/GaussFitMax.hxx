@@ -32,10 +32,10 @@ inline GaussFitMaxResults GaussFitMax (
     Verbosity v = Verbosity::SILENT,
     bool likelihood = false
 ) {
-	constexpr const char* color_red = "\e[1;91m";
-	constexpr const char* color_grn = "\e[1;92m";
-	constexpr const char* color_cyn = "\e[1;96m";
-	constexpr const char* color_off = "\e[0m";
+	constexpr const char* color_red = "\033[1;91m";
+	constexpr const char* color_grn = "\033[1;92m";
+	constexpr const char* color_cyn = "\033[1;96m";
+	constexpr const char* color_off = "\033[0m";
 
     constexpr double invalid = std::numeric_limits<double>::quiet_NaN();
 

@@ -38,7 +38,7 @@ private:
 		enum class Status { kFINE, kIN_CONFLICT, kDROPPED } status = Status::kFINE;
 
 		TPCHitCandidate() = default;
-		TPCHitCandidate(i32 _a_tdc, i32 _dl_tdc, i32 _dr_tdc, i32 _ref_tdc) noexcept :
+		TPCHitCandidate(i32 _a_tdc, i32 _dl_tdc, i32 _dr_tdc) noexcept :
 			a_tdc(_a_tdc), dl_tdc(_dl_tdc), dr_tdc(_dr_tdc) {}
 		
 		inline i32 CSum() { return dl_tdc + dr_tdc - 2*a_tdc; }

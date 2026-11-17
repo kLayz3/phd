@@ -231,7 +231,7 @@ void TFRSCalProc::ProcessCSum(int _i_tpc, int i) noexcept {
 
 					if( is_inside(csum, csum_limits) ) {
 						list.emplace_back (
-							tdc_a, dl, dr, INVALID	
+							tdc_a, dl, dr
 						);
 					}
 				}
@@ -406,7 +406,7 @@ void TFRSCalProc::ProcessTPC_YCut(int _i_tpc) noexcept {
 	}
 }
 #else
-void TFRSCalProc::ProcessSingleHit(int _i_tpc, int ref_tdc) noexcept {
+void TFRSCalProc::ProcessSingleHit([[maybe_unused]] int _i_tpc, int ref_tdc) noexcept {
 	constexpr i32 INVALID = RNTPCMap::Measurement::TDC_INVALID;
 
 	for(int d: {0,1}) {

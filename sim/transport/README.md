@@ -1,6 +1,6 @@
 # FOOT telescope transport
 
-`foot_transport` is separate from `c9be9`: no fragmentation process, decay, or
+`foot_transport` is separate from the reaction executable: no fragmentation process, decay, or
 hadronic reaction physics is registered. It retains electromagnetic option4,
 including multiple scattering and ionisation. The electron production range
 cut is 10 mm, as in the existing reaction simulation; this suppresses explicit
@@ -21,16 +21,18 @@ The installed `geant4.sh` sets the dataset paths. Use `--threads 8` with an MT-e
 `phy::Nucleus` currently includes the project's geometry/monad headers. The
 existing MPhysics, Geometry, FromChars, TextUtils, JSONParser and FilesystemUtils
 implementations are compiled directly; neither libStructures nor Go4 is loaded.
-The reaction executable and its macro remain unchanged.
+The reaction executable and its macro live under `reactions/8b->7be+p/`.
+The telescope configuration loader is shared in `include/TransportConfig.hh`
+and `src/TransportConfig.cc`.
 
 ## Inputs and invocation
 
 ```sh
 # Check the parsed inputs without constructing Geant4 or writing output.
-./sim/build/foot_transport --ion 9C --energy-per-u 700 --check-config
+./sim/build/transport/foot_transport --ion 9C --energy-per-u 700 --check-config
 
 # Example energy only: supply the appropriate kinetic energy at telescope entry.
-./sim/build/foot_transport --ion 9C --energy-per-u 700 \
+./sim/build/transport/foot_transport --ion 9C --energy-per-u 700 \
     --events 100000 --threads 1 --seed 12345 --output transport_9C.root
 ```
 
@@ -137,7 +139,7 @@ Build the ROOT-only analysis target and run it on an existing transport file:
 
 ```sh
 cmake --build sim/build --target foot_transport_analysis -j4
-./sim/build/foot_transport_analysis -f transport_9C.root --section c9
+./sim/build/transport/foot_transport_analysis -f transport_9C.root --section c9
 ```
 
 Use the ROOT environment matching `ROOT_DIR` in the CMake cache. In particular,
@@ -165,11 +167,11 @@ same `GaussFitMax` routine and four iterations as `foot_track_analysis.cc`.
 
 ```sh
 # Change only u binning; v still comes from the selected configuration.
-./sim/build/foot_transport_analysis -f transport_9C.root \
+./sim/build/transport/foot_transport_analysis -f transport_9C.root \
     --binning-dx=240,-0.6,0.6 -o finer_residuals.root
 
 # Optional trial detector noise: physical detector order d0..d7, in micrometres.
-./sim/build/foot_transport_analysis -f transport_9C.root \
+./sim/build/transport/foot_transport_analysis -f transport_9C.root \
     --sigma-um=30,30,30,30,30,30,30,30 -o trial_residuals.root
 ```
 

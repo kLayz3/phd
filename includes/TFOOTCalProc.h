@@ -22,7 +22,7 @@ struct TFOOTCalProc : TProcessor <
 	static_assert(MAX_CL_SIZE > MASSIVE_CLUSTER_CUTOFF);
 
 	using ClusterType = RNFOOTCluster::ClusterType;
-	using ClusterFullType = std::pair<ClusterType, ClusterType>;
+	using ClusterFullType = std::pair</*pos side*/ClusterType, /*neg side*/ClusterType>;
 
 	friend bool operator==(const ClusterFullType&, ClusterType );
 	friend bool operator!=(const ClusterFullType&, ClusterType );
@@ -40,7 +40,7 @@ struct TFOOTCalProc : TProcessor <
 			Seed       = 1<<3,
 			BelowThr   = 1<<4,
 		};
-		u32 flag; // default: all false
+		u32 flag = 0; // default: all false
 	};
 	static_assert(sizeof(TClustHit) == 16);
 
@@ -75,7 +75,10 @@ public:
 	using TClustHitIterator = std::remove_reference<decltype( std::begin(_buf) )>::type;
 
 	u32 _cl_cnt = 0; /* Points to one-ahead valid index in `_buf`. Is also size of `_buf`. */
-	ClusterFullType _ct { ClusterType::kUNKNOWN, ClusterType::kUNKNOWN };
+	ClusterFullType _ct {
+		ClusterType::kUNKNOWN, // positive side
+		ClusterType::kUNKNOWN  // negative side
+	};
 	ClusterType GetClusterType();
 
 	void CharacterizeCurrentCluster() noexcept;

@@ -1,5 +1,6 @@
 #include "RtypesCore.h"
-#include "monad/accessories/typedefs.hxx"
+
+#include "monad/accessories/timing.hxx"
 #include "monad/accessories/meta.hxx"
 
 #include "util/CLI.h"
@@ -51,7 +52,11 @@ int main(int argc, char** argv) {
 		->delimiter(',')
 		->expected(8);
 	add_logged_option(app, "--seed", seed, "Trial-smearing random seed");
+	
 	CLI11_PARSE(app, argc, argv);
+	srand(time(NULL));
+	std::vector<TimePoint> tv;
+	tv.emplace_back(TimePoint("start"));
 
 	// Match quick/run: compiled defaults, GLOBAL, SECTION; explicit analysis arguments override these.
 	const auto cli_u = bins_u, cli_v = bins_v;
@@ -261,4 +266,7 @@ int main(int argc, char** argv) {
 	canvas.Print(pdf.c_str());
 	WARN("Used %lld/%lld events; wrote %s and %s\n", static_cast<long long>(accepted),
 		static_cast<long long>(tree->GetEntries()), output.c_str(), pdf.c_str());
+
+	tv.emplace_back(TimePoint("end"));
+	PrintElapsed<kSECOND>(std::move(tv));
 }

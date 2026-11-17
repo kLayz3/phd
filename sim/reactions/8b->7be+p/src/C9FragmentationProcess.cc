@@ -1,6 +1,7 @@
 #include "C9FragmentationProcess.hh"
 
 #include "Config.hh"
+#include "ReactionConfig.hh"
 #include "EventInfo.hh"
 #include "G4DynamicParticle.hh"
 #include "G4Event.hh"
@@ -46,7 +47,7 @@ G4double C9FragmentationProcess::GetMeanFreePath(
 
     // For this pure-element target, n * sigma is the macroscopic cross section.
     const G4double nAtoms = material->GetTotNbOfAtomsPerVolume();
-    return 1.0 / (nAtoms * cfg::sigmaTotal);
+    return 1.0 / (nAtoms * reaction::sigmaTotal);
 }
 
 G4double C9FragmentationProcess::SampleTruncatedBreitWigner(
@@ -58,8 +59,8 @@ G4double C9FragmentationProcess::SampleTruncatedBreitWigner(
     // The finite window is deliberate: this is a transport toy model, not an
     // R-matrix treatment of the resonance line shape.
     const G4double lo = std::max(
-        thresholdEx, mean - cfg::widthWindow * width);
-    const G4double hi = mean + cfg::widthWindow * width;
+        thresholdEx, mean - reaction::widthWindow * width);
+    const G4double hi = mean + reaction::widthWindow * width;
 
     while (true) {
         const G4double u = G4UniformRand();
@@ -71,12 +72,12 @@ G4double C9FragmentationProcess::SampleTruncatedBreitWigner(
 
 C9FragmentationProcess::Resonance
 C9FragmentationProcess::SampleResonance(G4double thresholdEx) {
-    if (G4UniformRand() < cfg::state1Probability) {
+    if (G4UniformRand() < reaction::state1Probability) {
         return {1, SampleTruncatedBreitWigner(
-            cfg::ex1, cfg::width1, thresholdEx), cfg::width1};
+            reaction::ex1, reaction::width1, thresholdEx), reaction::width1};
     }
     return {2, SampleTruncatedBreitWigner(
-        cfg::ex2, cfg::width2, thresholdEx), cfg::width2};
+        reaction::ex2, reaction::width2, thresholdEx), reaction::width2};
 }
 
 G4VParticleChange* C9FragmentationProcess::PostStepDoIt(

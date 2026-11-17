@@ -75,6 +75,20 @@ template <
 				state->current_is_authoritative = true; // Respect my authoritah.
 				input.erase(input.begin());
 			}
+			/* Expand decimal suffixes. */
+			if constexpr(std::is_integral_v<T>) {
+				if(!input.empty()) {
+					size_t zeros = 0;
+					switch(input.back()) {
+						case 'k': zeros = 3; break;
+						case 'M': zeros = 6; break;
+						case 'G': zeros = 9; break;
+						default: break;
+					}
+					if(zeros != 0)
+						input.replace(input.size() - 1, 1, zeros, '0');
+				}
+			}
 			return input; // RVO
 		})
 		->trigger_on_parse();

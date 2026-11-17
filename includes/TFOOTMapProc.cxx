@@ -1,6 +1,5 @@
 #include "TFOOTMapProc.h"
 #include "TFOOTMapCont.h"
-#include "TFRSGo4Cont.hxx"
 
 #include "util/TextUtils.h"
 #include "util/GaussFitMax.hxx"

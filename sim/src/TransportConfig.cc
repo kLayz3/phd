@@ -1,7 +1,7 @@
 #include "monad/accessories/typedefs.hxx"
 #include "monad/accessories/meta.hxx"
 
-#include "Config.hh"
+#include "TransportConfig.hh"
 #include "util/JSONParser.h"
 #include <algorithm>
 #include <cmath>

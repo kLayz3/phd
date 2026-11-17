@@ -29,16 +29,13 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
         "Be9Target", fTargetDensity, 1);
     targetMaterial->AddElement(beElement, 1.0);
 
-    const auto worldHalfXY = 25.0 * cm;
-    const auto worldHalfZ = 50.0 * cm;
-    auto* worldSolid = new G4Box("WorldSolid", worldHalfXY, worldHalfXY, worldHalfZ);
+    auto* worldSolid = new G4Box("WorldSolid", cfg::worldHalfXY, cfg::worldHalfXY, cfg::worldHalfZ);
     auto* worldLV = new G4LogicalVolume(worldSolid, vacuum, "WorldLV");
     auto* worldPV = new G4PVPlacement(
         nullptr, {}, worldLV, "WorldPV", nullptr, false, 0, true);
 
-    const auto targetHalfXY = 10.0 * cm;
     auto* targetSolid = new G4Box(
-        "TargetSolid", targetHalfXY, targetHalfXY, 0.5 * fTargetThickness);
+        "TargetSolid", cfg::targetHalfXY, cfg::targetHalfXY, 0.5 * fTargetThickness);
     auto* targetLV = new G4LogicalVolume(targetSolid, targetMaterial, "TargetLV");
     new G4PVPlacement(
         nullptr, {}, targetLV, "TargetPV", worldLV, false, 0, true);

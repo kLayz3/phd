@@ -1,7 +1,8 @@
-#include "Config.hh"
+#include "TransportConfig.hh"
 #include "util/MPhysics.h"
 #include "util/CLI.h"
-#include "monad/accessories/typedefs.hxx"
+
+#include "monad/accessories/timing.hxx"
 
 #include "G4AnalysisManager.hh"
 #include "G4Box.hh"
@@ -26,6 +27,7 @@
 #include "G4VUserDetectorConstruction.hh"
 #include "G4VUserPrimaryGeneratorAction.hh"
 #include "Randomize.hh"
+
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -288,6 +290,10 @@ int main(int argc,char** argv) {
 
 	CLI11_PARSE(app,argc,argv);
 	
+	srand(time(NULL));
+	std::vector<TimePoint> tv;
+	tv.emplace_back(TimePoint("start"));
+
 	auto nucleus = phy::Nucleus::get_ion(o.ion, true, "foot_transport --ion");
 	if(!nucleus.valid() || nucleus.A < nucleus.Z || nucleus.Q() != nucleus.Z)
 		ERROR("Transport requires a valid fully stripped ion.");
@@ -379,4 +385,7 @@ int main(int argc,char** argv) {
 	
 	manager->BeamOn(o.events);
 	manager.reset();
+
+	tv.emplace_back(TimePoint("end"));
+	PrintElapsed<kSECOND>(std::move(tv));
 }

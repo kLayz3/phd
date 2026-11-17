@@ -1,5 +1,5 @@
-# Must be set before /run/initialize. Change 8 to however many workers you want.
-/run/numberOfThreads 8
+# For an MT-enabled Geant4 build, uncomment before /run/initialize:
+# /run/numberOfThreads 8
 
 /run/verbose 1
 /event/verbose 0

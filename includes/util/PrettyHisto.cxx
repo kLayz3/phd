@@ -527,7 +527,7 @@ std::ostream& mnd::col::operator<<(std::ostream& os, const RGBA& o) {
 		   << std::dec << std::setfill(' ');
 	}
 
-	os << "\e[0m";
+	os << "\0033[0m";
 	return os;
 }
 template std::ostream& mnd::col::operator<< <true >(std::ostream&, const mnd::col::RGBA& );

@@ -22,21 +22,14 @@ inline const G4double targetDensity = 1.848 * g / (cm * cm * cm);
 inline const G4double defaultProductionCut = 0.1 * mm;
 inline const G4double deltaElectronRangeCut = 10.0 * mm;
 
-// IMPORTANT: this is a placeholder TOTAL 9C-removal/reaction cross section.
-// It controls the reaction-depth distribution. Replace with the cross section
-// appropriate for your beam energy / experiment.
-inline const G4double sigmaTotal = 1.0 * barn;
-
-// Effective 8B* model.  These are approximate resonance parameters.
-// The relative population is deliberately arbitrary for this first transport test.
-inline const G4double ex1 = 0.770 * MeV;
-inline const G4double width1 = 35.6 * keV;
-inline const G4double ex2 = 2.320 * MeV;
-inline const G4double width2 = 350.0 * keV;
-inline constexpr G4double state1Probability = 0.18;
-
-// Truncate the Cauchy/Breit-Wigner sampling to avoid very remote tails in this
-// simple toy model. This is not an R-matrix line shape.
-inline constexpr G4double widthWindow = 5.0;
+// Shared world/target dimensions and beam entrance state.
+inline const G4double worldHalfXY = 25.0 * cm;
+inline const G4double worldHalfZ = 50.0 * cm;
+inline const G4double targetHalfXY = 10.0 * cm;
+inline const G4double beamX = 0.0 * mm;
+inline const G4double beamY = 0.0 * mm;
+inline const G4double beamAx = 0.0;
+inline const G4double beamAy = 0.0;
+inline const G4double beamStartGap = 1.0 * um;
 
 } // namespace cfg

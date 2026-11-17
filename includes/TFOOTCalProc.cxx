@@ -357,8 +357,8 @@ void TFOOTCalProc::MakeACluster(int& c0 /* Starting index. Passes C-threshold ch
 }
 
 void TFOOTCalProc::CharacterizeCurrentCluster() noexcept {
-	ClusterType& _ct_neg = _ct.first;  /* Negative side. */
-	ClusterType& _ct_pos = _ct.second; /* Positive side. */
+	ClusterType& _ct_pos = _ct.first; /* Positive side. */
+	ClusterType& _ct_neg = _ct.second;  /* Negative side. */
 
 	/* Firstly, check if it's isolated cluster. Cluster size == 3 is ALWAYS isolated.
 	 * The edge-nodes are ALWAYS BelowThr. */
@@ -430,7 +430,7 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int i /* 1, ...
 
 	int prev = i-1 /* <-- Is in cluster. */ , next = i+1;
 	if(next < N_STRIPS and e[next] > n_thr(next)) {
-		_frag = {e[i], i};
+		_frag = {e[i], i, TClustHit::Flag::Breakpoint};
 		_ct_pos = ClusterType::kFRAGMENTED;
 
 		e[i] = sqrt( e[prev] * e[next] );
@@ -447,14 +447,14 @@ bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int i /* 0, ...
 	 * It's known from caller's logic that `i+1` belongs to the cluster and
 	 * that `i` is below the N-threshold. */
 
-	ClusterType& _ct_neg = _ct.first; /* Negative side. */
+	ClusterType& _ct_neg = _ct.second; /* Negative side. */
 
 	/* Don't allow multiple fragmentations of cluster. A true zig-zag pattern. */
 	if(_ct_neg == ClusterType::kFRAGMENTED) return false;
 	
 	int next = i+1 /* <-- Is in cluster. */ , prev = i-1;
 	if(prev >= 0 and e[prev] > n_thr(prev)) {
-		_frag = {e[i], i};
+		_frag = {e[i], i, TClustHit::Flag::Breakpoint};
 		_ct_neg = ClusterType::kFRAGMENTED;
 		
 		e[i] = sqrt( e[prev] * e[next] );

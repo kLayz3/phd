@@ -20,7 +20,7 @@ void PrimaryGenerator::GeneratePrimaries(G4Event* event) {
     fGun->SetParticleDefinition(ion);
     fGun->SetParticleCharge(cfg::beamZ * eplus); // 9C6+
     fGun->SetParticleEnergy(cfg::beamA * cfg::beamEnergyPerU);
-    fGun->SetParticleMomentumDirection({0.0, 0.0, 1.0});
-    fGun->SetParticlePosition({0.0, 0.0, fDetector->TargetEntranceZ() - 1.0 * um});
+    fGun->SetParticleMomentumDirection({cfg::beamAx, cfg::beamAy, 1.0});
+    fGun->SetParticlePosition({cfg::beamX, cfg::beamY, fDetector->TargetEntranceZ() - cfg::beamStartGap});
     fGun->GeneratePrimaryVertex(event);
 }

@@ -35,7 +35,7 @@
 	template<std::size_t I, typename Self, typename std::enable_if<(I == INDEX)>::type* = nullptr> \
 	static void print_field(std::ostream& os, Self&& self) { \
 		using mnd::fmt::operator<<; \
-		os << ".\e[1;94m" <<  get_name<I>() << "\e[0m = " << std::forward<Self>(self).NAME << ", "; \
+		os << ".\033[1;94m" <<  get_name<I>() << "\033[0m = " << std::forward<Self>(self).NAME << ", "; \
 	}; \
 
 #define UNROLL_MAYBE_JSON_PARAM_SINGLE_(StructInstance, JSONInstance, INDEX) \
@@ -93,7 +93,7 @@
 	inline std::ostream& operator<<(std::ostream& os, const TYPE& obj) { \
 		os << "{"; \
 		print_me_json_helper_aux_##TYPE(os, obj, std::make_index_sequence<N+1>{}); \
-		os << "\e[1mEND\e[0m }"; \
+		os << "\033[1mEND\0033[0m }"; \
 		return os; \
 	} \
 	\
