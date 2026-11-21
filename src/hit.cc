@@ -28,8 +28,9 @@ int main(int argc, char* argv[]) {
 #ifdef MND_FOOTTRACK_DEBUG
     {
         std::string descr = app.get_description();
-        descr += "\n" BOLD "Compiled in DEBUG mode. Extra fields appended, and ROOT I/O won't work against "
-            "versions with non-debug mode." KNRM;
+        descr += fmt::format("\n{}", styled("Compiled in DEBUG mode. Extra fields appended, "
+			"and ROOT I/O won't work against versions with non-debug mode.",
+			fg(0xFFEFA9_rgb) | fmt::emphasis::bold));
         app.description(std::move(descr));
     }
 #endif
@@ -55,18 +56,18 @@ int main(int argc, char* argv[]) {
 			auto f = std::make_unique<TFile>(file_name.c_str(), "READ");
 			auto* _p1 = f->Get<std::string>("FRS_setup_file");
 			if(!_p1 or !_p1->length())
-				ERROR("`FRS_setup_file` (std::string) object not found (or is blank) in: %s\n", file_name.c_str());
+				ERROR("`FRS_setup_file` (std::string) object not found (or is blank) in: {}\n", file_name);
 			frsSetupFile = *_p1;
 
 			_p1 = f->Get<std::string>("FOOT0_setup_file");
 			if(!_p1 or !_p1->length())
-				ERROR("`FOOT0_setup_file` (std::string) object not found (or is blank) in: %s\n", file_name.c_str());
+				ERROR("`FOOT0_setup_file` (std::string) object not found (or is blank) in: {}\n", file_name);
 			footSetupFile = *_p1;
 		});
 
 
 	add_logged_option<DisplayDefault::No>(app, "-o,--output", outFile,
-		"Specify output file name. Default same as the input file with \'_cal\' suffix.")
+		"Specify output file name. Default same as the input file with '_cal' suffix.")
 		->expected(0,1);
 	add_logged_option<DisplayDefault::No>(app, "-m,--max-events", maxEvents,
 		"Specify total number of events. Default: all events in the input ROOT file.")

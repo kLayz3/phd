@@ -44,20 +44,20 @@ int main(i32 argc, char* argv[]) {
 		->expected(1)
 		->check(CLI::ExistingFile);
 	
-	add_logged_option<DisplayDefault::No>(app, "-o,--output", outFile, 
-		"Specify output file name. Default same as the input file with \'_map\' suffix.")
+	add_logged_option<DisplayDefault::No>(app, "-o,--output", outFile,
+		"Specify output file name. Default same as the input file with '_map' suffix.")
 		->expected(0,1);
 
-	add_logged_option<DisplayDefault::No>(app, "-m,--max-events", maxEvents, 
+	add_logged_option<DisplayDefault::No>(app, "-m,--max-events", maxEvents,
 		"Specify total number of events. Default: all events in the input ROOT file.")
 		->check(CLI::PositiveNumber);
 
-	add_logged_option<DisplayDefault::No>(app, "-d,--foot-dt", dt_veto, 
+	add_logged_option<DisplayDefault::No>(app, "-d,--foot-dt", dt_veto,
 		"Specify in microseconds FOOT deadtime veto. Consecutive entries with stamp difference <T will be discarded. Default 0")
 		->check(CLI::PositiveNumber);
 
 	CLI11_PARSE(app, argc, argv);
-	if(outFile.empty()) outFile = fileName.substr(0, fileName.find('.')) + "_map.root"; 
+	if(outFile.empty()) outFile = fileName.substr(0, fileName.find('.')) + "_map.root";
 	
 	srand(time(NULL));
 	std::vector<TimePoint> tv;
@@ -65,8 +65,8 @@ int main(i32 argc, char* argv[]) {
 #ifdef FRS_GO4
 	TFRSGo4Cont sort{};
 #else
-	static_assert(false, 
-		"Cannot handle non-FRS structures (yet)"); 
+	static_assert(false,
+		"Cannot handle non-FRS structures (yet)");
 #endif
 
 	std::unordered_map<std::string, std::string> info;
@@ -74,7 +74,7 @@ int main(i32 argc, char* argv[]) {
 #define INIT_FOOT_(ID) \
 	{ \
 		int i = mnd::FindIndex(::static_detectors, ID); \
-		if(i < 0) ERROR("Index cannot be found: ID=%d, i=%d", ID, i); \
+		if(i < 0) ERROR("Index cannot be found: ID={}, i={}", ID, i); \
 		TFOOTMapCont& f = foot[i]; \
 		info["FOOT_ID"] = #ID; \
 		f.Init(info); \
@@ -121,15 +121,15 @@ int main(i32 argc, char* argv[]) {
 	/* Loop over all workers, get their processes,
 	 * and set them correspondingly (FOOT). FRS+Trig process needs to be switched away from no-op state. */
 	for(auto& process : pool.GetPool()) {
-		auto subprocesses = process.GetProcesses(); 
+		auto subprocesses = process.GetProcesses();
 		/* ^^^^ std::array<TProcessorBase*, _> */
 
-		for(TProcessorBase* subproc : subprocesses) { 
+		for(TProcessorBase* subproc : subprocesses) {
 			TFOOTMapProc* pfoot = dynamic_cast<TFOOTMapProc*>(subproc);
 			if(pfoot) {
 				pfoot->CalcGlobalPedestal();
 				pfoot->process_type = TFOOTMapProc::kMAIN;
-			} 
+			}
 			TFRSMapProc* pfrs = dynamic_cast<TFRSMapProc*>(subproc);
 			if(pfrs) pfrs->do_analysis = TFRSMapProc::DoAnalysis::YES;
 			
@@ -160,9 +160,9 @@ int main(i32 argc, char* argv[]) {
 	
 	pool.Collect();
 
-	/* Perform final fit for the crrected pedestal sigma calculation. */ 
+	/* Perform final fit for the crrected pedestal sigma calculation. */
 	auto& process = pool.Ref();
-	for(TProcessorBase* subproc : process.GetProcesses()) { 
+	for(TProcessorBase* subproc : process.GetProcesses()) {
 		TFOOTMapProc* pfoot = dynamic_cast<TFOOTMapProc*>(subproc);
 		if(pfoot) pfoot->CalcFinalPedestal();
 	}

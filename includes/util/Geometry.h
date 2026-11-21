@@ -293,9 +293,9 @@ VertexingResult<T> FindVertexingTracksMut(std::vector<T>& , double const D = VER
 namespace mnd::geom::detail {
 
 struct CoordinateFormatter : fmt::range_formatter<double, char> {
-	/* OK: explaination. The fmt::range_formatter takes the brackets as views, so I cannot just 
-	 * paste in a single char since it would dangle. It needs some static-storage char array. 
-	 * Now passing in "{" deduces Open=2 and open = { '}', '\0' } */
+	/* OK: explaination. The fmt::range_formatter takes the brackets as views, so I cannot just
+	 * paste in a single char since it would dangle. It needs some static-storage char array.
+	 * Now passing in "{" deduces Open=2 and open = { '{', '\0' } */
 	template<size_t Open, size_t Close>
 	constexpr CoordinateFormatter(const char (&open)[Open], const char (&close)[Close]) {
 		set_brackets({open, Open - 1}, {close, Close - 1});
