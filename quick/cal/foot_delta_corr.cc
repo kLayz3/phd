@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
 	
 	add_logged_option(app, "-b,--foot-binning", foot_binning, "FOOT ADC binning")
 		->delimiter(',');
-	add_logged_option(app, "-d,--delta-binning", delta_binning, "FOOT ADC binning")
+	add_logged_option(app, "-d,--delta-binning", delta_binning, "FOOT delta 1D-binning")
 		->delimiter(',');
 	add_logged_option(app, "--sratio", sratio, "Width ratio of raw histogram, how much to fit around the peak.")
 		->check(CLI::PositiveNumber);
@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) {
 
 	const double CA = gain.GetNominalValue(Q_target);
 	if(!std::isfinite(CA))
-		ERROR("Z=%d nominal not found in the setup file. Cannot proceed.\n", Q_target);
+		ERROR("Z={} nominal not found in the setup file. Cannot proceed.\n", Q_target);
 
 	ROOT::EnableThreadSafety();
 	ROOT::DisableImplicitMT();
@@ -178,8 +178,8 @@ int main(int argc, char* argv[]) {
                 option::Lead{">"},
                 option::Remainder{" "},
                 option::End{"]"},
-                option::PostfixText{mnd::msg(
-					"%zu/%zu: %'zu (%s)", i+1, fileNames.size(), nentries, fname.c_str()
+                option::PostfixText{fmt::format(
+					"{}/{}: {:L} ({})", i+1, fileNames.size(), nentries, fname
 				)},
                 option::ForegroundColor{ indicators::next_col() },
                 option::ShowPercentage{true},
@@ -206,10 +206,6 @@ int main(int argc, char* argv[]) {
             if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
             if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
             if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
-
-			if(mnd::IsValid(sci21_cut) and (sci21.hits.size() != 1 or !mnd::IsInside(sci21.E, sci21_cut))) continue;
-			if(mnd::IsValid(sci22_cut) and (sci22.hits.size() != 1 or !mnd::IsInside(sci22.E, sci22_cut))) continue;
-			if(mnd::IsValid(sci31_cut) and (sci31.hits.size() != 1 or !mnd::IsInside(sci31.E, sci31_cut))) continue;
 
 			if(sci21.hits.size() == 1) h1_sci21_cut->Fill(sci21.E);
 			if(sci22.hits.size() == 1) h1_sci22_cut->Fill(sci22.E);
@@ -254,8 +250,8 @@ int main(int argc, char* argv[]) {
                 option::Lead{">"},
                 option::Remainder{" "},
                 option::End{"]"},
-                option::PostfixText{mnd::msg(
-					"%zu/%zu: %'zu (%s)", i+1, fileNames.size(), nentries, fname.c_str()
+                option::PostfixText{fmt::format(
+					"{}/{}: {:L} ({})", i+1, fileNames.size(), nentries, fname
 				)},
                 option::ForegroundColor{ indicators::next_col() },
                 option::ShowPercentage{true},
@@ -301,13 +297,15 @@ int main(int argc, char* argv[]) {
 	 * Then e2 := e1 - sum_k [ a_k cos(2πk(x-xmin)/P) + b_k sin(2πk(x-xmin)/P) ]
 	 * to fit everything onto the DC line. */
 	auto [fft, gr, g] = DoFFTW<fit_info::GAUSS_MAX>(corr_energy_vs_delta, -0.5, 0.5, sratio, harmonics, v);
-	WARN("\n[[FOOT%d]] FFT Params:\n", p->de10_index_);
-	printf("\"s\": %.5f,\n\"f\": %.5f,\n", d->s, d->f);
-	printf("\"f2\": {\n\t\"n\": %d,", static_cast<i32>(delta_binning[0]));
-	printf("\n\t\"c\": [");
-	for(int i=0; i<harmonics; ++i) std::cout << fft.coeff[i] << ", ";
-	std::cout << fft.coeff[harmonics] << "]";
-	printf("\n}\n");
+	WARN("\n[[FOOT{}]] FFT Params:\n", p->de10_index_);
+	fmt::print("\"s\": {:.5f},\n\"f\": {:.5f},\n"
+		"\"f2\": {{\n\t\"n\": {},\n\t\"c\": [",
+		d->s, d->f, static_cast<i32>(delta_binning[0]));
+	for(int i=0; i<=harmonics; ++i) {
+		const auto& [a, b] = fft.coeff[i];
+		fmt::print("{}[{:.6g}, {:.6g}]", i ? ", " : "", a, b);
+	}
+	fmt::print("]\n}}\n");
 
 	TCanvas *c = new TCanvas("FOOT", Form("Delta%d", ifoot), 2000, 1400);
 	c->Divide(3,2);
@@ -414,10 +412,10 @@ FOOTDeltaParam* GetDeltaParams(const TH2D& e_vs_delta, u32 niter) {
 	double f = (Ap + Am) / (2 * A0);
 	result->f = f;
 
-	WARN("\nA0 = %.2f, A+ = %.2f, A- = %.2f\n"
-	       "s0 = %.2f, s+ = %.2f, s- = %.2f\n"
-		   ">> f = %.4f; s = %.4f <<\n"
-		   "b0 = %d, b+ = %d, b- = %d\n",
+	WARN("\nA0 = {:.2f}, A+ = {:.2f}, A- = {:.2f}\n"
+	       "s0 = {:.2f}, s+ = {:.2f}, s- = {:.2f}\n"
+		   ">> f = {:.4f}; s = {:.4f} <<\n"
+		   "b0 = {}, b+ = {}, b- = {}\n",
 		   A0,Ap,Am, 0.0,sp,sm, f,s, bmax_0,bmax_p,bmax_m);
 
 	return result;

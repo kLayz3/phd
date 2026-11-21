@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ostream>
 #include <istream>
 #include <string_view>
 #include <filesystem>
@@ -97,8 +96,6 @@ struct RunsheetState {
 
 	static RunsheetState from(const nlohmann::json &);
 };
-std::ostream& operator<<(std::ostream& , const RunsheetState& );
-std::ostream& operator<<(std::ostream&, const RunsheetState::Brho&);
 
 using OptRunsheetStatePair = std::pair<
 	Option<RunsheetState>,
@@ -120,3 +117,38 @@ template<>
 [[nodiscard]] OptRunsheetStatePair QueryRunsheet<false, OptRunsheetStatePair>(std::string_view );
 
 } // namespace mnd
+
+template<>
+struct fmt::formatter<mnd::RunsheetState::Brho> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const mnd::RunsheetState::Brho& brho, Context& ctx) const {
+		auto out = fmt::format_to(ctx.out(), "brho: {{");
+		for(size_t i = 0; i < mnd::N_FOCAL_PTS; ++i) {
+			out = fmt::format_to(out, "{}{}: {:.6g} Tm", i ? ", " : "", mnd::fs::brho::label[i],
+				styled(brho.value[i], fmt::emphasis::bold));
+		}
+		return fmt::format_to(out, "}}");
+	}
+};
+
+template<>
+struct fmt::formatter<mnd::RunsheetState> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const mnd::RunsheetState& r, Context& ctx) const {
+		constexpr auto bold = fmt::emphasis::bold;
+		constexpr auto green = fg(fmt::terminal_color::bright_green) | bold;
+		return fmt::format_to(ctx.out(), "{}{}, {{primary: Z: {}, A: {}, Q: {}[e], EKin: {:.6g} MeV/u}}"
+			", {{secondary: Z: {}, A: {}, Q: {}[e]}} {}",
+			styled("({", green), r.brho,
+			styled(r.primary.Z, bold), styled(r.primary.A, bold),
+			styled(r.primary.charge_state().map([](auto x) { return std::to_string(x); }).value_or("none"), bold),
+			styled(r.e0, mnd::style::bold_red),
+			styled(r.secondary.Z, bold), styled(r.secondary.A, bold),
+			styled(r.secondary.charge_state().map([](auto x) { return std::to_string(x); }).value_or("none"), bold),
+			styled("})", green));
+	}
+};

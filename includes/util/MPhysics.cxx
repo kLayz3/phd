@@ -22,7 +22,7 @@ double Nucleus::mass() const noexcept {
 	const double m0 = ::phy::mass(A,Z);
 	if constexpr(detail::debug_) {
 		if(!std::isfinite(m0))
-			MND_THROW("Mass value looked up as invalid value. A=%u, Z=%u", A,Z);
+			MND_THROW("Mass value looked up as invalid value. A={}, Z={}", A,Z);
 	}
 	return m0 +
 		N_electrons.map([this](const auto value) {
@@ -111,11 +111,11 @@ Nucleus Nucleus::get_ion(std::string_view str,
 
 	Option<u32> A = mnd::stou_munch(view);
 	if(A.is_none()) {
-		auto msg = mnd::msg("mnd::RunsheetState::get_ion(desc: \"%s\") for input string: \'%.*s\', "
+		auto msg = fmt::format("mnd::RunsheetState::get_ion(desc: \"{}\") for input string: '{}', "
 			"couldn't parse out the mass number (A). Got `None`. "
-			"Setting the value to default: %u\n", desc, (int)view.length(), view.data(), DEFAULT_A_PRIMARY);
+			"Setting the value to default: {}\n", desc, view, DEFAULT_A_PRIMARY);
 		if(!bad_parse_is_error) {
-			WARN("%s", msg);
+			WARN("{}", msg);
 		} else {
 			throw std::invalid_argument(msg);
 		}
@@ -124,13 +124,13 @@ Nucleus Nucleus::get_ion(std::string_view str,
 
 	Option<u32> Z = phy::Z(view);
 	if(Z.is_none()) {
-		auto msg = mnd::msg("mnd::RunsheetState::get_ion(desc: \"%s\") for input string: \'%.*s\' "
-			"(current view: \'%.*s\'), "
+		auto msg = fmt::format("mnd::RunsheetState::get_ion(desc: \"{}\") for input string: '{}' "
+			"(current view: '{}'), "
 			"couldn't parse out the atomic number (Z). Got `None`. "
-			"Setting the value to default: %u\n", desc, (int)str.length(), str.data(),
-			(int)view.length(), view.data(), DEFAULT_A_PRIMARY);
+			"Setting the value to default: {}\n", desc, str,
+			view, DEFAULT_A_PRIMARY);
 		if(!bad_parse_is_error) {
-			WARN("%s", msg);
+			WARN("{}", msg);
 		} else {
 			throw std::invalid_argument(msg);
 		}

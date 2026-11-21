@@ -62,8 +62,8 @@ std::tuple <
 		int nbins = ibin_last - ibin_first + 1;
 		
 		if(v > 1) {
-			fprintf(stderr, "[%s]: from \'%s\'; taking bin indices: [%d,%d], "
-				"with lo = %.1f, hi = %.1f, N=%d\n",
+			fmt::println(stderr, "[{}]: from \'{}\'; taking bin indices: [{},{}], "
+				"with lo = {:.1f}, hi = {:.1f}, N={}",
 				"FitSpline", h2->GetTitle(), ibin_first, ibin_last, xfirst, xlast, nbins);
 		}
 
@@ -77,7 +77,7 @@ std::tuple <
 			pfx->SetBinContent(i, result[1]);
 			pfx->SetBinError(i, err[1]);
 			if(v > 1) {
-				fprintf(stderr, "[%d]: %.2f +- %.2f\n", i, result[1], err[1]);
+				fmt::println(stderr, "[{}]: {:.2f} +- {:.2f}", i, result[1], err[1]);
 			}
 		}
 	}
@@ -99,12 +99,9 @@ std::tuple <
 	gerr->SetMarkerSize(1.2);
 	xax->SetRange();
 	if(v > 0) {
-		std::cerr << "[FitSpline]" << h2->GetName() << '('
-			<< ((sliceType == fit_info::PROFILE_MAX)? "PROFILE_MAX": "GAUSS_MAX") << ") "
-			<< "fitting with " << std::endl
-			<< "x: " << x << std::endl
-			<< "y: " << y << std::endl
-			<< "w: " << w << std::endl;
+		fmt::println(stderr, "[FitSpline]{}({}) fitting with\nx: {}\ny: {}\nw: {}",
+			h2->GetName(), sliceType == fit_info::PROFILE_MAX ? "PROFILE_MAX" : "GAUSS_MAX",
+			x, y, w);
 	}
 	return { std::move(x), std::move(y), std::move(w), gerr };
 }
@@ -123,14 +120,14 @@ template <
 	Verbosity v
 ) {
 	assert((Npts > 0) && "Cannot pass 0 or negative number for points here.");
-	if(v > 0) std::cerr << "Result: " << r << std::endl;
+	if(v > 0) fmt::println(stderr, "Result: {}", r);
 
 	TGraph* g = new TGraph(Npts);
 	if(r.size() > 0) {
 		for(int i=0; i<Npts; ++i) {
 			double x0 = x_lo + (i+0.5) * (x_hi - x_lo) / Npts; // centre
 			double y0 = poly::Eval(x0, r);
-			if(v > 0) fprintf(stderr, "[%s:%s] Fit: (x0, y0): {%.2f, %.2f}\n", "FitSpline", h2->GetName(), x0, y0);
+			if(v > 0) fmt::println(stderr, "[{}:{}] Fit: (x0, y0): {{{:.2f}, {:.2f}}}", "FitSpline", h2->GetName(), x0, y0);
 			g->SetPoint(i, x0, y0);
 		}
 		if constexpr(sliceType == fit_info::PROFILE_MAX) {

@@ -1,4 +1,4 @@
-#include "monad/accessories/typedefs.hxx"
+#include "monad/accessories/formatting.hxx"
 #include "monad/accessories/meta.hxx"
 
 #include "TransportConfig.hh"
@@ -46,7 +46,7 @@ Config load_config(const std::string& setup_path, const std::string& cov_path, c
 	const auto& box = setup.at("box");
 	const auto positions = box.at("det_pos").get<std::vector<double>>();
 	if(positions.size() != N)
-		ERROR("Expected %zu detector positions, received: %zu", N, positions.size());
+		ERROR("Expected {} detector positions, received: {}", N, positions.size());
 	
 	std::array<bool, N> seen{};
 	std::array<std::array<bool, 2>, N/2> axes{};

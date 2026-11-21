@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
 		ERROR("At least two valid referent TPC's must be given.\n");
     for(const auto& tpc : ref) {
 		if(!tpc) { // operator bool()
-			std::cerr << tpc << std::endl;
+			fmt::println(stderr, "{}", fmt::streamed(tpc));
 			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid.");
 		}
 	}
@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
     const std::array<double, N_TPC> zTPC = TFRSCalCont::z_s2_tpc(tpc_params);
 	
     WARN("TPC positions: \n");
-	for(u32 i=0; i<N_TPC; ++i) printf("TPC%s: %.1f mm\n", label[i], zTPC[i]);
+	for(u32 i=0; i<N_TPC; ++i) fmt::println("TPC{}: {:.1f} mm", label[i], zTPC[i]);
 
     /* Containers for TPC extrapolation. */
 	std::vector<double> xe, ye, ze;
@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
             option::Lead{">"},
             option::Remainder{" "},
             option::End{"]"},
-            option::PostfixText{mnd::msg("SCI%s X-cal (per event: %s)", label[i_sci], fileName.c_str())},
+            option::PostfixText{fmt::format("SCI{} X-cal (per event: {})", label[i_sci], fileName)},
             option::ForegroundColor{Color::red},
             option::ShowPercentage{true},
             option::ShowElapsedTime{true},
@@ -188,25 +188,14 @@ int main(int argc, char* argv[]) {
         const double offset0 = sci_param.x_offset; // already inputted.
         const double slope0 = sci_param.x_factor;   // already inputted.
 
-        char text0[20] = {'\0'};
-        sprintf(text0, "For SCI%s:", label[i_sci]);
+		WARN("For SCI{}: Calculated: graph offset = {:.5f}, graph slope = {:.5f}.\n", label[i_sci], offset, slope);
+		WARN("Currently in the setup file: (offset, slope) = ({:.5f}, {:.5f})\n", offset0, slope0);
 
-        char text1[1024] = {'\0'};
-        sprintf(text1, "Calculated: graph offset = %.5f, graph slope = %.5f.", offset, slope);
-        WARN("%s %s\n", text0, text1);
-
-        char text2[1024] = {'\0'};
-        sprintf(text2, "Currently in the setup file: (offset, slope) = (%.5f, %.5f)", sci_param.x_offset, sci_param.x_factor);
-        WARN("%s\n", text2);
-
-        const double offset1 = (sci_param.x_offset - offset) / slope; // values to be written into file.
-        const double slope1 = sci_param.x_factor / slope;             // values to be written into file.
-        char result_slope[1024] = {'\0'};
-        char result_offset[1024] = {'\0'};
-        sprintf(result_offset, "x_offset: " KCYN "%.5f [mm]" KNRM, offset1);
-        sprintf(result_slope, "x_factor: " KCYN "%.5f [mm/tdc]" KNRM, slope1);
-        WARN("Recommended: %s\n%s\n", result_offset, result_slope);
-        WARN("~~~~~ This is a relative change of: %.3f%% and %.3f%%\n",
+		const double offset1 = (offset0 - offset) / slope; // values to be written into file.
+		const double slope1 = slope0 / slope;
+		WARN("Recommended: x_offset: {:.5f} [mm]\nx_factor: {:.5f} [mm/tdc]\n",
+			styled(offset1, mnd::style::cyan), styled(slope1, mnd::style::cyan));
+        WARN("~~~~~ This is a relative change of: {:.3f}% and {:.3f}%\n",
             100*std::abs((slope1-slope0)/slope0), 100*std::abs((offset1 - offset0)/offset0));
     }
 

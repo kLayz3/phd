@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "monad/accessories/typedefs.hxx"
+#include "monad/accessories/formatting.hxx"
 
 using PipeDeleter = int (*)(FILE*);
 
@@ -34,8 +34,8 @@ std::string mnd::fs::parse_file_to_string(const std::string& fileName) {
 		 + quoted + " -o - 2>&1";
 	
 	std::unique_ptr<FILE, PipeDeleter> pipe {popen(cmd.c_str(), "r"), pclose};
-	if(!pipe) ERROR("popen failed for file: '%s' (%s)\n",
-		fileName.c_str(), std::strerror(errno));
+	if(!pipe) ERROR("popen failed for file: '{}' ({})\n",
+		fileName, std::strerror(errno));
 
 	std::string text; text.reserve(1024);
 	char buf[1U << 14];
@@ -46,16 +46,17 @@ std::string mnd::fs::parse_file_to_string(const std::string& fileName) {
 	
 	int status = pclose(pipe.release());
 	if(status == -1)
-		MND_THROW("pclose failed for '%s': (%s)\n", fileName.c_str(), std::strerror(errno));
+		MND_THROW("pclose failed for '{}': ({})\n", fileName, std::strerror(errno));
 	if(WIFSIGNALED(status))
-		MND_THROW("Preprocessor killed by signal %d while parsing '%s' (%s)\n",
-			WTERMSIG(status), fileName.c_str(), std::strerror(errno));
+		MND_THROW("Preprocessor killed by signal {} while parsing '{}' ({})\n",
+			WTERMSIG(status), fileName, std::strerror(errno));
 	if(!WIFEXITED(status))
-		MND_THROW("Preproccessor failed:\n " KNRM "%s (%s)\n",
-			text.c_str(), std::strerror(errno));
+		MND_THROW("Preproccessor failed:\n {} ({})\n",
+			text,
+			std::strerror(errno));
 	if(WEXITSTATUS(status) != 0)
-		MND_THROW("Preprocessor failed for '%s': " KNRM "%s (%s)\n",
-			fileName.c_str(), text.c_str(), std::strerror(errno));
+		MND_THROW("Preprocessor failed for '{}': {} ({})\n",
+			fileName, text, std::strerror(errno));
 	
 	return text;
 }

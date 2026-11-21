@@ -21,7 +21,7 @@ struct TPCRef {
             }
 		}
 		catch(...) {
-            WARN("Bad query for TPC moniker, key: \'%s\'\n", xs.c_str());
+            WARN("Bad query for TPC moniker, key: \'{}\'\n", xs);
         }
 		return false;
 	}
@@ -53,5 +53,5 @@ inline std::istream& operator>>(std::istream& in, TPCRef& out) {
 	return ::mnd::template operator>> <','>(in, out.use);
 }
 inline std::ostream& operator<<(std::ostream& os, const TPCRef& out) {
-	return os << '[' << out.n << out.use << ']';
+	return os << fmt::format("[{}{}]", out.n, out.use);
 }

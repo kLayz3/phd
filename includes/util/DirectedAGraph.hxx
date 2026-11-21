@@ -5,7 +5,6 @@
 #include <type_traits>
 #include <array>
 #include <vector>
-#include <ostream>
 
 /* Small struct representing a nullable 2-index, used to memorize the "location" (i,j) of the entry used
  * in the Kalman online + possible null location. */
@@ -31,19 +30,6 @@ struct __attribute__((packed)) DAGIndex { // attribute is redundant here, but st
 	explicit operator bool() const noexcept { return i_ != null; }
 	explicit operator int()  const noexcept { return static_cast<int>( bool(*this) ); } // `0` or `1`
 
-	friend std::ostream& operator<<(std::ostream& os, const DAGIndex& i) {
-		if(!i) return os << "(∅)";
-		
-		os << '(';
-		if(i[0] != NULL_VALUE) os << i[0];
-		else os << "∅";
-		os << ',';
-		if(i[1] != NULL_VALUE) os << i[1];
-		else os << "∅";
-		os << ')';
-
-		return os;
-	}
 
 private:
 	std::array<T,2> i_;
@@ -58,7 +44,6 @@ struct DirectedAGraph {
 	struct /* __attribute__((packed)) */ DAGPath {
 		std::array<Index, Depth> node {};
 		
-		friend std::ostream& operator<<(std::ostream& os, const DAGPath& p) { return os << p.node; }
 		inline int Rank() const noexcept {
 			return mnd::sum<mnd::Unroll::Yes, int>(node); // explicit conversion of of `Index` to `int`.
 		}
@@ -100,9 +85,6 @@ struct DirectedAGraph {
 		path.erase(it, path.end());
 	}
 
-	friend std::ostream& operator<<(std::ostream& os, const DirectedAGraph& g) {
-		return os << g.path;
-	}
 	std::vector<DAGPath> path;
 };
 

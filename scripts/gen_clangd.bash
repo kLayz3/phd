@@ -27,6 +27,11 @@ for inc in "${python_includes[@]}"; do
 "    - $inc" >> $CLANGD
 done
 
+for export in MND_EXPORT_LITERALS; do
+    echo \
+"    - -D$export" >> $CLANGD
+done
+
 cat >> $CLANGD <<EOF
     - -std=c++17
   Remove: [-std=*]

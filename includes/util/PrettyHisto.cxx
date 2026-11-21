@@ -11,6 +11,7 @@
 #include <charconv>
 
 #include "PrettyHisto.h"
+#include "monad/accessories/formatting.hxx"
 #include "RtypesCore.h"
 #include "TGraph.h"
 #include "TGraphErrors.h"
@@ -90,9 +91,9 @@ TH1P::~TH1P() {
 		if(!parent_dc) {
 			/* Requires sanitising usually, since this is called at the end of the stack frame, in
 			 * possibly multithreaded context. Either way, it's a hard runtime error and shouldn't ever be recoverable */
-			std::fprintf(stderr,
-				"Calling destructor on TH1P \'%s\' (title: %s)'s copied object, but it's parent exists and isn't downcastable? "
-				"Something is very wrong..\n", h.GetName(), h.GetTitle()
+			fmt::println(stderr,
+				"Calling destructor on TH1P '{}' (title: '{}')'s copied object, but it's parent exists and isn't downcastable? "
+				"Something is very wrong..", h.GetName(), h.GetTitle()
 			);
 			std::abort();
 		}
@@ -117,9 +118,9 @@ TH2P::~TH2P() {
 	if(_parent) {
 		TH2P* parent_dc = dynamic_cast<TH2P*>(_parent);
 		if(!parent_dc) {
-			std::fprintf(stderr,
-				"Calling destructor on TH2P \'%s\' (title: %s)'s copied object, but it's parent exists and isn't downcastable? "
-				"Something is very wrong..\n", h.GetName(), h.GetTitle()
+			fmt::println(stderr,
+				"Calling destructor on TH2P '{}' (title: '{}')'s copied object, but it's parent exists and isn't downcastable? "
+				"Something is very wrong..", h.GetName(), h.GetTitle()
 			);
 			std::abort();
 		}
@@ -882,9 +883,9 @@ auto Figure::plot(const TH1& h, HistStyle style) && -> Figure {
 		
 		/* In this case, just reject the fill request. */
 		if(!style.fill_color_.is_some()) {
-			fprintf(stderr,
-				"mnd::plot::Figure::plot(): requested `fill()` for (ROOT) hist: \'%s\' "
-				" but facecolor not provided and also histogram isn't filled.\n", h.GetTitle());
+			fmt::println(stderr,
+				"mnd::plot::Figure::plot(): requested `fill()` for (ROOT) hist: '{}' "
+				" but facecolor not provided and also histogram isn't filled.", h.GetTitle());
 			style.do_fill = false;
 		}
 	}
@@ -998,7 +999,7 @@ auto FigureStyle::xlabel(const TObject* obj) && -> FigureStyle {
 		xlabel_ = g->GetXaxis()->GetTitle();
 	}
 	else {
-		fprintf(stderr, "Figure::xlabel(const TObject*): passed [%s] obj, but expects something castable to TGraph/TH1\n",
+		fmt::println(stderr, "Figure::xlabel(const TObject*): passed [{}] obj, but expects something castable to TGraph/TH1",
 			obj->ClassName());
 	}
 	return std::move(*this);
@@ -1015,7 +1016,7 @@ auto FigureStyle::ylabel(const TObject* obj) && -> FigureStyle {
 		ylabel_ = g->GetYaxis()->GetTitle();
 	}
 	else {
-		fprintf(stderr, "FigureStyle::ylabel(const TObject*): passed [%s] obj, but expects something castable to TGraph/TH1\n",
+		fmt::println(stderr, "FigureStyle::ylabel(const TObject*): passed [{}] obj, but expects something castable to TGraph/TH1",
 			obj->ClassName());
 	}
 	return std::move(*this);
@@ -1032,7 +1033,7 @@ auto FigureStyle::title(const TObject* obj) && -> FigureStyle {
 }
 auto FigureStyle::figsize(double x, double y) && -> FigureStyle {
 	if(!std::isfinite(x) || x <= 0 || !std::isfinite(y) || y <= 0) {
-		fprintf(stderr, "FigureStyle::figsize(double,double): passed invalid (%.2f,%.2f) values. Ignoring this request.\n",
+		fmt::println(stderr, "FigureStyle::figsize(double,double): passed invalid ({:.2f},{:.2f}) values. Ignoring this request.",
 			x,y);
 	} else {
 		figsize_ = Some{ std::pair<double,double>{x,y} };
@@ -1041,7 +1042,7 @@ auto FigureStyle::figsize(double x, double y) && -> FigureStyle {
 }
 auto FigureStyle::save_dpi(double value) && -> FigureStyle {
 	if(!std::isfinite(value) || value <= 0) {
-		fprintf(stderr, "FigureStyle::save_dpi(double): passed invalid (%.2f) value. Ignoring this request.\n",
+		fmt::println(stderr, "FigureStyle::save_dpi(double): passed invalid ({:.2f}) value. Ignoring this request.",
 			value);
 	} else {
 		save_dpi_ = Some{value};
@@ -1338,7 +1339,7 @@ void Figure::save(const std::filesystem::path& path) const {
 		throw;
 	}
 
-	fprintf(stdout, "[PYTHON]: Figure::save(): output file \'%s\' saved as: \'%s\'\n",
-		path.filename().c_str(), path.c_str());
+	fmt::println(stdout, "[PYTHON]: Figure::save(): output file '{}' saved as: '{}'",
+		path.filename().string(), path.string());
 }
 

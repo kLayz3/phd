@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-w,--qwidth", Q_width, "Select width of the target charge to gate upon.")
 		->delimiter(',');
 	add_logged_flag(app, "-a,--all", require_all,
-		mnd::msg("Require all %u layers to participate in the selected tracks.", N_PAIRS));
+		fmt::format("Require all {} layers to participate in the selected tracks.", N_PAIRS));
 	add_logged_option(app, "-b,--foot-binning", foot_binning, "FOOT ADC binning")
 		->delimiter(',');
 	add_logged_option(app, "-d,--delta-binning", delta_binning, "FOOT ADC binning")
@@ -144,7 +144,7 @@ int main(int argc, char* argv[]) {
 		return p.N == ifoot;
 	});
 	if(parameter == setup->end())
-		ERROR("FOOT%d not found in saved pair %d setup.\n", ifoot, foot_pair_id);
+		ERROR("FOOT{} not found in saved pair {} setup.\n", ifoot, foot_pair_id);
 	
 	FOOTParam* const foot_param = &*parameter;
 
@@ -156,12 +156,12 @@ int main(int argc, char* argv[]) {
 	gain.IsSaneThrowable();
 
 	if(harmonics > static_cast<i32>(delta_binning[0]) / 2)
-		ERROR("Cannot select %d harmonics, which is >%d  (binning/2).\n",
+		ERROR("Cannot select {} harmonics, which is >{}  (binning/2).\n",
 			harmonics, static_cast<i32>(delta_binning[0]) / 2);
 
 	const double CA = gain.GetNominalValue(Q_target);
 	if(!std::isfinite(CA))
-		ERROR("Z=%d nominal not found in the setup file. Cannot proceed.\n", Q_target);
+		ERROR("Z={} nominal not found in the setup file. Cannot proceed.\n", Q_target);
 
 	TApplication rootApp("app", 0, 0);
 
@@ -199,20 +199,20 @@ int main(int argc, char* argv[]) {
         const size_t nentries = ntuple->GetNEntries();
 
 		auto _bar_ptr = std::make_unique<ProgressBar>(
-            option::BarWidth{50},
-                option::Start{"["},
-                option::Fill{"="},
-                option::Lead{">"},
-                option::Remainder{" "},
-                option::End{"]"},
-                option::PostfixText{mnd::msg(
-					"%zu/%zu: %'zu (%s)", i+1, fileNames.size(), nentries, fname.c_str()
-				)},
-                option::ForegroundColor{ indicators::next_col() },
-                option::ShowPercentage{true},
-                option::ShowElapsedTime{true},
-                option::ShowRemainingTime{true},
-                option::FontStyles{std::vector{FontStyle::bold}}
+			option::BarWidth{50},
+			option::Start{"["},
+			option::Fill{"="},
+			option::Lead{">"},
+			option::Remainder{" "},
+			option::End{"]"},
+			option::PostfixText{fmt::format(
+				"{}/{}: {:L} ({})", i+1, fileNames.size(), nentries, fname
+			)},
+			option::ForegroundColor{ indicators::next_col() },
+			option::ShowPercentage{true},
+			option::ShowElapsedTime{true},
+			option::ShowRemainingTime{true},
+			option::FontStyles{std::vector{FontStyle::bold}}
 		);
 		auto idx = progress1.push_back(std::move(_bar_ptr));
 		auto& bar = progress1[idx];
@@ -301,8 +301,8 @@ int main(int argc, char* argv[]) {
                 option::Lead{">"},
                 option::Remainder{" "},
                 option::End{"]"},
-                option::PostfixText{mnd::msg(
-					"%zu/%zu: %'zu (%s)", i+1, fileNames.size(), nentries, fname.c_str()
+                option::PostfixText{fmt::format(
+					"{}/{}: {:L} ({})", i+1, fileNames.size(), nentries, fname
 				)},
                 option::ForegroundColor{ indicators::next_col() },
                 option::ShowPercentage{true},
@@ -366,13 +366,15 @@ int main(int argc, char* argv[]) {
 	 * Then e2 := e1 - sum_k [ a_k cos(2πk(x-xmin)/P) + b_k sin(2πk(x-xmin)/P) ]
 	 * to fit everything onto the DC line. */
 	auto [fft, gr, g] = DoFFTW<fit_info::GAUSS_MAX>(corr_energy_vs_delta, -0.5, 0.5, sratio, harmonics, v);
-	WARN("\n[[FOOT%d]] FFT Params:\n", foot_param->de10_index_);
-	printf("\"s\": %.6f,\n\"f\": %.6f,\n", d->s, d->f);
-	printf("\"f2\": {\n\t\"n\": %d,", static_cast<i32>(delta_binning[0]));
-	printf("\n\t\"c\": [");
-	for(int i=0; i<harmonics; ++i) std::cout << fft.coeff[i] << ", ";
-	std::cout << fft.coeff[harmonics] << "]";
-	printf("\n}\n");
+	WARN("\n[[FOOT{}]] FFT Params:\n", foot_param->de10_index_);
+	fmt::print("\"s\": {:.6f},\n\"f\": {:.6f},\n"
+		"\"f2\": {{\n\t\"n\": {},\n\t\"c\": [",
+		d->s, d->f, static_cast<i32>(delta_binning[0]));
+	for(int i=0; i<=harmonics; ++i) {
+		const auto& [a, b] = fft.coeff[i];
+		fmt::print("{}[{:.6g}, {:.6g}]", i ? ", " : "", a, b);
+	}
+	fmt::print("]\n}}\n");
 
 	TCanvas *cmain = new TCanvas("Delta", Form("Delta-correction: FOOT%d", ifoot), 2000, 1400);
 	cmain->cd(); corr_energy_vs_delta->Draw("COLZ"); gPad->SetLogz();
@@ -440,7 +442,7 @@ int main(int argc, char* argv[]) {
 	rootApp.Run();
 
 #else
-    WARN("\n" BOLD ".. MND_FOOTTRACK_DEBUG not compiled in. This program does nothing.\n" KNRM);
+    WARN("\n{}\n", styled(".. MND_FOOTTRACK_DEBUG not compiled in. This program does nothing.", fmt::emphasis::bold));
 #endif
     return 0;
 
@@ -525,10 +527,10 @@ FOOTDeltaParam* GetDeltaParams(const TH2D& e_vs_delta, u32 niter, Verbosity v) {
 	double f = (Ap + Am) / (2 * A0);
 	result->f = f;
 
-	WARN("\nA0 = %.4f, A+ = %.4f, A- = %.4f\n"
-	       "s0 = %.4f, s+ = %.4f, s- = %.4f\n"
-		   ">> f = %.6f; s = %.6f <<\n"
-		   "b0 = %d, b+ = %d, b- = %d\n",
+	WARN("\nA0 = {:.4f}, A+ = {:.4f}, A- = {:.4f}\n"
+	       "s0 = {:.4f}, s+ = {:.4f}, s- = {:.4f}\n"
+		   ">> f = {:.6f}; s = {:.6f} <<\n"
+		   "b0 = {}, b+ = {}, b- = {}\n",
 		   A0,Ap,Am, s0,sp,sm, f,s, bmax_0,bmax_p,bmax_m);
 
 	return result;

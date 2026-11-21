@@ -89,7 +89,7 @@ public:
 			nlohmann::json j = nlohmann::json::parse(f);
 			append_flat_json(TFOOTMapProc::_bad_strips, j);
 		} catch(std::exception const& e) {
-			WARN("Json parsing failed. Reason: %s\n", e.what());
+			WARN("Json parsing failed. Reason: {}\n", e.what());
 			throw;
 		}
 		(LoadBadStripsFile(other), ...);

@@ -37,7 +37,7 @@ add_executable(foot_transport_analysis transport/analyse_transport.cc
 target_include_directories(foot_transport_analysis PRIVATE ../includes)
 target_compile_features(foot_transport_analysis PRIVATE cxx_std_17)
 target_compile_options(foot_transport_analysis PRIVATE -Wall -Wextra)
-target_compile_definitions(foot_transport_analysis PRIVATE MND_EXPORT_OSTREAM_G_NAMESPACE
+target_compile_definitions(foot_transport_analysis PRIVATE
     FOOT_TRACK_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/../quick/hit/cfg/foot_track_analysis/config.cfg")
 target_link_libraries(foot_transport_analysis PRIVATE ROOT::Core ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad ROOT::Matrix)
 

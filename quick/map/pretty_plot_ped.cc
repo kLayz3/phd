@@ -132,20 +132,20 @@ int main(int argc, char* argv[]) {
         const size_t nentries = ntuple->GetNEntries();
 
 		auto _bar_ptr = std::make_unique<ProgressBar>(
-            option::BarWidth{50},
-                option::Start{"["},
-                option::Fill{"="},
-                option::Lead{">"},
-                option::Remainder{" "},
-                option::End{"]"},
-                option::PostfixText{mnd::msg(
-					"%zu/%zu: %'zu (%s)", i+1, fileNames.size(), nentries, fname.c_str()
-				)},
-                option::ForegroundColor{ indicators::next_col() },
-                option::ShowPercentage{true},
-                option::ShowElapsedTime{true},
-                option::ShowRemainingTime{true},
-                option::FontStyles{std::vector{FontStyle::bold}}
+			option::BarWidth{50},
+			option::Start{"["},
+			option::Fill{"="},
+			option::Lead{">"},
+			option::Remainder{" "},
+			option::End{"]"},
+			option::PostfixText{fmt::format(
+				"{}/{}: {:L} ({})", i+1, fileNames.size(), nentries, fname
+			)},
+			option::ForegroundColor{ indicators::next_col() },
+			option::ShowPercentage{true},
+			option::ShowElapsedTime{true},
+			option::ShowRemainingTime{true},
+			option::FontStyles{std::vector{FontStyle::bold}}
 		);
 		auto idx = progress.push_back(std::move(_bar_ptr));
 		auto& bar = progress[idx];

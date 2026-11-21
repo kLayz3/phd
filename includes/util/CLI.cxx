@@ -13,22 +13,13 @@ static auto is_space = [](unsigned char c) {
  * the capacity up front, and not never be able to 'resize' the vector. */
 int mnd::Argv::push_back(std::string s) {
 	if(storage.size() == capacity)
-		MND_THROW("Attempting to add an argument \'%s\' to mnd::Argv but capacity %zu is reached.", s.c_str(), capacity);
+		MND_THROW("Attempting to add an argument '{}' to mnd::Argv but capacity {} is reached.", s, capacity);
 
 	storage.push_back( std::move(s) );
 	argv.back() = storage.back().data();
 	argv.push_back(nullptr); // last entry must be terminated.
 
 	return static_cast<int>( storage.size() );
-}
-
-std::ostream& mnd::operator<<(std::ostream& os, const Argv& argv) {
-	int i=0;
-	const char* item;
-	while(item = argv[i++], item) {
-		os << item << " ";
-	}
-	return os;
 }
 
 mnd::Argv mnd::parse_argv(std::string_view text, std::string program_name) {

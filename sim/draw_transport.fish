@@ -1,6 +1,7 @@
 #!/usr/bin/env -S fish --no-config
 
-if test (count $argv) -gt 2
+set -l narg (count $argv)
+if test $narg -gt 2; or test $narg -lt 1
 	echo 'Usage: draw_transport.fish [INPUT.root [OUTPUT.pdf]]' >&2
 	exit 2
 end

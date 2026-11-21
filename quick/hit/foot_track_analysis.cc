@@ -230,7 +230,7 @@ int main(int argc, char* argv[]) {
 
 	for(const auto& [foot_i, _] : cut_q) {
 		if(foot_i >= N_PAIRS)
-			ERROR("Supplied index: %u >= %u as Q-cut pair index.\n", foot_i, N_PAIRS);
+			ERROR("Supplied index: {} >= {} as Q-cut pair index.\n", foot_i, N_PAIRS);
 	}
 
 	TApplication rootApp("app", 0, 0);
@@ -256,8 +256,8 @@ int main(int argc, char* argv[]) {
 				option::Lead{">"},
 				option::Remainder{" "},
 				option::End{"]"},
-                option::PostfixText{mnd::msg(
-					"%zu/%zu: %'zu (%s)", i+1, fileNames.size(), nentries, fname.c_str()
+                option::PostfixText{fmt::format(
+					"{}/{}: {:L} ({})", i+1, fileNames.size(), nentries, fname
 				)},
 				option::ForegroundColor{ indicators::next_col() },
 				option::ShowPercentage{true},
@@ -450,8 +450,11 @@ int main(int argc, char* argv[]) {
 	for(size_t rank=0; rank<histos.size(); ++rank) {
 		auto& h = histos[rank];
 		const u32 npairs = N_PAIRS - rank;
-		TCanvas* ccharge = new TCanvas(Form("ChargeInnovation_N%u", npairs), Form("Selected tracks: charge disagreement and sequential innovation (%u pairs)", npairs), 2100, 1400);
+		
+		TCanvas* ccharge = new TCanvas(Form("ChargeInnovation_N%u", npairs),
+			Form("Selected tracks: charge disagreement and sequential innovation (%u pairs)", npairs), 2100, 1400);
 		ccharge->Divide(N_PAIRS - 1, 3);
+
 		for(u32 i = 1; i < N_PAIRS; ++i) {
 			ccharge->cd(i);
 			h.h1_charge_innovation[i].Draw();
@@ -463,7 +466,7 @@ int main(int argc, char* argv[]) {
 			const auto& moments = h.h2_charge_innovation[i].h;
 			const double count = moments.GetEntries();
 			if(count < 2) {
-				WARN("Charge innovation layer %u: fewer than two finite samples; covariance unavailable.\n", i);
+				WARN("Charge innovation layer {}: fewer than two finite samples; covariance unavailable.\n", i);
 				continue;
 			}
 			// ROOT stores population moments; convert to the unbiased sample covariance (unit weights).
@@ -474,10 +477,10 @@ int main(int argc, char* argv[]) {
 			const double cov_dr = correction * moments.GetCovariance(1, 2);
 			const double correlation = (var_d > 0 && var_r > 0)
 				? cov_dr / (sqrt(var_d) * sqrt(var_r)) : NAN;
-			WARN("Charge innovation layer %u (selected %u-pair tracks, all finite fills including overflow):\n"
-			     "  d = Qx - Qy; r = Qpair - Qprevious; N = %.0f\n"
-			     "  mean(d,r) [e] = [%.6g, %.6g]\n"
-			     "  covariance(d,r) [e^2] = [[%.6g, %.6g], [%.6g, %.6g]]; corr = %.6g\n",
+			WARN("Charge innovation layer {} (selected {}-pair tracks, all finite fills including overflow):\n"
+			     "  d = Qx - Qy; r = Qpair - Qprevious; N = {:.0f}\n"
+			     "  mean(d,r) [e] = [{:.6g}, {:.6g}]\n"
+			     "  covariance(d,r) [e^2] = [[{:.6g}, {:.6g}], [{:.6g}, {:.6g}]]; corr = {:.6g}\n",
 			     i, npairs, count, mean_d, mean_r, var_d, cov_dr, cov_dr, var_r, correlation);
 			ccharge->cd(2 * (N_PAIRS - 1) + i);
 			PLatex(0.08,
@@ -496,21 +499,24 @@ int main(int argc, char* argv[]) {
 		 * Its width includes the uncertainty of the prediction from the other pairs. */
 		TCanvas* c1d = new TCanvas(Form("FitResidue1D_N%u", npairs), Form("Fit residues 1D (%u pairs)", npairs), 2150, 1650);
 		c1d->Divide(N_PAIRS, 3);
+		const auto pair_label = fmt::format(fg(0xFF7C0A_rgb) | fmt::emphasis::bold, "[{}]", npairs);
 		for(size_t i=0; i<N_PAIRS; ++i) {
 			c1d->cd(i+1);
 			auto [fit_result_x, _x_] = h.resx[i].DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
-			WARN("FOOT%zu X: " KBH_MAG "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_x[1], 1e3*fit_result_x[2]);
+			WARN("{} FOOT{} X: {:.2f}, {:.2f} [um]\n", pair_label, i,
+				styled(1e3*fit_result_x[1], mnd::style::bold_magenta), styled(1e3*fit_result_x[2], mnd::style::bold_magenta));
 			c1d->cd(i+1 + N_PAIRS);
 			auto [fit_result_y, _y_] = h.resy[i].DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
-			WARN("FOOT%zu Y: " KBH_YEL "%.2f, %.2f" KNRM " [um]\n", i, 1e3*fit_result_y[1], 1e3*fit_result_y[2]);
+			WARN("{} FOOT{} Y: {:.2f}, {:.2f} [um]\n", pair_label, i,
+				styled(1e3*fit_result_y[1], mnd::style::bold_yellow), styled(1e3*fit_result_y[2], mnd::style::bold_yellow));
 
 			c1d->cd(i+1 + 2*N_PAIRS);
 			auto [fit_result_q, _q_] = h.resq[i].DrawAndFit(fit_side_ratio, kMagenta + 2, 5, 4 /* niter */);
-			WARN("FOOT%zu Q: " KBH_CYN "%.3f, %.3f" KRNM " [Q]\n", i, fit_result_q[1], fit_result_q[2]);
+			WARN("{} FOOT{} Q: {:.3f}, {:.3f} [Q]\n", pair_label, i,
+				styled(fit_result_q[1], mnd::style::bold_cyan), styled(fit_result_q[2], mnd::style::bold_cyan));
 
 			resolutions.emplace_back (
-				Form("FOOT%zu (X,Y): (%s%.2f%s, %s%.2f%s) um",
-					i, KRED, 1e3*fit_result_x[2], KNRM, KBLU, 1e3*fit_result_y[2], KNRM)
+				fmt::format("FOOT{} (X,Y): ({:.2f}, {:.2f}) um", i, 1e3*fit_result_x[2], 1e3*fit_result_y[2])
 			);
 		}
 		TCanvas* cpos = new TCanvas(Form("foot_xyq_N%u", npairs), Form("FOOT absolute positions/charge (%u pairs)", npairs), 2150, 1650);
@@ -544,13 +550,13 @@ int main(int argc, char* argv[]) {
 		cscore->cd(1); h.h1_score.Draw();
 		std::vector<std::string> cost_labels {
 			"Search parameters (first input file):",
-			mnd::msg("Cr = %.3g; Ct = %.3g", Cr, Ct),
-			mnd::msg("max cost: %.3g; max cost_f: %.3g", max_cost, max_cost_f),
+			fmt::format("Cr = {:.3g}; Ct = {:.3g}", Cr, Ct),
+			fmt::format("max cost: {:.3g}; max cost_f: {:.3g}", max_cost, max_cost_f),
 			"Charge scales: sd, sr [e]; corr dimensionless"
 		};
 		for(u32 i = 0; i < N_PAIRS; ++i) {
 			const auto& q = qcov->at(i);
-			cost_labels.emplace_back(mnd::msg("Pair %u: sd=%.3g; sr=%.3g; corr=%.3g",
+			cost_labels.emplace_back(fmt::format("Pair {}: sd={:.3g}; sr={:.3g}; corr={:.3g}",
 				i + 1, q.sd, q.sr, q.corr));
 		}
 		cscore->cd(2); PLatex(0.045, mnd::as_span(cost_labels));
@@ -581,8 +587,7 @@ int main(int argc, char* argv[]) {
 			cRQT2->cd(1*N_PAIRS + 1+n); replay[rank].h2_diff_q.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
 			cRQT2->cd(2*N_PAIRS + 1+n); replay[rank].h2_diff_t.at(n)->Draw("COLZ"); gPad->SetGrid(); gPad->SetLogz();
 		}
-
-	}
+	} // for(size_t rank=0; rank<histos.size(); ++rank)
 
 	if(draw_sci) {
 		TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2150, 1400);
@@ -623,7 +628,7 @@ int main(int argc, char* argv[]) {
 	rootApp.Run();
 
 #else
-    WARN("\n" BOLD ".. MND_FOOTTRACK_DEBUG not compiled in. This program does nothing.\n" KNRM);
+    WARN("\n{}\n", styled(".. MND_FOOTTRACK_DEBUG not compiled in. This program does nothing.", fmt::emphasis::bold));
 #endif
     return 0;
 }

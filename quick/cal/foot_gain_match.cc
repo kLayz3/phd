@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) {
 		->check([](const std::string& match) -> std::string {
 			int n = -1;
 			if(!mnd::parse(match, n) or (TFOOTCalCont::N_STRIPS % n != 0)) 
-				return mnd::msg("Must be integer parsable and evenly divisible by %d", TFOOTCalCont::N_STRIPS);
+				return fmt::format("Must be integer parsable and evenly divisible by {}", TFOOTCalCont::N_STRIPS);
 			return "";
 		});
 	add_logged_option(app, "-l,--fit", do_fit, "Select which ASICs to fit.")
@@ -177,7 +177,7 @@ int main(int argc, char* argv[]) {
 			option::Lead{">"},
 			option::Remainder{" "},
 			option::End{"]"},
-			option::PostfixText{mnd::msg("Analysis (per event: %s)", fileName.c_str())},
+			option::PostfixText{fmt::format("Analysis (per event: {})", fileName)},
 			option::ForegroundColor{Color::green},
 			option::ShowPercentage{true},
 			option::ShowElapsedTime{true},
@@ -229,7 +229,7 @@ int main(int argc, char* argv[]) {
 	/* Do the small fit in the 1D plot. */	
 	TH1D* const h = *h1_foot_e_mid;
 	auto [fitr_mid, err_mid] = GaussFitMax(h, sratio, niter);
-	WARN("[CENTRAL HIT] 1D projection yields: max: %.2f, gauss fit max (around this max+-%.1f sigma): %.2f +- %.2f\n",
+	WARN("[CENTRAL HIT] 1D projection yields: max: {:.2f}, gauss fit max (around this max+-{:.1f} sigma): {:.2f} +- {:.2f}\n",
 		h->GetXaxis()->GetBinCenter( h->GetMaximumBin() ), sratio,
 		fitr_mid[1], err_mid[1]);
 	
@@ -331,8 +331,8 @@ int main(int argc, char* argv[]) {
 			std::sort( asic.multi_poly.begin(), asic.multi_poly.end() );
 		}
 
-		std::cout << "\"gain\": " << nlohmann::json(pp).dump(4) << std::endl;
-		WARN("Average value: %.5f (bin-center) and %.5f (gauss-fit-center)\n",
+		fmt::println("\"gain\": {}", nlohmann::json(pp).dump(4));
+		WARN("Average value: {:.5f} (bin-center) and {:.5f} (gauss-fit-center)\n",
 			(*h1_foot_e_mid)->GetBinCenter((*h1_foot_e_mid)->GetMaximumBin()), mean_mid);
 	}
 
@@ -377,7 +377,7 @@ int main(int argc, char* argv[]) {
 				g->SetLineWidth(8);
 				l->AddEntry(g, Form("Current gain curve (Z=%d) from the setup file", Z));
 			} catch(std::exception const& e) {
-				WARN("%s\n", e.what());
+				WARN("{}\n", e.what());
 			}
 		}
 	}

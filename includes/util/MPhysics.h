@@ -296,7 +296,7 @@ inline double beta_gamma_sq(EKin_t K) noexcept {
 inline double Gamma(Beta_t beta) noexcept {
 	if constexpr(detail::debug_) {
 		if(beta.value >= 1 || beta.value < 0)
-			MND_THROW("Requested beta velocity %.2f out of bounds.", beta.value);
+			MND_THROW("Requested beta velocity {:.2f} out of bounds.", beta.value);
 	}
 	if(beta.value >= 1) return std::numeric_limits<double>::infinity();
 	if(beta.value < 0)  return NAN;

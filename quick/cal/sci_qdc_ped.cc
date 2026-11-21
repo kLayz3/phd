@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
         ->check(CLI::ReadPermissions)
 		->delimiter(',');
     add_logged_option(app, "-i,--sci", i_sci,
-        mnd::msg("Scintillator index; %u => SCI21, %u => SCI22, %u => SCI31, %u => SCI41",
+        fmt::format("Scintillator index; {} => SCI21, {} => SCI22, {} => SCI31, {} => SCI41",
             SCI21_I, SCI22_I, SCI31_I, SCI41_I))
         ->check(CLI::Range(
 			(int)SCI21_I, (int)SCI41_I
@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
 				option::Lead{">"},
 				option::Remainder{" "},
 				option::End{"]"},
-				option::PostfixText{mnd::msg("SCI%s QDC-cal [%s]", label[i_sci], file.c_str())},
+				option::PostfixText{fmt::format("SCI{} QDC-cal [{}]", label[i_sci], file)},
 				option::ForegroundColor{Color::yellow},
 				option::ShowPercentage{true},
 				option::ShowElapsedTime{true},
@@ -129,15 +129,14 @@ int main(int argc, char* argv[]) {
 	std::string key = mnd::longest_common_prefix(fileNames);
 	nlohmann::json j{};
 	j[key] = result;
-    WARN("Pedestal of SCI%s found:\n%s%s%s\n", label[i_sci],
-		 BOLD, j.dump(4).c_str(), KNRM);
+    WARN("Pedestal of SCI{} found:\n{}\n", label[i_sci], styled(j.dump(4), fmt::emphasis::bold));
 
     SCIQDCPedestal peak;
 	TH1D* hl = &h1_sci_ped_l->h;
 	TH1D* hr = &h1_sci_ped_r->h;
 	result.left  = hl->GetXaxis()->GetBinCenter( hl->GetMaximumBin() );
 	result.right = hr->GetXaxis()->GetBinCenter( hr->GetMaximumBin() );
-    WARN("Pedestal PEAK of SCI%s found:\n%s\n", label[i_sci], j.dump(4).c_str());
+    WARN("Pedestal PEAK of SCI{} found:\n{}\n", label[i_sci], j.dump(4));
 
     TCanvas *c = new TCanvas("qdc-raw", "Raw QDC (for hits)", 1800, 1200);
 	c->Divide(3,1);
@@ -145,7 +144,7 @@ int main(int argc, char* argv[]) {
 	c->cd(2); h1_sci_r->Draw();
 	c->cd(3); h1_sci_e->Draw();
 
-	canvas::save_all<canvas::Exe>( save, { mnd::msg("SCI%d", i_sci) });
+	canvas::save_all<canvas::Exe>( save, { fmt::format("SCI{}", i_sci) });
 
     WARN("End-of-main\n");
     rootApp.Run(); return 0;

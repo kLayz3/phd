@@ -23,6 +23,9 @@
 #include <memory>
 #include <random>
 
+/* Okay, so this part uses no Geant4 anymore. All of the Geant4 stuff, related to straggling
+ * must have been already precomputed by the transport program. Here we just "analyse it" ...
+ * Basically trying to */
 int main(int argc, char** argv) {
 	std::string input, output, pdf, config = FOOT_TRACK_CONFIG, section = "c9";
 	
@@ -30,7 +33,6 @@ int main(int argc, char** argv) {
 	double side = 2.0;
 	bool no_config = false;
 	std::vector<double> sigma_um(8, 0);
-	u64 seed = 12345;
 	
 	CLI::App app{"Four-pair leave-one-pair-out residuals from FOOT transport truth"};
 	
@@ -51,12 +53,14 @@ int main(int argc, char** argv) {
 	add_logged_option(app, "--sigma-um", sigma_um, "Trial detector noise RMS, d0..d7 [micrometres]; default zero")
 		->delimiter(',')
 		->expected(8);
-	add_logged_option(app, "--seed", seed, "Trial-smearing random seed");
 	
 	CLI11_PARSE(app, argc, argv);
 	srand(time(NULL));
+
 	std::vector<TimePoint> tv;
 	tv.emplace_back(TimePoint("start"));
+	
+	u64 seed = (u64)rand() | (u64)rand();
 
 	// Match quick/run: compiled defaults, GLOBAL, SECTION; explicit analysis arguments override these.
 	const auto cli_u = bins_u, cli_v = bins_v;
@@ -66,7 +70,7 @@ int main(int argc, char** argv) {
 		std::string body{mnd::sdsl::extract_text_body("GLOBAL", "", text).value_or("")};
 		if(!section.empty()) {
 			const auto selected = mnd::sdsl::extract_text_body("SECTION", section, text);
-			if(selected.is_none()) ERROR("Unknown config section: %s", section.c_str());
+			if(selected.is_none()) ERROR("Unknown config section: {}", section);
 			body += "\n" + std::string(selected.unwrap());
 		}
 		CLI::App settings;
@@ -100,7 +104,7 @@ int main(int argc, char** argv) {
 		ERROR("Output already exists or ROOT/PDF paths coincide");
 	nlohmann::json metadata;
 	std::ifstream info(input+".json");
-	if(!info) ERROR("Cannot read transport metadata: %s.json", input.c_str());
+	if(!info) ERROR("Cannot read transport metadata: {}.json", input);
 	info >> metadata;
 	using Matrix = Eigen::Matrix<double, 8, 8>;
 	Eigen::Matrix<double, 8, 4> A;
@@ -143,9 +147,8 @@ int main(int argc, char** argv) {
 	Eigen::JacobiSVD<Matrix> svd(T);
 	const auto singular = svd.singularValues();
 	const u32 rank = (singular.array() > singular(0)*1e-10).count();
-	WARN("Effective residual binning u: %s; v: %s; side ratio: %g\n"
-		"Variance-response rank (relative tolerance 1e-10): %u/8\n",
-		mnd::streamable(bins_u).c_str(), mnd::streamable(bins_v).c_str(), side, rank);
+	WARN("Effective residual binning u: {}; v: {}; side ratio: {:.6g}\n"
+		"Variance-response rank (relative tolerance 1e-10): {}/8\n", bins_u, bins_v, side, rank);
 	if(rank < 8) WARN("Eight independent detector variances are not identified at this tolerance.\n");
 
 	std::unique_ptr<TFile> file{TFile::Open(input.c_str(), "READ")};
@@ -236,7 +239,7 @@ int main(int argc, char** argv) {
 		TLatex text;
 		text.SetNDC();
 		text.SetTextSize(.045);
-		const std::string label = mnd::msg("Core #sigma: %.2f #mum; measured: %.2f #mum",
+		const std::string label = fmt::format("Core #sigma: {:.2f} #mum; measured: {:.2f} #mum",
 			fitted ? fit.first[2]*1000 : NAN, reference*1000);
 		text.DrawLatex(.12, .83, label.c_str());
 		summary["residuals"].push_back({
@@ -248,7 +251,7 @@ int main(int argc, char** argv) {
 			{"core_sigma_mm",           fitted ? fit.first[2] : NAN},
 			{"reference_core_sigma_mm", reference}
 		});
-		WARN("%s: core=%g um; reference=%g um\n", hist[i]->GetName(),
+		WARN("{}: core={:.6g} um; reference={:.6g} um\n", hist[i]->GetName(),
 			fitted ? fit.first[2]*1000 : NAN, reference*1000);
 		hist[i]->Write();
 	}
@@ -264,8 +267,7 @@ int main(int argc, char** argv) {
 	description.Write();
 	canvas.Write();
 	canvas.Print(pdf.c_str());
-	WARN("Used %lld/%lld events; wrote %s and %s\n", static_cast<long long>(accepted),
-		static_cast<long long>(tree->GetEntries()), output.c_str(), pdf.c_str());
+	WARN("Used {}/{} events; wrote {} and {}\n", accepted, tree->GetEntries(), output, pdf);
 
 	tv.emplace_back(TimePoint("end"));
 	PrintElapsed<kSECOND>(std::move(tv));

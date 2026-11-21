@@ -96,7 +96,6 @@ struct TrackCost {
         sum_.reset();
     }
 
-	friend std::ostream& operator<<(std::ostream&, const TrackCost&);
 	friend bool operator>(const TrackCost& , double );
 
 	TrackCost() = delete;

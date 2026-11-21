@@ -8,7 +8,7 @@
 #include <cstring>
 #include <filesystem>
 
-#include "monad/accessories/typedefs.hxx"
+#include "monad/accessories/formatting.hxx"
 
 /* This is pure hatred coding. I absolutely despise the std::string|view API in C++,
  * plus sprinkle some const char* C-api on top. Why not. Junge Alter es sieht ziemlich schlimm aus. */
@@ -51,13 +51,13 @@ static bool is_word(std::string_view text) {
  * If the closing bracket is not found. Returns std::string_view::npos. */
 static size_t find_balanced_brace(std::string_view text) {
 	if(text.size() < 2)
-		MND_THROW("Text is: '%.*s', with not enough size to have two matching brace?",
-			(int)text.size(), text.data());
+		MND_THROW("Text is: '{}', with not enough size to have two matching brace?",
+			text);
 
 	// Opening delim.
 	const char O = text.front();
 	if(O != '(' && O != '[' && O != '{' && O != '<')
-		MND_THROW("View currently isn't placed at one of the opening braces: ([{< . It is placed on: '%c'", text.front());
+		MND_THROW("View currently isn't placed at one of the opening braces: ([{{< . It is placed on: {:?}", text.front());
 
 	// Closing delim
 	const char C = O == '(' ? ')' :
@@ -163,7 +163,7 @@ std::vector<std::string_view> mnd::split_view(std::string_view text, char sep) {
 		}
 	}
 	if(quote)
-		MND_THROW("split_view: unterminated quote %c somewhere.", quote);
+		MND_THROW("split_view: unterminated quote {:?} somewhere.", quote);
 
 	tokens.push_back(text.substr(start));
 	return tokens;
@@ -194,13 +194,12 @@ mnd::rootfile_info(std::string_view file) {
     const std::string name = path.filename().string();
 
     if(name.size() > file.size())
-		MND_THROW("Invalid file path? %.*s", (int)file.size(), file.data());
+		MND_THROW("Invalid file path? {}", file);
 
 	std::smatch match;
     if(!std::regex_match(name, match, re)) {
-		MND_THROW("mnd::fs::file_info(): provided file name '%s' does not "
-			"match the regular expression: %s%s%s\n",
-			name.c_str(), BOLD, rootfile_pattern, KNRM);
+		MND_THROW("mnd::fs::file_info(): provided file name '{}' does not match the regular expression: {}\n",
+			name, styled(rootfile_pattern, fmt::emphasis::bold));
 	}
 	
 	const std::string basename = match[1];
@@ -210,9 +209,9 @@ mnd::rootfile_info(std::string_view file) {
 	const Option<u32> maybe_n_start = mnd::stou(run_n_start_view);
 	Option<u32> maybe_n_end   = maybe_n_start;
 	if(maybe_n_start.is_none()) {
-        MND_THROW("mnd::fs:file_info: In file name: %s , "
+        MND_THROW("mnd::fs:file_info: In file name: {} , "
 			"expected `<start>` run number to be "
-			"parsable to uint32_t", name.c_str());
+			"parsable to uint32_t", name);
 	}
 
 	if(match[3].matched) {
@@ -221,9 +220,9 @@ mnd::rootfile_info(std::string_view file) {
 		};
 		maybe_n_end = mnd::stou(run_n_end_view);
         if(maybe_n_end.is_none()) {
-			MND_THROW("mnd::fs:file_info: In file name: %s , "
+			MND_THROW("mnd::fs:file_info: In file name: {} , "
 				"expected `<end>` run number to be "
-				"parsable to uint32_t", name.c_str());
+				"parsable to uint32_t", name);
 		}
 	}
 
@@ -243,7 +242,7 @@ u32 mnd::rootfile_end_number(std::string_view file) {
 std::pair<u32, u32>
 mnd::rootfile_number_bounds(const std::vector<std::string>& files) {
     if(files.empty())
-        throw std::invalid_argument("Cannot determine bounds of an empty file sequence");
+        MND_THROW("Cannot determine bounds of an empty file sequence");
 
     return {
         rootfile_start_number(files.front()),
@@ -252,13 +251,17 @@ mnd::rootfile_number_bounds(const std::vector<std::string>& files) {
 }
 
 std::string mnd::rootfile_names_concatenated(const std::vector<std::string>& files) {
-    auto bounds = rootfile_number_bounds(files);
+	if(files.empty()) MND_THROW("Requested concatenation of names, but the vector is empty?");
 
-    return std::string{file_prefix}
-        + "_"
-        + mnd::utos(bounds.first, nchars_run_number)
-        + "_"
-        + mnd::utos(bounds.second, nchars_run_number);
+	auto bounds = rootfile_number_bounds(files);
+	/* Stem take from the first rootfile. It dictates the name. */
+	auto runname = run_name(files.front());
+
+	return std::move(runname)
+		+ "_"
+		+ mnd::utos(bounds.first, nchars_run_number)
+		+ "_"
+		+ mnd::utos(bounds.second, nchars_run_number);
 }
 
 std::string mnd::file_stem(std::string_view path) {
@@ -271,12 +274,12 @@ mnd::Option<std::string_view> mnd::sdsl::extract_text_body (
 	std::string_view text   // full text
 ) {
 	if(!is_word(block_keyword))
-		MND_THROW("The label is '%.*s', but should only contain [a-zA-Z0-9_] symbols.",
-			(int)block_keyword.size(), block_keyword.data());
+		MND_THROW("The label is '{}', but should only contain [a-zA-Z0-9_] symbols.",
+			block_keyword);
 
 	if(!label.empty() && !is_word(label))
-		MND_THROW("The label is '%.*s', but should only contain [a-zA-Z0-9_] symbols.",
-			(int)label.size(), label.data());
+		MND_THROW("The label is '{}', but should only contain [a-zA-Z0-9_] symbols.",
+			label);
 
 	std::regex re;
 	try {
@@ -289,7 +292,7 @@ mnd::Option<std::string_view> mnd::sdsl::extract_text_body (
 
 		re = std::regex{rgx};
 	} catch(const std::exception& e) {
-		MND_THROW("Regex creation failed: reason: %s", e.what());
+		MND_THROW("Regex creation failed: reason: {}", e.what());
 	}
 
 	mnd::Option<std::string_view> result;
@@ -303,23 +306,22 @@ mnd::Option<std::string_view> mnd::sdsl::extract_text_body (
 	const size_t brace = text.find_first_not_of(" \t\r\n\f\v", header_end);
 
 	if(brace == std::string_view::npos || text[brace] != '{')
-		MND_THROW("Expected '{' after section header.");
+		MND_THROW("Expected '{{' after section header.");
 
 	text.remove_prefix(brace);
 	size_t closing_brace = find_balanced_brace(text);
 
 	if(closing_brace == std::string_view::npos)
-		MND_THROW("mnd::extract_text_body: "
-			"Parse error: unterminated block-section %.*s(%.*s)\n",
-			(int)block_keyword.size(), block_keyword.data(), (int)label.size(), label.data());
+		MND_THROW("mnd::extract_text_body: Parse error: "
+			"unterminated block-section {}({})\n", block_keyword, label);
 	
 	result = Some{ text.substr(1, closing_brace-1) };
 
 	text = text.substr(closing_brace+1);
 
 	if(std::regex_search(text.begin(), text.end(), m, re))
-		MND_THROW("Duplicate instance of '%.*s(%.*s)' block found.\n",
-			(int)block_keyword.size(), block_keyword.data(), (int)label.size(), label.data());
+		MND_THROW("Duplicate instance of '{}({})' block found.\n",
+			block_keyword, label);
 	
 	return result;
 }
@@ -329,8 +331,8 @@ std::vector<std::string_view> mnd::sdsl::extract_available_sections (
 	std::string_view text
 ) {
 	if(!is_word(block_keyword))
-		MND_THROW("The label is '%.*s', but should only contain [a-zA-Z0-9_] symbols.",
-			(int)block_keyword.size(), block_keyword.data());
+		MND_THROW("The label is '{}', but should only contain [a-zA-Z0-9_] symbols.",
+			block_keyword);
 
 	std::vector<std::string_view> results{};
 
@@ -354,8 +356,7 @@ std::vector<std::string_view> mnd::sdsl::extract_available_sections (
 		const size_t closing_brace = find_balanced_brace(text);
 
 		if(closing_brace == std::string_view::npos)
-			MND_THROW("Unterminated section body %.*s.",
-				(int)results.back().size(), results.back().data());
+			MND_THROW("Unterminated section body {}.", results.back());
 
 		text.remove_prefix(closing_brace + 1);
 	}

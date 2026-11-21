@@ -38,44 +38,42 @@ TFRSHitProc::TFRSHitProc (
 	
 	constexpr auto tof_param_json_name = FRSToFParam::get_name<0>();
 	if(in.setup.find(tof_param_json_name) == in.setup.end()) {
-		ERROR("'%s' parameter not found in the input JSON. Cannot continue (no ToF).\n",
+		ERROR("'{}' parameter not found in the input JSON. Cannot continue (no ToF).\n",
 			tof_param_json_name);
 	} else {
 		UNROLL_JSON_PARAM( (*out.sTof), in.setup, 0);
 		for(const auto& tofp : out.sTof->ToF) {
 			if(!tofp.IsValid())
-				ERROR("Parsed in ToF combination marked as invalid:\nIt is: %s\n",
-					mnd::streamable(tofp).c_str());
+				ERROR("Parsed in ToF combination marked as invalid:\nIt is: {}\n", tofp);
 		}
-		WARN("'%s' JSON successfully parsed as: %s\n", tof_param_json_name, mnd::streamable(*out.sTof).c_str());
+		WARN("'{}' JSON successfully parsed as: {}\n", tof_param_json_name, *out.sTof);
 	}
 
 	const std::string_view fname = mnd::g_input_file.name();
-	WARN("TFRSHitProc::TFRSHitProc(..) found current input file from MONAD: %s%.*s%s\n",
-		KBH_MAG, (int)fname.size(), fname.data(), KNRM);
+	WARN("TFRSHitProc::TFRSHitProc(..) found current input file from MONAD: {}\n",
+		styled(fname, mnd::style::bold_magenta));
 
 	mnd::fs::load_runsheet(runsheet_name);
 	const mnd::RunsheetState runsheet_row = mnd::QueryRunsheet(fname);
 
 	if(!runsheet_row.primary.valid() || (runsheet_row.primary != mnd::assume::primary))
-		WARN("Primary beam identified as %s%s%s but is mismatched with assumption %s%s%s. Is fine, just to be noted.\n",
-			KBH_RED, mnd::streamable(runsheet_row.primary).c_str(), KNRM,
-			KBH_MAG, mnd::streamable(mnd::assume::primary).c_str(), KRNM);
+		WARN("Primary beam identified as {} but is mismatched with assumption {}. Is fine, just to be noted.\n",
+			styled(runsheet_row.primary.to_string(), mnd::style::bold_red),
+			styled(mnd::assume::primary.to_string(), mnd::style::bold_magenta));
 
 	if(!runsheet_row.secondary.valid())
-		ERROR("Runsheet parsed fine, but secondary beam: %s is marked invalid?",
-			runsheet_row.secondary.chem_to_string().c_str());
+		ERROR("Runsheet parsed fine, but secondary beam: {} is marked invalid?",
+			runsheet_row.secondary.chem_to_string());
 	
-	WARN("Runsheet path loaded and identified as %s%.*s%s, with corresponding row being:\n  %s\n",
-		BOLD, (int)runsheet_name.size(), runsheet_name.data(), KNRM, mnd::streamable(runsheet_row).c_str());
+	WARN("Runsheet path loaded and identified as {}, with corresponding row being:\n  {}\n",
+		styled(runsheet_name, fmt::emphasis::bold), runsheet_row);
 
 	BeamInfo* binfo = out.binfo;
 	if(!binfo) ERROR("Forgot to call TFRSHitCont::Setup() ?");
 	binfo->GetFrom(runsheet_row);
 	
-	WARN("Beam impinging on S2 target identified as %s%s%s\n", KBH_MAG,
-		binfo->SecondaryIon()->chem_to_string().c_str(), KNRM
-	);
+	WARN("Beam impinging on S2 target identified as {}\n",
+		styled(binfo->SecondaryIon()->chem_to_string(), mnd::style::bold_magenta));
 }
 
 void TFRSHitProc::ProcessEntry() noexcept {

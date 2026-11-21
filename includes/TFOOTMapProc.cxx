@@ -71,7 +71,7 @@ const TFOOTMapProc::FOOTView TFOOTMapProc::GetPtrs(const TFRSSortEvent* e, int N
 		GET_FOOT_GO4(29)
 		
 		default:
-			ERROR("Request for member %d, not in [1,29]\n", N);
+			ERROR("Request for member {}, not in [1,29]\n", N);
 	}
 }
 
@@ -103,12 +103,13 @@ static constexpr i32 FIT_WIDTH = 8;
 void TFOOTMapProc::CalcGlobalPedestal() {
 	TH2I* h = out.h2_raw_tmp;
 	if(h->GetEntries() == 0) {
-		WARN("Ran over the raw Go4 FOOT data batch, but found 0 events with data? " EMPH(FOOT: %d) ", Setting keeping old pedestals / setting to 0.\n", N);
+		WARN("Ran over the raw Go4 FOOT data batch, but found 0 events with data? {}, keeping old pedestals / setting to 0.\n",
+			styled(fmt::format("FOOT: {}", N), mnd::style::bold_yellow));
 		return;
 	}
 
 	for(int i=0; i < N_STRIPS; ++i) {
-		auto slice = std::unique_ptr<TH1D>( h->ProjectionY(mnd::msg("_py%d-%d", N, i), i+1, i+1) );
+		auto slice = std::unique_ptr<TH1D>( h->ProjectionY(fmt::format("_py{}-{}", N, i).c_str(), i+1, i+1) );
 		slice->SetDirectory(nullptr);
 		
 		int maxBin = slice->GetMaximumBin();
@@ -134,8 +135,8 @@ void TFOOTMapProc::CalcGlobalPedestal() {
 		}
 
 		if(!fit_ok) {
-			//WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of raw data? Skipping. "
-			//	"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
+			//WARN("FOOT{}, strip {}, couldn't fit Gauss for y-projection of raw data? Skipping. "
+			//	"Debug: maxBin = {}, integral = {:.1f}\n", N, i, maxBin, slice->GetEntries());
 			pedestal = slice->GetBinCenter(maxBin);
 
 			// This pedestal can be garbage.. If it is not close to the previous pedestal, then just yeet it out.
@@ -305,7 +306,7 @@ void TFOOTMapProc::ProcessEventPedestal() noexcept {
 int TFOOTMapProc::ParseStaticBadStrips() {
 	TFOOTMapCont& output = this->out;
 	if(! output.bad_strips)
-		ERROR("Output bad strips container uninitialized (FOOT_N=%d). Did you call TFOOTMapCont::Init(..) beforehand?",
+		ERROR("Output bad strips container uninitialized (FOOT_N={}). Did you call TFOOTMapCont::Init(..) beforehand?",
 			N);
 
 	const char* key = Form("FOOT%d", N);
@@ -329,9 +330,9 @@ int TFOOTMapProc::ParseStaticBadStrips() {
 	std::sort(v.begin(), v.end());
 
 	if(v.size() > 0) {
-		WARN("[%s] Found " EMPH(%zu) " bad strips (%zu from param files): ", key, v.size(), parsed.size());
-		for(auto x : v) printf("%s%d%s ", BOLD, x, KNRM);
-		printf("\n");
+		WARN("[{}] Found {} bad strips ({} from param files): {}\n",
+			key, styled(v.size(), mnd::style::bold_yellow), parsed.size(),
+			styled(fmt::join(v, " "), fmt::emphasis::bold));
 	}
 	
 	return (int)v.size();
@@ -339,18 +340,18 @@ int TFOOTMapProc::ParseStaticBadStrips() {
 
 void TFOOTMapProc::CalcFinalPedestal() {
 	if(out.h2_corr->GetEntries() == 0) {
-		WARN("Ran over the data, but found 0 events with calibrated data? Setting all pedestals ridiculously high."
-			EMPH(FOOT: %d\n), N);
+		WARN("Ran over the data, but found 0 events with calibrated data? Setting all pedestals ridiculously high. {}\n",
+			styled(fmt::format("FOOT: {}", N), mnd::style::bold_yellow));
 		for(int i=0; i < N_STRIPS; ++i) out.ped_s->at(i) = 10'000;
 		return;
 	}
 	
 	for(int i=0; i < N_STRIPS; ++i) {
-		auto slice = std::unique_ptr<TH1D>( out.h2_corr->ProjectionY(mnd::msg("_py%d-%d", N, i), i+1, i+1) );
+		auto slice = std::unique_ptr<TH1D>( out.h2_corr->ProjectionY(fmt::format("_py{}-{}", N, i).c_str(), i+1, i+1) );
 		slice->SetDirectory(nullptr);
 
 		if(slice->GetEntries() < 100) {
-			WARN("FOOT%d, strip %d, found no entries in y-projection of calibrated data? Skipping.\n", N, i);
+			WARN("FOOT{}, strip {}, found no entries in y-projection of calibrated data? Skipping.\n", N, i);
 			out.ped_s->at(i) = 10'000'000; /* Random number for high pedestal. */
 			out.bad_strips->push_back(i);
 			continue;
@@ -365,8 +366,8 @@ void TFOOTMapProc::CalcFinalPedestal() {
 		const bool fit_ok = VerifyGaussFitMax(fit_result);
 
 		if(!fit_ok) {
-			WARN("FOOT%d, strip %d, couldn't fit Gauss for y-projection of calibrated data? Skipping. "
-				"Debug: maxBin = %d, integral = %.1f\n", N, i, maxBin, slice->GetEntries());
+			WARN("FOOT{}, strip {}, couldn't fit Gauss for y-projection of calibrated data? Skipping. "
+				"Debug: maxBin = {}, integral = {:.1f}\n", N, i, maxBin, slice->GetEntries());
 			out.ped_s->at(i) = BAD_STRIP_CUTOFF_HI + 10;
 		} else {
 			out.ped_s->at(i) = fit_result.first[2];
@@ -410,7 +411,7 @@ void TFOOTMapProc::parse_json_string(std::vector<int>& out, std::string s) {
 	} else if(std::regex_match(s, m, re_range)) {
 		int a = std::stoi(m[1].str());
 		int b = std::stoi(m[3].str());
-		if(a > b) ERROR("%d < %d found while parsing json: '%s'\n", a,b,s.c_str());
+		if(a > b) ERROR("{} < {} found while parsing json: '{}'\n", a,b,s);
 		for(int i=a; i<b; ++i) out.push_back(i);
 		if(m[2].matched) out.push_back(b);
 	} else if(std::regex_match(s, m, re_seq)) {
@@ -419,7 +420,7 @@ void TFOOTMapProc::parse_json_string(std::vector<int>& out, std::string s) {
 		for(int i=b; i < 640; i+=a)
 			out.push_back(i);
 	} else {
-		WARN("String '%s' doesn't match a: number, range or sequence regular expression.", s.c_str());
+		WARN("String '{}' doesn't match a: number, range or sequence regular expression.", s);
 	}
 }
 
@@ -440,14 +441,14 @@ void TFOOTMapProc::parse_json_as_int_vec(std::vector<int>& out, const json& j) {
 		for(const auto& jsub : j)
 			parse_json_as_int_vec(out, jsub);
 	}
-	else ERROR("Passed a json object '%s' which isn't: string/array/number.\n", j.dump().c_str());
+	else ERROR("Passed a json object '{}' which isn't: string/array/number.\n", j.dump());
 }
 
 void TFOOTMapProc::append_flat_json(json& dst, const json& src) {
 	if(!dst.empty() && !dst.is_object())
-		ERROR("Destination object '%s' cannot store sources appended to it. Non-empty and not-an-object!", dst.dump().c_str());
+		ERROR("Destination object '{}' cannot store sources appended to it. Non-empty and not-an-object!", dst.dump());
 	if(!src.is_object())
-		ERROR("Source json: '%s' must be an object.", src.dump().c_str());
+		ERROR("Source json: '{}' must be an object.", src.dump());
 
 	for(const auto& [k, v] : src.items()) {
 		auto it = dst.find(k);

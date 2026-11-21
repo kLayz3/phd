@@ -37,14 +37,15 @@ void TFOOTMapCont::Init(TDictInfo info) {
 	try {
 		n = std::stoi(n_it->second);
 	} catch(const std::exception& e) {
-		ERROR("FOOT_ID found: " EMPH(%s) " but unparsable to integer. Err: %s", n_it->second.c_str(), e.what());  
+		ERROR("FOOT_ID found: {} but unparsable to integer. Err: {}",
+			styled(n_it->second, mnd::style::bold_yellow), e.what());
 	}
 	FOOT_N = n;
 	this->SetName(Form("FOOT%d", n));
 }
 
 void TFOOTMapCont::Setup() {
-	if(FOOT_N < 0) ERROR("FOOT index not set. It is %d. Did you call `Init` ?", FOOT_N);
+	if(FOOT_N < 0) ERROR("FOOT index not set. It is {}. Did you call `Init` ?", FOOT_N);
 
 	h2_raw_tmp = RegisterObject<TH2I>("h2_raw_tmp" , Form("Raw FOOT%d Temp", FOOT_N),
 		N_STRIPS,0,N_STRIPS, MAX_ADC_VALUE,0,MAX_ADC_VALUE);

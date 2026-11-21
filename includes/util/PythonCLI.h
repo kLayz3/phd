@@ -39,7 +39,5 @@ struct PyInfo {
 std::istream& operator>>(std::istream& , PyInfo& );
 std::ostream& operator<<(std::ostream& , const PyInfo& );
 
-std::ostream& operator<<(std::ostream& , const PyInfo::ObjectInfo& );
-
 } // namespace mnd::plot
 

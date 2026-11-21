@@ -34,10 +34,6 @@ struct Q {
 	inline value_type const& var() const noexcept { return v; }
 
 	inline value_type s() const noexcept { return std::sqrt( var() ); }
-
-	friend std::ostream& operator<<(std::ostream& os, const Q& rhs) {
-		return os << rhs.mean() << "±" << rhs.s();
-	}
 };
 
 } // namespace track
@@ -95,7 +91,7 @@ template <
 	QCombinator& operator+=(const EntryType& e) noexcept {
 		/* it's noexcept, since `ERROR(..)` simply calls std::abort */
 		if(N == Capacity)
-			ERROR("Trying to add an entry but capacity %zu already reached.\n", Capacity);
+			ERROR("Trying to add an entry but capacity {} already reached.\n", Capacity);
 		buffer[N++] = e;
 		value.reset();
 		return *this;
@@ -104,8 +100,8 @@ template <
 	const EntryType& operator[](size_t i) const noexcept {
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(i >= N)
-			ERROR("Requesting index: %zu, but currently combinator (%s) has %zu entries (capacity=%zu)",
-				i, MND_SELF_TYPE_CSTR, N, Capacity);
+			ERROR("Requesting index: {}, but currently combinator ({}) has {} entries (capacity={})",
+				i, MND_SELF_TYPE_NAME, N, Capacity);
 #endif
 		return buffer[i];
 	}
@@ -160,9 +156,7 @@ template <
 
 	double mean() const noexcept { return get().mean(); }
 	double var() const noexcept { return get().var(); }
-	friend std::ostream& operator<<(std::ostream& os, const QCombinator& Q) {
-		return os << mnd::as_span(Q.buffer.data(), Q.N) << " => " << Q.get();
-	}
+	friend struct fmt::formatter<QCombinator>;
 
 private:
 	size_t N = 0;
@@ -174,7 +168,6 @@ private:
 struct FTrack {
 	mnd::geom::Line3D l;
 	mnd::track::Q q;
-	friend std::ostream& operator<<(std::ostream& , const FTrack& );
 };
 
 namespace mnd {
@@ -283,10 +276,10 @@ struct DesignMatrix {
 
 	constexpr decltype(auto) get_from_mask(u32 mask) const noexcept {
 		if(mask >= mnd::size(index_lookup_table))
-			ERROR("DesignMatrix::get_from_mask() : invalid access: %u > %zu.", mask, mnd::size(index_lookup_table));
+			ERROR("DesignMatrix::get_from_mask() : invalid access: {} > {}.", mask, mnd::size(index_lookup_table));
 		u32 retval =  index_lookup_table[mask];
 		if(retval == mnd::combi::invalid)
-			ERROR("DesignMatrix::get_from_mask() : invalid combination 0x%08x yields index -1.", mask);
+			ERROR("DesignMatrix::get_from_mask() : invalid combination 0x{:08x} yields index -1.", mask);
 		
 		return lookup_table[retval];
 	}
@@ -399,7 +392,7 @@ template <
 		const size_t n_current = N();
 	#if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(n_current >= Capacity)
-			ERROR("Adding a point to '%s' object. Capacity %zu exceeded", MND_SELF_TYPE_CSTR, Capacity);
+			ERROR("Adding a point to '{}' object. Capacity {} exceeded", MND_SELF_TYPE_NAME, Capacity);
 	#endif
 		layer_i[n_current] = static_cast<hm_key_type>(layer);
 		m[n_current] = entry.pos;
@@ -447,21 +440,6 @@ template <
 			sq += dqx*dqx + dqy*dqy;
 		}
 		return (sp / Track::SP + sq / Track::SQ) / (n_current - 2);
-	}
-
-	friend std::ostream& operator<<(std::ostream& os, const Track& rhs) {
-		using mnd::fmt::operator<<;
-		const size_t N = rhs.N();
-
-		std::streamsize old_precision = os.precision();
-		os << std::setprecision(4);
-		os << "{| "
-		   << "(u,v): " << mnd::span<const entry_xy_type>{rhs.m.data(), N}
-		   << ", q: " << rhs.q
-		   << ", i: " << mnd::span<const hm_key_type>{rhs.layer_i.data(), N}
-			<< " |}";
-		os.precision(old_precision);
-		return os;
 	}
 
 private:
@@ -536,3 +514,45 @@ private:
 	mutable mnd::Option<FTrack> t;
 
 }; // struct Track
+
+template<>
+struct fmt::formatter<mnd::track::Q> : fmt::formatter<double> {
+	template<typename Context>
+	auto format(const mnd::track::Q& q, Context& ctx) const {
+		auto out = fmt::formatter<double>::format(q.mean(), ctx);
+		ctx.advance_to(fmt::format_to(out, "±"));
+		return fmt::formatter<double>::format(q.s(), ctx);
+	}
+};
+
+template<size_t Capacity, typename Entry, typename Result>
+struct fmt::formatter<QCombinator<Capacity, Entry, Result>> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const QCombinator<Capacity, Entry, Result>& q, Context& ctx) const {
+		return fmt::format_to(ctx.out(), "{} => {}", mnd::as_span(q.buffer.data(), q.N), q.get());
+	}
+};
+
+template<>
+struct fmt::formatter<FTrack> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const FTrack& track, Context& ctx) const {
+		return fmt::format_to(ctx.out(), "L -> {}, Q: {}", track.l, track.q);
+	}
+};
+
+template<size_t Capacity, typename Pair>
+struct fmt::formatter<Track<Capacity, Pair>> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const Track<Capacity, Pair>& track, Context& ctx) const {
+		const size_t n = track.N();
+		return fmt::format_to(ctx.out(), "{{| (u,v): {:::.4g}, q: {}, i: {} |}}",
+			mnd::as_span(track.m.data(), n), track.q, mnd::as_span(track.layer_i.data(), n));
+	}
+};

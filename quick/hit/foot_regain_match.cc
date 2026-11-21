@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "-w,--qwidth", Q_width, "Select width of the target charge to gate upon.")
 		->delimiter(',');
 	add_logged_flag(app, "-a,--all", require_all,
-		mnd::msg("Require all %u layers to participate in the selected tracks.", N_PAIRS));
+		fmt::format("Require all {} layers to participate in the selected tracks.", N_PAIRS));
 	add_logged_option(app, "-p,--poly", poly_deg,
 		"Select polynomial degree to fit the specified ASIC's.")
 		->check(CLI::PositiveNumber);
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
 		->check([](const std::string& match) -> std::string {
 			int n = -1;
 			if(!mnd::parse(match, n) or n <= 0 or (TFOOTCalCont::N_STRIPS % n != 0))
-				return mnd::msg("Must be integer parsable and evenly divisible by %d", TFOOTCalCont::N_STRIPS);
+				return fmt::format("Must be integer parsable and evenly divisible by {}", TFOOTCalCont::N_STRIPS);
 			return "";
 		});
 	add_logged_option(app, "-l,--fit", do_fit, "Select which ASICs to fit.")
@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
 		return p.N == ifoot;
 	});
 	if(parameter == setup->end())
-		ERROR("FOOT%d not found in saved pair %d setup.\n", ifoot, foot_pair_id);
+		ERROR("FOOT{} not found in saved pair {} setup.\n", ifoot, foot_pair_id);
 	
 	FOOTParam* const foot_param = &*parameter;
 	
@@ -211,7 +211,7 @@ int main(int argc, char* argv[]) {
                 option::Lead{">"},
                 option::Remainder{" "},
                 option::End{"]"},
-                option::PostfixText{mnd::msg("[%u] (Re)gain FOOT match analysis (per event: %s)", i, fname.c_str())},
+                option::PostfixText{fmt::format("[{}] (Re)gain FOOT match analysis (per event: {})", i, fname)},
                 option::ForegroundColor{ indicators::next_col() },
                 option::ShowPercentage{true},
                 option::ShowElapsedTime{true},
@@ -299,7 +299,7 @@ int main(int argc, char* argv[]) {
 	/* Do the small fit in the 1D plot. */	
 	TH1D* const h = &h1_e0_mid.h;
 	auto [fitr_mid, err_mid] = GaussFitMax(h, sratio, niter);
-	WARN("[CENTRAL HIT] 1D projection yields: max: %.2f, gauss fit max (around this max+-%.1f sigma): %.2f +- %.2f\n",
+	WARN("[CENTRAL HIT] 1D projection yields: max: {:.2f}, gauss fit max (around this max+-{:.1f} sigma): {:.2f} +- {:.2f}\n",
 		h->GetXaxis()->GetBinCenter( h->GetMaximumBin() ), sratio,
 		fitr_mid[1], err_mid[1]);
 	
@@ -367,7 +367,7 @@ int main(int argc, char* argv[]) {
 					auto [pg0, err_pg0] = GaussFitMax( pasic.get(), sratio );
 					
 					if(!std::isfinite(pg0[1])) {
-						WARN("ASIC[%d]: GaussFitMax produced non-finite mean value? Setting it to mean_mid.\n", a);
+						WARN("ASIC[{}]: GaussFitMax produced non-finite mean value? Setting it to mean_mid.\n", a);
 						gauss_mean = mean_mid;
 					} else {
 						gauss_mean = pg0[1];
@@ -415,8 +415,8 @@ int main(int argc, char* argv[]) {
 			}
 		}
 
-		std::cout << "\"gain\": " << j.dump(4) << std::endl;
-		WARN("Average value: %.5f (bin-center) and %.5f (gauss-fit-center)\n",
+		fmt::println("\"gain\": {}", j.dump(4));
+		WARN("Average value: {:.5f} (bin-center) and {:.5f} (gauss-fit-center)\n",
 			h1_e0_mid->GetBinCenter(h1_e0_mid->GetMaximumBin()), mean_mid);
 	}
 
@@ -464,7 +464,7 @@ int main(int argc, char* argv[]) {
 				g->SetLineWidth(8);
 				l->AddEntry(g, Form("Current gain curve (Z=%d) from the setup file", Z));
 			} catch(std::exception const& e) {
-				WARN("%s\n", e.what());
+				WARN("{}\n", e.what());
 			}
 		}
 	}
@@ -513,7 +513,7 @@ int main(int argc, char* argv[]) {
 	WARN("End-of-main");
 	rootApp.Run();
 #else
-    WARN("\n" BOLD ".. MND_FOOTTRACK_DEBUG not compiled in. This program does nothing.\n" KNRM);
+    WARN("\n{}\n", styled(".. MND_FOOTTRACK_DEBUG not compiled in. This program does nothing.", fmt::emphasis::bold));
 #endif
     return 0;
 }

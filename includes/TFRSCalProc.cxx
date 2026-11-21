@@ -7,29 +7,19 @@
 
 using json = nlohmann::json;
 
-/* This ostream API is really hacked. Close your eyes. */
 #ifdef TFRSCALPROC_VERBOSE_
-template<typename T, size_t N>
-std::ostream& operator<<(std::ostream& os, const std::array<T, N>& );
+template<>
+struct fmt::formatter<RNTPCMap::Measurement> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
-std::ostream& operator<<(std::ostream& os, const RNTPCMap::Measurement& m) {
-	os << "{" << KBH_MAG << "A: " << KNRM << m.tdc_a;
-	os  << KBH_MAG << " L: " << KNRM << m.tdc_l 
-		<< KBH_MAG << " R: " << KNRM << m.tdc_r  << "}";
-	return os;
-}
-
-#include "json_struct_def.hh"
-
-std::ostream& operator<<(std::ostream& os, const RNTPCMap& m) {
-	os << KBH_RED << "Full TPC dump: " << std::endl;
-	os << KBH_GRN << "DL0: " << KNRM << m.tdc[0] << '\n' 
-		<< KBH_GRN << "DL1: " << KRNM << m.tdc[1] << '\n';
-	os << KBH_BLU << "S:   " << KRNM << BOLD << m.tdc_ref << KNRM;
-	return os;
-}
+	template<typename Context>
+	auto format(const RNTPCMap::Measurement& m, Context& ctx) const {
+		constexpr auto magenta = mnd::style::bold_magenta;
+		return fmt::format_to(ctx.out(), "{{{}{} {}{} {}{}}}",
+			styled("A: ", magenta), m.tdc_a, styled("L: ", magenta), m.tdc_l, styled("R: ", magenta), m.tdc_r);
+	}
+};
 #endif
-/* Now code becomes human again... */
 
 /* Compare if the first argument lands inside the area of two delimiters. */
 template<typename T, typename U>
@@ -74,8 +64,8 @@ void TFRSCalProc::LoadQDCParams() {
 
 	for(const auto& [_sci_i, params] : setup.at("SCI").items()) {
 		if(RNFRSCal::sci_moniker.find(_sci_i) == RNFRSCal::sci_moniker.end())
-			ERROR("Sci parameter named '%s' found in the setup JSON parameter file isn't mapped to 0..%d index.",
-				_sci_i.c_str(), RNFRSCal::N_VALID_SCI);
+			ERROR("Sci parameter named '{}' found in the setup JSON parameter file isn't mapped to 0..{} index.",
+				_sci_i, RNFRSCal::N_VALID_SCI);
 		
 		const u32 i = RNFRSCal::sci_moniker.at(_sci_i);
 		if(i >= RNFRSCal::N_VALID_SCI) continue;
@@ -94,30 +84,29 @@ void TFRSCalProc::LoadQDCParams() {
 					re = std::regex{raw_regex};
 				} catch(const std::exception& e) {
 					MND_THROW("SCIDEIntoQConverter::matches_file(...): "
-						"Compiling underlying regex: '%s' failed. Info: %s\n",
-						raw_regex.c_str(), e.what());
+						"Compiling underlying regex: '{}' failed. Info: {}\n",
+						raw_regex, e.what());
 				}
 
 				/* Regex needs to just find a match on the fname. Thats it. */
 				if( std::regex_search(fname.begin(), fname.end(), re) ) {
 					if(qdc.IsValid())
-						ERROR("'%s' entry for SCI%s is already marked as valid: %s\nBut found another match. "
-							"Regex in question: '%s' , current input file name %.*s, full: %s\n",
-							qdc_seq_key, _sci_i.c_str(), mnd::streamable(qdc).c_str(), raw_regex.c_str(),
-							(int)fname.size(), fname.data(), mnd::g_input_file.full_path().c_str());
+						ERROR("'{}' entry for SCI{} is already marked as valid: {}\nBut found another match. "
+							"Regex in question: '{}' , current input file name {}, full: {}\n",
+							qdc_seq_key, _sci_i, qdc, raw_regex, fname, mnd::g_input_file.full_path());
 
 					UNROLL_JSON_PARAM(qdc, item.at(qdc_key), 1);
 				}
 			}
 
 			if( qdc.IsDefaulted() ) {
-				WARN("SCI%s : '%s' key found in the JSON. But could not match current file name %.*s. QDC converter written as defaulted.\n",
-					_sci_i.c_str(), qdc_seq_key, (int)fname.size(), fname.data());
+				WARN("SCI{} : '{}' key found in the JSON. But could not match current file name {}. QDC converter written as defaulted.\n",
+					_sci_i, qdc_seq_key, fname);
 			}
 		}
 		else {
-			WARN("SCI%s : '%s' key not found in the JSON. Is fine. QDC converter written as defaulted.\n",
-				_sci_i.c_str(), qdc_seq_key);
+			WARN("SCI{} : '{}' key not found in the JSON. Is fine. QDC converter written as defaulted.\n",
+				_sci_i, qdc_seq_key);
 		}
 	}
 }
@@ -274,13 +263,16 @@ void TFRSCalProc::ProcessCSum(int _i_tpc, int i) noexcept {
 				conflicts[i][a].emplace_back(&*it0, &*it1);
 
 #ifdef TFRSCALPROC_VERBOSE_
-					WARN(EMPH([%lu])": Found a CSUM duplicate in just one anode: TPC%d delay-line: %d, anode %d.\n"
+					WARN("{}: Found a CSUM duplicate in just one anode: TPC{} delay-line: {}, anode {}.\n"
 						"           A     L     R\n"
-						"Hit(0): (%4d %4d %4d)\nHit(1): (%4d %4d %4d)\n",
-						called_, _i_tpc, i, a, 
+						"Hit(0): ({:4} {:4} {:4})\nHit(1): ({:4} {:4} {:4})\n",
+						styled(fmt::format("[{}]", called_), mnd::style::bold_yellow), _i_tpc, i, a,
 						it0->a_tdc, it0->dl_tdc, it0->dr_tdc,
 						it1->a_tdc, it1->dl_tdc, it1->dr_tdc);
-					std::cerr << in << "\nCsumLim: " << csum_lim[ai] << "\n\n";
+					fmt::println(stderr, "{}\n{}{}\n{}{}\n{}{}\nCsumLim: {}\n",
+						styled("Full TPC dump:", mnd::style::bold_red), styled("DL0: ", mnd::style::green), in.tdc[0],
+						styled("DL1: ", mnd::style::green), in.tdc[1], styled("S:   ", mnd::style::cyan),
+						styled(in.tdc_ref, fmt::emphasis::bold), csum_lim[ai]);
 					++errors_;
 #endif
 				}
@@ -435,10 +427,10 @@ void TFRSCalProc::ProcessSingleHit([[maybe_unused]] int _i_tpc, int ref_tdc) noe
 #ifdef TFRSCALPROC_VERBOSE_
 					static u64 called_1 = 0;
 					if(_i_tpc == 0 and d == 0) 
-						WARN(EMPH2([%lu])": Found a CSUM valid in two anode with mismatched measurements?: TPC%d delay-line: %d.\n"
+						WARN("{}: Found a CSUM valid in two anode with mismatched measurements?: TPC{} delay-line: {}.\n"
 							"           A     L     R\n"
-							"Ano(%d): (%4d %4d %4d)\nAno(%d): (%4d %4d %4d)\n",
-							++called_1, _i_tpc, d, 
+							"Ano({}): ({:4} {:4} {:4})\nAno({}): ({:4} {:4} {:4})\n",
+							styled(fmt::format("[{}]", ++called_1), mnd::style::bold_magenta), _i_tpc, d,
 							a, list[0].a_tdc, list[0].dl_tdc, list[0].dr_tdc,
 							a^1, outlist[0].a_tdc[a^1], outlist[0].dl_tdc, outlist[0].dr_tdc);
 
@@ -462,7 +454,7 @@ void TFRSCalProc::PostProcessTPC(int _i_tpc) noexcept {
 		auto& l = full_candidate_list[d];
 		//std::sort(l.begin(), l.end());
 #ifdef TFRSCALPROC_SINGLEHIT
-		MND_ASSERT(l.size() < 2 && mnd::msg("What, TPC%d, has %lu hits, and should be 1?", l.size()));
+		MND_ASSERT(l.size() < 2 && "Expected at most one TPC hit per delay line");
 #endif
 		std::vector<RNTPCCal::Measurement>& out_list = out.hits[d];
 		out_list.reserve(l.size());

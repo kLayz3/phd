@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
 		"QDC value histogram range for all the scintillators. "
 		"The two indices passed in -s,--sci should match some of the two inputs of the map. "
 		"If not found, will assign the default value.")
-		->default_str(mnd::streamable(qhist_df));
+		->default_str(fmt::format("{}", qhist_df));
 
 	add_logged_option(app, "-o,--save", save, "Save the resulting canvases as one or more extensions.")
 		->delimiter(',');
@@ -123,7 +123,7 @@ int main(int argc, char* argv[]) {
 			const SCIParam& scip = sci_params->at(s);
 			const SCIDEIntoQConverter& cvt = scip.qdc;
 			if(cvt.IsDefaulted() )
-				ERROR("Requested SCI%s QDC vs. β calibration, but no valid QDC pedestals in the file found? "
+				ERROR("Requested SCI{} QDC vs. β calibration, but no valid QDC pedestals in the file found? "
 					"Find the pedestals first, using the `cal/sci_qdc_ped` program.\n", label.at(s));
 		
 			qdc_cvt[i] = cvt;
@@ -150,23 +150,23 @@ int main(int argc, char* argv[]) {
 	const auto run_info_example = mnd::QueryRunsheet(f.front());
 	for(const auto& fileName : f) {
 		const auto run_info = mnd::QueryRunsheet(fileName);
-		WARN("[%s] runsheet row parsed as: %s\n", fileName.c_str(), mnd::streamable(run_info).c_str());
+		WARN("[{}] runsheet row parsed as: {}\n", fileName, run_info);
 		
 		if( run_info.primary.A != run_info.secondary.A
 		 || run_info.primary.Z != run_info.secondary.Z) {
-			ERROR("File: '%s', but primary beam: %s and secondary beam: %s do not match? This does not qualify as a calib run!\n",
-				fileName.c_str(), run_info.primary.chem_to_string().c_str(), run_info.secondary.chem_to_string().c_str());
+			ERROR("File: '{}', but primary beam: {} and secondary beam: {} do not match? This does not qualify as a calib run!\n",
+				fileName, run_info.primary.chem_to_string(), run_info.secondary.chem_to_string());
 		}
 		if( run_info.primary   != run_info_example.primary
 		 || run_info.secondary != run_info_example.secondary) {
-			ERROR("File/Initial file: '%s'/'%s' mismatch between either primary  %s/%s or secondary beams: %s/%s ?\n",
-				fileName.c_str(), f.front().c_str(),
-				run_info.primary.chem_to_string().c_str(), run_info_example.primary.chem_to_string().c_str(),
-				run_info.secondary.chem_to_string().c_str(), run_info_example.secondary.chem_to_string().c_str());
+			ERROR("File/Initial file: '{}'/'{}' mismatch between either primary  {}/{} or secondary beams: {}/{} ?\n",
+				fileName, f.front().c_str(),
+				run_info.primary.chem_to_string(), run_info_example.primary.chem_to_string(),
+				run_info.secondary.chem_to_string(), run_info_example.secondary.chem_to_string());
 		}
 
 		const phy::Nucleus& ion = run_info.secondary;
-		WARN("Secondary ion parsed as: %s%s%s\n", KBH_MAG, ion.chem_to_string().c_str(), KNRM);
+		WARN("Secondary ion parsed as: {}\n", styled(ion.chem_to_string(), mnd::style::bold_magenta));
 
         auto model = RNTupleModel::Create();
         auto frs = model->MakeField<RNFRSCal>("FRS");
@@ -175,23 +175,21 @@ int main(int argc, char* argv[]) {
         const double beta_s2_inc = phy::Beta(ion, phy::Brho_t{run_info.brho[mnd::S1_S2]});
         const double beta_s2_out = phy::Beta(ion, phy::Brho_t{run_info.brho[mnd::S2_S3]});
         const double beta_s4  = phy::Beta(ion, phy::Brho_t{run_info.brho[mnd::S3_S4]});
-		WARN("[%s] calculated:\n"
-			"β(TA-S1): " BOLD "%.4f" KNRM " , "
-			"β(S1-S2): " BOLD "%.4f" KNRM " , "
-			"β(S2-S3): " BOLD "%.4f" KNRM " , "
-			"β(S3-S4): " BOLD "%.4f" KNRM " \n",
-			fileName.c_str(), beta_ta, beta_s2_inc, beta_s2_out, beta_s4);
-	
+		WARN("[{}] calculated:\n"
+			"β(TA-S1): {:.4f}, β(S1-S2): {:.4f}, β(S2-S3): {:.4f}, β(S3-S4): {:.4f}\n",
+			fileName, styled(beta_ta, fmt::emphasis::bold), styled(beta_s2_inc, fmt::emphasis::bold),
+			styled(beta_s2_out, fmt::emphasis::bold), styled(beta_s4, fmt::emphasis::bold));
+
 		switch(sci_i[1]) {
 			case 0: beta.push_back(beta_s2_inc); break; // SCI21
 			case 1: beta.push_back(beta_s2_out); break; // SCI22
 			case 2: beta.push_back(beta_s2_out); break; // SCI31
 			case 3: beta.push_back(beta_s4);     break; // SCI41
 			default:
-				ERROR("Case not handled? Is: %d\n", sci_i[1]);
+				ERROR("Case not handled? Is: {}\n", sci_i[1]);
 		}
-		WARN("SCI%s-%s nominal β-identified as: %s%.4f%s\n",
-			label.at(sci_i[0]), label.at(sci_i[1]), KBH_MAG, beta.back(), KNRM);
+		WARN("SCI{}-{} nominal β-identified as: {:.4f}\n",
+			label.at(sci_i[0]), label.at(sci_i[1]), styled(beta.back(), mnd::style::bold_magenta));
 
 		auto* h1_dt = new TH1P(Form("((h1_dt_%d))#Delta t [25 ps]@SCI%s - SCI%s, TOF Point [%u]",
             i_clb_pnt, label.at(sci_i[0]), label.at(sci_i[1]), i_clb_pnt),
@@ -219,7 +217,7 @@ int main(int argc, char* argv[]) {
                 option::Lead{":)"},
                 option::Remainder{" "},
                 option::End{"]"},
-                option::PostfixText{mnd::msg("ToF Calibration %zu (per event: %s)", nentries, fileName.c_str())},
+                option::PostfixText{fmt::format("ToF Calibration {} (per event: {})", nentries, fileName)},
                 option::ForegroundColor{Color::magenta},
                 option::ShowPercentage{true},
                 option::ShowElapsedTime{true},
@@ -286,18 +284,16 @@ int main(int argc, char* argv[]) {
     gerr->GetYaxis()->SetTitle("1.0 / #beta");
     g->SetLineColor(kBlue);
 
-    WARN("The formula is: " EMPH(1/β = a*ΔT + b\n));
-	{
-		const char* msg_ = mnd::msg("Time-of-Flight SCI%s - SCI31: %s" EBOLD(b = %.6f; a = %.6f [1/(25ps)]\n),
-			 label.at(sci_i[0]), label.at(sci_i[1]), fit_result[0], fit_result[1]);
-		WARN("%s", msg_);
-	}
+	WARN("The formula is: {}\n", styled("1/β = a*ΔT + b", mnd::style::bold_yellow));
+	WARN("Time-of-Flight SCI{} - SCI{}: {}\n", label.at(sci_i[0]), label.at(sci_i[1]),
+		styled(fmt::format("b = {:.6f}; a = {:.6f} [1/(25ps)]", fit_result[0], fit_result[1]),
+			fmt::emphasis::bold));
 	FRSToFSingle p{};
 	p.combo = { (u32)sci_i[0], (u32)sci_i[1] };
 	p.par[0] = fit_result[0];
 	p.par[1] = fit_result[1];
 
-	std::cout << nlohmann::json(p).dump(4) << std::endl;
+	fmt::println("{}", nlohmann::json(p).dump(4));
 
     TCanvas *c = new TCanvas("ToF", "Time-of-Flight to do β-calculation", 2150, 1250);
     c->Divide(2,1);
@@ -313,7 +309,7 @@ int main(int argc, char* argv[]) {
 
 	/* ================= OPTIONAL Q vs. β calculation ==================== */
 	if(q) {
-		std::cerr << std::endl;
+		fputc('\n', stderr);
 		TCanvas *c_q = new TCanvas("QDC", "QDC After Pedestal Subtraction", 2050, 1400);
 		c_q->Divide(4 , nfiles);
 
@@ -345,15 +341,15 @@ int main(int argc, char* argv[]) {
 			const int s = sci_i[i];
 
 			if(q_fit_qdc[i].size() != beta.size())
-				ERROR("SCI%s: sizes mismatch between β's array: %zu and number of fit pts %zu! Nfiles=%zu "
-					"QDC converter %s, all fine\n",
-					label[s], beta.size(), q_fit_qdc[i].size(), f.size(), mnd::streamable(qdc_cvt[i]).c_str() );
+				ERROR("SCI{}: sizes mismatch between β's array: {} and number of fit pts {}! Nfiles={} "
+					"QDC converter {}, all fine\n",
+					label[s], beta.size(), q_fit_qdc[i].size(), f.size(), qdc_cvt[i] );
 	
 			std::vector<double> x = mnd::map(beta, [](double b) -> double { return 1.0 / (b*b); });
 			std::vector<double> const& y = q_fit_qdc[i];
 
-			WARN("SCI%s: fitsize: %zu, %zu. It is:\n%s\n%s\n", label[s],
-				x.size(), y.size(), mnd::streamable(x).c_str(), mnd::streamable(y).c_str());
+			WARN("SCI{}: fitsize: {}, {}. It is:\n{}\n{}\n", label[s],
+				x.size(), y.size(), x, y);
 			auto [gerrQ, gQ] = FitAndDraw(1, x, y, {}, q_exclude[i], fit_q);
 			gerrQ->SetMarkerColor(kRed - 1);
 			gerrQ->SetTitle(Form("SCI%s: QDC vs. 1/#beta^{2} for calibration runs", label[s]));
@@ -361,8 +357,8 @@ int main(int argc, char* argv[]) {
 			gerrQ->GetYaxis()->SetTitle("QDC Mean");
 			gQ->SetLineColor(kRed);
 			c_qf->cd(i+1); gerrQ->Draw("AP"); gQ->Draw("L SAME"); gPad->SetGrid();
-			WARN("Calculated dependency for SCI%s QDC vs. β: %s%s%s, with last QDC avg value: %s%.5f%s\n",
-				label[s], KBH_MAG, mnd::streamable(fit_q).c_str(), KNRM, KBH_MAG, q_fit_qdc[i].back(), KNRM);
+			WARN("Calculated dependency for SCI{} QDC vs. β: {}, with last QDC avg value: {:.5f}\n",
+				label[s], styled(fit_q, mnd::style::bold_magenta), styled(q_fit_qdc[i].back(), mnd::style::bold_magenta));
 
 			SCIPrimary sp {};
 			sp.beta = beta.back();
@@ -370,12 +366,12 @@ int main(int argc, char* argv[]) {
 			
 			nlohmann::json j{};
 			j[ SCIParam::name_4 ] = sp;
-			std::cout << BOLD "\"" << label[s] << "\": " << j.dump(4) << KNRM << ",\n";
+			fmt::println("{},", styled(fmt::format("\"{}\": {}", label[s], j.dump(4)), fmt::emphasis::bold));
 		}
 	}
 
 	const std::string info = std::string{"tof"}
-		+ mnd::msg("%s-%s%s", label.at(sci_i[0]), label.at(sci_i[1]), q ? "-q" : "");
+		+ fmt::format("{}-{}{}", label.at(sci_i[0]), label.at(sci_i[1]), q ? "-q" : "");
 	canvas::save_all<canvas::Exe>(save, { info });
 	WARN("End-of-main");
 	rootApp.Run(); return 0;

@@ -50,17 +50,17 @@ int main(int argc, char* argv[]) {
 
 	if(help_underlying) {
 		mnd::Argv fwd_argv = mnd::parse_argv("--help", prog);
-		std::cout.flush();
-		std::cerr.flush();
+		fflush(stdout);
+		fflush(stderr);
 		execvp(fwd_argv[0], fwd_argv.data() );
 
 		const int err = errno;
-		YELL("Cannot execute '%s': %s\n", prog.c_str(), std::strerror(err));
+		YELL("Cannot execute '{}': {}\n", prog, std::strerror(err));
 		_exit(127);
 	}
 
 	if(config.empty()) {
-		std::cerr << "-c,--config is required.\nRun with --help for more information.";
+		fmt::println(stderr, "-c,--config is required.\nRun with --help for more information.");
 		return 1;
 	}
 
@@ -71,16 +71,16 @@ int main(int argc, char* argv[]) {
 		if(!CLI::ReadPermissions(candidate.string()).empty())
 			throw std::runtime_error("Config file not found or not readable: " + config);
 		config = candidate.string();
-		WARN("Config file heuristically found as: %s%s%s\n", BOLD, config.c_str(), KNRM);
+		WARN("Config file heuristically found as: {}\n", styled(config, fmt::emphasis::bold));
 	}
 
 	/* Parse the config file. It throws here on bad parse.. */
 	const std::string cfg_contents = mnd::fs::parse_file_to_string(config);
 
 	if(print_sections) {
-		std::cout << MND_RGB_COL(203,255,30) "\nAvailable sections:\n" KNRM;
+		fmt::println("{}", styled("\nAvailable sections:", fg(0xCBFF1E_rgb)));
 		for(const auto name : mnd::sdsl::extract_available_sections("SECTION", cfg_contents))
-			std::cout << name << '\n';
+			fmt::println("{}", name);
 		return 0;
 	}
 
@@ -93,13 +93,13 @@ int main(int argc, char* argv[]) {
 		const auto body = mnd::sdsl::extract_text_body(
 			"SECTION", section, cfg_contents);
 		if(body.is_none())
-			MND_THROW("Contents empty, invalid or section 'SECTION(%s)' not found?\n", section.c_str());
+			MND_THROW("Contents empty, invalid or section 'SECTION({})' not found?\n", section);
 
 		sec_contents = body.unwrap();
 	}
 	if(dump) {
-		std::cout << BOLD "\nGLOBAL:  " KNRM << g_contents.value_or("");
-		std::cout << BOLD "\nSECTION: " KNRM << sec_contents << "\n";
+		fmt::println("{}{}{}{}", styled("\nGLOBAL:  ", fmt::emphasis::bold), g_contents.value_or(""),
+			styled("\nSECTION: ", fmt::emphasis::bold), sec_contents);
 		return 0;
 	}
 
@@ -107,19 +107,19 @@ int main(int argc, char* argv[]) {
 	
 	mnd::Argv fwd_argv = mnd::parse_argv(full_contents, prog);
 	if(sim) {
-		std::cout << fwd_argv << std::endl;
+		fmt::println("{}", fwd_argv);
 		return 0;
 	}
 
 	// Roll a random number
 	u32 n = static_cast<u32>(rand()) % std::size(artsy);
-	WARN("Replacing the run script with '%s'\n%s%s%s\n", fwd_argv[0], BOLD, artsy[n], KNRM);
-	std::cout.flush();
-	std::cerr.flush();
+	WARN("Replacing the run script with '{}'\n{}\n", fwd_argv[0], styled(artsy[n], fmt::emphasis::bold));
+	fflush(stdout);
+	fflush(stderr);
 	execvp(fwd_argv[0], fwd_argv.data() );
 
 	const int err = errno;
-	YELL("Cannot execute '%s': %s\n", prog.c_str(), std::strerror(err));
+	YELL("Cannot execute '{}': {}\n", prog, std::strerror(err));
 	_exit(127);
 }
 

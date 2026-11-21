@@ -101,14 +101,20 @@ void FitFOOTCluster(TFOOTCalProc& self, FOOTClusterFit* dest) {
 	dest->a0    = a0;
 }
 
-std::ostream& operator<<(std::ostream& os, const TFOOTCalProc::TClustHit& cl) {
-	return os << "{" << cl.x << ", " << cl.e << "}";
-}
+template<>
+struct fmt::formatter<TFOOTCalProc::TClustHit> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const TFOOTCalProc::TClustHit& hit, Context& ctx) const {
+		return fmt::format_to(ctx.out(), "{{{}, {}}}", hit.x, hit.e);
+	}
+};
 
 void TFOOTCalProc::PrintBuff() {
-	using mnd::operator<<;
-	std::cerr << mnd::as_span(_buf, _cl_cnt) << '\n';
+	fmt::println(stderr, "{}", mnd::as_span(_buf, _cl_cnt));
 }
+
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kPOS>(const int );
 template<> bool TFOOTCalProc::_IsAddibleToCluster<TFOOTCalProc::kNEG>(const int );
 
@@ -164,15 +170,15 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 {
 	TFOOTMapCont& input = std::get<0>(this->in);
 	if(!input.ped_s || input.ped_s->size() != N_STRIPS)
-		ERROR("Input sigma array not initialized? State (null|entries): \'%s\' . Did you call TFOOTMapCont::Setup() ?\n",
-				input.ped_s ? "null" : Form("%zu", input.ped_s->size()));
+		ERROR("Input sigma array not initialized? State (null|entries): \'{}\' . Did you call TFOOTMapCont::Setup() ?\n",
+				input.ped_s ? fmt::to_string(input.ped_s->size()) : "null");
 
 	if(out.FOOT_N < 0 || out.par.N < 0)
-		ERROR("Output object (TFOOTCalCont): \'%s\' uninitialized. Did you call ::Setup?", out.GetName());
+		ERROR("Output object (TFOOTCalCont): \'{}\' uninitialized. Did you call ::Setup?", out.GetName());
 
 	if(input.FOOT_N != out.FOOT_N)
-		ERROR(EMPH2(%s) ": mapping is wrong. Deduced output FOOT%d (from setup input), but processor's input is FOOT%d ?\n",
-			MND_SELF_TYPE_CSTR, out.FOOT_N, input.FOOT_N);
+		ERROR("{}: mapping is wrong. Deduced output FOOT{} (from setup input), but processor's input is FOOT{} ?\n",
+			styled(MND_SELF_TYPE_NAME, mnd::style::bold_magenta), out.FOOT_N, input.FOOT_N);
 
 	Double_t* c_thr_setter = &_hidden_c_thr[1];
 	Double_t* n_thr_setter = &_hidden_n_thr[1];
@@ -196,9 +202,9 @@ TFOOTCalProc::TFOOTCalProc(TFOOTCalCont& out, TFOOTMapCont& in) :
 
 	for(int i=0; i<N_STRIPS; ++i) {
 		if(n_thr(i) < 0.1)
-			ERROR("FOOT[%d -> %d], strip = %d, n_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, n_thr(i));
+			ERROR("FOOT[{} -> {}], strip = {}, n_thr = {:.2f} too small.\n", out.FOOT_N, out.par.N, i, n_thr(i));
 		if(c_thr(i) < 0.1)
-			ERROR("FOOT[%d -> %d], strip = %d, c_thr = %.2f too small.\n", out.FOOT_N, out.par.N, i, c_thr(i));
+			ERROR("FOOT[{} -> {}], strip = {}, c_thr = {:.2f} too small.\n", out.FOOT_N, out.par.N, i, c_thr(i));
 	}
 	
 #define _ALTER_TITLE(x) \

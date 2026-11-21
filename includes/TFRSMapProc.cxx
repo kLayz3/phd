@@ -74,7 +74,7 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 		for(int i=0; i<2; ++i) { // [0] => left, [1] => right
 			nhits[i] = *sci_go4._nhit_raw[i];
 			if(nhits[i] < 0 || nhits[i]> RNSciMap::MAX_SIZE) {
-				WARN("Go4 reads: %d hits in Sci[%d] > %d or negative. Dumping it.\n", 
+				WARN("Go4 reads: {} hits in Sci[{}] > {} or negative. Dumping it.\n",
 					nhits[i], s, RNSciMap::MAX_SIZE);
 				return;
 			}
@@ -122,7 +122,7 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 
 		_nhits_s = *tpc_go4._sci_timerefn;
 		if(_nhits_s < 0) {
-			WARN("Go4 reads: %d < 0 hits in TPC[%d], sci ref.\n", _nhits_s, s);
+			WARN("Go4 reads: {} < 0 hits in TPC[{}], sci ref.\n", _nhits_s, s);
 			return;
 		}
 		
@@ -144,14 +144,14 @@ void TFRSMapProc::_ProcessEntry() noexcept {
 			_nhits_l[i] = *tpc_go4._tpc_ltn[i];
 			_nhits_r[i] = *tpc_go4._tpc_rtn[i];
 			if(_nhits_l[i] < 0 || _nhits_r[i] < 0) {
-				WARN("Go4 reads: %d,%d < 0 (l,r) hits in TPC[%d], delay line[%d]. Skipping it. \n", 
+				WARN("Go4 reads: {},{} < 0 (l,r) hits in TPC[{}], delay line[{}]. Skipping it.\n",
 					_nhits_l[i], _nhits_r[i], s, i);
 				return;
 			}
 			for(int a : {0,1}) {
 				_nhits_a[i][a] = *tpc_go4._tpc_atn[i][a];
 				if(_nhits_a[i][a] < 0) {
-					WARN("Go4 reads: %d < 0 hits in TPC[%d], anode[%d].\n", _nhits_a[i][a], s, 2*i+a);
+					WARN("Go4 reads: {} < 0 hits in TPC[{}], anode[{}].\n", _nhits_a[i][a], s, 2*i+a);
 					return;
 				}
 			}

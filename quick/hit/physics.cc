@@ -38,6 +38,22 @@ namespace fs = std::filesystem;
 
 using namespace std::string_view_literals;
 
+struct ThetaHistograms {
+	std::array<TH2P, 2> hist;
+
+	ThetaHistograms(const A3& theta, const A3& rho) :
+		hist{{
+			TH2P{"#theta(p_{1}, HI) [mrad]:#theta(p_{2}, HI) [mrad]@Traced by the FOOT",
+				theta, theta},
+			TH2P{"#rho [mrad]:#theta(p_{1}, p_{2}) [mrad]@Traced by the FOOT",
+				theta, rho}
+		}}
+	{}
+
+	TH2P& operator[](size_t i) noexcept { return hist[i]; }
+	const TH2P& operator[](size_t i) const noexcept { return hist[i]; }
+};
+
 struct SciMetaQDC {
 	constexpr static double lo = 300; constexpr static double hi = 4000;
 };
@@ -180,7 +196,7 @@ int main(int argc, char* argv[]) {
 	add_logged_option(app, "--py-linewidth", py_linewidth, "Linewidth for the ρ-value histogram to be exported from Python.");
 	add_logged_option(app, "--py-fillcol", py_fillcol, "Line col (ARGB) for the ρ-value histogram to be exported from Python. "
 		"By default, taken from original TH1P")
-		->default_str( mnd::streamable(DEFAULT_FILL_COL_EX) );
+		->default_str( fmt::format("{}", fmt::streamed(DEFAULT_FILL_COL_EX)) );
 	add_logged_option(app, "--py-linecol", py_linecol, "Line col (ARGB) for the ρ-value histogram to be exported from Python. "
 		"If left as none, taken from original TH1P");
 	add_logged_flag(app, "--fmt-isotope", fmt_isotope,
@@ -206,16 +222,15 @@ int main(int argc, char* argv[]) {
 		auto sBack  = std::make_unique<mnd::RunsheetState>( mnd::QueryRunsheet(fileName.back()) );
 		/* I "trust" the OS that the allocation won't fail, e.g. I'm not dereffing a null here :-) */
 		if(*sFront != *sBack) {
-			WARN("Runsheet status for initial file '%s' is: \n", fileName.front().c_str());
-			std::cerr << *sFront << std::endl;
-			fprintf(stderr, ".. and for the final file '%s' is: \n", fileName.back().c_str());
-			std::cerr << *sBack << "\n" KBH_RED ">> does not match!\n" KNRM;
+			WARN("Runsheet status for initial file '{}' is:\n{}\n", fileName.front(), *sFront);
+			fmt::println(stderr, ".. and for the final file '{}' is:\n{}\n{}", fileName.back(), *sBack,
+				styled(">> does not match!", mnd::style::bold_red));
 		}
 		run_info = std::move(sFront);
 	}
-	WARN("Run-info parsed as: "); std::cerr << *run_info << std::endl;
-	WARN("Primary beam: "); std::cerr << run_info->primary << std::endl;
-	WARN("Secondary beam: "); std::cerr << run_info->secondary << std::endl;
+	WARN("Run-info parsed as: {}\n", *run_info);
+	WARN("Primary beam: {}\n", run_info->primary.to_string());
+	WARN("Secondary beam: {}\n", run_info->secondary.to_string());
 	if(!run_info->primary.valid() or !run_info->secondary.valid())
 		ERROR("Either primary or secondary beam is invalid. Parse from runsheet was unsuccessful.\n");
 
@@ -243,11 +258,8 @@ int main(int argc, char* argv[]) {
 	const double gamma_nominal = phy::Gamma( phy::Beta_t{beta_nominal} );
 	const double beta_gamma_n = beta_nominal * gamma_nominal;
 
-	WARN("Assumed values for just before/after 9Be target: "
-		MND_RGB_COL(250, 250,  70) "%.2f MeV/u" KNRM
-		" and "
-		MND_RGB_COL( 70, 160, 250) "%.2f MeV/u\n" KNRM,
-		avg_ekin_before_target, avg_ekin_after_target);
+	WARN("Assumed values for just before/after 9Be target: {:.2f} MeV/u and {:.2f} MeV/u\n",
+		styled(avg_ekin_before_target, fg(0xFAFA46_rgb)), styled(avg_ekin_after_target, fg(0x46A0FA_rgb)));
 
 	mnd::python::poke();
 	ROOT::EnableThreadSafety();
@@ -274,25 +286,25 @@ int main(int argc, char* argv[]) {
 		target_depth = box->target.Width();
 	}
 	constexpr auto TARGET_Z = TFOOTHitCont::TARGET_Z;
-	WARN("9Be S2 target's outer edge placed nominally at " MND_RGB_COL(255,128,0)
-		"z₀ = %.2f mm" KNRM " with width " MND_RGB_COL(255,128,0)
-		"w = %.2f mm" KNRM"\n", TARGET_Z, target_depth);
-	
+	WARN("9Be S2 target's outer edge placed nominally at z₀ = {:.2f} mm with width w = {:.2f} mm\n",
+		styled(TARGET_Z, fg(0xFF8000_rgb)), styled(target_depth, fg(0xFF8000_rgb)));
+
 	const double loss_rate_per_depth =
 		(avg_ekin_after_target - avg_ekin_before_target) / target_depth;
 
 	if(do_scaling) {
 		if(target_depth <= 0.0)
 			ERROR("Scaling requested (-s,--scaling) but target width "
-				"calculated as %.2f <= 0.0 ? Not allowed!\n", target_depth);
+				"calculated as {:.2f} <= 0.0 ? Not allowed!\n", target_depth);
 
 		WARN("Normalising will slightly scale ρ-value, per entry, to the "
-			"average energy in the center of the 9Be target: "
-			KBH_CYN "%.3f" KNRM " , which means: "
-			KBH_BLU "beta = %.5f. " KNRM "\nEnergy loss rate per depth calculated as: "
-			MND_RGB_COL(255,128,0) "%.2f AMeV/mm" KNRM " while per x distance: "
-			MND_RGB_COL(128,255,0) "%.3f AMeV/mm" KNRM "\n",
-			avg_ekin_reaction, beta_nominal, loss_rate_per_depth, mnd::assume::s2::e_dispersion[1]);
+			"average energy in the center of the 9Be target: {:.3f}, which means: "
+			"beta = {:.5f}.\nEnergy loss rate per depth calculated as: {:.2f} AMeV/mm"
+			" while per x distance: {:.3f} AMeV/mm\n",
+			styled(avg_ekin_reaction, mnd::style::bold_cyan),
+			styled(beta_nominal, fg(fmt::terminal_color::bright_blue) | fmt::emphasis::bold),
+			styled(loss_rate_per_depth, fg(0xFF8000_rgb)),
+			styled(mnd::assume::s2::e_dispersion[1], fg(0x80FF00_rgb)));
 	}
 
 	/* Sanitize some CLI passed in arguments... */
@@ -318,8 +330,8 @@ int main(int argc, char* argv[]) {
 		}
 		if(!std::isfinite(qcut[0]) || !std::isfinite(qcut[1])
 			|| !(qcut[0] < qcut[1]))
-			ERROR("FOOT invalid charge interval set for %s : %s.",
-				std::string{magic_enum::enum_name(e)}.c_str(), mnd::streamable(qcut).c_str());
+			ERROR("FOOT invalid charge interval set for {} : {}.",
+				magic_enum::enum_name(e), qcut);
 	}
 	
 	/* Sort out the selected nuclei, in descending charge.
@@ -345,9 +357,9 @@ int main(int argc, char* argv[]) {
 	
 	RhoExpressionType rho_ex_type = RhoExpressionType::full;
 	/* Sanitize the angle part. Check if either the reaction of interest is:
-	 * [1] X => Y + Np
-	 * [2] X => y_1 + y_2 + ... + y_N 
-	 * [3] X => N y
+	 * [1] X => Y + Np                     proton-like
+	 * [2] X => N y                        equinuclear
+	 * [3] X => y_1 + y_2 + ... + y_N      unknown
 	 * [4] UNKNOWN , in case no selection (-s,--select) was given. */
 	if(selected.size() == 2 &&
 	   selected.front().index == 1 &&
@@ -372,24 +384,19 @@ int main(int argc, char* argv[]) {
 	}
 	{
 		std::string_view rho_type_label =  magic_enum::enum_name(rho_ex_type);
-		WARN("Matched the ρ-analysis type: it is: %s%.*s%s, the decay of "
-			MND_RGB_COL(141,249,155) "%s" KNRM "\n",
-			BOLD, (int)rho_type_label.length(), rho_type_label.data(), KNRM,
-			mother.to_string().c_str());
+		WARN("Matched the ρ-analysis type: it is: {}, the decay of {}\n",
+			styled(rho_type_label, fmt::emphasis::bold), styled(mother.to_string(), fg(0x8DF99B_rgb)));
 	}
 
 	if(mother.valid() and nuclei.size() > 1) {
-		WARN(BOLD "The complete requested reaction deduced as: "
-			KNRM "%s" MND_RGB_COL(255,65,224) "\n",
-			phy::format_reaction(phy::Nucleus::Represent::Normal,
-				std::vector{mother}, nuclei ).c_str()
-		);
-		WARN("Daughter nuclei: %s\n", mnd::streamable(nuclei).c_str());
+		WARN("{}{}\n", styled("The complete requested reaction deduced as: ", fmt::emphasis::bold),
+			phy::format_reaction(phy::Nucleus::Represent::Normal, std::vector{mother}, nuclei));
+		WARN("Daughter nuclei: {}\n", mnd::map(nuclei, [](const auto& nucleus) { return nucleus.to_string(); }));
 	}
 	else if(!mother.valid() and nuclei.size() > 1) {
-		ERROR("Requesting a reaction channel for mother nucleus: %s , but "
+		ERROR("Requesting a reaction channel for mother nucleus: {} , but "
 			"the nucleus qualified as invalid. Maybe its mass not given?\n", 
-			mother.to_string().c_str());
+			mother.to_string());
 	}
 	
 	/* Why the f*** ROOT can't parse a LaTeX expression naturally? Amazing job, devs. :b */
@@ -400,16 +407,16 @@ int main(int argc, char* argv[]) {
 			const auto& [heavy, nheavy_, _] = selected.front();
 			const auto& [proton, nprotons, __] = selected.back();
 			if(nheavy_ != 1)
-				ERROR("Something is wrong. Heavy ion: '%s' selected as quantity %u and not 1\n?",
-					heavy.to_string().c_str(), nheavy_);
+				ERROR("Something is wrong. Heavy ion: '{}' selected as quantity {} and not 1\n?",
+					heavy.to_string(), nheavy_);
 			
 			const auto heavy_ion_label_rootex = heavy.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope);
 			const auto heavy_ion_label_pythex = heavy.chem_to_string(phy::Nucleus::Represent::Pythex, fmt_isotope);
 			if(nprotons > 1) {
-				rho_expression_rootex += mnd::msg("#frac{1}{#sqrt{1 + %u m[p] / m[%s]}}"
-					" #sqrt{", nprotons, heavy_ion_label_rootex.c_str());
-				rho_expression_pythex += mnd::msg("\\frac{1}{ \\sqrt{1 + %u \\frac{ m_{\\mathrm{p}} }{ m_{%s} } } }"
-					" \\sqrt{", nprotons, heavy_ion_label_pythex.c_str());
+				rho_expression_rootex += fmt::format("#frac{{1}}{{#sqrt{{1 + {} m[p] / m[{}]}}}}"
+					" #sqrt{{", nprotons, heavy_ion_label_rootex);
+				rho_expression_pythex += fmt::format("\\frac{{1}}{{ \\sqrt{{1 + {} \\frac{{ m_{{\\mathrm{{p}}}} }}{{ m_{{{}}} }} }} }}"
+					" \\sqrt{{", nprotons, heavy_ion_label_pythex);
 
 				for(u32 i=1; i <= nprotons; ++i) {
 					rho_expression_rootex += Form("%s#theta_{%s-p_{%u}}^{2} ", (i==1)? "": "+ ",
@@ -417,8 +424,8 @@ int main(int argc, char* argv[]) {
 					rho_expression_pythex += Form("%s\\theta_{%s-\\mathrm{p}_%u}^2", (i==1)? "": "+",
 						heavy_ion_label_pythex.c_str(), i);
 				}
-				rho_expression_rootex += mnd::msg("+ #frac{m[p]}{m[%s]} ", heavy_ion_label_rootex.c_str());
-				rho_expression_pythex += mnd::msg("+ \\left(\\frac{m_\\mathrm{p}}{m_{%s}}\\right)", heavy_ion_label_pythex.c_str());
+				rho_expression_rootex += fmt::format("+ #frac{{m[p]}}{{m[{}]}} ", heavy_ion_label_rootex);
+				rho_expression_pythex += fmt::format("+ \\left(\\frac{{m_\\mathrm{{p}}}}{{m_{{{}}}}}\\right)", heavy_ion_label_pythex);
 				if(nprotons > 2) {
 					rho_expression_rootex += '(';
 					rho_expression_pythex += "\\left(";
@@ -426,9 +433,9 @@ int main(int argc, char* argv[]) {
 				}
 				for(u32 i=1; i <= nprotons; ++i) {
 					for(u32 j=i+1; j <= nprotons; ++j) {
-						rho_expression_rootex += mnd::msg("%s#theta_{p_{%u} - p_{%u}}^{2} ",
+						rho_expression_rootex += fmt::format("{}#theta_{{p_{{{}}} - p_{{{}}}}}^{{2}} ",
 							(i==1 && j==2)? "": "+ ", i, j);
-						rho_expression_pythex += mnd::msg("%s\\theta_{\\mathrm{p}_{%u} - \\mathrm{p}_{%u}}^2",
+						rho_expression_pythex += fmt::format("{}\\theta_{{\\mathrm{{p}}_{{{}}} - \\mathrm{{p}}_{{{}}}}}^2",
 							(i==1 && j==2)? "": "+", i, j);
 					}
 				}
@@ -440,12 +447,12 @@ int main(int argc, char* argv[]) {
 				rho_expression_rootex += '}';
 			}
 			else {
-				rho_expression_rootex += mnd::msg("#frac{1}{#sqrt{1 + m[p]/m[%s]}}"
-					" #theta_{%s-p}",
-					heavy_ion_label_rootex.c_str(), heavy_ion_label_rootex.c_str());
-				rho_expression_pythex += mnd::msg("\\frac{1}{ \\sqrt{1 + \\frac{ m_{\\mathrm{p}} }{ m_{%s} } } }"
-					"\\,\\theta_{%s-\\mathrm{p}}",
-					heavy_ion_label_pythex.c_str(), heavy_ion_label_pythex.c_str());
+				rho_expression_rootex += fmt::format("#frac{{1}}{{#sqrt{{1 + m[p]/m[{}]}}}}"
+					" #theta_{{{}-p}}",
+					heavy_ion_label_rootex, heavy_ion_label_rootex);
+				rho_expression_pythex += fmt::format("\\frac{{1}}{{ \\sqrt{{1 + \\frac{{ m_{{\\mathrm{{p}}}} }}{{ m_{{{}}} }} }} }}"
+					"\\,\\theta_{{{}-\\mathrm{{p}}}}",
+					heavy_ion_label_pythex, heavy_ion_label_pythex);
 			}
 			break;
 		}
@@ -454,19 +461,19 @@ int main(int argc, char* argv[]) {
 			const auto nuc_label_rootex = nuc.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope);
 			const auto nuc_label_pythex = nuc.chem_to_string(phy::Nucleus::Represent::Pythex, fmt_isotope);
 
-			rho_expression_rootex += mnd::msg("#sqrt{#frac{m[%s]}{%u m[p]}} #sqrt{",
-				nuc_label_rootex.c_str(), nitems);
-			rho_expression_pythex += mnd::msg("\\sqrt{\\frac{m_{%s}}{%u m_{\\mathrm{p}} }} \\sqrt{",
-				nuc_label_pythex.c_str(), nitems);
+			rho_expression_rootex += fmt::format("#sqrt{{#frac{{m[{}]}}{{{} m[p]}}}} #sqrt{{",
+				nuc_label_rootex, nitems);
+			rho_expression_pythex += fmt::format("\\sqrt{{\\frac{{m_{{{}}}}}{{{} m_{{\\mathrm{{p}}}} }}}} \\sqrt{{",
+				nuc_label_pythex, nitems);
 
 			for(u32 i=1; i<=nitems; ++i) {
 				for(u32 j=i+1; j<=nitems; ++j) {
-					rho_expression_rootex +=  mnd::msg("%s#theta_{%s(%u) - %s(%u)}^{2}",
+					rho_expression_rootex +=  fmt::format("{}#theta_{{{}({}) - {}({})}}^{{2}}",
 						(i==1 && j==2)? "": "+",
-						nuc_label_rootex.c_str(), i, nuc_label_rootex.c_str(), j);
-					rho_expression_pythex +=  mnd::msg("%s\\theta_{%s(%u) - %s(%u)}^2",
+						nuc_label_rootex, i, nuc_label_rootex, j);
+					rho_expression_pythex +=  fmt::format("{}\\theta_{{{}({}) - {}({})}}^2",
 						(i==1 && j==2)? "": "+",
-						nuc_label_pythex.c_str(), i, nuc_label_pythex.c_str(), j);
+						nuc_label_pythex, i, nuc_label_pythex, j);
 				}
 			}
 			rho_expression_pythex += '}';
@@ -476,12 +483,12 @@ int main(int argc, char* argv[]) {
 		case(RhoExpressionType::full): {
 			const auto mother_label_rootex = mother.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope);
 			const auto mother_label_pythex = mother.chem_to_string(phy::Nucleus::Represent::Pythex, fmt_isotope);
-			rho_expression_rootex += mnd::msg(
-				"#sqrt{#sum_{i=1}^{%u} #sum_{j=i+1}^{%u} #frac{m_{i} m_{j}{ M[%s] m[p] } #theta_{ij}^{2} }",
-					sum_n_tracks_required, sum_n_tracks_required, mother_label_rootex.c_str());
-			rho_expression_pythex += mnd::msg(
-				"\\sqrt{\\sum_{i=1}^{%u} \\sum_{j=i+1}^{%u} \\frac{m_i m_j}{ M_{%s} m_{\\mathrm{p}} } \\theta_{ij}^2 }",
-					sum_n_tracks_required, sum_n_tracks_required, mother_label_pythex.c_str());
+			rho_expression_rootex += fmt::format(
+				"#sqrt{{#sum_{{i=1}}^{{{}}} #sum_{{j=i+1}}^{{{}}} #frac{{m_{{i}} m_{{j}}{{ M[{}] m[p] }} #theta_{{ij}}^{{2}} }}",
+					sum_n_tracks_required, sum_n_tracks_required, mother_label_rootex);
+			rho_expression_pythex += fmt::format(
+				"\\sqrt{{\\sum_{{i=1}}^{{{}}} \\sum_{{j=i+1}}^{{{}}} \\frac{{m_i m_j}}{{ M_{{{}}} m_{{\\mathrm{{p}}}} }} \\theta_{{ij}}^2 }}",
+					sum_n_tracks_required, sum_n_tracks_required, mother_label_pythex);
 			break;
 		}
 		case(RhoExpressionType::unknown): {
@@ -493,8 +500,8 @@ int main(int argc, char* argv[]) {
 	rho_expression_pythex += '$';
 
 	if(!hide_rho_title) {
-		WARN("Rho expression in ROOT: " BOLD "%s" KNRM "\n", rho_expression_rootex.c_str());
-		WARN("Rho expression in Pyth: " BOLD "%s" KNRM "\n", rho_expression_pythex.c_str());
+		WARN("Rho expression in ROOT: {}\n", styled(rho_expression_rootex, fmt::emphasis::bold));
+		WARN("Rho expression in Pyth: {}\n", styled(rho_expression_pythex, fmt::emphasis::bold));
 	}
 	if(rho_title.empty())
 		rho_title = rho_expression_pythex;
@@ -548,6 +555,13 @@ int main(int argc, char* argv[]) {
 			Form("#theta(p, %s) [mrad]", hi.chem_to_string(phy::Nucleus::Represent::Rootex, fmt_isotope).c_str())
 		);
 	}
+
+	std::optional<ThetaHistograms> h2_theta1_vs_theta2;
+	if( rho_ex_type == RhoExpressionType::p && selected.back().index == 2) {
+		/* Have to do it hacked like this since std::array<T,2> is an aggregate type and cannot
+		 * "forward" constructors. */
+		h2_theta1_vs_theta2.emplace(theta_binning, rho_binning);
+	}
 #define SCI_HIST_SELECT_RANGE sci_nbins, sci_select_q ? SciMetaQ::lo: SciMetaQDC::lo, sci_select_q ? SciMetaQ::hi: SciMetaQDC::hi
 	const char* _sinfo = sci_select_q ? "Q" : "QDC units";
 	auto h1_sci21 = TH1P{Form("SCI21 %s mean [%s]", _sinfo, _sinfo), 0xCB00CB_c, SCI_HIST_SELECT_RANGE};
@@ -577,7 +591,7 @@ int main(int argc, char* argv[]) {
 			option::Lead{">"},
 			option::Remainder{" "},
 			option::End{"]"},
-			option::PostfixText{mnd::msg("%zu/%zu: %'zu (%s)", i+1, fileName.size(), nentries, fname.c_str())},
+			option::PostfixText{fmt::format("{}/{}: {:L} ({})", i+1, fileName.size(), nentries, fname)},
 			option::ForegroundColor{ indicators::next_col() },
 			option::ShowPercentage{true},
 			option::ShowElapsedTime{true},
@@ -761,9 +775,18 @@ int main(int argc, char* argv[]) {
 
 				const mnd::geom::Line3D& heavy_track = tracks.front();
 				for(u32 i=1; i < n_tracks_selected; ++i) {
-					double theta = phy::MRAD_CVT * tracks[i].AngleRelativeTo( heavy_track );
+					const double theta = phy::MRAD_CVT * tracks[i].AngleRelativeTo( heavy_track );
 					h2_rho_vs_theta->Fill(theta, rho_val);
 				}
+
+				if(h2_theta1_vs_theta2.has_value()) {
+					const double theta1 = phy::MRAD_CVT * tracks[1].AngleRelativeTo( heavy_track );
+					const double theta2 = phy::MRAD_CVT * tracks[2].AngleRelativeTo( heavy_track );
+					const double t12 = phy::MRAD_CVT * tracks[2].AngleRelativeTo( tracks[1] );
+					(*h2_theta1_vs_theta2)[0].Fill(theta2, theta1);
+					(*h2_theta1_vs_theta2)[1].Fill(t12, rho_val);
+				}
+
 				h1_track_mult->Fill(n_tracks_selected);
 				valid_vertex_found = true;
 
@@ -859,6 +882,13 @@ int main(int argc, char* argv[]) {
 	ct2->cd(3); h1_track_q.Draw();
 	ct2->cd(4); h1_track_distance.Draw();
 
+	if(h2_theta1_vs_theta2.has_value()) {
+		[[maybe_unused]] TCanvas* ct3 = new TCanvas("Physics3", "Angles correction", 1900, 1600);
+		ct3->Divide(2,1);
+		ct3->cd(1); (*h2_theta1_vs_theta2)[0].Draw("COLZ");
+		ct3->cd(2); (*h2_theta1_vs_theta2)[1].Draw("COLZ");
+		// Leaked but is fine. gROOT has it still.
+	}
 	TCanvas* cs = new TCanvas("SCIs", "SCI21,22,31", 2150, 1400);
 	cs->Divide(3,3);
 	cs->cd(1); h1_sci21.Draw();
@@ -871,8 +901,7 @@ int main(int argc, char* argv[]) {
 	cs->cd(8); h1_sci22_cut2.Draw();
 	cs->cd(9); h1_sci31_cut2.Draw();
 
-	using mnd::operator<<; // shut up LSP you stupid dog
-	WARN("Info: "); std::cerr << MND_RGB_COL(140,85,255) << info << KNRM "\n";
+	WARN("Info: {}\n", styled(info, fg(0x8C55FF_rgb)));
 
 	canvas::save_all<canvas::Exe>( save, mnd::to_views(info) );
 
@@ -930,7 +959,7 @@ std::istream& operator>>(std::istream& is, SingleSelect& out) {
 			try {
 				nuc = phy::Nucleus::get_ion(std::string{parts[0]}, true, "std::istream& operator>>");
 			} catch(std::exception& e) {
-				YELL("%s\n", e.what());
+				YELL("{}\n", e.what());
 				is.setstate(std::ios::failbit);
 				return is;
 			}

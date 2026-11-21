@@ -78,7 +78,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 	}
 	for(const auto& tpc : ref) {
 		if(!tpc || !tpc.IsUpstream()) {
-			ERROR("TPC%s (n=%u) flagged invalid. Must be upstream and at least one dl flagged as valid.",
+			ERROR("TPC{} (n={}) flagged invalid. Must be upstream and at least one dl flagged as valid.",
                 (tpc.n < RNFRSCal::N_VALID_TPC)? RNFRSCal::tpc_label[tpc.n]: "??", tpc.n);
 		}
 	}
@@ -98,7 +98,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
         // FOOT z assigned relative to FRS nominal Z, not the "box coordinates".
 		foot.z = box->GetFOOTZ( foot.p );
 		Orientation o = foot.p->GetOrientation();
-		if(o == Orientation::UNKNOWN) ERROR("FOOT%d orientation not specified. I won't allow it.\n", ifoot);
+		if(o == Orientation::UNKNOWN) ERROR("FOOT{} orientation not specified. I won't allow it.\n", ifoot);
 		foot.o = o;
 	}
 
@@ -114,18 +114,14 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 		? AngleFitResult::Direction::X
 		: AngleFitResult::Direction::Y;
 		
-	WARN("Heuristically identified:\n" BOLD
-		">> FOOT%d\n"
-		">> DE10: %d\n"
-		">> Measuring: \'%s\'\n"
-		">> Inputted offset along measurement axis: %.2f mm\n"
-		">> Zs: %.2f\n" KNRM,
-		foot.p->N,
-		foot.p->de10_index_,
-		foot.p->orientation.c_str(),
-		foot.p->delta_p,
-		foot.z
-	);
+	WARN("Heuristically identified:\n{}", styled(fmt::format(
+		">> FOOT{}\n"
+		">> DE10: {}\n"
+		">> Measuring: '{}'\n"
+		">> Inputted offset along measurement axis: {:.2f} mm\n"
+		">> Zs: {:.4f}\n",
+		foot.p->N, foot.p->de10_index_, foot.p->orientation, foot.p->delta_p, foot.z
+	), fmt::emphasis::bold));
 
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000);
@@ -250,8 +246,8 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 
 			static int cnt = 0;
 			double deg = angle * 180 / M_PI;
-			WARN("#%2d, phi = %.3f° ; gamma = %.3f;"
-				"   a=%.4f, b=%.4f, a^2+b^2 = %.4f;\n",
+			WARN("#{:2}, phi = {:.3f}° ; gamma = {:.3f};"
+				"   a={:.4f}, b={:.4f}, a^2+b^2 = {:.4f};\n",
 				++cnt, deg, offset, r.t.a, r.t.b, r.t.a*r.t.a + r.t.b*r.t.b);
 			
 			measurements_a.push_back(deg);
@@ -266,8 +262,7 @@ to referent 0 by manually fitting on the calibration run. This is done by a diff
 
 	/* p is what the fit gives, but this is the offset, so detector is placed at -mean */
 	result_p.mean *= -1;
-	std::cout << "=================\n"
-		<< BOLD "Avg deg: " << result_a << "°\n" << KNRM;
+	fmt::println("=================\n{}", styled(fmt::format("Avg deg: {}°", result_a), fmt::emphasis::bold));
 
 	TCanvas* cs = new TCanvas("SCIs&Refs", "SCI21,22,31; FOOT Ref", 2150, 1400);
 	cs->Divide(3,3);

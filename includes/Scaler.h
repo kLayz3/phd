@@ -38,7 +38,7 @@ struct Scaler {
 		}
 		/* Possible miscounting! */
 		if(prev_data - curr_data < static_cast<u32>(wrap_point_)) {
-			WARN("Backwards counting in scaler struct. Prev = %u, curr = %u\n", prev_data, curr_data);
+			WARN("Backwards counting in scaler struct. Prev = {}, curr = {}\n", prev_data, curr_data);
 			return 0;
 		}
 		/* Wrap-around. */

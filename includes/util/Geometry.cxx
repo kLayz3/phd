@@ -111,15 +111,6 @@ Line2D& Line2D::RepresentInShifted (
 }
 
 
-std::ostream& operator<<(std::ostream& os, const SphericalAngles& rhs) {
-#ifdef MND_FORMAT_ANGLES_IN_RADIANS
-	return os << "(θ: " << rhs.theta <<  ", φ: " << rhs.phi << ')';
-#else
-	constexpr double CVAL = 180.0 / M_PI;
-	return os << "(θ: " << CVAL*rhs.theta <<  "°, φ: " << CVAL*rhs.phi << "°)";
-#endif
-}
-
 /* ====================== 3D ====================== */
 
 bool Line3D::IsValid() const noexcept {
@@ -401,19 +392,4 @@ Point3D mnd::geom::FindVertex(::mnd::span<const Line3D*> lines) noexcept {
 Point3D mnd::geom::FindVertex(const Line3D& l1, const Line3D& l2) noexcept {
 	const std::array<Line3D, 2> lines{l1, l2};
 	return FindVertex(lines);
-}
-
-std::ostream& operator<<(std::ostream& os, const Point2D& rhs) {
-	return os << '(' << rhs.x << ", " << rhs.y << ')';
-}
-std::ostream& operator<<(std::ostream& os, const Point3D& rhs) {
-	return os << '(' << rhs.x << ", " << rhs.y << ", " << rhs.z << ')';
-}
-std::ostream& operator<<(std::ostream& os, const Line2D&  rhs) {
-	using mnd::fmt::operator<<;
-	return os << rhs.value;
-}
-std::ostream& operator<<(std::ostream& os, const Line3D&  rhs) {
-	using mnd::fmt::operator<<;
-	return os << '(' << rhs.xarray() << ", " << rhs.yarray() << ')';
 }

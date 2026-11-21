@@ -86,9 +86,11 @@ public:
 	inline void _ClearClust() noexcept { _cl_cnt = 0; _ct = {ClusterType::kGOOD, ClusterType::kGOOD}; }
 	inline void _AddHit(double e, int x, u32 flag=0) noexcept {
 		if(_cl_cnt >= MAX_CL_SIZE) {
-			WARN("(%s => %s) cluster size exceeded: " EMPH(max = %d) ". Ignoring the hit (strip:ADC): " EMPH(%d: %7.2f; N-Thr: %5.2f (X=%.1f)) ". Consider increasing the buffer size.\n", 
-				std::get<0>(in).GetName(), out.GetName(), MAX_CL_SIZE,
-				x, e, n_thr(x), X_NEIGHB_THR);
+			WARN("({} => {}) cluster size exceeded: {}. Ignoring the hit (strip:ADC): {}. Consider increasing the buffer size.\n",
+				std::get<0>(in).GetName(), out.GetName(),
+				styled(fmt::format("max = {}", MAX_CL_SIZE), mnd::style::bold_yellow),
+				styled(fmt::format("{}: {:7.2f}; N-Thr: {:5.2f} (X={:.1f})", x, e, n_thr(x), X_NEIGHB_THR),
+					mnd::style::bold_yellow));
 			return;
 		}
 		_buf[_cl_cnt].e = e;

@@ -8,8 +8,7 @@
 
 #include "nlohmann/json.hpp"
 
-/* Used only for streaming of std::vector<T> type, and also MND_ macros. */
-#include "monad/monad.hxx"
+#include "monad/accessories/formatting.hxx"
 
 #define GET_HELP_AUX_IMPL  \
 	template<std::size_t I> \
@@ -31,12 +30,6 @@
 	\
 	template<std::size_t I, typename std::enable_if<(I == INDEX)>::type* = nullptr> \
 	static constexpr const char* get_name() { return #NAME; } \
-	\
-	template<std::size_t I, typename Self, typename std::enable_if<(I == INDEX)>::type* = nullptr> \
-	static void print_field(std::ostream& os, Self&& self) { \
-		using mnd::fmt::operator<<; \
-		os << ".\033[1;94m" <<  get_name<I>() << "\033[0m = " << std::forward<Self>(self).NAME << ", "; \
-	}; \
 
 #define UNROLL_MAYBE_JSON_PARAM_SINGLE_(StructInstance, JSONInstance, INDEX) \
 	do { \
@@ -49,9 +42,9 @@
 			StructInstance.get<INDEX>() = JSONInstance[ key ].get<BareType::type_##INDEX>(); \
 		} catch(std::exception const& e) { \
 			MND_THROW( \
-				"Failed JSON setup assignment '%s': index: %d, key: '%s' " \
-				"(Json instance: '%s'), " \
-				"reason: %s\n",  \
+				"Failed JSON setup assignment '{}': index: {}, key: '{}' " \
+				"(Json instance: '{}'), " \
+				"reason: {}\n",  \
 				#StructInstance, INDEX, key, #JSONInstance, e.what()); \
 		} \
 		MND_EMPTY_MACRO(INDEX) \
@@ -60,17 +53,17 @@
 #define UNROLL_JSON_PARAM(StructInstance, JSONInstance, N)  UNROLL_JSON_PARAM_N_(StructInstance, JSONInstance, N)
 #define UNROLL_JSON_PARAM_N_(StructInstance, JSONInstance, N) UNROLL_JSON_PARAM_##N(StructInstance, JSONInstance)
 
-#define UNROLL_JSON_PARAM_0(T1, T2) MND_EMPTY_MACRO(T1, T2)     UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  0)
-#define UNROLL_JSON_PARAM_1(T1, T2) UNROLL_JSON_PARAM_0(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  1)
-#define UNROLL_JSON_PARAM_2(T1, T2) UNROLL_JSON_PARAM_1(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  2)
-#define UNROLL_JSON_PARAM_3(T1, T2) UNROLL_JSON_PARAM_2(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  3)
-#define UNROLL_JSON_PARAM_4(T1, T2) UNROLL_JSON_PARAM_3(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  4)
-#define UNROLL_JSON_PARAM_5(T1, T2) UNROLL_JSON_PARAM_4(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  5)
-#define UNROLL_JSON_PARAM_6(T1, T2) UNROLL_JSON_PARAM_5(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  6)
-#define UNROLL_JSON_PARAM_7(T1, T2) UNROLL_JSON_PARAM_6(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  7)
-#define UNROLL_JSON_PARAM_8(T1, T2) UNROLL_JSON_PARAM_7(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  8)
-#define UNROLL_JSON_PARAM_9(T1, T2) UNROLL_JSON_PARAM_8(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  9)
-#define UNROLL_JSON_PARAM_10(T1, T2) UNROLL_JSON_PARAM_9 (T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 10)
+#define UNROLL_JSON_PARAM_0(T1, T2)  MND_EMPTY_MACRO(T1, T2)      UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  0)
+#define UNROLL_JSON_PARAM_1(T1, T2)  UNROLL_JSON_PARAM_0(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  1)
+#define UNROLL_JSON_PARAM_2(T1, T2)  UNROLL_JSON_PARAM_1(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  2)
+#define UNROLL_JSON_PARAM_3(T1, T2)  UNROLL_JSON_PARAM_2(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  3)
+#define UNROLL_JSON_PARAM_4(T1, T2)  UNROLL_JSON_PARAM_3(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  4)
+#define UNROLL_JSON_PARAM_5(T1, T2)  UNROLL_JSON_PARAM_4(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  5)
+#define UNROLL_JSON_PARAM_6(T1, T2)  UNROLL_JSON_PARAM_5(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  6)
+#define UNROLL_JSON_PARAM_7(T1, T2)  UNROLL_JSON_PARAM_6(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  7)
+#define UNROLL_JSON_PARAM_8(T1, T2)  UNROLL_JSON_PARAM_7(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  8)
+#define UNROLL_JSON_PARAM_9(T1, T2)  UNROLL_JSON_PARAM_8(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2,  9)
+#define UNROLL_JSON_PARAM_10(T1, T2) UNROLL_JSON_PARAM_9(T1, T2)  UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 10)
 #define UNROLL_JSON_PARAM_11(T1, T2) UNROLL_JSON_PARAM_10(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 11)
 #define UNROLL_JSON_PARAM_12(T1, T2) UNROLL_JSON_PARAM_11(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 12)
 #define UNROLL_JSON_PARAM_13(T1, T2) UNROLL_JSON_PARAM_12(T1, T2) UNROLL_MAYBE_JSON_PARAM_SINGLE_(T1, T2, 13)
@@ -85,17 +78,23 @@
 
 /* Macro to be exported. */
 #define ADD_JSON_TYPE_RESOLUTION(TYPE, N) \
-	/* First define printer. */ \
-	template<std::size_t... Is> \
-	void print_me_json_helper_aux_##TYPE(std::ostream& os, const TYPE& obj, std::index_sequence<Is...>) { \
-		(..., obj.print_field<Is>(os, obj) ); \
-	} \
-	inline std::ostream& operator<<(std::ostream& os, const TYPE& obj) { \
-		os << "{"; \
-		print_me_json_helper_aux_##TYPE(os, obj, std::make_index_sequence<N+1>{}); \
-		os << "\033[1mEND\0033[0m }"; \
-		return os; \
-	} \
+	template<> struct fmt::formatter<TYPE> { \
+		constexpr auto parse(::fmt::format_parse_context& ctx) { return ctx.begin(); } \
+		\
+		template<typename Context> \
+		auto format(const TYPE& obj, Context& ctx) const { \
+			return format_fields(obj, ctx.out(), std::make_index_sequence<N+1>{}); \
+		} \
+		\
+	private: \
+		template<typename Output, std::size_t... Is> \
+		static auto format_fields(const TYPE& obj, Output out, std::index_sequence<Is...>) { \
+			out = ::fmt::format_to(out, "{{"); \
+			constexpr auto blue = ::fmt::fg(::fmt::terminal_color::bright_blue) | ::fmt::emphasis::bold; \
+			((out = ::fmt::format_to(out, ".{} = {}, ", ::fmt::styled(TYPE::get_name<Is>(), blue), obj.get<Is>())), ...); \
+			return ::fmt::format_to(out, "{} }}", ::fmt::styled("END", ::fmt::emphasis::bold)); \
+		} \
+	}; \
 	\
 	/* Structured binding stuff. */ \
 	namespace std { \
@@ -240,7 +239,7 @@ int main() {
 	auto& [xf, adf, _, __, ___, ____] = par;
 	assert(adf[1][0] == -580);
 
-	std::cout << par << std::endl;
+	fmt::println("{}", par);
 
 	return 0;
 }

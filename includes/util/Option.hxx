@@ -133,20 +133,20 @@ public:
 	constexpr bool is_none() const noexcept { return !is_some(); }
 
 	/* May panic (throw). Unlike Rust, returns back a reference when called on lvalue. */
-	constexpr T&        unwrap(const char* msg = detail::bad_option_def_msg) & {
-		if(is_none()) throw detail::bad_option_access(msg ? msg : detail::bad_option_def_msg);
+	constexpr T&        unwrap(std::string_view msg = detail::bad_option_def_msg) & {
+		if(is_none()) throw detail::bad_option_access(std::string{msg});
 		return *data;
 	}
-	constexpr const T&  unwrap(const char* msg = detail::bad_option_def_msg) const&  {
-		if(is_none()) throw detail::bad_option_access(msg ? msg : detail::bad_option_def_msg);
+	constexpr const T&  unwrap(std::string_view msg = detail::bad_option_def_msg) const&  {
+		if(is_none()) throw detail::bad_option_access(std::string{msg});
 		return *data;
 	}
-	constexpr T&&       unwrap(const char* msg = detail::bad_option_def_msg) &&      {
-		if(is_none()) throw detail::bad_option_access(msg ? msg : detail::bad_option_def_msg);
+	constexpr T&&       unwrap(std::string_view msg = detail::bad_option_def_msg) &&      {
+		if(is_none()) throw detail::bad_option_access(std::string{msg});
 		return *std::move(data);
 	}
-	constexpr const T&& unwrap(const char* msg = detail::bad_option_def_msg) const&& {
-		if(is_none()) throw detail::bad_option_access(msg ? msg : detail::bad_option_def_msg);
+	constexpr const T&& unwrap(std::string_view msg = detail::bad_option_def_msg) const&& {
+		if(is_none()) throw detail::bad_option_access(std::string{msg});
 		return *std::move(data);
 	}
 

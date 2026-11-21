@@ -28,6 +28,18 @@ struct State {
 
 inline constexpr char auth_sym = '!';
 
+/* For formatting, default to the fmt:: formnatter.
+ * Else, for cases where it's not compiled-in
+ * go to CLI::detail::to_string which internally uses
+ * the ostream& operator<<(const T& ) overload. */
+template<typename T>
+decltype(auto) format_value(const T& value) {
+	if constexpr(fmt::is_formattable<T>::value)
+		return (value);
+	else
+		return std::string(CLI::detail::to_string(value));
+}
+
 } //namespace mnd::cli::detail
 
 namespace mnd::type_traits {
@@ -59,14 +71,15 @@ template <
 				// The ! occurrence overrides everything.
 				variable = match;
 				state->authoritative_seen = true;
-				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM);
-				std::cerr << KBH_YEL << name << KNRM << " as "
-					<< KBH_CYN << match << KNRM << '\n';
+				WARN("Parsed {} option {} as {}\n",
+					styled("authoritative", fmt::emphasis::bold),
+					styled(name, mnd::style::bold_yellow),
+					styled(mnd::cli::detail::format_value(match), mnd::style::bold_cyan));
 			} else if(!state->authoritative_seen) {
 				variable = match;
-				WARN("Parsed option ");
-				std::cerr << KBH_YEL << name << KNRM << " as "
-					<< KBH_CYN << match << KNRM << '\n';
+				WARN("Parsed option {} as {}\n",
+					styled(name, mnd::style::bold_yellow),
+					styled(mnd::cli::detail::format_value(match), mnd::style::bold_cyan));
 			}
 			state->current_is_authoritative = false;
 		}, description)
@@ -115,25 +128,26 @@ template <
 		[&variable, name, state](const std::string& s) {
 			auto e = magic_enum::enum_cast<E>(s);
 			if(!e)
-				throw CLI::ValidationError(name, mnd::msg("Validation error for enum: \'%s\', "
-					"passed in \'%s\' which is not parsable.",
-					mnd::type_name<E>().c_str(), s.c_str()));
+				throw CLI::ValidationError(name, fmt::format("Validation error for enum: \'{}\', "
+					"passed in \'{}\' which is not parsable.",
+					mnd::type_name<E>(), s));
 			if(state->current_is_authoritative) {
 				// The ! occurrence overrides everything.
 				variable = *e;
 				state->authoritative_seen = true;
-				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM);
-				std::cerr << KBH_YEL << name << KNRM << " as "
-					<< KBH_CYN << s << KNRM << '\n';
+				WARN("Parsed {} option {} as {}\n",
+					styled("authoritative", fmt::emphasis::bold),
+					styled(name, mnd::style::bold_yellow),
+					styled(mnd::cli::detail::format_value(s), mnd::style::bold_cyan));
 			} else if(!state->authoritative_seen) {
 				variable = *e;
-				WARN("Parsed option ");
-				std::cerr << KBH_YEL << name << KNRM << " as "
-					<< KBH_CYN << s << KNRM << '\n';
+				WARN("Parsed option {} as {}\n",
+					styled(name, mnd::style::bold_yellow),
+					styled(mnd::cli::detail::format_value(s), mnd::style::bold_cyan));
 			}
 			state->current_is_authoritative = false;
 		},
-		mnd::sstrcat("Enum: ",  magic_enum::enum_names<E>(), ". ", description))
+		fmt::format("Enum: {}. {}", magic_enum::enum_names<E>(), description))
 		->transform( [state](std::string input) -> std::string {
 			if(!input.empty() && input.front() == mnd::cli::detail::auth_sym) {
 				state->current_is_authoritative = true;
@@ -172,7 +186,6 @@ template <
 	auto* opt = app.add_option_function<std::vector<std::string>>(
 		name,
 		[&variable, name, state](const std::vector<std::string>& matches) {
-			using mnd::fmt::operator<<;
 			std::vector<E> parsed;
 			parsed.reserve(matches.size());
 
@@ -180,9 +193,9 @@ template <
 				auto e = magic_enum::enum_cast<E>(s);
 				if(!e)
 					throw CLI::ValidationError(name,
-						mnd::msg("Validation error for enum: \'%s\', "
-						"passed in \'%s\' which is not parsable.",
-						mnd::type_name<E>().c_str(), s.c_str()));
+						fmt::format("Validation error for enum: \'{}\', "
+						"passed in \'{}\' which is not parsable.",
+						mnd::type_name<E>(), s));
 
 				parsed.push_back(*e);
 			}
@@ -192,18 +205,19 @@ template <
 				variable = std::move(parsed);
 				state->authoritative_seen = true;
 
-				WARN("Parsed %sauthoritative%s option ", BOLD, KNRM);
-				std::cerr << KBH_YEL << name << KNRM << " as "
-					<< KBH_CYN << matches << KNRM << '\n';
+				WARN("Parsed {} option {} as {}\n",
+					styled("authoritative", fmt::emphasis::bold),
+					styled(name, mnd::style::bold_yellow),
+					styled(mnd::cli::detail::format_value(matches), mnd::style::bold_cyan));
 			} else if(!state->authoritative_seen) {
 				variable = std::move(parsed);
-				WARN("Parsed option ");
-				std::cerr << KBH_YEL << name << KNRM << " as "
-					<< KBH_CYN << matches << KNRM << '\n';
+				WARN("Parsed option {} as {}\n",
+					styled(name, mnd::style::bold_yellow),
+					styled(mnd::cli::detail::format_value(matches), mnd::style::bold_cyan));
 			}
 			state->current_is_authoritative = false;
 		},
-		mnd::sstrcat("Enum: ", magic_enum::enum_names<E>(), ". ", description))
+		fmt::format("Enum: {}. {}", magic_enum::enum_names<E>(), description))
 		->transform([state](std::string input) -> std::string {
 			if(!input.empty() &&
 			input.front() == mnd::cli::detail::auth_sym)
@@ -254,10 +268,10 @@ template <
 					return;
 
 				if(!CLI::detail::lexical_cast(args[i], std::get<i>(parsed))) {
-					throw CLI::ValidationError(name, mnd::msg("Arg: %s , invalid tuple "
-						"element index'ed %zu, cannot be parsed from '" EBOLD(%s)
-						"' into underlying type: %s\n", name.c_str(), i, args[i].c_str(),
-						mnd::type_name<std::tuple_element_t<i,Tuple>>().c_str())
+					throw CLI::ValidationError(name, fmt::format("Arg: {}, invalid tuple "
+						"element at index {} cannot be parsed from '{}' into underlying type: {}\n",
+						name, i, styled(args[i], fmt::emphasis::bold),
+						mnd::type_name<std::tuple_element_t<i,Tuple>>())
 					);
 				}
 			});
@@ -269,17 +283,17 @@ template <
 			if(authoritative)
 				state->authoritative_seen = true;
 
-			WARN("Parsed %soption ",
-				authoritative ? BOLD "authoritative " KNRM : "");
-
-			std::cerr << KBH_YEL << name << KNRM << " as ";
-			std::cerr << KBH_CYN;
-			mnd::fmt::detail::print_tuple(std::cerr, variable, 0, args.size());
+			std::ostringstream supplied, defaulted;
+			mnd::print_tuple(supplied, variable, 0, args.size());
 			if(args.size() < N) {
-				std::cerr << KNRM << ", " << KBH_MAG;
-				mnd::fmt::detail::print_tuple(std::cerr, variable, args.size());
+				defaulted << ", ";
+				mnd::print_tuple(defaulted, variable, args.size());
 			}
-			std::cerr << KNRM "\n";
+			WARN("Parsed {}option {} as {}{}\n",
+				styled(authoritative ? "authoritative " : "", fmt::emphasis::bold),
+				styled(name, mnd::style::bold_yellow),
+				styled(supplied.str(), mnd::style::bold_cyan),
+				styled(defaulted.str(), mnd::style::bold_magenta));
 		},
 		description
 	)
@@ -300,7 +314,7 @@ template <
 
 	if constexpr(d == DisplayDefault::Yes) {
 		std::ostringstream ss;
-		ss << variable;
+		mnd::print_tuple(ss, variable);
 		opt->default_str(ss.str());
 	}
 
@@ -409,11 +423,10 @@ template<
 			if(authoritative)
 				state->authoritative_seen = true;
 
-			WARN("Parsed %soption ",
-				authoritative ? BOLD "authoritative " KNRM : "");
-
-			std::cerr << KBH_YEL << name << KNRM << " as "
-				<< KBH_CYN << variable << KNRM << '\n';
+			WARN("Parsed {}option {} as {}\n",
+				styled(authoritative ? "authoritative " : "", fmt::emphasis::bold),
+				styled(name, mnd::style::bold_yellow),
+				styled(mnd::cli::detail::format_value(variable), mnd::style::bold_cyan));
 		},
 		description
 	)
@@ -452,6 +465,7 @@ template <
 	mnd::Option<T>& variable,
 	const std::string& description
 ) {
+	using mnd::literals::operator""_rgb;
 	static_assert(
 		std::is_default_constructible_v<T>,
 		"mnd::Option<T> CLI parsing requires default-constructible type T."
@@ -527,26 +541,19 @@ template <
 		if(reset) {
 			variable.reset();
 
-			WARN("Parsed %ssum-type reset%s option ",
-				authoritative ?  BOLD "authoritative ": "",
-				authoritative ? KNRM : ""
-			);
-
-			std::cerr << KBH_YEL << name << KNRM << " as "
-				<< MND_RGB_COL(204,102,0) << "none" << KNRM << '\n';
+			WARN("Parsed {}sum-type reset option {} as {}\n",
+				styled(authoritative ? "authoritative " : "", fmt::emphasis::bold),
+				styled(name, mnd::style::bold_yellow),
+				styled("none", fg(0xCC6600_rgb)));
 
 			return true;
 		}
 
-		if(authoritative) {
-			WARN("Parsed %sauthoritative%s sum-type option ", BOLD, KNRM);
-		} else {
-			WARN("Parsed sum-type option ");
-		}
-
-		std::cerr << KBH_YEL << name << KNRM << " as "
-			<< (empty ? MND_RGB_COL(255,102,255) "defaulted value: " : "")
-			<< KBH_CYN << variable.unwrap() << KNRM << '\n';
+		WARN("Parsed {}sum-type option {} as {}{}\n",
+			styled(authoritative ? "authoritative " : "", fmt::emphasis::bold),
+			styled(name, mnd::style::bold_yellow),
+			styled(empty ? "defaulted value: " : "", fg(0xFF66FF_rgb)),
+			styled(mnd::cli::detail::format_value(variable.unwrap()), mnd::style::bold_cyan));
 
 		return true;
 	};
@@ -555,10 +562,9 @@ template <
 		name,
 		std::move(callback),
 		description
-		 + mnd::msg("\n%s\'%c\'%s flag requests an explicitly empty object (but in the value-given variant), "
-			        "\n%s\'%c\'%s requests a reset back to the no-value-given variant.",
-		            MND_RGB_COL(255,102,255), mnd::cli::detail::empty_sym, KNRM,
-		            MND_RGB_COL(204,102,0  ), mnd::cli::detail::reset_sym, KNRM)
+		 + fmt::format("\n{} flag requests an explicitly empty object (but in the value-given variant), \n{} requests a reset back to the no-value-given variant.",
+			styled(fmt::format("\'{:c}\'", mnd::cli::detail::empty_sym), fg(0xFF66FF_rgb)),
+			styled(fmt::format("\'{:c}\'", mnd::cli::detail::reset_sym), fg(0xCC6600_rgb)))
 	)
 	->type_name(CLI::detail::type_name<T>())
 	->type_size(
@@ -594,9 +600,9 @@ CLI::Option* add_logged_option_seq (
 		[&variable, name](const std::vector<T>& matches) {
 			for(const auto& match : matches) {
 				variable.push_back(match);
-				WARN("Appended option ");
-				std::cerr << KBH_YEL << name << KNRM << " as "
-					<< KBH_CYN << CLI::detail::to_string(match) << KNRM << '\n';
+				WARN("Appended option {} as {}\n",
+					styled(name, mnd::style::bold_yellow),
+					styled(mnd::cli::detail::format_value(match), mnd::style::bold_cyan));
 			}
 		},
 		description
@@ -618,9 +624,9 @@ CLI::Option* add_logged_flag (
 	return app.add_flag(name, variable, description)
 		->each(
 			[name](const std::string& match) {
-				WARN("Parsed flag ");
-				std::cerr << KBH_YEL << name << KNRM << " as "
-					<< KBH_CYN << match << KNRM << '\n';
+				WARN("Parsed flag {} as {}\n",
+					styled(name, mnd::style::bold_yellow),
+					styled(match, mnd::style::bold_cyan));
 			}
 		);
 }
@@ -651,7 +657,6 @@ public:
 	int push_back(std::string );
 	const char* operator[](size_t i) const noexcept { return argv[i]; }
 };
-std::ostream& operator<<(std::ostream& , const Argv& );
 
 /* Parse a block of text (1st arg) and the program name (2nd argument) into an
  * argv/argc format, which can then be delegated to exec(3) family: execvp */
@@ -740,3 +745,16 @@ Validator RangeOrEmpty(T min, T max) {
 }
 
 } // namespace CLI
+
+template<>
+struct fmt::formatter<mnd::Argv> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const mnd::Argv& argv, Context& ctx) const {
+		auto out = ctx.out();
+		for(int i = 0; i < argv.argc(); ++i)
+			out = fmt::format_to(out, "{} ", argv[i]);
+		return out;
+	}
+};

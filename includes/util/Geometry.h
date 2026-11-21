@@ -4,10 +4,9 @@
 #include <cfloat>
 #include <cmath>
 #include <limits>
-#include <ostream>
 #include <type_traits>
 #include <vector>
-#include "json_struct_def.hh" // std::ostream& operator<<(std::ostream&, array<T,N> const&)
+#include "json_struct_def.hh"
 #include "monad/monad.hxx"
 #include "../Eigen.h"
 
@@ -116,7 +115,7 @@ struct Line2D {
 
 struct SphericalAngles {
 	double theta, phi;
-	friend std::ostream& operator<<(std::ostream& , const SphericalAngles& );
+
 };
 
 /* Two ways to represent lines in 3D:
@@ -246,14 +245,7 @@ struct Rectangle2D {
 	Point2D Mid() const noexcept;
 	bool IsInside(const Point2D& ) const noexcept;
 	bool IsInside(double, double ) const noexcept;
-	
-	friend std::ostream& operator<<(std::ostream& os, const Rectangle2D& r) {
-		return os << "{R ("
-			<< r.p0.x << ',' << r.p0.y
-			<< ") <> ("
-			<< r.p1.x << ',' << r.p1.y
-			<< ") R}";
-	}
+
 };
 
 /* Find a point with a minimal distance to a sequence of lines (aka: a vertex). */
@@ -298,9 +290,100 @@ VertexingResult<T> FindVertexingTracksMut(std::vector<T>& , double const D = VER
 
 } /* namespace mnd::geom */
 
-std::ostream& operator<<(std::ostream&, const mnd::geom::Point2D& );
-std::ostream& operator<<(std::ostream&, const mnd::geom::Point3D& );
-std::ostream& operator<<(std::ostream&, const mnd::geom::Line2D& );
-std::ostream& operator<<(std::ostream&, const mnd::geom::Line3D& );
+namespace mnd::geom::detail {
+
+struct CoordinateFormatter : fmt::range_formatter<double, char> {
+	/* OK: explaination. The fmt::range_formatter takes the brackets as views, so I cannot just 
+	 * paste in a single char since it would dangle. It needs some static-storage char array. 
+	 * Now passing in "{" deduces Open=2 and open = { '}', '\0' } */
+	template<size_t Open, size_t Close>
+	constexpr CoordinateFormatter(const char (&open)[Open], const char (&close)[Close]) {
+		set_brackets({open, Open - 1}, {close, Close - 1});
+	}
+
+	// Apply the scalar format specifier to each coordinate.
+	constexpr auto parse(fmt::format_parse_context& ctx) {
+		return underlying().parse(ctx);
+	}
+};
+
+} // namespace mnd::geom::detail
+
+template<>
+struct fmt::formatter<mnd::geom::Point2D> : mnd::geom::detail::CoordinateFormatter {
+	constexpr formatter() : CoordinateFormatter("(", ")") {}
+
+	template<typename Context>
+	auto format(const mnd::geom::Point2D& p, Context& ctx) const {
+		return CoordinateFormatter::format(std::array{p.x, p.y}, ctx);
+	}
+};
+
+template<>
+struct fmt::formatter<mnd::geom::Point3D> : mnd::geom::detail::CoordinateFormatter {
+	constexpr formatter() : CoordinateFormatter("(", ")") {}
+
+	template<typename Context>
+	auto format(const mnd::geom::Point3D& p, Context& ctx) const {
+		return CoordinateFormatter::format(std::array{p.x, p.y, p.z}, ctx);
+	}
+};
+
+template<>
+struct fmt::formatter<mnd::geom::Line2D> : mnd::geom::detail::CoordinateFormatter {
+	constexpr formatter() : CoordinateFormatter("[", "]") {}
+
+	template<typename Context>
+	auto format(const mnd::geom::Line2D& line, Context& ctx) const {
+		return CoordinateFormatter::format(line.value, ctx);
+	}
+};
+
+template<>
+struct fmt::formatter<mnd::geom::Line3D> : mnd::geom::detail::CoordinateFormatter {
+	constexpr formatter() : CoordinateFormatter("[", "]") {}
+
+	template<typename Context>
+	auto format(const mnd::geom::Line3D& line, Context& ctx) const {
+		ctx.advance_to(fmt::format_to(ctx.out(), "("));
+		auto out = CoordinateFormatter::format(line.xarray(), ctx);
+		ctx.advance_to(fmt::format_to(out, ", "));
+		return fmt::format_to(CoordinateFormatter::format(line.yarray(), ctx), ")");
+	}
+};
+
+template<>
+struct fmt::formatter<mnd::geom::SphericalAngles> : fmt::formatter<double> {
+	template<typename Context>
+	auto format(const mnd::geom::SphericalAngles& angles, Context& ctx) const {
+#ifdef MND_FORMAT_ANGLES_IN_RADIANS
+		constexpr double scale = 1.0;
+		constexpr auto unit = "";
+#else
+		constexpr double scale = 180.0 / M_PI;
+		constexpr auto unit = "°";
+#endif
+		ctx.advance_to(fmt::format_to(ctx.out(), "(θ: "));
+		auto out = fmt::formatter<double>::format(angles.theta * scale, ctx);
+		ctx.advance_to(fmt::format_to(out, "{}, φ: ", unit));
+		return fmt::format_to(fmt::formatter<double>::format(angles.phi * scale, ctx), "{})", unit);
+	}
+};
+
+template<>
+struct fmt::formatter<mnd::geom::Rectangle2D> : mnd::geom::detail::CoordinateFormatter {
+	constexpr formatter() : CoordinateFormatter("(", ")") {
+		set_separator({",", 1});
+	}
+
+	template<typename Context>
+	auto format(const mnd::geom::Rectangle2D& r, Context& ctx) const {
+		ctx.advance_to(fmt::format_to(ctx.out(), "{{R "));
+		auto out = CoordinateFormatter::format(std::array{r.p0.x, r.p0.y}, ctx);
+		ctx.advance_to(fmt::format_to(out, " <> "));
+		out = CoordinateFormatter::format(std::array{r.p1.x, r.p1.y}, ctx);
+		return fmt::format_to(out, " R}}");
+	}
+};
 
 #include "GeometryImpl.hxx"

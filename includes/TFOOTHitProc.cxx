@@ -22,7 +22,6 @@ static constexpr u32 N_PAIRS = TFOOTHitCont::N_PAIRS;
 using namespace mnd::geom;
 
 extern thread_local Line3D g_upstream_track; // extern'ed from `includes/TFRSHitProc.cxx`
-using mnd::fmt::operator<<; // to shut up the whiney-ass LSP :X
 
 /* These following values are assigned only once; at the TFOOTHitProc ctor.
  * Later access is read-only, as such safe to be non thread_local. */
@@ -92,12 +91,6 @@ double& max_cost_final_track = TrackCost::max_cost_final_track;
 Verbosity TFOOTHitProc::v = Verbosity::SILENT;
 bool TFOOTHitProc::requires_valid_upstream_track;
 
-std::ostream& operator<<(std::ostream& os, const TrackCost& rhs) {
-	return os << "(kr: " << rhs.kr_ << ','
-	          << " kq: " << rhs.kq_ << ','
-	          << " kt: " << rhs.kt_ << ')';
-}
-
 /* Maximum cost to allow a point to branch the Kalman cannot be constant,
  * as it depends on the layer/points numbered:
  * Layer [1] => only `kq` cost
@@ -129,18 +122,18 @@ void TFOOTHitProc::ValidateParameters() {
 	
 	mnd::for_each_in_tuple(this->in, [this, &i, &test_vec, box](const TFOOTCalCont& cfoot) {
 		const auto* s = cfoot.setup;
-		if(!s) ERROR("FOOT%u setup is nullptr?", i);
+		if(!s) ERROR("FOOT{} setup is nullptr?", i);
 		int n = s->N;
 		if(n >= N_FOOT_DETECTORS)
-			ERROR("Found FOOT index: %d, and is out of range [0,%d> ?", n, N_FOOT_DETECTORS);
+			ERROR("Found FOOT index: {}, and is out of range [0,{}> ?", n, N_FOOT_DETECTORS);
 
 		double z = box->GetFOOTZ(n, s);
 		Orientation o = s->GetOrientation();
-		if(o == Orientation::UNKNOWN) ERROR("FOOT%u, orientation unknown.\n", i);
+		if(o == Orientation::UNKNOWN) ERROR("FOOT{}, orientation unknown.\n", i);
 		
 		const u32 ipair = i/2;
 		if(ipair >= N_PAIRS)
-			ERROR("Checking for input setup validity, encountered %i >= %i ?", ipair, N_PAIRS);
+			ERROR("Checking for input setup validity, encountered {} >= {} ?", ipair, N_PAIRS);
 		auto& map = test_vec[ipair];
 		map.insert({o,z});
 
@@ -188,7 +181,7 @@ void TFOOTHitProc::AssignParameters() {
 		) {
 			const Orientation o1 = f1.setup->GetOrientation();
 			const Orientation o2 = f2.setup->GetOrientation();
-			if(o1 == o2) ERROR("Pair: %u, orientations marked as identical?", i);
+			if(o1 == o2) ERROR("Pair: {}, orientations marked as identical?", i);
 			
 			const FOOTParam& px = (o1 == Orientation::X) ? *f1.setup : *f2.setup;
 			const FOOTParam& py = (o1 == Orientation::Y) ? *f1.setup : *f2.setup;
@@ -211,8 +204,8 @@ void TFOOTHitProc::AssignParameters() {
 		if(!mnd::is_positive(sd, sr) ||
 			!std::isfinite(corr) || std::abs(corr) >= 1.0
 		) {
-			ERROR("FOOT pair:%u one of the FOOTQCov elements is <0 or correlation not [0,1)? It is: %s\n",
-				n, mnd::streamable(out.qcov->operator[](n)).c_str());
+			ERROR("FOOT pair {}: expected positive sd and sr and a correlation in (-1, 1). Got {}\n",
+				n, out.qcov->operator[](n));
 		}
 		::qcost[n] = {
 			.Qdd = 1/(sd*sd),
@@ -303,7 +296,7 @@ void TFOOTHitProc::SetFitConversionMatrices() {
 				}
 			}
 			if(row != 2*K)
-				ERROR("N=%u, K=%u, row=%u => check row == 2*K failed, e.g. the "
+				ERROR("N={}, K={}, row={} => check row == 2*K failed, e.g. the "
 					"underlying_matrix for QR is entirely wrong.\n", N, K, (u32)row);
 
 			auto& qr = dm.lookup_table[icombo].first;
@@ -312,7 +305,7 @@ void TFOOTHitProc::SetFitConversionMatrices() {
 			dm.lookup_table[icombo].second = offset_vector;
 
 			if(qr.rank() != 4)
-				ERROR("Rank-deficient geometry for mask %#08x. QR decomposition failed. "
+				ERROR("Rank-deficient geometry for mask {:#08x}. QR decomposition failed. "
 					"Are the parameters fine or degenerate for this case.. ?", mask);
 		}
 	});
@@ -361,19 +354,19 @@ TFOOTHitProc::TFOOTHitProc (
 		out.cost_coeff->at(i) = val;
 	}
 	
-	WARN("Cost coefficients [cr, cq, ct] = [%.2f, %.2f, %.2f]\n", Cr, Cq, Ct);
-	WARN("Max candidate allowed cost: %s%.2f%s , max complete track allowed cost %s%.2f%s\n",
-		BOLD, max_cost, KNRM, BOLD, max_cost_final_track, KRNM);
-	WARN("Cluster size==1 cutoff point is %.2f units of charge. Anything below that considered "
+	WARN("Cost coefficients [cr, cq, ct] = [{:.2f}, {:.2f}, {:.2f}]\n", Cr, Cq, Ct);
+	WARN("Max candidate allowed cost: {:.2f}, max complete track allowed cost {:.2f}\n",
+		styled(max_cost, fmt::emphasis::bold), styled(max_cost_final_track, fmt::emphasis::bold));
+	WARN("Cluster size==1 cutoff point is {:.2f} units of charge. Anything below that considered "
 		"pure noise and ignored\n", CLUSTER_SIZE_ONE_Q_CUTOFF);
 
 	AssignParameters();
 
 	if(v > 2) {
-		WARN("FOOT pairs placed at: "); for(u32 n=0; n<N_PAIRS; ++n) {
-			std::cerr << ", " << geometry.layer[n].z << std::endl;
-		}
-		WARN("EXPERT target placed at: %.2f\n", TFOOTHitProc::TARGET_Z);
+		WARN("FOOT pairs placed at:\n");
+		for(const auto& layer : geometry.layer)
+			fmt::println(stderr, "  {}", layer.z);
+		WARN("EXPERT target placed at: {:.2f}\n", TFOOTHitProc::TARGET_Z);
 	}
 } // TFOOTHitProc::TFOOTHitProc( ... )
 
@@ -384,7 +377,8 @@ void TFOOTHitProc::ProcessEntry() noexcept {
 #ifdef MND_FOOTTRACK_DEBUG
 	if(v > 1) {
 		static u64 ev_num = 0;
-		fprintf(stderr, "\n%s>>> Entry[%lu] <<<%s\n", KBH_GRN, ++ev_num, KNRM);
+		fmt::println(stderr, "\n{}", styled(fmt::format(">>> Entry[{}] <<<", ++ev_num),
+			fg(fmt::terminal_color::bright_green) | fmt::emphasis::bold));
 	}
 #endif
 
@@ -534,8 +528,8 @@ Point2D TFOOTHitProc::extrapolate_to_target_with_update(
 
 #ifdef MND_FOOTTRACK_DEBUG
 	if(v > 3) {
-		fprintf(stderr, "TFOOTHitProc::extrapolate_to_target_with_update(..) : Updated test track: ");
-		std::cerr << tau << " :: value at target: " << target_point << std::endl;
+		fmt::println(stderr, "TFOOTHitProc::extrapolate_to_target_with_update(..) : Updated test track: "
+			"{} :: value at target: {}", tau, target_point);
 	}
 #endif
 
@@ -601,7 +595,7 @@ void TFOOTHitProc::ConstructDAG() noexcept {
 
 	#ifdef MND_FOOTTRACK_DEBUG
 		if(v > 0)
-			WARN("[#%u] ConstructDAG(): new_paths to be reserved at size: %zu (size currently:%zu)\n", n, new_paths.capacity(), new_paths.size());
+			WARN("[#{}] ConstructDAG(): new_paths to be reserved at size: {} (size currently:{})\n", n, new_paths.capacity(), new_paths.size());
 	#endif
 		/* Each path already draws (an optional) preliminary track.
 		 * Try to match some of the current layer's hitmatrix elements against that
@@ -685,7 +679,7 @@ void TFOOTHitProc::AnalyseDAG() noexcept {
 
 	#ifdef MND_FOOTTRACK_DEBUG
 		if(v > 0) {
-			WARN(KBH_CYN "~~~> Valid %zu paths thru the tree.\n" KNRM, dag.path.size());
+			WARN("{}\n", styled(fmt::format("~~~> Valid {} paths thru the tree.", dag.path.size()), mnd::style::bold_cyan));
 		}
 	#endif
 	/* Sort the sequence of paths through the graph according to their score.

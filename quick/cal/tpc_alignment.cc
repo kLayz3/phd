@@ -29,8 +29,6 @@ struct HistDrawer {
 
 
 int main(int argc, char* argv[]) {
-	using mnd::operator<<;
-
 	CLI::App app {
 		"Calibrate the TPC detectors, by:\n\
 		=> Defining referent (--ref) \"drift velocities\" for specific delay-lines (x-direction).\n\
@@ -108,7 +106,7 @@ int main(int argc, char* argv[]) {
 		ERROR("At least two valid referent TPC's must be given.\n");
     for(const auto& tpc : ref) {
 		if(!tpc) { // operator bool()
-			std::cerr << tpc << std::endl;
+			fmt::println(stderr, "{}", fmt::streamed(tpc));
 			ERROR("TPC invalid. Must be 0,1,2 and at least one dl flagged as valid.");
 		}
 	}
@@ -129,15 +127,13 @@ int main(int argc, char* argv[]) {
     const std::array<double, 2>& z0 = zDL[i_tpc];
 
     WARN("All TPC positions: \n");
-	for(u32 i=0; i<N_TPC; ++i) printf("TPC%s: %.1f mm\n", label[i], zTPC[i]);
+	for(u32 i=0; i<N_TPC; ++i) fmt::println("TPC{}: {:.1f} mm", label[i], zTPC[i]);
 
-    WARN("Calibrating TPC%s: nominal positition: %.1f, delay lines nominally at: ",
-         label[i_tpc], zTPC[i_tpc]);
-    std::cerr << z0 << std::endl;
-    WARN("Reference tracks are constructed by: " BOLD);
-    for(const auto& r : ref) {
-        fprintf(stderr, "TPC%s: %d|%d -- ", label[r.n], (int)r.use[0], (int)r.use[1]);
-    } fprintf(stderr, KNRM "\n");
+	WARN("Calibrating TPC{}: nominal position: {:.1f}, delay lines nominally at: {}\n",
+		label[i_tpc], zTPC[i_tpc], z0);
+	WARN("Reference tracks are constructed by:\n");
+	for(const auto& r : ref)
+		fmt::println(stderr, "{}", styled(fmt::format("TPC{}: {:d}|{:d}", label[r.n], r.use[0], r.use[1]), fmt::emphasis::bold));
 
     TH2P *h2_x[2], *h2_y[4];
 	for(int d=0; d<2; ++d)
@@ -174,7 +170,7 @@ int main(int argc, char* argv[]) {
                 option::Lead{">"},
                 option::Remainder{" "},
                 option::End{"]"},
-                option::PostfixText{mnd::msg("[%u] TPC%s Alignment (per event: %s)", f_index, label[i_tpc], fileName.c_str())},
+                option::PostfixText{fmt::format("[{}] TPC{} Alignment (per event: {})", f_index, label[i_tpc], fileName)},
                 option::ForegroundColor{Color::cyan},
                 option::ShowPercentage{true},
                 option::ShowElapsedTime{true},
@@ -288,31 +284,30 @@ int main(int argc, char* argv[]) {
         }
 
 #define PRINT_TPC_PARAM(pname, pobj, delim) \
-        fprintf(stderr, "\"%s\": ", #pname); std::cerr << (pobj).pname << #delim << std::endl;
+        fmt::println(stderr, "\"{}\": {}{}", #pname, (pobj).pname, #delim);
 
-        WARN("For TPC%s \n", label[i_tpc]);
+        WARN("For TPC{} \n", label[i_tpc]);
         WARN("Old values: \n");
         PRINT_TPC_PARAM(x_factor, (tpc_param), (,))
         PRINT_TPC_PARAM(x_offset, (tpc_param), (,))
         PRINT_TPC_PARAM(y_factor, (tpc_param), (,))
         PRINT_TPC_PARAM(y_offset, (tpc_param), ())
-        WARN("\nNew values: \n" BOLD);
+        WARN("\n{}\n", styled("New values:", fmt::emphasis::bold));
         PRINT_TPC_PARAM(x_factor, (new_param), (,))
         PRINT_TPC_PARAM(x_offset, (new_param), (,))
         PRINT_TPC_PARAM(y_factor, (new_param), (,))
         PRINT_TPC_PARAM(y_offset, (new_param), ())
 
-        fprintf(stderr, KNRM);
         for(int d: {0,1}) {
             const double slope0 = tpc_param.x_factor[d]; const double offset0 = tpc_param.x_offset[d];
             const double slope1 = new_param.x_factor[d]; const double offset1 = new_param.x_offset[d];
-            WARN("~~~~ [DL%d] This is a relative change of: " BOLD "%.3f%% and %.3f%%\n" KNRM, d,
+            WARN("~~~~ [DL{}] This is a relative change of: {:.3f}% and {:.3f}%\n", d,
                 100*std::abs((slope1-slope0)/slope0), 100*std::abs((offset1 - offset0)/offset0));
         }
         for(int a: {0,1,2,3}) {
             const double slope0 = tpc_param.y_factor[a]; const double offset0 = tpc_param.y_offset[a];
             const double slope1 = new_param.y_factor[a]; const double offset1 = new_param.y_offset[a];
-            WARN("~~~~ [AN%d] This is a relative change of: " BOLD "%.3f%% and %.3f%%\n" KNRM, a,
+            WARN("~~~~ [AN{}] This is a relative change of: {:.3f}% and {:.3f}%\n", a,
                 100*std::abs((slope1-slope0)/slope0), 100*std::abs((offset1 - offset0)/offset0));
         }
     } else {

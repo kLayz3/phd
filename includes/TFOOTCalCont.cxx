@@ -153,8 +153,8 @@ void FOOTGainParam::IsSaneThrowable() const {
 	if(auto it = std::find_if_not(nominal_value.begin(), nominal_value.end(), [](const auto& m) -> bool {
 		return m.Valid();
 	}); it != nominal_value.end())
-		MND_THROW("FOOTGainParam - nominal value entry invalid: %s at position [%td]\n",
-			mnd::streamable(*it).c_str(), std::distance(nominal_value.begin() , it));
+		MND_THROW("FOOTGainParam - nominal value entry invalid: {} at position [{}]\n",
+			*it, std::distance(nominal_value.begin(), it));
 
 	/* There has to be *exact same* amount of total detector nominal measurements,
 	 * and individual ASIC referent measurements. */
@@ -168,23 +168,23 @@ void FOOTGainParam::IsSaneThrowable() const {
 	for(int i=0; i<TFOOTMapCont::N_ASIC; ++i) {
 		const auto& asic = fit[i];
 		if(asic.multi_poly.size() != n_nom)
-			MND_THROW("FOOTGainParam - ASIC[%i] marked bad - since it has "
-				"%zu!=%zu nominal detector measurements. Nominal measurements are: %s",
-				i, asic.multi_poly.size(), n_nom, mnd::streamable(nominal_value).c_str());
+			MND_THROW("FOOTGainParam - ASIC[{}] marked bad - since it has "
+				"{}!={} nominal detector measurements. Nominal measurements are: {}",
+				i, asic.multi_poly.size(), n_nom, nominal_value);
 
 		if(!asic.IsSaneZ())
-			MND_THROW("FOOTGainParam - ASIC[%i] has bad internal Z's : they aren't stricly ascending.", i);
+			MND_THROW("FOOTGainParam - ASIC[{}] has bad internal Z's : they aren't stricly ascending.", i);
 
 		const std::vector<i32> Zs = asic.GetZ();
 		if(Zs != nominalZ)
-			MND_THROW("FOOTGainParam - ASIC[%i] has mismatched Z's compared to nominal detector Z measurements. "
-				"ASIC: %s , nominal: %s.", i, mnd::streamable(Zs).c_str(), mnd::streamable(nominalZ).c_str());
+			MND_THROW("FOOTGainParam - ASIC[{}] has mismatched Z's compared to nominal detector Z measurements. "
+				"ASIC: {} , nominal: {}.", i, Zs, nominalZ);
 
 		for(int n=0; n < TFOOTMapCont::N_STRIPS_PER_ASIC; ++n) {
 			const f64 x = TFOOTMapCont::N_STRIPS_PER_ASIC*i + n + 0.5; // centre of the strip.
 			if(!asic.IsSane(x, evals))
-				MND_THROW("FOOTGainParam - ASIC[%i] has invalid slice at x=%.2f . Measurements are:\n"
-				"Z: %s\nE: %s", i, x, mnd::streamable(Zs).c_str(), mnd::streamable(evals).c_str());
+				MND_THROW("FOOTGainParam - ASIC[{}] has invalid slice at x={:.2f} . Measurements are:\n"
+				"Z: {}\nE: {}", i, x, Zs, evals);
 		}
 	}
 }
@@ -549,30 +549,31 @@ void TFOOTCalCont::Init(TDictInfo info) {
 	constexpr const char* id_key = "ID";
 	auto it = info.find(id_key);
 	if(it == info.end())
-		ERROR("\"%s\" key not found in the info hashmap.", id_key);
+		ERROR("\"{}\" key not found in the info hashmap.", id_key);
 	try {
 		FOOT_N = std::stoi(it->second);
 	} catch(const std::exception& e) {
-		ERROR("For key \"%s\", value found: " EMPH(%s) " but unparsable to integer. Err: %s", id_key, it->second.c_str(), e.what());
+		ERROR("For key \"{}\", value found: {} but unparsable to integer. Err: {}",
+			id_key, styled(it->second, mnd::style::bold_yellow), e.what());
 	}
 
 	it = info.find("Setup");
 	if(it == info.end())
-		ERROR("TFOOTCalCont::Init(): \"Setup\" key not found for info (%s).\n"
-			, mnd::type_name<TDictInfo>().c_str());
+		ERROR("TFOOTCalCont::Init(): \"Setup\" key not found for info ({}).\n",
+			mnd::type_name<TDictInfo>());
 	const std::string& file_name = it->second;
 	json j = ParseJSON(file_name);
 	
 	auto j_it = j.find(Form("FOOT%d", FOOT_N));
 	if(j_it == j.end())
-		ERROR("Trying to set up FOOT[%d] cal, but setup file doesn't contain the key \"FOOT%d\".", FOOT_N, FOOT_N);
+		ERROR("Trying to set up FOOT[{}] cal, but setup file doesn't contain the key \"FOOT{}\".", FOOT_N, FOOT_N);
 	
 	json& jf = j_it.value();
 	UNROLL_JSON_PARAM(par, jf, 9);
 
 	par.de10_index_ = FOOT_N;
 	if(par.N == -1)
-		ERROR("Parsed the setup file fine, but the \"N\" table entry for FOOT%d not found. "
+		ERROR("Parsed the setup file fine, but the \"N\" table entry for FOOT{} not found. "
 			"It is mandatory to label the FOOT's!", FOOT_N);
 	/* Note, if two FOOT's in the setup have identical `.N` field, it will throw a
 	 * wildest RNTuple error 'cause of columns of identical name... */
@@ -580,8 +581,8 @@ void TFOOTCalCont::Init(TDictInfo info) {
 
 	if(should_register_box_) {
 		if(!j.contains("box"))
-			ERROR("Container meant to also register the FOOT box, but inside %s file, \"box\" key not found?",
-				file_name.c_str());
+			ERROR("Container meant to also register the FOOT box, but inside {} file, \"box\" key not found?",
+				file_name);
 		
 		UNROLL_JSON_PARAM(bpar, j["box"], 7);
 		
@@ -590,7 +591,7 @@ void TFOOTCalCont::Init(TDictInfo info) {
 			fs::path pfull = fs::canonical(file_name);
 			full_setup_file_name = pfull.c_str();
 		} catch(std::filesystem::filesystem_error const& e) {
-			ERROR("Fetching full path from: '%s' failed? Reason: %s", file_name.c_str(), e.what());
+			ERROR("Fetching full path from: '{}' failed? Reason: {}", file_name, e.what());
 		}
 	}
 }

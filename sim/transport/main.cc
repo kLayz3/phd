@@ -32,7 +32,6 @@
 #include <cmath>
 #include <fstream>
 #include <filesystem>
-#include <iostream>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -329,7 +328,7 @@ int main(int argc,char** argv) {
 	};
 
 	if(o.check) {
-		std::cout << config.provenance.dump(4) << '\n'; 
+		fmt::println("{}", config.provenance.dump(4));
 		return 0;
 	}
 	

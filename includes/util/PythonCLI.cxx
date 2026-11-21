@@ -32,13 +32,23 @@ std::vector<std::string> split_fields(View text) {
 
 } // namespace
 
+template<>
+struct fmt::formatter<PyInfo::ObjectInfo> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const PyInfo::ObjectInfo& object, Context& ctx) const {
+		return fmt::format_to(ctx.out(), "name: {}; opts: {}", object.name, object.options);
+	}
+};
+
 
 // Uniform adapters handle the different arities and argument types.
 void PyInfo::add_figure_cfg(View kv_cfg) {
 	const auto colon = kv_cfg.find(':');
 	if(colon == View::npos)
-		MND_THROW("parse_figure_cfg(): the string '%.*s' isn't of the form key:value ?",
-			(int)kv_cfg.size(), kv_cfg.data());
+		MND_THROW("parse_figure_cfg(): the string '{}' isn't of the form key:value ?",
+			kv_cfg);
 
 	const View key   = mnd::trim(kv_cfg.substr(0, colon));
 	const View value = kv_cfg.substr(colon + 1);
@@ -50,53 +60,51 @@ void PyInfo::add_figure_cfg(View kv_cfg) {
 	} else if(key == "title") {
 		fig_style.title_ = std::string{value};
 	} else if(key == "save_dpi") {
-		double v = mnd::stof<double>(value).unwrap(mnd::msg(
-			"save_dpi flag value: '%.*s' not parsable to double", (int)value.size(), value.data())
-		);
+		double v = mnd::stof<double>(value).unwrap(fmt::format(
+			"save_dpi flag value: '{}' not parsable to double", value));
 		fig_style.save_dpi_ = Some{v};
 	} else if(key == "figsize") {
 		auto fs = mnd::split_view(value, ',');
 		if(fs.size() != 2)
-			MND_THROW("Found %.*s:%.*s  pair, but rhs cannot be destructured into integer,integer .",
-				(int)key.size(),key.data(), (int)value.size(), value.data());
+			MND_THROW("Found {}:{}  pair, but rhs cannot be destructured into form 'int,int' .",
+				key, value);
 
-		u32 d0 = mnd::stou(fs[0]).unwrap( mnd::msg(
-			"parse_figure_cfg(): '%.*s:%.*s' parsing cannot parse 1st arg: '%.*s' as integer.",
-			 (int)key.size(),key.data(), (int)value.size(), value.data(), (int)fs[0].size(), fs[0].data())
+		u32 d0 = mnd::stou(fs[0]).unwrap( fmt::format(
+			"parse_figure_cfg(): '{}:{}' parsing cannot parse 1st arg: '{}' as integer.",
+			 key, value, fs[0])
 		);
-		u32 d1 = mnd::stou(fs[1]).unwrap( mnd::msg(
-			"parse_figure_cfg(): '%.*s:%.*s' parsing cannot parse 2nd arg: '%.*s' as integer.",
-			(int)key.size(),key.data(), (int)value.size(), value.data(), (int)fs[1].size(), fs[1].data())
+		u32 d1 = mnd::stou(fs[1]).unwrap( fmt::format(
+			"parse_figure_cfg(): '{}:{}' parsing cannot parse 2nd arg: '{}' as integer.",
+			key, value, fs[1])
 		);
 
 		fig_style.figsize_ = Some{ std::pair<u32,u32>{d0,d1} };
 	} else if(key == "xlim" || key == "ylim") {
 		auto fs = mnd::split_view(value, ',');
 		if(fs.size() != 2)
-			MND_THROW("Found %.*s:%.*s  pair, but rhs cannot be destructured into double,double .",
-				(int)key.size(),key.data(), (int)value.size(), value.data()
-			);
+			MND_THROW("Found {}:{}  pair, but rhs cannot be destructured into double,double .",
+				key, value);
 
-		double d0 = mnd::stof<double>(fs[0]).unwrap( mnd::msg(
-			"parse_figure_cfg(): '%.*s:%.*s' parsing cannot parse 1st arg: '%.*s' as double.",
-				(int)key.size(),key.data(), (int)value.size(), value.data(), (int)fs[0].size(), fs[0].data())
+		double d0 = mnd::stof<double>(fs[0]).unwrap( fmt::format(
+			"parse_figure_cfg(): '{}:{}' parsing cannot parse 1st arg: '{}' as double.",
+				key, value, fs[0])
 			);
-		double d1 = mnd::stof<double>(fs[1]).unwrap( mnd::msg(
-			"parse_figure_cfg(): '%.*s:%.*s' parsing cannot parse 2nd arg: '%.*s' as double.",
-				(int)key.size(),key.data(), (int)value.size(), value.data(), (int)fs[1].size(), fs[1].data())
+		double d1 = mnd::stof<double>(fs[1]).unwrap( fmt::format(
+			"parse_figure_cfg(): '{}:{}' parsing cannot parse 2nd arg: '{}' as double.",
+				key, value, fs[1])
 			);
 
 		if(key == "xlim")
 			fig_style.xlim_ = Some{ std::pair<double,double>{d0,d1} };
-		else 
+		else
 			fig_style.ylim_ = Some{ std::pair<double,double>{d0,d1} };
 	}
 	else if(key == "logx" || key == "logy" || key == "logz"
 		|| key == "enable_right_top_spline" || key == "legend" || key == "grid") {
 		bool b = false;
 		if(!mnd::parse(value, b))
-			MND_THROW("parse_figure_cfg(): '%.*s:%.*s', rhs not parsable to a boolean.",
-				(int)key.size(),key.data(), (int)value.size(), value.data());
+			MND_THROW("parse_figure_cfg(): '{}:{}', rhs not parsable to a boolean.",
+				key, value);
 
 		if(key == "logx")      fig_style.logx_ = b;
 		else if(key == "logy") fig_style.logy_ = b;
@@ -107,16 +115,16 @@ void PyInfo::add_figure_cfg(View kv_cfg) {
 		else MND_THROW("should have been unreachable?");
 	}
 	else {
-		MND_THROW("unknown figure key? Parsed 'key:value' as ...  '%.*s':'%.*s'",
-			(int)key.size(),key.data(), (int)value.size(), value.data());
+		MND_THROW("unknown figure key? Parsed 'key':'value' as ...  '{}':'{}'",
+			key, value);
 	}
 }
 
 void PyInfo::ObjectInfo::add_object_cfg(View kv_cfg) {
 	const auto colon = kv_cfg.find(':');
 	if(colon == View::npos)
-		MND_THROW("add_object_cfg(): the string '%.*s' isn't of the form key:value ?",
-			(int)kv_cfg.size(), kv_cfg.data());
+		MND_THROW("add_object_cfg(): the string '{}' isn't of the form key:value ?",
+			kv_cfg);
 
 	const View key   = mnd::trim(kv_cfg.substr(0, colon));
 	const View value = kv_cfg.substr(colon + 1);
@@ -183,16 +191,9 @@ std::istream& mnd::plot::operator>>(std::istream& in, PyInfo& info) {
 	return in;
 }
 
-std::ostream& mnd::plot::operator<<(std::ostream& out, const PyInfo::ObjectInfo& o) {
-	using mnd::fmt::operator<<;
-	return out << "name: " << o.name << "; opts: " << o.options;
-}
-
 std::ostream& mnd::plot::operator<<(std::ostream& out, const PyInfo& info) {
-	using mnd::fmt::operator<<;
-
 	out << "PyInfo{ objects: ";
-	out << info.objects;
+	out << fmt::format("{}", info.objects);
 
 	const auto& f = info.fig_style;
 	out << ", figure: {xlabel:" << std::quoted(f.xlabel_)

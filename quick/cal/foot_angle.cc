@@ -21,7 +21,17 @@ struct foot_enc {
 	double dxy;
 	Orientation o;
 };
-std::ostream& operator<<(std::ostream& , const foot_enc& );
+template<>
+struct fmt::formatter<foot_enc> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const foot_enc& foot, Context& ctx) const {
+		return fmt::format_to(ctx.out(), "z: {}, p: {}, a: {}, ({})", foot.z,
+			foot.p ? fmt::format("{}mm", foot.p->delta_p) : "NULL",
+			foot.p ? fmt::format("{}º", foot.p->delta_a) : "NULL", magic_enum::enum_name(foot.o));
+	}
+};
 
 int main(int argc, char* argv[]) {
 	CLI::App app{"\
@@ -77,7 +87,7 @@ particle tracks to match with other detectors in the sequence. "};
 		WARN("To continue, must supply a valid file name!\n"); return 0;
 	}
 	if(Npts < 10)
-		ERROR("Supply at least 10 points (-N,--npts). Is currently %zu.", Npts);
+		ERROR("Supply at least 10 points (-N,--npts). Is currently {}.", Npts);
 	
 	TApplication rootApp("app", 0, 0);
 
@@ -96,14 +106,14 @@ particle tracks to match with other detectors in the sequence. "};
 			rfoot[i].dxy = rfoot[i].p->delta_p;
 			
 			Orientation o = rfoot[i].p->GetOrientation();
-			if(o == Orientation::UNKNOWN) ERROR("Referent FOOT%u orientation not specified. I won't allow it.\n", i);
+			if(o == Orientation::UNKNOWN) ERROR("Referent FOOT{} orientation not specified. I won't allow it.\n", i);
 			rfoot[i].o = o;
 		}
         get_obj(f, foot.p, Form("FOOT%u_setup", ifoot));
         foot.z = box->GetFOOTZRel( foot.p );
 
         Orientation o = foot.p->GetOrientation();
-        if(o == Orientation::UNKNOWN) ERROR("To-calibrate FOOT%d orientation not specified. I won't allow it.\n", ifoot);
+        if(o == Orientation::UNKNOWN) ERROR("To-calibrate FOOT{} orientation not specified. I won't allow it.\n", ifoot);
         foot.o = o;
 	}
 	double z0 = foot.z;
@@ -113,10 +123,10 @@ particle tracks to match with other detectors in the sequence. "};
 	 * There *must* be two X- and two Y-measuring detectors. */
 	if(std::accumulate(std::begin(rfoot), std::end(rfoot), 0, [](int s, const auto& ref) {
 		return s + (int)(ref.o == Orientation::X); }) != 2)
-		ERROR("Expected %u X-measuring FOOTs in the %u referent pairs?", N_REF_PAIRS, N_REF_PAIRS);
+		ERROR("Expected {} X-measuring FOOTs in the {} referent pairs?", N_REF_PAIRS, N_REF_PAIRS);
 	if(std::accumulate(std::begin(rfoot), std::end(rfoot), 0, [](int s, const auto& ref) {
 		return s + (int)(ref.o == Orientation::Y); }) != 2)
-		ERROR("Expected %u Y-measuring FOOTs in the %u referent pairs?", N_REF_PAIRS, N_REF_PAIRS);
+		ERROR("Expected {} Y-measuring FOOTs in the {} referent pairs?", N_REF_PAIRS, N_REF_PAIRS);
 
 	/* Reason these two enums are separate,
 	 * is so that the fitting library doesn't tag along any of the ROOT dependency. */
@@ -126,27 +136,21 @@ particle tracks to match with other detectors in the sequence. "};
 	
     WARN("Referent FOOT detectors given as:\n" );
 	for(u32 i=0; i<N_REF_DET; ++i) {
-        std::cerr << rfoot[i] << "\n";
+        fmt::println(stderr, "{}", rfoot[i]);
     }
 	
-	WARN("Wanted detector heuristically identified:\n" BOLD
-		">> FOOT%d\n"
-		">> DE10: %d\n"
-		">> Measuring: \'%s\'\n"
-		">> Inputted offset along measurement axis: %.2f mm\n"
-		">> Z: %.4f\n" KNRM,
-		foot.p->N,
-		foot.p->de10_index_,
-		foot.p->orientation.c_str(),
-		foot.p->delta_p,
-        foot.z
-	); {
+	WARN("Wanted detector heuristically identified:\n{}", styled(fmt::format(
+		">> FOOT{}\n"
+		">> DE10: {}\n"
+		">> Measuring: '{}'\n"
+		">> Inputted offset along measurement axis: {:.2f} mm\n"
+		">> Z: {:.4f}\n",
+		foot.p->N, foot.p->de10_index_, foot.p->orientation, foot.p->delta_p, foot.z
+	), fmt::emphasis::bold)); {
 		nlohmann::json j;
 		j["delta_p"] = foot.p->delta_p;
 		j["delta_a"] = foot.p->delta_a;
-		std::cerr << "Before:\n" << MND_RGB_COL(201,129,255)
-			<< Form("\"FOOT%u\": ", foot.p->de10_index_)
-			<< j.dump(4) << KNRM << std::endl;
+		fmt::println(stderr, "Before:\n{}", styled(fmt::format("\"FOOT{}\": {}", foot.p->de10_index_, j.dump(4)), fg(0xC981FF_rgb)));
 	}
 
 	/* The normal-line: (x0,ax,y0,ay) converts to the measurement u|v as:
@@ -167,8 +171,8 @@ particle tracks to match with other detectors in the sequence. "};
 	}
 	const auto qr = A.colPivHouseholderQr();
 	if(qr.rank() < 4)
-		ERROR("QR decomposition did not produce rank() >= 4. The referent FOOT part was:\n%s",
-			mnd::streamable(rfoot).c_str());
+		ERROR("QR decomposition did not produce rank() >= 4. The referent FOOT part was:\n{}",
+			rfoot);
 
 	auto* h1_sci21 = new TH1P("SCI21 QDC mean [QDC units]", 0xCB00CB_c, 500, 300, 4000);
 	auto* h1_sci22 = new TH1P("SCI22 QDC mean [QDC units]", 0x0070DD_c, 500, 300, 4000);
@@ -197,7 +201,7 @@ particle tracks to match with other detectors in the sequence. "};
 
 	/* Optimally Npts has to be at least 3 times less than nentries */
 	if(4*Npts > nentries) {
-		WARN("4x Npts > nentries ; (4x %zu > %zu). Will trim -N,--npts to %zu",
+		WARN("4x Npts > nentries ; (4x {} > {}). Will trim -N,--npts to {}",
 			Npts, nentries, nentries/4);
 		Npts = nentries/4;
 	}
@@ -313,8 +317,8 @@ particle tracks to match with other detectors in the sequence. "};
 
 			static int count = 0;
 			double deg = angle * 180 / M_PI;
-			WARN("#%2d, phi = %.3f° ; gamma = %.3f;"
-				"   a=%.4f, b=%.4f, a^2+b^2 = %.4f;\n",
+			WARN("#{:2}, phi = {:.3f}° ; gamma = {:.3f};"
+				"   a={:.4f}, b={:.4f}, a^2+b^2 = {:.4f};\n",
 				++count, deg, offset, r.t.a, r.t.b, scale_factor);
 			
 			result_a.push_back(deg);
@@ -333,16 +337,14 @@ particle tracks to match with other detectors in the sequence. "};
 
 	/* p is what the fit gives, but this is the offset, so detector is placed at -mean */
 	final_p.mean *= -1;
-	std::cout << "\n========== TO BE WRITTEN INTO PARAM FILE =======" BOLD "\n"
-		<< "Avg deg: " << final_a << "°\n"
-		<< "Avg off: " << final_p << " mm\n"
-        << Form("Scale factor (%u): ", ifoot) << final_s << KNRM "\n";
-    nlohmann::json j;
-    j["delta_p"] = final_p.mean;
-    j["delta_a"] = final_a.mean;
-    std::cerr << MND_RGB_BOLD_COL(207,255,182)
-		<< Form("\"FOOT%u\": ", foot.p->de10_index_) << j.dump(4) 
-		<< KNRM << std::endl;
+	fmt::println("\n========== TO BE WRITTEN INTO PARAM FILE =======\n{}",
+		styled(fmt::format("Avg deg: {}°\nAvg off: {} mm\nScale factor ({}): {}", final_a, final_p, ifoot, final_s),
+			fmt::emphasis::bold));
+	nlohmann::json j;
+	j["delta_p"] = final_p.mean;
+	j["delta_a"] = final_a.mean;
+	fmt::println(stderr, "{}", styled(fmt::format("\"FOOT{}\": {}", foot.p->de10_index_, j.dump(4)),
+		fg(0xCFFFB6_rgb) | fmt::emphasis::bold));
 
     if(!no_draw) {
         TCanvas* cs = new TCanvas("SCIs&Refs", "SCI21,22,31; FOOT Ref", 2150, 1400);
@@ -376,13 +378,4 @@ particle tracks to match with other detectors in the sequence. "};
         rootApp.Run();
     }
     return 0;
-}
-
-std::ostream& operator<<(std::ostream& os, const foot_enc& foot) {
-    return os 
-		<< "z: " << foot.z
-		<< "p: " << (foot.p ? mnd::ftos(foot.p->delta_p) + "mm" : "NULL")
-		<< "a: " << (foot.p ? mnd::ftos(foot.p->delta_a) + "º" : "NULL")
-		<< ", (" << magic_enum::enum_name(foot.o) << ')'
-		<< " ";
 }

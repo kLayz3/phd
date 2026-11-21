@@ -19,7 +19,7 @@ struct TFRSCalProc : TProcessor <
 #ifdef TFRSCALPROC_VERBOSE_
 	inline static u64 called_ = 0;
 	inline static u64 errors_ = 0;
-	~TFRSCalProc() { WARN("N_ERRORS: " EMPH1(%lu\n), errors_); }
+	~TFRSCalProc() { WARN("N_ERRORS: {}\n", styled(errors_, mnd::style::bold_yellow)); }
 #endif
 
 	constexpr static auto N_VALID_TPC = RNFRSCal::N_VALID_TPC;

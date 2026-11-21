@@ -29,9 +29,6 @@ struct Q {
 	inline bool HasValue() const noexcept { return std::isfinite(qx); }
 	inline explicit operator bool() const noexcept { return HasValue(); }
 
-	friend std::ostream& operator<<(std::ostream& os, const Q& rhs) {
-		return os << rhs.mean() << "±" << rhs.s();
-	}
 };
 static_assert(sizeof(Q) == 2*sizeof(f32));
 
@@ -62,10 +59,6 @@ struct Data {
 	inline xy_underlying_type Y() const noexcept { return pos(1); }
 };
 static_assert(std::is_aggregate_v<Data> && sizeof(Data) == 32);
-
-inline std::ostream& operator<<(std::ostream& os, const Data& d) {
-	return os << '(' << d.pos.transpose() << "; " << d.q << ')';
-}
 
 struct Cached {
 	template<typename> friend struct ::HitMatrix;
@@ -180,9 +173,9 @@ public:
 	Entry const& operator()(ActiveIndex i, ActiveIndex j) const noexcept {
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(i >= static_cast<ActiveIndex>(GetN<X>()))
-			ERROR("HitMatrix::operator(i,j): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<X>());
+			ERROR("HitMatrix::operator(i,j): Requested x-index {} out of bounds ({})", static_cast<u32>(i), GetN<X>());
 		if(j >= static_cast<ActiveIndex>(GetN<Y>()))
-			ERROR("HitMatrix::operator(i,j): Requested y-index %u out of bounds (%zu)", static_cast<u32>(j), GetN<Y>());
+			ERROR("HitMatrix::operator(i,j): Requested y-index {} out of bounds ({})", static_cast<u32>(j), GetN<Y>());
 #endif
 
 		auto& slot = cache(i,j);
@@ -218,7 +211,7 @@ public:
 	bool is_poisoned(ActiveIndex i, ActiveIndex j) const noexcept {
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(i >= static_cast<ActiveIndex>(GetN<X>()) or j > static_cast<ActiveIndex>(GetN<Y>())) {
-			ERROR("HitMatrix::is_poisoned(): Requested %s-index %d/%d out of bounds (%zu/%zu)",
+			ERROR("HitMatrix::is_poisoned(): Requested {}-index {}/{} out of bounds ({}/{})",
 				"X/Y", i, j, GetN<X>(), GetN<Y>() );
 		}
 #endif
@@ -233,7 +226,7 @@ public:
 
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(i >= static_cast<ActiveIndex>(nx) or j >= static_cast<ActiveIndex>(ny)) {
-			ERROR("HitMatrix::poison(): Requested %s-index %d/%d out of bounds (%zu/%zu)",
+			ERROR("HitMatrix::poison(): Requested {}-index {}/{} out of bounds ({}/{})",
 				"X/Y", i, j, nx, ny);
 		}
 #endif
@@ -287,55 +280,31 @@ public:
 	RawHitPairRef GetRaw(ActiveIndex i, ActiveIndex j) const noexcept {
 #if defined(MND_HITMATRIX_DO_BOUNDS_CHECK)
 		if(i >= static_cast<ActiveIndex>(GetN<X>()))
-			ERROR("HitMatrix::GetRaw(i,j): Requested x-index %u out of bounds (%zu)", static_cast<u32>(i), GetN<X>());
+			ERROR("HitMatrix::GetRaw(i,j): Requested x-index {} out of bounds ({})", static_cast<u32>(i), GetN<X>());
 		if(j >= static_cast<ActiveIndex>(GetN<Y>()))
-			ERROR("HitMatrix::GetRaw(i,j): Requested y-index %u out of bounds (%zu)", static_cast<u32>(j), GetN<Y>());
+			ERROR("HitMatrix::GetRaw(i,j): Requested y-index {} out of bounds ({})", static_cast<u32>(j), GetN<Y>());
 #endif
 		return { &p->x[i], &p->y[j] };
 	}
 	
-	friend std::ostream& operator<<(std::ostream& os, const HitMatrix& hm) {
-		constexpr size_t X = HitMatrix<FOOTPair>::X;
-		constexpr size_t Y = HitMatrix<FOOTPair>::Y;
-
-		const size_t nx =  hm.template GetN<X>();
-		const size_t ny =  hm.template GetN<Y>();
-
-		os << KBH_YEL
-		   << " --- == |Y| ==> " << KNRM;
-		for(size_t j=0; j < ny; ++j) {
-			os << hm.p->y[j] << hm.template GetPoisonLabel<Y>(j);
-			if(nx > 0)
-			if(j != hm.template GetN<Y>()-1)
-				os << ", ";
-		}	
-		os << std::endl << KBH_YEL
-		   << " --- vv |X| vvv";
-		for(size_t i=0; i < nx; ++i) {
-			os << '\n' << hm.p->x[i] << hm.template GetPoisonLabel<X>(i);
-		}
-		os << KBH_YEL << " -----END---- " << KNRM;
-		return os;
-	}
-
 private:
 	const FOOTPair* p; /* Reassigned, event-by-event. */
 	mutable Cached cache;
 	
-	template<size_t L>
-	inline const char* GetPoisonLabel(ActiveIndex i) const {
-		if      constexpr(L == X) {
-			return (GetN<!L>() > 0)? (cache(i,0).is_poisoned()? "🐍": (cache(i,0).has_value()? "✅": "❓")): "";
-		}
-		else if constexpr(L == Y) {
-			return (GetN<!L>() > 0)? (cache(0,i).is_poisoned()? "🐍": (cache(0,i).has_value()? "✅": "❓")): "";
-		}
-		else static_assert(L == X || L == Y, "Axis parameter supplied must be 'X' or 'Y' (or 0,1) respectively.");	
-	}
 }; // struct HitMatrix
 
 struct RNFOOTPair;
 struct FOOTHit;
-//extern template struct HitMatrix<RNFOOTPair>;
+// extern template struct HitMatrix<RNFOOTPair>;
+
+template<>
+struct fmt::formatter<mnd::hm::Q> : fmt::formatter<double> {
+	template<typename Context>
+	auto format(const mnd::hm::Q& q, Context& ctx) const {
+		auto out = fmt::formatter<double>::format(q.mean(), ctx);
+		ctx.advance_to(fmt::format_to(out, "±"));
+		return fmt::formatter<double>::format(q.s(), ctx);
+	}
+};
 
 /* No implementation file. The type is instantiated in the TFOOTHitProc.cxx. */

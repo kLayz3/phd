@@ -23,7 +23,7 @@ class TH2I;
 #	ifndef MND_HITMATRIX_DO_BOUNDS_CHECK
 #		define MND_HITMATRIX_DO_BOUNDS_CHECK
 #	endif
-#   pragma message(MND_FILE_LINE_STR " => FOOT Hit Step Debugging Features Enabled!")
+#	pragma message("FOOT Hit Step Debugging Features Enabled!")
 #endif
 
 #include "util/HitMatrix.hxx"
@@ -89,7 +89,17 @@ struct FOOTHit {
 #ifndef MND_FOOTTRACK_DEBUG
 static_assert(sizeof(FOOTHit) == 32, "Alignment obsession, friends.");
 #endif
-std::ostream& operator<<(std::ostream& , const FOOTHit& ) noexcept;
+template<>
+struct fmt::formatter<FOOTHit> {
+	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+	template<typename Context>
+	auto format(const FOOTHit& hit, Context& ctx) const {
+		return fmt::format_to(ctx.out(), "({:.2f},{},{:5.1f})",
+			styled(hit.Q.q, mnd::style::bold_cyan), hit.Q.fCM,
+			styled(hit.m, mnd::style::bold_red));
+	}
+};
 
 struct RNFOOTPair {
 	std::vector<FOOTHit> x;

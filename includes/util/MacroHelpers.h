@@ -56,7 +56,7 @@ void get_obj(F&& fhandle, P& var, const char* label) {
 		var = f->Get<T>(label);
 	}
 
-	if(!var) ERROR("get_obj(): cannot extract object: '%s'\n", label);
+	if(!var) ERROR("get_obj(): cannot extract object: '{}'\n", label);
 }
 template<typename T, typename F>
 std::unique_ptr<T> get_obj(F&& fhandle, const char* label) {
@@ -75,7 +75,7 @@ std::unique_ptr<T> get_obj(F&& fhandle, const char* label) {
 		var = f->Get<T>(label);
 	}
 
-	if(!var) ERROR("get_obj(): cannot extract object: '%s'\n", label);
+	if(!var) ERROR("get_obj(): cannot extract object: '{}'\n", label);
 	return std::unique_ptr<T>{var};
 }
 
@@ -135,7 +135,7 @@ void save_all (
 	try {
 		std::filesystem::create_directories(p);
 	} catch(const std::filesystem::filesystem_error& e) {
-		WARN("canvas::save_all : Error in creating directories: \'%s\', err: %s\n", p.c_str(), e.what());
+		WARN("canvas::save_all : Error in creating directories: \'{}\', err: {}\n", p.string(), e.what());
 		return;
 	}
 
@@ -145,7 +145,7 @@ void save_all (
 			cs.push_back(c);
 	}
 	if(cs.empty()) return;
-	WARN("Will stash %zu canvases as *.%s in path: \'%s\'\n", cs.size(), ext, p.c_str());
+	WARN("Will stash {} canvases as *.{} in path: '{}'\n", cs.size(), ext, p.string());
 
 	if(extension == Extension::root)
 		TColor::DefinedColors(1); // Save color table with the canvas object(s)
@@ -161,9 +161,8 @@ void save_all (
 		if(extension == Extension::png) {
 			auto img = std::unique_ptr<TImage>{TImage::Create()};
 			if(!img) {
-				WARN("canvas::save_all: TImage::Create() failed for Canvas: '%s' (title: '%s'). "
-					"You can directly extract from the PDF: %spdftoppm -png -cropbox -r 300 all.pdf canvas%s\n",
-					c->GetName(), c->GetTitle(), BOLD, KNRM);
+				WARN("canvas::save_all: TImage::Create() failed for Canvas: '{}' (title: '{}'). You can directly extract from the PDF: {}\n",
+					c->GetName(), c->GetTitle(), styled("pdftoppm -png -cropbox -r 300 all.pdf canvas", fmt::emphasis::bold));
 				continue;
 			}
 			img->FromPad(c);

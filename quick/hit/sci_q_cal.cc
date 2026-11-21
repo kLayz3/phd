@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 		->delimiter(',')
 		->check(CLI::ReadPermissions);
 	add_logged_option(app, "-i,--sci", i_sci,
-        mnd::msg("Scintillator index; %u => SCI21, %u => SCI22, %u => SCI31, %u => SCI41",
+        fmt::format("Scintillator index; {} => SCI21, {} => SCI22, {} => SCI31, {} => SCI41",
             SCI21_I, SCI22_I, SCI31_I, SCI41_I))
         ->check(CLI::IsMember(
 			{SCI21_I, SCI22_I, SCI31_I, SCI41_I}
@@ -89,8 +89,8 @@ int main(int argc, char* argv[]) {
 	const SCIDEIntoQConverter& cvt_first = par.qdc;
 	
 	if(cvt_first.IsDefaulted())
-		ERROR("Tried to reach for the charge converter, but the initial file labelled '%s' has the defaulted converter?\n"
-			"Full parameter is: %s\n", fileNames.front().c_str(), mnd::streamable(par).c_str());
+		ERROR("Tried to reach for the charge converter, but the initial file labelled '{}' has the defaulted converter?\n"
+			"Full parameter is: {}\n", fileNames.front(), par);
 
 	/* Should be common for all the files.. If not, something is very bad. */
 	FRSToFSingle const* const tof_p =
@@ -100,10 +100,10 @@ int main(int argc, char* argv[]) {
 		: nullptr;
 
 	if(!tof_p)
-		WARN("ToF parameter is nullptr, that's fine. Will not do β-correction for SCI%s in this case.\n", label[i_sci]);
+		WARN("ToF parameter is nullptr, that's fine. Will not do β-correction for SCI{} in this case.\n", label[i_sci]);
 
 	std::unique_ptr<phy::Nucleus> sec_nuc = beam_param->SecondaryIon();
-	WARN("Secondary nucleus identified as: %s\n",
+	WARN("Secondary nucleus identified as: {}\n",
 		sec_nuc->chem_to_string().c_str());
 
 	const double brho = beam_param->BrhoAt(i_sci);
@@ -150,8 +150,8 @@ int main(int argc, char* argv[]) {
 	auto h1_sci_a_c = TH1P{Form("((h1_cut))SCI%s QDC #beta-corrected avg [QDC units]@w/ FOOT selection", label[i_sci]),
 		0x005B0F_c, bin[0], bin[1], bin[2]};
 
-	WARN("SCI%s: ToF parameter identified as: %s\n", label[i_sci],
-		tof_p ? mnd::streamable(*tof_p).c_str() : "nullptr");
+	WARN("SCI{}: ToF parameter identified as: {}\n", label[i_sci],
+		tof_p ? fmt::format("{}", *tof_p) : "nullptr");
 	
 	ROOT::EnableThreadSafety();
 	TApplication rootApp("app", 0, 0);
@@ -173,11 +173,11 @@ int main(int argc, char* argv[]) {
 		
 		/* Compare the two converters. They ought to be the same.. */
 		if(cvt.IsDefaulted() || cvt != cvt_first)
-			ERROR("Inside file: '%s', fetched a converter. \n"
-				"      It is: %s\n"
-				"Initial cvt: %s\n"
-				"They are either not equal cvt, or it is invalid. Either way, not allowed!",
-				fname.c_str(), mnd::streamable(cvt).c_str(), mnd::streamable(cvt_first).c_str());
+			ERROR("Inside file: '{}', fetched a converter. \n"
+				"Current cvt: {}\n"
+				"Initial cvt: {}\n"
+				"They are either not equal, or one of them is invalid. Either way, not allowed!",
+				fname, styled(cvt, fg(0xE8A6FF_rgb)), styled(cvt_first, fg(0xB0FFA6_rgb)));
 
 		auto model = RNTupleModel::Create();
 
@@ -196,7 +196,7 @@ int main(int argc, char* argv[]) {
 			option::Lead{">"},
 			option::Remainder{" "},
 			option::End{"]"},
-			option::PostfixText{mnd::msg("%zu/%zu: %zu (%s)", i+1, fileNames.size(), nentries, fname.c_str())},
+			option::PostfixText{fmt::format("{}/{}: {:L} ({})", i+1, fileNames.size(), nentries, fname)},
 			option::ForegroundColor{ indicators::next_col() },
 			option::ShowPercentage{true},
 			option::ShowElapsedTime{true},

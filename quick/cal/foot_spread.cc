@@ -116,14 +116,14 @@ int main(int argc, char* argv[]) {
 			option::Lead{"~"},
 			option::Remainder{" "},
 			option::End{"]"},
-			option::PostfixText{mnd::msg("Analysis (per event: %s)", fname.c_str())},
+			option::PostfixText{fmt::format("Analysis (per event: {})", fname)},
 			option::ForegroundColor{Color::green},
 			option::ShowPercentage{true},
 			option::ShowElapsedTime{true},
 			option::ShowRemainingTime{true},
 			option::FontStyles{std::vector<FontStyle>{FontStyle::bold}}
 		};
-		WARN("Proceeding with file [%zu/%zu]: \'%s\'. Entries: [%'zu]\n", i+1, fileName.size(), fname.c_str(), nentries);
+		WARN("Proceeding with file [{}/{}]: \'{}\'. Entries: [{:L}]\n", i+1, fileName.size(), fname, nentries);
 		
 		for(size_t entryId{0}; entryId < nentries; ++entryId ) {
 			mnd::PrintProgress(bar, entryId, nentries, 1000);
@@ -207,7 +207,8 @@ int main(int argc, char* argv[]) {
 	f->SetBit(TF1::kNotGlobal);
 
 	(*foot_pos)->Fit(f, "RMN");
-	WARN("Result to be put in setup file: " BOLD "\"delta_p\": %.5f\n" KNRM, -f->GetParameter("mu"));
+	WARN("Result to be put in setup file: {}\n",
+		styled(fmt::format("\"delta_p\": {:.5f}", -f->GetParameter("mu")), fmt::emphasis::bold));
 	TCanvas* c = new TCanvas("FOOT", Form("FOOT%d calibration position plots", ifoot), 2150,1400);
 	c->Divide(2,2);
 	c->cd(1); foot_q_vs_d->Draw("COLZ"); gPad->SetLogz();
@@ -235,5 +236,5 @@ std::istream& operator>>(std::istream& in, Dead& out) {
 	return ::mnd::template operator>> <','>(in, out.val);
 }
 std::ostream& operator<<(std::ostream& os, const Dead& out) {
-	return os << out.val;
+	return os << fmt::format("{}", out.val);
 }

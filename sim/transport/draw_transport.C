@@ -1,13 +1,11 @@
-#include "../../includes/monad/accessories/typedefs.hxx"
-#include "../../includes/monad/accessories/meta.hxx"
-#include "../../includes/util/FromChars.cxx"
+#include "../../includes/monad/accessories/formatting.hxx"
 
 #include <TCanvas.h>
 #include <TFile.h>
 #include <TH1.h>
 #include <TTree.h>
 #include <TVirtualPad.h>
-#include <cstddef>
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -19,11 +17,11 @@ constexpr auto nil = std::nullopt;
 void draw_transport(const char* filename = "foot_transport.root", const char* pdf = "") {
 	std::unique_ptr<TFile> file{TFile::Open(filename, "READ")};
 	if(!file || file->IsZombie()) {
-		ERROR("Cannot open %s", filename);
+		ERROR("Cannot open {}", filename);
 	}
 	auto* tree = file->Get<TTree>("crossings");
 	if(!tree || tree->GetEntries() == 0) {
-		ERROR("Missing or empty crossings tree in %s", filename);
+		ERROR("Missing or empty crossings tree in {}", filename);
 	}
 	static u32 counter = 0;
 	auto draw = [&](const std::string& expression, const std::string& cut,
@@ -38,31 +36,31 @@ void draw_transport(const char* filename = "foot_transport.root", const char* pd
 		std::string draw_expr = expression + ">>" + name;
 		draw_expr += "(";
 		if(nbinsx.has_value()) {
-			draw_expr += mnd::utos(nbinsx.value());
+			draw_expr += fmt::to_string(*nbinsx);
 		}
 		if(xrange.has_value()) {
 			if(!nbinsx.has_value())
 				ERROR("Must give also nbinsx, hello?");
-			draw_expr += "," + mnd::ftos(xrange.value()[0], 6) + "," + mnd::ftos(xrange.value()[1], 6);
+			draw_expr += fmt::format(",{:.6f},{:.6f}", (*xrange)[0], (*xrange)[1]);
 		}
 		if(two_dimensional) {
 			if(nbinsy.has_value()) {
 				if(!nbinsx.has_value() or !xrange.has_value()) /* In this case, x ranges must also be given! */
 					ERROR("Wanting to pass in nbinsy, but nbinsx/xrange not fully quantified.");
-				draw_expr += "," + mnd::utos(nbinsy.value());
+				draw_expr += fmt::format(",{}", *nbinsy);
 			}
 			if(yrange.has_value()) {
 				if(!nbinsy.has_value())
 					ERROR("Must give also nbinsy, hello?");
-				draw_expr += "," + mnd::ftos(xrange.value()[0], 6) + "," + mnd::ftos(xrange.value()[1], 6);
+				draw_expr += fmt::format(",{:.6f},{:.6f}", (*xrange)[0], (*xrange)[1]);
 			}
 		}
 		draw_expr += ")";
 		if(tree->Draw(draw_expr.c_str(), cut.c_str(), "goff") < 0) {
-			ERROR("Cannot plot %s", expression.c_str());
+			ERROR("Cannot plot {}", expression);
 		}
 		std::unique_ptr<TH1> h{tree->GetHistogram()};
-		if(!h) ERROR("Cannot retrieve histogram for %s", expression.c_str());
+		if(!h) ERROR("Cannot retrieve histogram for {}", expression);
 		h->SetDirectory(nullptr);
 		h->SetTitle(title.c_str());
 		h->SetFillColor(kRed+2);
@@ -131,12 +129,11 @@ void draw_transport(const char* filename = "foot_transport.root", const char* pd
 	}
 
 	if(pdf && *pdf) {
-		WARN("Dumping the canvases into a pdf: '%s'", pdf);
+		WARN("Dumping the canvases into a pdf: '{}'", pdf);
 		overview->Print((std::string(pdf)+"[").c_str());
 		for(auto* c: canvases) c->Print(pdf);
 		overview->Print((std::string(pdf)+"]").c_str());
 	}
 
-	WARN("%lld generated particles. Positions include transport but no detector smearing.\n",
-		static_cast<long long>(tree->GetEntries()));
+	WARN("{} generated particles. Positions include transport but no detector smearing.\n", tree->GetEntries());
 }

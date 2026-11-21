@@ -18,14 +18,6 @@ static FOOTBoxParam _box {};
 
 double g_expert_target_z {};
 
-std::ostream& operator<<(std::ostream& os, const FOOTHit& rhs) noexcept {
-	os << mnd::msg("(%s%.2f%s,%d,%s%5.1f%s)",
-		KBH_CYN, rhs.Q.q, KNRM,
-		rhs.Q.fCM,
-		KBH_RED, rhs.m, KNRM);
-	return os;
-}
-
 bool RNFOOTPair::HasDataX() const noexcept {
     return mnd::get_bit<_DATA_PRESENT_BITINDEX>(zx);
 }
@@ -150,7 +142,7 @@ tg_from_stg(const STrackingGeometry& stg) {
 			parameters.first.compute(matrix);
 			parameters.second = offsets;
 			if(parameters.first.rank() != 4)
-				ERROR("tg_from_stg(): rank() !=4 for mask %#08x.", mask);
+				ERROR("tg_from_stg(): rank() !=4 for mask {:#08x}.", mask);
 		}
 	});
 
@@ -170,13 +162,13 @@ std::unique_ptr<
 void TFOOTHitCont::Init(TDictInfo info) {
 	auto it = info.find("Setup");
 	if(it == info.end())
-		ERROR("Setup key not found for info (%s) passed to TFOOTHitCont.\n", mnd::type_name<TDictInfo>().c_str());
+		ERROR("Setup key not found for info ({}) passed to TFOOTHitCont.\n", mnd::type_name<TDictInfo>());
 	const std::string& file_name = it->second;
 	
 	setup = ParseJSON(file_name);
 	setup["file_name"] = file_name;
 	
-	if(!setup.contains("box")) ERROR("'box' key not found in JSON file: %s\n", file_name.c_str());
+	if(!setup.contains("box")) ERROR("'box' key not found in JSON file: {}\n", file_name);
 	UNROLL_JSON_PARAM(_box, setup["box"], 7);
 
 	/* Single global to be shipped over to TFRSHitProc */
@@ -193,10 +185,10 @@ void TFOOTHitCont::Init(TDictInfo info) {
 				/* Try to convert whatever is s.back() to an index-1. If it throws, propagates
 				 * all the way to termination with the message. Is fine. */
 				u32 n = mnd::stou(s.back()).unwrap(
-					mnd::msg("Could not convert '%.*s' to u32.", (int)s.back().length(), s.back().data()) )
+					fmt::format("Could not convert '{}' to u32.", s.back()) )
 					-1;
 				if(n >= N_PAIRS) {
-					WARN("Passed in %u index for pair, is not < N_PAIRS=%u. Ignored.", n, N_PAIRS);
+					WARN("Passed in {} index for pair, is not < N_PAIRS={}. Ignored.", n, N_PAIRS);
 					continue;
 				}
 				auto& item = cov_setup[n];
@@ -206,9 +198,9 @@ void TFOOTHitCont::Init(TDictInfo info) {
 			}
 		}
 	} else {
-		WARN("'%s' key not found for info (%s) passed to TFOOTHitCont::Init(). Not a problem. "
-			"Will just use all the defaulted values: %s\n", cv_key,
-			mnd::type_name<TDictInfo>().c_str(), mnd::streamable(cov_setup.back()).c_str());
+		WARN("'{}' key not found for info ({}) passed to TFOOTHitCont::Init(). Not a problem. "
+			"Will just use all the defaulted values: {}\n", cv_key,
+			mnd::type_name<TDictInfo>(), cov_setup.back());
 	}
 }
 

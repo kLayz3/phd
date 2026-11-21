@@ -69,29 +69,6 @@ mnd::RunsheetState mnd::RunsheetState::from(const nlohmann::json& j) {
 	};
 }
 
-std::ostream& mnd::operator<<(std::ostream& os, const RunsheetState::Brho& brho) {
-	os << "brho: {";
-	mnd::static_for<0, N_FOCAL_PTS-1>([&](auto I){
-		constexpr size_t i = decltype(I)::value;
-		os << fs::brho::label[i] << ": " BOLD << brho.value[i] << KNRM " Tm, ";
-	});
-	return os << fs::brho::label[N_FOCAL_PTS-1] << BOLD << brho.value[N_FOCAL_PTS-1] << KNRM " Tm}";
-}
-std::ostream& mnd::operator<<(std::ostream& os, const RunsheetState& r) {
-	return os << KBH_GRN "({" KNRM
-		<< r.brho
-		<< ", {primary"
-		<< ": Z: " BOLD << r.primary.Z << KNRM
-		<< ", A: " BOLD << r.primary.A << KNRM
-		<< ", Q: " BOLD << r.primary.charge_state().map([](auto x) { return std::to_string(x); }).value_or("none")
-		<< KNRM "[e], EKin: " << KBH_RED << r.e0 << KNRM " MeV/u}"
-		<< ", {secondary"
-		<< ": Z: " BOLD << r.secondary.Z << KNRM
-		<< ", A: " BOLD << r.secondary.A << KNRM
-		<< ", Q: " BOLD << r.secondary.charge_state().map([](auto x) { return std::to_string(x); }).value_or("none")
-		<< KNRM "[e]} " KBH_GRN "})" KNRM;
-}
-
 template<>
 mnd::OptRunsheetStatePair
 mnd::QueryRunsheet<
@@ -144,21 +121,21 @@ mnd::RunsheetState mnd::QueryRunsheet<
 	auto [start_info, end_info] = QueryRunsheet<false, OptRunsheetStatePair>(str);
 
 	if(start_info.is_none())
-		MND_THROW("mnd::QueryRunsheet(\"%.*s\"): file name's inferred basename '%s' "
-			"and start run-number '%u' not found in a row in the runsheet.\n",
-			(int)str.size(), str.data(), basename.c_str(), start_num);
+		MND_THROW("mnd::QueryRunsheet(\"{}\"): file name's inferred basename '{}' "
+			"and start run-number '{}' not found in a row in the runsheet.\n",
+			str, basename, start_num);
 
 	if(end_info.is_none())
-		MND_THROW("mnd::QueryRunsheet(\"%.*s\"): file name's inferred basename '%s' "
-			"and end run-number '%u' not found in a row in the runsheet.\n",
-			(int)str.size(), str.data(), basename.c_str(), end_num);
+		MND_THROW("mnd::QueryRunsheet(\"{}\"): file name's inferred basename '{}' "
+			"and end run-number '{}' not found in a row in the runsheet.\n",
+			str, basename, end_num);
 
 	if(start_info.unwrap() != end_info.unwrap()) {
-		std::cerr << "mnd::QueryRunsheet: mismatch!\n"
-			<< start_info.unwrap() << " ... and:\n" << end_info.unwrap() << std::endl;
-		MND_THROW("mnd::QueryRunsheet(\"%.*s\"): file name's inferred basename '%s': "
-			"start '%u' and end '%u' run-numbers mismatched runsheet info?\n",
-			(int)str.size(), str.data(), basename.c_str(), start_num, end_num);
+		fmt::println(stderr, "mnd::QueryRunsheet: mismatch!\n{} ... and:\n{}",
+			start_info.unwrap(), end_info.unwrap());
+		MND_THROW("mnd::QueryRunsheet(\"{}\"): file name's inferred basename '{}': "
+			"start '{}' and end '{}' run-numbers mismatched runsheet info?\n",
+			str, basename, start_num, end_num);
 	}
 	
 	return start_info.unwrap();

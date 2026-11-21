@@ -100,15 +100,13 @@ void SCIDEIntoQConverter::Init(bool verbose) const {
 	if(fit_.load() == true)
 		return;
 
-    if( !mnd::isfinite(pedestal.left, pedestal.right) ) {
-        ERROR("SCI: de-to-q converter, pedestal left parameter is null.\n");
-        std::cerr << pedestal << std::endl;
-    }
+	if(!mnd::isfinite(pedestal.left, pedestal.right))
+		ERROR("SCI: de-to-q converter, a pedestal value is non-finite.\n{}", pedestal);
 
 	std::vector<f64> x, y;
     for(auto [Q, qdc_mean] : this->values) {
         if(qdc_mean <= pedestal.left || qdc_mean <= pedestal.right)
-            ERROR("SCI: de-to-q converter, for charge %d, its mean value <= pedestal?\n", Q);
+            ERROR("SCI: de-to-q converter, for charge {}, its mean value <= pedestal?\n", Q);
 
         x.push_back( std::log(Q) );
         y.push_back( std::log(qdc_mean) );
@@ -118,8 +116,10 @@ void SCIDEIntoQConverter::Init(bool verbose) const {
 		fit_->f = std::exp(-r[0]);
 		fit_->c = 1.0 / r[1];
 		if(verbose)
-			WARN("SCIDEIntoQConverter::Init(): found coefficients: " BOLD "E(Q) = %.2f * Q^%.2f" KRNM "  <=>  "
-				KBH_GRN "Q(E) = (%.2f * E)^%.2f\n" KNRM, 1.0/fit_->f, 1.0/fit_->c, fit_->f, fit_->c);
+			WARN("SCIDEIntoQConverter::Init(): found coefficients: {}  <=>  {}\n",
+				styled(fmt::format("E(Q) = {:.2f} * Q^{:.2f}", 1.0/fit_->f, 1.0/fit_->c), fmt::emphasis::bold),
+				styled(fmt::format("Q(E) = ({:.2f} * E)^{:.2f}", fit_->f, fit_->c),
+					fg(fmt::terminal_color::bright_green) | fmt::emphasis::bold));
 	} else {
 		fit_->f = fit_->c = NAN;
 		if(verbose)
@@ -229,7 +229,7 @@ TrigParam::TLabels TrigParam::GetTrigLabels() const {
     for(const auto& trig: trigger_map) {
         const u32 index = trig.tpat;
         if(index > MAX_TPAT)
-            ERROR("TrigParam::GetTrigLabels() requested index is %u>%u. Fix the param file.\n", index, MAX_TPAT);
+            ERROR("TrigParam::GetTrigLabels() requested index is {}>{}. Fix the param file.\n", index, MAX_TPAT);
         labels[index] = trig.label;
     }
     return labels;
@@ -249,7 +249,7 @@ TFRSCalCont::TFRSCalCont() : TContainer("FRS") {}
 void TFRSCalCont::Init(TDictInfo info) {
 	auto it = info.find("Setup");
 	if(it == info.end())
-		ERROR("Setup key not found for info (%s).\n", mnd::type_name<TDictInfo>().c_str());
+		ERROR("Setup key not found for info ({}).\n", mnd::type_name<TDictInfo>());
 	const std::string& file_name = it->second;
 	setup = ParseJSON(file_name);
 
@@ -258,14 +258,14 @@ void TFRSCalCont::Init(TDictInfo info) {
 		fs::path pfull = fs::canonical(file_name);
 		setup["file_name"] = pfull.c_str();
 	} catch(...) {
-		ERROR("Fetching full path from: \'%s\' failed?", file_name.c_str());
+		ERROR("Fetching full path from: \'{}\' failed?", file_name);
 	}
 
 	/* Verify the JSON static + add to static param object. */
 	for(const auto& [_tpc_i, params] : setup.at("TPC").items()) {
 		if(RNFRSCal::tpc_moniker.find(_tpc_i) == RNFRSCal::tpc_moniker.end())
-			ERROR("TPC parameter named \'%s\' found in the %s JSON parameter file isn't mapped to 0..%zu index.",
-				_tpc_i.c_str(), file_name.c_str(), _tpc_param.size());
+			ERROR("TPC parameter named \'{}\' found in the {} JSON parameter file isn't mapped to 0..{} index.",
+				_tpc_i, file_name, _tpc_param.size());
 		
 		u32 i = RNFRSCal::tpc_moniker.at(_tpc_i);
 		if(i >= RNFRSCal::N_VALID_TPC) continue;
@@ -274,8 +274,8 @@ void TFRSCalCont::Init(TDictInfo info) {
 
 	for(const auto& [_sci_i, params] : setup.at("SCI").items()) {
 		if(RNFRSCal::sci_moniker.find(_sci_i) == RNFRSCal::sci_moniker.end())
-			ERROR("Sci parameter named \'%s\' found in the %s JSON parameter file isn't mapped to 0..%zu index.",
-				_sci_i.c_str(), file_name.c_str(), _sci_param.size());
+			ERROR("Sci parameter named \'{}\' found in the {} JSON parameter file isn't mapped to 0..{} index.",
+				_sci_i, file_name, _sci_param.size());
 		
 		u32 i = RNFRSCal::sci_moniker.at(_sci_i);
 		if(i >= RNFRSCal::N_VALID_SCI) continue;
@@ -284,7 +284,7 @@ void TFRSCalCont::Init(TDictInfo info) {
 
     constexpr auto trig_param_json_name = TrigParam::get_name<0>();
     if(!setup.contains(trig_param_json_name))
-		WARN("'%s' JSON entry not found. Trig/tpat mapping not performed... Is fine.\n", trig_param_json_name);
+		WARN("'{}' JSON entry not found. Trig/tpat mapping not performed... Is fine.\n", trig_param_json_name);
     else
 		UNROLL_JSON_PARAM(_trig_param, setup, 0);
 }
@@ -323,7 +323,7 @@ void TFRSCalCont::Setup() {
 	for(int i=0; i < (int)sci_param->size(); ++i)
 		sci_param->at(i) = _sci_param[i];
 	if(SCIParam::channel_to_ns < 0)
-		ERROR("Conversion between channel number to ns not given (or parsed) in \'%s\'", setupFileName.c_str());
+		ERROR("Conversion between channel number to ns not given (or parsed) in \'{}\'", setupFileName);
 
 	/* The remaining `qdc` part of the SCIParam is handled by the TFRSCalProc::FinalInit(...) . */
     trig_param = RegisterObject<TrigParam>("trigger_map", _trig_param);
