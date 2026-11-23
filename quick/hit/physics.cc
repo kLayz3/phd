@@ -556,7 +556,7 @@ int main(int argc, char* argv[]) {
 		);
 	}
 
-	std::optional<ThetaHistograms> h2_theta1_vs_theta2;
+	mnd::Option<ThetaHistograms> h2_theta1_vs_theta2;
 	if( rho_ex_type == RhoExpressionType::p && selected.back().index == 2) {
 		/* Have to do it hacked like this since std::array<T,2> is an aggregate type and cannot
 		 * "forward" constructors. */
@@ -779,7 +779,7 @@ int main(int argc, char* argv[]) {
 					h2_rho_vs_theta->Fill(theta, rho_val);
 				}
 
-				if(h2_theta1_vs_theta2.has_value()) {
+				if(h2_theta1_vs_theta2.is_some()) {
 					const double theta1 = phy::MRAD_CVT * tracks[1].AngleRelativeTo( heavy_track );
 					const double theta2 = phy::MRAD_CVT * tracks[2].AngleRelativeTo( heavy_track );
 					const double t12 = phy::MRAD_CVT * tracks[2].AngleRelativeTo( tracks[1] );
@@ -882,7 +882,7 @@ int main(int argc, char* argv[]) {
 	ct2->cd(3); h1_track_q.Draw();
 	ct2->cd(4); h1_track_distance.Draw();
 
-	if(h2_theta1_vs_theta2.has_value()) {
+	if(h2_theta1_vs_theta2.is_some()) {
 		[[maybe_unused]] TCanvas* ct3 = new TCanvas("Physics3", "Angles correction", 1900, 1600);
 		ct3->Divide(2,1);
 		ct3->cd(1); (*h2_theta1_vs_theta2)[0].Draw("COLZ");

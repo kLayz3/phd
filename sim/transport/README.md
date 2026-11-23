@@ -6,39 +6,18 @@ including multiple scattering and ionisation. The electron production range
 cut is 10 mm, as in the existing reaction simulation; this suppresses explicit
 delta rays without removing continuous energy loss.
 
-## Build
-
-Use the Geant4 environment from your installation, then configure the existing
-simulation build directory:
-
-```sh
-cmake -S sim -B sim/build -DGeant4_DIR=/path/to/lib/cmake/Geant4 \
-    -DROOT_DIR=/path/to/root/cmake
-cmake --build sim/build --target foot_transport -j4
-```
-
-The installed `geant4.sh` sets the dataset paths. Use `--threads 8` with an MT-enabled Geant4 build; a serial-only build rejects requests for more than one thread. ROOT Core is needed because
-`phy::Nucleus` currently includes the project's geometry/monad headers. The
-existing MPhysics, Geometry, FromChars, TextUtils, JSONParser and FilesystemUtils
-implementations are compiled directly; neither libStructures nor Go4 is loaded.
-The reaction executable and its macro live under `reactions/8b->7be+p/`.
-The telescope configuration loader is shared in `include/TransportConfig.hh`
-and `src/TransportConfig.cc`.
-
 ## Inputs and invocation
 
 ```sh
 # Check the parsed inputs without constructing Geant4 or writing output.
-./sim/build/transport/foot_transport --ion 9C --energy-per-u 700 --check-config
+./sim/build/transport/foot_transport --ion 9C --energy-per-u 667 --check-config
 
-# Example energy only: supply the appropriate kinetic energy at telescope entry.
-./sim/build/transport/foot_transport --ion 9C --energy-per-u 700 \
-    --events 100000 --threads 1 --seed 12345 --output transport_9C.root
+# Example energy only: supply the appropriate kinetic energy at target exit.
+./sim/build/transport/foot_transport --ion 9C --energy-per-u 667 \
+    --events 1M --threads 1 --seed 12345 --output transport_9C.root
 ```
 
-`--setup` and `--cov` default to this checkout's `params/foot_setup.json` and
-`params/foot_cov.json`. They use the existing preprocessed `ParseJSON` API, once
-on the main thread. Isotopes use `phy::Nucleus::get_ion`, with fully stripped
+`--setup` defaults to this checkout's `params/foot_setup.json`. Isotopes use `phy::Nucleus::get_ion`, with fully stripped
 nuclei required. Both the project's tabulated mass and Geant4's particle mass
 are recorded; Geant4 retains its own particle definition and transport mass.
 
@@ -54,10 +33,6 @@ are recorded; Geant4 retains its own particle definition and transport mass.
   X/u uses `(cos(angle), sin(angle))`, Y/v uses `(-sin(angle), cos(angle))`.
   The bare measurement is `a*x + b*y - delta_p`. Orientation signs/reflections
   must not be applied again to this already geometric measurement.
-- Pair numbers in `foot_cov.json` are one-based. Residual widths are input in
-  micrometres, converted to mm, and saved as reference data. Missing isotope
-  measurements in a pair are marked unavailable. They are **not** used to smear
-  the Geant4 crossings: detector noise is the unknown to be inferred later.
 
 The current transport geometry is a vacuum world and eight axis-aligned square
 material stacks, with default half-width 48 mm. Their centres are offset along
@@ -92,8 +67,8 @@ geometry boundary. A measurement is taken at the primary's upstream-half to
 downstream-half transition. This is a point-crossing approximation, not an
 energy-weighted strip centroid. Keep the distinction when modelling response.
 
-`OUTPUT.root.json` records the input file paths, resolved planes and material stack,
-reference residuals, isotope masses, seed, source settings, material scope and
+`OUTPUT.root.json` records the setup file path, resolved planes and material stack,
+isotope masses, seed, source settings, material scope and
 step limit. Existing output/metadata files are rejected rather than overwritten.
 Parent output directories must already exist.
 
@@ -125,7 +100,9 @@ From the repository root:
 root -l 'sim/transport/draw_transport.C("transport_9C.root")'
 # Optional four-page PDF, also usable in batch mode:
 root -l -b -q 'sim/transport/draw_transport.C("transport_9C.root", "transport.pdf")'
+./sim/draw_transport.fish transport_9C.root
 ```
+
 
 The canvases show crossing multiplicity, scalar measurements and true x/y at
 all eight midplanes, accumulated x/y slope changes relative to the generated
@@ -133,20 +110,9 @@ entrance direction, and energy loss between the first and last midplanes.
 Detector labels use physical indices d0..d7. The angular labels express slope
 differences times 1000, approximating projected angles in mrad near the beam axis.
 
-## Leave-one-pair-out residuals with the analysis binning
+## analyse_transport: leave-one-pair-out residuals with the analysis binning
 
-Build the ROOT-only analysis target and run it on an existing transport file:
-
-```sh
-cmake --build sim/build --target foot_transport_analysis -j4
-./sim/build/transport/foot_transport_analysis -f transport_9C.root --section c9
-```
-
-Use the ROOT environment matching `ROOT_DIR` in the CMake cache. In particular,
-do not combine FairSoft ROOT libraries with a different installation's
-`ROOTSYS`/`ROOT_INCLUDE_PATH`; source the matching `thisroot.sh` first.
-
-This produces `transport_9C_residuals.root` and `.pdf`. It reads the source file's
+This program produces `transport_9C_residuals.root` and `.pdf`. It reads the source file's
 compact `.root.json` summary to construct the calibrated scalar design rows,
 then refits the other three pairs for each omitted pair. The PDF contains four
 u and four v residual histograms, their Gaussian core fits, and the corresponding
@@ -159,21 +125,20 @@ Binning/settings precedence is:
 3. The selected `SECTION(...)`, using the existing section/argument parsing APIs.
 4. Explicit residual-analysis CLI overrides.
 
-The actual carbon section name is **c9**, not 9c. Currently it inherits u/v
-`180,-0.6,0.6` from GLOBAL, giving a bin width of 6.67 micrometres. Other config
-arguments such as files and charge gates are ignored here. `--no-config` uses
-compiled defaults; `--section ''` reads only GLOBAL. Gaussian fitting uses the
-same `GaussFitMax` routine and four iterations as `foot_track_analysis.cc`.
+`--no-config` uses compiled defaults; `--section ''` reads only GLOBAL.
 
 ```sh
 # Change only u binning; v still comes from the selected configuration.
-./sim/build/transport/foot_transport_analysis -f transport_9C.root \
+./sim/build/transport/analyse_transport -f transport_9C.root \
     --binning-dx=240,-0.6,0.6 -o finer_residuals.root
 
 # Optional trial detector noise: physical detector order d0..d7, in micrometres.
-./sim/build/transport/foot_transport_analysis -f transport_9C.root \
+./sim/build/transport/analyse_transport -f transport_9C.root \
     --sigma-um=30,30,30,30,30,30,30,30 -o trial_residuals.root
 ```
+
+`analyse_transport` reads the measured residual widths for the simulated ion from
+`--cov` (default `params/foot_cov.json`) at analysis time.
 
 Noise defaults to zero, so the first comparison is scattering-only. Trial noise
 is added to measurements before fitting; transport is not rerun. The ROOT file
@@ -183,12 +148,3 @@ summary. The mapping satisfies `residual = R * (measurement + offset)` and
 `Var(residual)[i] = sum_j T[i,j] * detector_variance[j] + scattering_variance[i]`.
 The variance response rank is reported as a diagnostic, not a guarantee that all
 eight detector variances can be estimated accurately from core widths.
-
-This is a forward residual comparison, **not yet an automatic resolution fit**.
-It applies no CKF pruning, charge response/gates or final track-score cut, so
-matching the binning and Gaussian fitting does not yet match real-data selection.
-Any detector-resolution inference still needs the selection-bias validation
-specified in the uncertainty plan.
-
-A larger transport sample can be requested with `--events 150000`. The analysis
-reads every input event; it does not cap the sample at 10k or 150k.

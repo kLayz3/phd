@@ -82,44 +82,44 @@ void draw_transport(const char* filename = "foot_transport.root", const char* pd
 	constexpr u32 nbins = 300;
 	std::string number_present;
 	for(u32 i=0; i<8; ++i) {
-		const std::string prefix = "d" + std::to_string(i) + "_";
-		const std::string label = "Detector " + std::to_string(i);
-		const std::string cut = prefix + "present";
+		const std::string measurement = fmt::format("d{}_measurement_mm", i);
+		const std::string xlabel = fmt::format("d{}_x_mm", i);
+		const std::string ylabel = fmt::format("d{}_y_mm", i);
+		const std::string label = fmt::format("FOOT detector {}", i);
+		const std::string cut = fmt::format("d{}_present", i);
 		if(i) number_present += "+";
 		number_present += cut;
 		measurements->cd(i+1);
-		draw(prefix+"measurement_mm", cut, label+";Bare readout-axis position [mm];Count");
+		draw(measurement, cut, label+";Bare readout-axis position [mm];Count");
 
 		positions->cd(i+1);
-		draw(prefix+"y_mm:"+prefix+"x_mm", cut, label+";True x [mm];True y [mm]",
+		draw(fmt::format("{}:{}", ylabel, xlabel), cut, fmt::format("{};True x [mm];True y [mm]", label),
 			nbins, {{-3,3}}, /*2D*/true,
 			nbins, {{-3,3}}
 		);
 
 		angles->cd(i+1);
-		draw("1000*("+prefix+"ax-beam_ax)", cut, label+";a_{x} - a_{x,entrance} [mrad];Count",
-			nbins, {{-4, 4}} );
+		draw(fmt::format("1000*(d{}_ax-beam_ax)", i), cut,
+			fmt::format("{};a_{{x}} - a_{{x,entrance}} [mrad];Count", label), nbins, {{-4, 4}}
+		);
+		
 		angles->cd(i+9);
-		draw("1000*("+prefix+"ay-beam_ay)", cut, label+";a_{y} - a_{y,entrance} [mrad];Count",
-			nbins, {{-4, 4}} );
+		draw(fmt::format("1000*(d{}_ay-beam_ay)", i), cut,
+			fmt::format("{};a_{{y}} - a_{{y,entrance}} [mrad];Count", label), nbins, {{-4, 4}}
+		);
 	}
 
 	auto* overview = new TCanvas("TransportOverview", "Telescope transport overview", 1400, 1000);
 	overview->Divide(2, 2);
-	overview->cd(1);
-	draw(number_present, "", "Crossed measurement planes;Number of planes;Events");
-	overview->cd(2);
-	draw("1000*(d7_ax-beam_ax)", "d7_present", "Last-plane deflection;a_{x} - a_{x,entrance} [mrad];Count",
-	  nbins, {{-3,3}});
-	overview->cd(3);
-	draw("1000*(d7_ay-beam_ay):1000*(d7_ax-beam_ax)", "d7_present",
+	overview->cd(1); draw(number_present, "", "Crossed measurement planes;Number of planes;Events");
+	overview->cd(2); draw("1000*(d7_ax-beam_ax)", "d7_present",
+		"Last-plane deflection;a_{x} - a_{x,entrance} [mrad];Count", nbins, {{-3,3}});
+	overview->cd(3); draw("1000*(d7_ay-beam_ay):1000*(d7_ax-beam_ax)", "d7_present",
 		"Last-plane deflection;#Delta a_{x} [mrad];#Delta a_{y} [mrad]",
 			nbins, {{-3,3}}, /*2D*/true,
 			nbins, {{-3,3}}
 	);
-
-	overview->cd(4);
-	draw("d0_kinetic_MeV-d7_kinetic_MeV", "d0_present && d7_present",
+	overview->cd(4); draw("d0_kinetic_MeV-d7_kinetic_MeV", "d0_present && d7_present",
 		"Energy lost between first and last midplanes;Energy loss [MeV];Count");
 
 	const std::vector<TCanvas*> canvases{overview, measurements, positions, angles};

@@ -39,7 +39,6 @@
 namespace transport {
 struct Options {
 	std::string setup = FOOT_PARAM_DIR "/foot_setup.json";
-	std::string cov = FOOT_PARAM_DIR "/foot_cov.json";
 	std::string ion = "9C", output = "foot_transport.root";
 	double energy = 0, half_width = 48, x = 0, y = 0, ax = 0, ay = 0;
 	double beam_sigma_mm = 0, angle_sigma_mrad = 0, max_step_mm = 0.015;
@@ -255,8 +254,6 @@ int main(int argc,char** argv) {
 	CLI::App app{"FOOT electromagnetic telescope transport; no reaction or detector smearing"};
 	add_logged_option(app,"--setup", o.setup, "Detector geometry and material parameter file")
 		->check(CLI::ExistingFile);
-	add_logged_option(app,"--cov", o.cov, "Measured charge/position residual parameter file")
-		->check(CLI::ExistingFile);
 	add_logged_option(app,"--ion", o.ion, "Isotope parsed by phy::Nucleus, e.g. 1H, 4He, 9C");
 	add_logged_option(app,"--energy-per-u", o.energy, "Kinetic energy at telescope entrance [MeV/u]")
 		->required()
@@ -304,7 +301,7 @@ int main(int argc,char** argv) {
 	for(double v: {o.energy,o.half_width,o.x,o.y,o.ax,o.ay,o.beam_sigma_mm,o.angle_sigma_mrad,o.max_step_mm})
 		if(!std::isfinite(v)) ERROR("Beam and geometry options must be finite");
 	
-	auto config = load_config(o.setup,o.cov,o.ion);
+	auto config = load_config(o.setup, o.ion);
 
 	config.provenance["nucleus"] = {
 		{"A",nucleus.A}, {"Z",nucleus.Z}, {"phy_mass_MeV", nucleus.mass()}

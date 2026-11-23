@@ -1,12 +1,23 @@
 #!/usr/bin/env -S fish --no-config
 
+set -l usage "Usage: $(basename (status filename)) INPUT.root [OUTPUT.pdf]"
+set -l help "
+Delegates to the `draw_transport.C` macro, which will just draw
+(and optionally generate a PDF file) from the current 'bare' transport process.
+E.g. just shoots particles and measures the scattering statuses after each layer of FOOT."
+
+if contains -- -h $argv; or contains -- --help $argv
+	printf '%s\n%s\n' "$usage" "$help"
+	exit 0
+end
+
 set -l narg (count $argv)
 if test $narg -gt 2; or test $narg -lt 1
-	echo 'Usage: draw_transport.fish [INPUT.root [OUTPUT.pdf]]' >&2
+	printf '%s\n' "$usage" >&2
 	exit 2
 end
 
-set -l script_dir (dirname (realpath (status filename)))
+set -l script_dir (dirname (realpath (status -f)))
 set -l cpp_args
 for arg in $argv
 	# Escape each argument for a C++ string literal, without eval.

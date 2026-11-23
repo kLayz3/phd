@@ -52,6 +52,9 @@ sim/build
 !README.md
 typst/*
 sim/*.json
+sim/gen
+sim/*.txt
+result*
 
 exec/*.txt
 autosave

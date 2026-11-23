@@ -26,6 +26,6 @@ struct Config {
 	nlohmann::json provenance;
 };
 
-Config load_config(const std::string& setup, const std::string& cov, const std::string& ion);
+Config load_config(const std::string& setup, const std::string& ion);
 
 } // namespace transport

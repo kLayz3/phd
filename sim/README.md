@@ -38,7 +38,7 @@ Build targets and resulting executables are:
 |---|---|
 | `reaction_8b_to_7be_p` | `sim/build/reactions/8b->7be+p/run` |
 | `foot_transport` | `sim/build/transport/foot_transport` |
-| `foot_transport_analysis` | `sim/build/transport/foot_transport_analysis` |
+| `analyse_transport` | `sim/build/transport/analyse_transport` |
 
 Quote reaction paths in the shell: `>` is a redirection operator.
 The reaction macro is copied alongside its executable and is also its default

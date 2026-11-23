@@ -5,16 +5,16 @@
 				"sd": 0.5,
 				"sr": 0.28
 			},
-			"position": [ // Residual widths from main_30.png; He and H isotope pairs share measurements.
+			"position": [
 				{
 					"ion": "12C",
 					"residue": { // in µm
 						"u": 52.2,
 						"v": 51.6
 					},
-					"scattering-only": {
-						"u": 35.9,
-						"v": 35.8
+					"resolution": {
+						"u": 31,
+						"v": 31
 					}
 				},
 				{
@@ -22,6 +22,10 @@
 					"residue": { // in µm
 						"u": 68.8,
 						"v": 68.6
+					},
+					"resolution": {
+						"u": 36,
+						"v": 36
 					}
 				},
 				{
@@ -29,6 +33,10 @@
 					"residue": { // in µm
 						"u": 69.3,
 						"v": 72.6
+					},
+					"resolution": {
+						"u": 42,
+						"v": 46
 					}
 				},
 				{
@@ -36,6 +44,10 @@
 					"residue": { // in µm
 						"u": 104.8,
 						"v": 108.1
+					},
+					"resolution": {
+						"u": 47,
+						"v": 46
 					}
 				}
 			]
@@ -45,30 +57,38 @@
 				"sd": 0.5,
 				"sr": 0.28
 			},
-			"position": [ // Residual widths from main_30.png; He and H isotope pairs share measurements.
+			"position": [
 				{
 					"ion": "12C",
 					"residue": { // in µm
 						"u": 27.5,
 						"v": 27.4
 					},
-					"scattering-only": {
-						"u": 17.8,
-						"v": 17.9
+					"resolution": {
+						"u": 12,
+						"v": 12
 					}
 				},
 				{
 					"ion": "9C",
 					"residue": { // in µm
 						"u": 35.5,
-						"v": 36.6
+						"v": 35.6
+					},
+					"resolution": {
+						"u": 14,
+						"v": 14
 					}
 				},
 				{
 					"ion": "4He",
 					"residue": { // in µm
 						"u": 38.3,
-						"v": 40.7
+						"v": 40.6
+					},
+					"resolution": {
+						"u": 20,
+						"v": 22
 					}
 				},
 				{
@@ -76,6 +96,10 @@
 					"residue": { // in µm
 						"u": 58.3,
 						"v": 62.2
+					},
+					"resolution": {
+						"u": 30,
+						"v": 37
 					}
 				}
 			]
@@ -85,16 +109,16 @@
 				"sd": 0.5,
 				"sr": 0.28
 			},
-			"position": [ // Residual widths from main_30.png; He and H isotope pairs share measurements.
+			"position": [
 				{
 					"ion": "12C",
 					"residue": { // in µm
 						"u": 30.7,
 						"v": 27.6
 					},
-					"scattering-only": {
-						"u": 17.9,
-						"v": 17.9
+					"resolution": {
+						"u": 13,
+						"v": 12
 					}
 				},
 				{
@@ -102,13 +126,21 @@
 					"residue": { // in µm
 						"u": 37.3,
 						"v": 35.7
+					},
+					"resolution": {
+						"u": 14,
+						"v": 12
 					}
 				},
 				{
 					"ion": "4He",
 					"residue": { // in µm
 						"u": 40.4,
-						"v": 39.3
+						"v": 39.2
+					},
+					"resolution": {
+						"u": 22,
+						"v": 20
 					}
 				},
 				{
@@ -116,6 +148,10 @@
 					"residue": { // in µm
 						"u": 62.2,
 						"v": 60.9
+					},
+					"resolution": {
+						"u": 37,
+						"v": 36
 					}
 				}
 			]
@@ -125,30 +161,38 @@
 				"sd": 0.5,
 				"sr": 0.28
 			},
-			"position": [ // Residual widths from main_30.png; He and H isotope pairs share measurements.
+			"position": [
 				{
 					"ion": "12C",
 					"residue": { // in µm
 						"u": 53.9,
 						"v": 51.4
 					},
-					"scattering-only": {
-						"u": 36.0,
-						"v": 35.8
+					"resolution": {
+						"u": 34,
+						"v": 33
 					}
 				},
 				{
 					"ion": "9C",
 					"residue": { // in µm
-						"u": 70.4,
-						"v": 69.9
+						"u": 70.5,
+						"v": 69.0
+					},
+					"resolution": {
+						"u": 40,
+						"v": 39
 					}
 				},
 				{
 					"ion": "4He",
 					"residue": { // in µm
 						"u": 73.0,
-						"v": 71.2
+						"v": 71.7
+					},
+					"resolution": {
+						"u": 47,
+						"v": 45
 					}
 				},
 				{
@@ -156,6 +200,10 @@
 					"residue": { // in µm
 						"u": 109.6,
 						"v": 107.2
+					},
+					"resolution": {
+						"u": 49,
+						"v": 45
 					}
 				}
 			]

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <initializer_list>
 #include <optional>
 #include <utility>
 #include <functional>
@@ -484,6 +485,23 @@ class Option : public detail::OptionBase<Option<T>, std::optional<T>> {
 public:
 	using base::base;
 	using base::operator=;
+
+	/* Copy-pasta from /usr/include/c++/14/optional (GLIBCXX) */
+	template<typename... Args>
+	std::enable_if_t<std::is_constructible_v<T, Args...>, T&>
+	emplace(Args&&... args)
+	noexcept(std::is_nothrow_constructible_v<T, Args...> ) {
+		return this->data.emplace(std::forward<Args>(args)...);
+	}
+
+	/* Absolute worst API since fprintf in human history.
+	* It is called *drum-rolls*, you guessed it: 𝐬𝐭𝐝::𝐢𝐧𝐢𝐭𝐢𝐚𝐥𝐢𝐳𝐞𝐫_𝐥𝐢𝐬𝐭 😡 */
+	template<typename U, typename... Args>
+	std::enable_if_t<std::is_constructible_v<T, std::initializer_list<U>&, Args...>, T&>
+	emplace(std::initializer_list<U> ilist, Args&&... args)
+	noexcept(std::is_nothrow_constructible_v<T, std::initializer_list<U>&, Args...> ) {
+		return this->data.emplace(ilist, std::forward<Args>(args)...);
+	}
 };
 
 template<>
@@ -518,5 +536,8 @@ public:
 	using base::base;
 	using base::operator=;
 };
+
+template<typename T>
+Option(Some<T>) -> Option<T>;
 
 } // namespace mnd

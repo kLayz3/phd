@@ -69,7 +69,8 @@ std::pair<u32, u32> rootfile_number_bounds(const std::vector<std::string>& );
 std::string rootfile_names_concatenated(const std::vector<std::string>& );
 
 /* One liner to return a stem of the string representing a possible path.
- * If "caldir/foo/main_0012.root"sv => "main_0012" */
+ * Returns an owned string.
+ * If "caldir/foo/main_0012.root"sv => "main_0012"s */
 std::string file_stem(std::string_view );
 
 /* {"hehe.txt", "heha.jpg", "hehe.mk"} -> "heh"s */

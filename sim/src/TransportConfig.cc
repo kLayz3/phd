@@ -10,14 +10,12 @@
 
 namespace transport {
 
-Config load_config(const std::string& setup_path, const std::string& cov_path, const std::string& ion) {
+Config load_config(const std::string& setup_path, const std::string& ion) {
 	const auto setup = ParseJSON(setup_path);
-	const auto cov = ParseJSON(cov_path);
 	Config result;
 	result.provenance = {
 		{"sources", {
-			{"setup", std::filesystem::absolute(setup_path).lexically_normal().string()},
-			{"covariance", std::filesystem::absolute(cov_path).lexically_normal().string()}
+			{"setup", std::filesystem::absolute(setup_path).lexically_normal().string()}
 			}
 		},
 		{"ion", ion},
@@ -87,34 +85,6 @@ Config load_config(const std::string& setup_path, const std::string& cov_path, c
 		if(result.planes[i].z_mm <= result.planes[i-1].z_mm)
 			ERROR("Detector indices must be in increasing z order");
 
-	// Residual widths are comparison data, never the input detector smearing.
-	nlohmann::json reference = nlohmann::json::array();
-
-	for(u32 pair=0; pair<N/2; ++pair) {
-		const auto& entries = cov.at("values").at("pair " + std::to_string(pair+1)).at("position");
-		bool found = false;
-		for(const auto& entry: entries) {
-			if(entry.at("ion") != ion)
-				continue;
-			if(found)
-				ERROR("Duplicate residual species in a pair");
-			found = true;
-			
-			const auto& r = entry.at("residue");
-			const double u = r.at("u").get<double>() * 0.001;
-			const double v = r.at("v").get<double>() * 0.001;
-			if(!mnd::is_positive(u, v))
-				ERROR("Residual widths must be positive and finite (input unit: υm)");
-			reference.push_back({
-				{"pair", pair}, {"u_mm", u}, {"v_mm", v}
-			});
-		}
-
-		if(!found)
-			reference.push_back({{"pair", pair}, {"available", false}});
-	}
-
-	result.provenance["reference_residuals"] = reference;
 	for(size_t i=0; i<N; ++i) {
 		const auto& p = result.planes[i];
 		result.provenance["planes"].push_back({

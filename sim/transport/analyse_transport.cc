@@ -1,9 +1,9 @@
 #include "RtypesCore.h"
 
-#include "monad/accessories/timing.hxx"
-#include "monad/accessories/meta.hxx"
+#include "monad/monad.hxx"
 
 #include "util/CLI.h"
+#include "util/JSONParser.h"
 #include "util/TextUtils.h"
 #include "util/FilesystemUtils.h"
 #include "util/GaussFitMax.hxx"
@@ -23,6 +23,9 @@
 #include <memory>
 #include <random>
 
+using json = nlohmann::json;
+using namespace indicators;
+
 /* Okay, so this part uses no Geant4 anymore. All of the Geant4 stuff, related to straggling
  * must have been already precomputed by the transport program. Here we just "analyse it" ...
  * Basically trying to */
@@ -30,8 +33,9 @@ int main(int argc, char** argv) {
 	std::string input, output, pdf, config = FOOT_TRACK_CONFIG, section = "c9";
 	
 	std::array<double, 3> bins_u{100, -5, 5}, bins_v{100, -5, 5};
+	std::string cov_path = FOOT_PARAM_DIR "/foot_cov.json";
 	double side = 2.0;
-	bool no_config = false;
+	bool no_config = false, force_creation = false;
 	std::vector<double> sigma_um(8, 0);
 	
 	CLI::App app{"Four-pair leave-one-pair-out residuals from FOOT transport truth"};
@@ -40,8 +44,11 @@ int main(int argc, char** argv) {
 		->required()
 		->check(CLI::ExistingFile);
 	add_logged_option(app, "-o,--output", output, "Residual ROOT output; default INPUT_residuals.root");
+	add_logged_flag(app, "-F,--force,!--no-force", force_creation, "Overwrite possible existing output files.");
 	add_logged_option(app, "--pdf", pdf, "Residual canvas PDF; default derived from output");
 	add_logged_option(app, "-c,--config", config, "foot_track_analysis configuration");
+	add_logged_option(app, "--cov", cov_path, "Measured residual widths for comparison")
+		->check(CLI::ExistingFile);
 	add_logged_option(app, "--section", section, "Configuration section (actual carbon section is c9)");
 	add_logged_flag(app, "--no-config", no_config, "Use the compiled foot_track_analysis defaults");
 	auto* u_option = add_logged_option(app, "--binning-dx", bins_u, "Residual u: bins,min,max [mm]")
@@ -71,7 +78,7 @@ int main(int argc, char** argv) {
 		if(!section.empty()) {
 			const auto selected = mnd::sdsl::extract_text_body("SECTION", section, text);
 			if(selected.is_none()) ERROR("Unknown config section: {}", section);
-			body += "\n" + std::string(selected.unwrap());
+			body += "\n" + std::string{selected.unwrap()};
 		}
 		CLI::App settings;
 		settings.allow_extras(); // Input files and charge gates belong to the real-data analysis.
@@ -86,38 +93,70 @@ int main(int argc, char** argv) {
 	if(u_option->count()) bins_u = cli_u;
 	if(v_option->count()) bins_v = cli_v;
 	if(side_option->count()) side = cli_side;
+
 	for(const auto& bins: {bins_u, bins_v})
-		if(!mnd::isfinite(bins[0], bins[1], bins[2]) || bins[0] < 1 || bins[0] > 1000000 || std::floor(bins[0]) != bins[0] ||
-			bins[1] >= bins[2])
-			ERROR("Invalid residual binning");
+		if(!mnd::isfinite(bins[0], bins[1], bins[2]) || bins[0] < 1 || bins[0] > 1000000
+			|| std::floor(bins[0]) != bins[0] || bins[1] >= bins[2]
+		) ERROR("Invalid residual binning");
 	if(!mnd::is_positive(side)) ERROR("Invalid core-fit side ratio");
+	
 	for(double sigma: sigma_um)
 		if(!mnd::is_non_negative(sigma)) ERROR("Noise RMS must be finite and nonnegative");
-	if(output.empty()) output = (std::filesystem::path(input).parent_path() /
-		(std::filesystem::path(input).stem().string()+"_residuals.root")).string();
+	if(output.empty())
+		output = (std::filesystem::path(input).parent_path() /
+		         (std::filesystem::path(input).stem().string() +"_residuals.root"))
+			.string();
+	
 	if(pdf.empty()) {
 		auto p = std::filesystem::path(output);
 		p.replace_extension(".pdf");
 		pdf = p.string();
 	}
-	if(output == pdf || std::filesystem::exists(output) || std::filesystem::exists(pdf))
-		ERROR("Output already exists or ROOT/PDF paths coincide");
-	nlohmann::json metadata;
+	if(output == pdf)
+		ERROR("ROOT/PDF output paths coincide");
+
+	if(!force_creation && (std::filesystem::exists(output) || std::filesystem::exists(pdf)))
+		ERROR("Output {} or {} already exists. Pass -F,--force to override them or explicitly "
+			"delete the files.", output, pdf);
+
+	json metadata;
 	std::ifstream info(input+".json");
 	if(!info) ERROR("Cannot read transport metadata: {}.json", input);
 	info >> metadata;
+	const auto ion = metadata.at("ion").get<std::string>();
+	const auto cov = ParseJSON(cov_path);
+	struct Widths { double u = NAN, v = NAN; };
+	std::array<Widths, 4> measured;
+	for(size_t pair = 0; pair < measured.size(); ++pair) {
+		const auto key = fmt::format("pair {}", pair + 1);
+		for(const auto& entry: cov.at("values").at(key).at("position")) {
+			if(entry.at("ion") != ion) continue;
+			auto& widths = measured[pair];
+			if(std::isfinite(widths.u)) ERROR("Duplicate residual widths for {} in {}", ion, key);
+			const auto& residue = entry.at("residue");
+			widths.u = residue.at("u").get<double>() * 0.001;
+			widths.v = residue.at("v").get<double>() * 0.001;
+			if(!mnd::is_positive(widths.u, widths.v))
+				ERROR("Expected positive finite residual widths for {} in {} [µm]", ion, key);
+		}
+	}
+	
 	using Matrix = Eigen::Matrix<double, 8, 8>;
 	Eigen::Matrix<double, 8, 4> A;
 	Eigen::Matrix<double, 8, 1> offsets;
 	std::array<u32, 8> pairs;
 	std::array<bool, 8> is_u, seen{};
 	std::array<std::array<bool, 2>, 4> axes{};
-	if(metadata.at("planes").size() != 8) ERROR("Expected eight plane descriptions");
+
+	if(metadata.at("planes").size() != 8)
+		ERROR("Expected eight plane descriptions");
+	
 	for(const auto& plane: metadata.at("planes")) {
 		const u32 i = plane.at("index"), pair = plane.at("pair");
 		const std::string axis = plane.at("axis");
 		if(i >= 8 || pair >= 4 || seen[i] || (axis != "u" && axis != "v"))
 			ERROR("Invalid plane mapping in metadata");
+
 		seen[i] = true;
 		pairs[i] = pair;
 		is_u[i] = axis == "u";
@@ -151,24 +190,28 @@ int main(int argc, char** argv) {
 		"Variance-response rank (relative tolerance 1e-10): {}/8\n", bins_u, bins_v, side, rank);
 	if(rank < 8) WARN("Eight independent detector variances are not identified at this tolerance.\n");
 
-	std::unique_ptr<TFile> file{TFile::Open(input.c_str(), "READ")};
+	auto file = std::make_unique<TFile>(input.c_str(), "READ");
 	if(!file || file->IsZombie()) ERROR("Cannot open transport ROOT input");
 	auto* tree = file->Get<TTree>("crossings");
 	if(!tree) ERROR("Missing crossings tree");
+
 	std::array<int, 8> present{};
 	std::array<double, 8> measurement{};
 	std::array<std::unique_ptr<TH1D>, 8> hist;
 	tree->SetBranchStatus("*", 0);
 	for(u32 i=0; i<8; ++i) {
-		const auto prefix = "d"+std::to_string(i)+"_";
-		for(const auto& name: {prefix+"present", prefix+"measurement_mm"}) tree->SetBranchStatus(name.c_str(), 1);
+		const auto prefix = fmt::format("d{}_", i);
+		for(const auto& name: {prefix+"present", prefix+"measurement_mm"})
+			tree->SetBranchStatus(name.c_str(), 1);
 		if(tree->SetBranchAddress((prefix+"present").c_str(), &present[i]) < 0 ||
 			tree->SetBranchAddress((prefix+"measurement_mm").c_str(), &measurement[i]) < 0)
 			ERROR("Invalid crossing branch");
+
 		const auto& bins = is_u[i] ? bins_u : bins_v;
-		const auto name = "residual_"+prefix+(is_u[i] ? "u" : "v");
-		const auto title = "Pair "+std::to_string(pairs[i])+" "+(is_u[i] ? "u" : "v")+
-			" (d"+std::to_string(i)+");Measurement - prediction [mm];Count";
+		const auto name = fmt::format("residual_{}{}", prefix, is_u[i] ? "u" : "v");
+		const auto title = fmt::format("Pair {} {} (d{});Measurement - prediction [mm];Count",
+			pairs[i], is_u[i]? "u": "v", i);
+
 		hist[i] = std::make_unique<TH1D>(name.c_str(), title.c_str(), static_cast<int>(bins[0]), bins[1], bins[2]);
 		hist[i]->SetDirectory(nullptr);
 		hist[i]->SetStatOverflows(TH1::kConsider);
@@ -182,8 +225,24 @@ int main(int argc, char** argv) {
 	Matrix sum_cov = Matrix::Zero();
 
 	const Long64_t nentries = tree->GetEntries();
+	ProgressBar bar {
+		option::BarWidth{55},
+		option::Start{"["},
+		option::Fill{"="},
+		option::Lead{">"},
+		option::Remainder{" "},
+		option::End{"]"},
+		option::PostfixText{fmt::format("Transport Analysis ({})", input)},
+		option::ForegroundColor{Color::yellow},
+		option::ShowPercentage{true},
+		option::ShowElapsedTime{true},
+		option::ShowRemainingTime{true},
+		option::FontStyles{std::vector{FontStyle::bold}}
+	};
 	for(Long64_t event=0; event < nentries; ++event) {
 		if(tree->GetEntry(event) <= 0) ERROR("Cannot read transport entry");
+        mnd::PrintProgress(bar, event, nentries, 1000);
+		
 		bool valid = true;
 		Eigen::Matrix<double, 8, 1> measured;
 		for(u32 i=0; i<8; ++i) {
@@ -205,8 +264,9 @@ int main(int argc, char** argv) {
 	TCanvas canvas("TransportResiduals", "Four-pair leave-one-pair-out residuals", 1800, 950);
 	canvas.Divide(4, 2);
 	
-	nlohmann::json summary {
+	json summary {
 		{"input",                  input},
+		{"covariance",             cov_path},
 		{"config",                 no_config ? "" : config},
 		{"section",                section},
 		{"binning_dx",             bins_u},
@@ -220,9 +280,11 @@ int main(int argc, char** argv) {
 		{"selection", "All finite four-pair transport events; no real-data charge gates, CKF pruning or final score cut"}
 	};
 	TFile destination(output.c_str(), "RECREATE");
-	if(destination.IsZombie()) ERROR("Cannot create residual output");
+	if(destination.IsZombie())
+		ERROR("Cannot create residual output");
+	
 	for(u32 i=0; i<8; ++i) {
-		canvas.cd(pairs[i]+1+(is_u[i] ? 0 : 4));
+		canvas.cd(pairs[i] + 1 + (is_u[i]? 0: 4));
 		hist[i]->Draw("HIST");
 		const auto fit = GaussFitMax(hist[i].get(), side, 4);
 		const bool fitted = VerifyGaussFitMax(fit);
@@ -232,10 +294,8 @@ int main(int argc, char** argv) {
 			gaussian.SetParameters(fit.first.data());
 			gaussian.DrawCopy("SAME");
 		}
-		double reference = NAN;
-		for(const auto& item: metadata.at("reference_residuals"))
-			if(item.at("pair").get<u32>() == pairs[i] && item.value("available", true))
-				reference = item.at(is_u[i] ? "u_mm" : "v_mm");
+		const auto& widths = measured[pairs[i]];
+		const double reference = is_u[i] ? widths.u : widths.v;
 		TLatex text;
 		text.SetNDC();
 		text.SetTextSize(.045);
@@ -271,4 +331,5 @@ int main(int argc, char** argv) {
 
 	tv.emplace_back(TimePoint("end"));
 	PrintElapsed<kSECOND>(std::move(tv));
+	return 0;
 }

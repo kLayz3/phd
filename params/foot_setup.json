@@ -4,7 +4,9 @@
 		"composition": [
 			{
 				"material": "Si",
-				"thickness": 150e-6 // in meters
+				"thickness": 150e-6, // in meters
+				"pitch": 50, // in υm
+				"effective pitch": 150 // in um
 			}
 		]
 	},
