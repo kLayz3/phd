@@ -12,10 +12,10 @@
 
 using PipeDeleter = int (*)(FILE*);
 
-template void canvas::save_all<canvas::Macro>(canvas::Extension , std::vector<std::string_view> );
-template void canvas::save_all<canvas::Exe  >(canvas::Extension , std::vector<std::string_view> );
-template void canvas::save_all<canvas::Macro>(std::vector<canvas::Extension> , std::vector<std::string_view> );
-template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extension> , std::vector<std::string_view> );
+template void canvas::save_all<canvas::Macro>(canvas::Extension , std::vector<std::string_view> , std::vector<std::string_view> );
+template void canvas::save_all<canvas::Exe  >(canvas::Extension , std::vector<std::string_view> , std::vector<std::string_view> );
+template void canvas::save_all<canvas::Macro>(std::vector<canvas::Extension> , std::vector<std::string_view> , std::vector<std::string_view> );
+template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extension> , std::vector<std::string_view> , std::vector<std::string_view> );
 
 void canvas::DumpPrimitives(TVirtualPad* pad, int depth) {
 	if(!pad) return;

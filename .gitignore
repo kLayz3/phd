@@ -49,6 +49,8 @@ quick/hit/*
 !quick/hit/cfg/**/*.cfg
 
 sim/build
+/sim/.clangd-build/
+/sim/reactions/reactions
 *.md
 !README.md
 typst/*

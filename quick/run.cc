@@ -1,4 +1,4 @@
-#include "monad/monad.hxx"
+#include "monad/accessories/formatting.hxx"
 
 #include <csignal>
 #include <unistd.h>
@@ -13,11 +13,7 @@ constexpr size_t N = 5;
 extern const char* artsy[N];
 
 int main(int argc, char* argv[]) {
-	signal(SIGINT , mnd::sig_callback_handler);
-	signal(SIGSEGV, mnd::sig_callback_handler);
-	CLI::App app{"This program will delegate the arguments to the underlying program accordingly."s
-		+ "\nBuild mode: " + mnd::build_mode
-	};
+	CLI::App app{"This program will delegate the arguments to the underlying program accordingly."};
 
 	std::string prog, config, section="";
 	
@@ -67,6 +63,7 @@ int main(int argc, char* argv[]) {
 	// Resolve only after CLI parsing, when --program has its final value.
 	if(!CLI::ReadPermissions(config).empty()) {
 		const auto program_path = std::filesystem::path(prog);
+		/* Do not resolve parrent_path. Delegated program could come from a symlink and that is just fine. */
 		const auto candidate = program_path.parent_path() / "cfg" / program_path.stem() / config;
 		if(!CLI::ReadPermissions(candidate.string()).empty())
 			throw std::runtime_error("Config file not found or not readable: " + config);

@@ -1,3 +1,4 @@
+#include "Telescope.hh"
 #include "TransportConfig.hh"
 #include "util/MPhysics.h"
 #include "util/CLI.h"
@@ -65,14 +66,9 @@ public:
 	G4VPhysicalVolume* Construct() override {
 		auto* nist = G4NistManager::Instance();
 		auto* vacuum = nist->FindOrBuildMaterial("G4_Galactic");
-		double thickness = 0, before_si = 0;
-		bool found_si = false;
+		double thickness = 0;
 		for(const auto& layer: config.materials) {
 			thickness += layer.thickness_mm;
-			if(!found_si) {
-				before_si += layer.thickness_mm * (layer.name == "G4_Si" ? 0.5 : 1);
-				found_si = layer.name == "G4_Si";
-			}
 		}
 		for(size_t i=1; i<N; ++i)
 			if(config.planes[i].z_mm-config.planes[i-1].z_mm <= thickness)
@@ -81,25 +77,7 @@ public:
 		const double world_z = ((config.planes.back().z_mm-config.planes.front().z_mm)/2 + thickness + 100)*mm;
 		auto* world_lv = new G4LogicalVolume(new G4Box("World",world_xy,world_xy,world_z),vacuum,"World");
 		auto* world = new G4PVPlacement(nullptr,{},world_lv,"World",nullptr,false,0,true);
-		for(size_t i=0; i<N; ++i) {
-			const auto& plane = config.planes[i];
-			double cursor = plane.z_mm - before_si;
-			for(const auto& layer: config.materials) {
-				auto* material = options.vacuum ? vacuum : nist->FindOrBuildMaterial(layer.name);
-				if(!material) throw std::runtime_error("Unknown Geant4 material: " + layer.name);
-				const bool silicon = layer.name == "G4_Si";
-				const int pieces = silicon ? 2 : 1;
-				for(int part=0; part<pieces; ++part) {
-					const double t = layer.thickness_mm/pieces;
-					const std::string name = silicon ? (part ? "SiliconDown" : "SiliconUp") : "Passive";
-					auto* lv = new G4LogicalVolume(new G4Box(name,options.half_width*mm,options.half_width*mm,t*mm/2),material,name);
-					new G4PVPlacement(nullptr,
-						{plane.a*plane.offset_mm*mm,plane.b*plane.offset_mm*mm,(cursor+t/2-centre)*mm},
-						lv,name,world_lv,false,static_cast<int>(i),true);
-					cursor += t;
-				}
-			}
-		}
+		place_telescope(config, world_lv, options.half_width, centre, options.vacuum);
 		return world;
 	}
 };

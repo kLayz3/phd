@@ -873,7 +873,9 @@ public:
 			},
 			domain_min, domain_max, 0
 		)
-	{}
+	{
+		forward_.AddToGlobalList(false);
+	}
 
 	void Paint(Option_t* option = "") override {
 		if(!gPad)

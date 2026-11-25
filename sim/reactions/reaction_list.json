@@ -1,0 +1,37 @@
+{
+	"secondary": "9C6+", // parsable by mnd::phy::Nucleus
+	"energy": 697.30, // MeV/u
+	"target_file": "../../params/foot_setup.json",
+	
+	/* Target thickness in g/cm^2 is found in the target_file as box.target
+	 * Parsable trivially using the ExpertTarget type (struct).
+	 * Target density found in ExperimentAssumptions, or you can assume it is 9Be. */
+
+	"reaction": {
+		"1": {
+			"mother": "8B",
+			"daughters": ["7Be", "p"],
+			"excitation": 770, // keV
+			"width": 35.6 // kev
+		},
+		"2": {
+			"mother": "8B",
+			"daughters": ["7Be", "p"],
+			"excitation": 2320, // keV
+			"width": 350 // kev
+		},
+		
+		"3": { // For 6Be g.s. : S_2P = -1372 keV , S_p > 0
+			"mother": "6Be",
+			"daughters": ["4He", "p", "p"],
+			"excitation": 0, // keV; ground state
+			"width": 92 // keV
+		},
+		"4": {// For 6Be 1st ex : S_2P = -3040 keV , S_p = -1080 keV
+			"mother": "6Be",
+			"daughters": ["4He", "p", "p"],
+			"excitation": 1670, // keV; 1st excited state
+			"width": 1160 // keV
+		}
+	}
+}

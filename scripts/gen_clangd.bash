@@ -12,7 +12,9 @@ QUICK_DIR=$script_dir/../quick
 PYBIND11_DIR=$script_dir/../includes/pybind11/include
 
 echo \
-"CompileFlags:
+"If:
+  PathExclude: sim/.*
+CompileFlags:
   Add:
     - -I$(root-config --incdir)
     - -I$INC_DIR

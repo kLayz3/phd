@@ -224,7 +224,7 @@ struct Nucleus {
 		bool add_nucleon_number = true
 	) const noexcept;
 
-	/* Parse a string into the Nucleus state.
+	/* Parse an isotope or the exact short names p (1H), d (2H), and α (4He).
 	 * get_ion("16O6+") => Nucleus{ .A = 16, .Z = 8, .N_electrons = Some{2} }
 	 * get_ion("")      => Nucleus{ .A = DEFAULT_A_PRIMARY, .Z = DEFAULT_Z_PRIMARY, .N_electrons = None }
 	 * , second argument converts a bad parse into an std::invalid_argument throw.
@@ -235,6 +235,10 @@ struct Nucleus {
 		const char* desc = ""
 	);
 };
+inline constexpr Nucleus proton   {1, 1, mnd::None};
+inline constexpr Nucleus deuteron {2, 1, mnd::None};
+inline constexpr Nucleus alpha    {4, 2, mnd::None};
+
 bool operator==(Nucleus const& , Nucleus const& ) noexcept;
 bool operator!=(Nucleus const& , Nucleus const& ) noexcept;
 std::ostream& operator<<(std::ostream& , Nucleus const& );

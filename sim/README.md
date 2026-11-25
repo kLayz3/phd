@@ -1,59 +1,43 @@
 # FOOT simulations
 
-```text
-sim/
-  include/                 shared beam/geometry settings and interfaces
-  src/                     shared geometry, beam generator and JSON loader
-  transport/               telescope transport and residual-analysis programs
-  reactions/
-    CMakeLists.txt
-    8b->7be+p/             reaction mechanism, parameters, event output and plots
-  build/
-  CMakeLists.txt
-```
-
-`include/Config.hh` contains the incoming beam, target dimensions/density,
-world dimensions and EM production cuts used by the reaction simulations.
-`include/TransportConfig.hh` and `src/TransportConfig.cc` load the calibrated
-FOOT detector geometry and material composition from the existing JSON files.
-The transport driver retains its CLI-configured beam and JSON geometry.
-
-Each reaction owns its decay/production model, cross section, resonance widths,
-Q-value/threshold calculation, and event/output schema. These belong under its
-reaction directory, not in the common geometry configuration.
-
-## Build
-
-After setting up the matching Geant4 and ROOT environments:
+Source `sim/sourceme.sh` in the build shell, then build from the repository root.
 
 ```sh
 cmake -S sim -B sim/build
 cmake --build sim/build -j4
+sim/build/reactions/reactions --which=1,2 --probability 0.3,0.7 --events 10000 --save=root,pdf --info=boron
 ```
 
-Use `-DGeant4_DIR=...` and `-DROOT_DIR=...` on configuration if needed.
-Build targets and resulting executables are:
+## Prompt decays
 
-| CMake target | Executable |
-|---|---|
-| `reaction_8b_to_7be_p` | `sim/build/reactions/8b->7be+p/run` |
-| `foot_transport` | `sim/build/transport/foot_transport` |
-| `analyse_transport` | `sim/build/transport/analyse_transport` |
+`--list` defaults to [reaction_list.json](reactions/reaction_list.json). The secondary
+beam starts just upstream of Be at the listed kinetic energy in MeV/u. The
+target file path is relative to the reaction list. Use `--energy-per-u` or
+`--setup` for an explicit override. The Be downstream face defines FOOT z = 0.
 
-Quote reaction paths in the shell: `>` is a redirection operator.
-The reaction macro is copied alongside its executable and is also its default
-when no argument is supplied. Output ROOT files are written in the current
-working directory, so a typical reaction invocation is:
+Each incident particle is assigned at most one channel. Probabilities refer to
+incident particles and any remainder gives a beam particle that traverses the setup
+without the modeled decay. For a selected channel the production depth is uniform
+along z. Geant4 transports the beam to that depth. The excited mother inherits
+the beam direction and **total kinetic energy** there. Excitations are sampled in
+keV from a Breit–Wigner within five widths of the nominal value and above the
+daughter mass threshold. A zero width selects the nominal energy. Decay is
+prompt, isotropic two-body or direct unweighted many-body phase space.
+The two-proton model omits intermediate resonances and final-state interactions.
 
-```sh
-cd 'sim/build/reactions/8b->7be+p'
-./run run.mac
-```
+The serial simulation transports daughters in Be and in the same material stacks
+as `foot_transport`. Each silicon midplane supplies one unsmeared strip-axis
+projection. A daughter needs all eight projections for its Eigen straight-line fit.
+The event vertex and proton-emission ρ use the same geometry and mass-weighted
+angular routines as `quick/hit/physics.cc`. Tracks are associated by simulated
+daughter identity. Scintillator gates, charge response and combinatorial track
+scores require detector-response models.
 
-The default reaction macro works with serial Geant4. For an MT-enabled build,
-uncomment `/run/numberOfThreads 8` before `/run/initialize`.
+Use `--save=root` to write the FOOT canvases individually under
+`autosave/simulated/reactions/root`. Use `--info` for additional output directory
+components.
 
-See [the reaction notes](reactions/8b->7be+p/README.md) for its physics assumptions,
-and [the transport notes](transport/README.md) for telescope inputs, truth output,
-plots and resolution studies. Existing files in an old build directory may
-include obsolete executables; the paths above are the current targets.
+## Scattering-only transport
+
+See [the transport notes](transport/README.md) for `foot_transport` and
+`analyse_transport`, geometry inputs, plots and resolution studies.

@@ -109,6 +109,10 @@ Nucleus Nucleus::get_ion(std::string_view str,
 	if(!desc) ERROR("Description string is a nullptr? Pass \"\" empty string instead!\n");
 	std::string_view view = mnd::trim(str);
 
+	if(view == "p") return proton;
+	if(view == "d") return deuteron;
+	if(view == "α") return alpha;
+
 	Option<u32> A = mnd::stou_munch(view);
 	if(A.is_none()) {
 		auto msg = fmt::format("mnd::RunsheetState::get_ion(desc: \"{}\") for input string: '{}', "

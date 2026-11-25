@@ -103,7 +103,8 @@ enum WhereAmI { Macro, Exe };
 template<enum WhereAmI loc>
 void save_all (
 	Extension extension = Extension::png,
-	std::vector<std::string_view> extra_tag = {}
+	std::vector<std::string_view> trailing_tags = {},
+	std::vector<std::string_view> leading_tags = {}
 ) {
 	const char* ext = "";
 #define HANDLE_CASE_SAVE_ALL(e) case(Extension::e): { ext = #e; break; }
@@ -128,14 +129,17 @@ void save_all (
 	}
 
 	std::filesystem::path p = "autosave";
+	for(auto tag: leading_tags)
+		p /= tag;
+
 	p = p / stem / ext;
-	for(auto& tag: extra_tag)
+	for(auto tag: trailing_tags)
 		p /= tag;
 
 	try {
 		std::filesystem::create_directories(p);
 	} catch(const std::filesystem::filesystem_error& e) {
-		WARN("canvas::save_all : Error in creating directories: \'{}\', err: {}\n", p.string(), e.what());
+		WARN("canvas::save_all : Error in creating directories: '{}', err: {}\n", p.string(), e.what());
 		return;
 	}
 
@@ -186,10 +190,11 @@ void save_all (
 template<enum WhereAmI loc>
 void save_all (
 	std::vector<Extension> extension,
-	std::vector<std::string_view> extra_tag = {}
+	std::vector<std::string_view> trailing_tags = {},
+	std::vector<std::string_view> leading_tags = {}
 ) {
 	for(auto const e : extension)
-		save_all<loc>(e, extra_tag);
+		save_all<loc>(e, trailing_tags, leading_tags);
 }
 /* All vectors passed by value, but it's small so overhead is whatever,
  * and this fnc won't ever get called in a loop. */
@@ -200,10 +205,10 @@ inline std::ostream& operator<<(std::ostream& os, canvas::Extension e) {
 
 }; // namespace canvas
 
-extern template void canvas::save_all<canvas::Macro>(canvas::Extension , std::vector<std::string_view> );
-extern template void canvas::save_all<canvas::Exe  >(canvas::Extension , std::vector<std::string_view> );
-extern template void canvas::save_all<canvas::Macro>(std::vector<canvas::Extension> , std::vector<std::string_view> );
-extern template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extension> , std::vector<std::string_view> );
+extern template void canvas::save_all<canvas::Macro>(canvas::Extension , std::vector<std::string_view> , std::vector<std::string_view> );
+extern template void canvas::save_all<canvas::Exe  >(canvas::Extension , std::vector<std::string_view> , std::vector<std::string_view> );
+extern template void canvas::save_all<canvas::Macro>(std::vector<canvas::Extension> , std::vector<std::string_view> , std::vector<std::string_view> );
+extern template void canvas::save_all<canvas::Exe  >(std::vector<canvas::Extension> , std::vector<std::string_view> , std::vector<std::string_view> );
 
 namespace mnd {
 namespace geom { struct Line2D; } // namespace geom

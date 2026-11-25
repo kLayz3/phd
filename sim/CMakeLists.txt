@@ -4,17 +4,9 @@ project(foot_simulations LANGUAGES CXX)
 find_package(Geant4 REQUIRED)
 include(${Geant4_USE_FILE})
 
-# Shared target geometry and incoming beam; no reaction mechanism or output schema.
-add_library(sim_setup STATIC src/DetectorConstruction.cc src/PrimaryGenerator.cc)
-target_include_directories(sim_setup PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(sim_setup PUBLIC ${Geant4_LIBRARIES})
-target_compile_features(sim_setup PUBLIC cxx_std_17)
-target_compile_options(sim_setup PRIVATE -Wall -Wextra -Wpedantic)
-add_subdirectory(reactions)
-
 # Standalone telescope transport; deliberately excludes the reaction sources.
 add_executable(foot_transport
-    transport/foot_transport.cc src/TransportConfig.cc
+    transport/foot_transport.cc src/TransportConfig.cc src/Telescope.cc
     ../includes/util/JSONParser.cxx ../includes/util/FilesystemUtils.cxx)
 target_include_directories(foot_transport PRIVATE include ../includes)
 target_compile_features(foot_transport PRIVATE cxx_std_17)
@@ -46,3 +38,5 @@ target_link_libraries(analyse_transport PRIVATE ROOT::Core ROOT::Tree ROOT::Hist
 
 set_target_properties(foot_transport analyse_transport PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/transport")
+
+add_subdirectory(reactions)
