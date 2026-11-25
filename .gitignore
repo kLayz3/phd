@@ -25,6 +25,7 @@ rn_merged
 stash
 info.yaml
 *.exe
+*.info
 exec/*.cmd
 log.txt
 .venv

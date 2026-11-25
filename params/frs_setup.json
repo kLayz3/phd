@@ -274,7 +274,7 @@
 					}
 				},
 				{
-					"regex": "main_(?!0193)\\d{1,4}_\\d{1,4}",
+					"regex": "main_(?!(?:0193|0204))\\d{1,4}_\\d{1,4}",
 					"qdc": {
 						"pedestal": {
 							"left": 101.75,
@@ -294,6 +294,17 @@
 								"qdc_mean": 250.205
 							}
 						]
+					}
+				},
+				{
+					"regex": "main_0204_\\d{1,4}",
+					"qdc": {
+						"pedestal": {
+							"left": 101.75,
+							"right": 104.17
+						},
+						/* Not possible to analyse, Be is already overflown. */
+						"values": []
 					}
 				}
 			]

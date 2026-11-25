@@ -15,9 +15,9 @@ dx = 5.5 # dx = 5.5 best found now.
 d0 = 48.0 - dx
 dist12 = 136.85 + dx
 
-dtarget = -8.1
+dtarget = -0.1
 
-# Distances always measured with respect to the outer edge:
+# Distances always measured with respect to the outer edge (with caliper):
 # ====>>> BEAM DIRECTION ====>>>
 #                   (0)    (1)                   (2)    (3)                    (4)    (5)                   (6)    (7)
 # | W  |             | FOOT |                     | FOOT |                      | FOOT |                     | FOOT |

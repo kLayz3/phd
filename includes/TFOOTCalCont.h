@@ -289,8 +289,8 @@ struct ExpertTarget {
 	ADD_SERIALIZABLE_FIELD(double, dy,        0.0, 4)
 	ADD_SERIALIZABLE_FIELD(double, dz,        0.0, 5)
 
-	/* Target width in units of [mm] */
-	double Width() const noexcept {
+	/* Target width in units of [mm] , in case of S111 Feb. '24, evaluates to ~40.2 mm */
+	inline double Width() const noexcept {
 		return 10.0 * thickness / mnd::assume::s2::target_density;
 	}
 
@@ -313,8 +313,13 @@ struct FOOTBoxParam {
 	ADD_SERIALIZABLE_FIELD(double, db,          NAN, 6)
 	ADD_SERIALIZABLE_FIELD(ExpertTarget, target, {}, 7)
 
+	/* Retrieve the target's downstream face position in the nominal FRS coordinates. */
 	inline double GetTargetZ() const noexcept { return z0 - (width_outer / 2) + target.dz; }
-	
+
+	/* Get the target's central plane z-position in the nominal FRS coordinates. */
+	inline double GetTargetZCentre() const noexcept { return GetTargetZ() - target.Width()/2;}
+
+	/* Get the target geometry in the nominal FRS coordinates. */
 	inline std::array<std::array<double, 2>, 2> TargetXYGeom() const noexcept {
 		return {
 			std::array {
@@ -327,7 +332,7 @@ struct FOOTBoxParam {
 		}
 		};
 	}
-	/* Calculate the absolute z- position of n-th FOOT detector in the box. */
+	/* Calculate the absolute (in FRS coordinates) z- position of n-th FOOT detector in the box. */
 	inline double GetFOOTZ(const int n, const FOOTParam* p = nullptr) const noexcept {
 		double zfoot = z0 - (width_outer / 2) + det_pos.at(n);
 		if(p) {
@@ -337,7 +342,7 @@ struct FOOTBoxParam {
 	}
 	inline double GetFOOTZ(const FOOTParam* p) const noexcept { return GetFOOTZ(p->N, p); }
 
-	/* Calculate z- position of n-th FOOT detector in the box, relative to the target */
+	/* Calculate z- position of n-th FOOT detector in the box, relative to the target's downstream face. */
 	inline double GetFOOTZRel(const int n, const FOOTParam* p = nullptr) const noexcept {
 		return GetFOOTZ(n, p) - GetTargetZ();
 	}

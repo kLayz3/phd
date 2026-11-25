@@ -89,6 +89,7 @@ struct FOOTHit {
 #ifndef MND_FOOTTRACK_DEBUG
 static_assert(sizeof(FOOTHit) == 32, "Alignment obsession, friends.");
 #endif
+
 template<>
 struct fmt::formatter<FOOTHit> {
 	constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
@@ -113,8 +114,8 @@ struct RNFOOTPair {
 
 	RNFOOTPair() = default;
 
-    constexpr static u32 _DATA_PRESENT_BITINDEX = 0;
-    constexpr static u64 _DATA_PRESENT_BITMASK  = (1ULL << _DATA_PRESENT_BITINDEX);
+    inline constexpr static u32 _DATA_PRESENT_BITINDEX = 0;
+    inline constexpr static u64 _DATA_PRESENT_BITMASK  = (1ULL << _DATA_PRESENT_BITINDEX);
 
     bool HasDataX() const noexcept;
     bool HasDataY() const noexcept;
@@ -292,11 +293,11 @@ struct FOOTQCov {
 ADD_JSON_TYPE_RESOLUTION(FOOTQCov, 2);
 
 struct TFOOTHitCont : TContainer<RNFOOTHit> {
-	static constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
+	inline static constexpr u32 N_PAIRS = RNFOOTHit::N_PAIRS;
 
-	/* Convention. In Kalman coordinates, place target's FOOT-facing edge nominally at 0.0.
+	/* Convention. In Kalman coordinates, place target's FOOT-facing edge (downstream edge) nominally at 0.0.
 	 * Will be shifted back to "real" FRS coordinates later. */
-	static constexpr double TARGET_Z = 0.0;
+	inline static constexpr double TARGET_Z = 0.0;
 	
 	FOOTBoxParam* box;
 	std::array<FOOTParam, 2>* foot_param[N_PAIRS];

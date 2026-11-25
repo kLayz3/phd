@@ -120,7 +120,7 @@ struct TFOOTHitProc : TProcessor <
 
 	inline static constexpr float CLUSTER_SIZE_ONE_Q_CUTOFF = 3.0; // when cluster size == 1 doesn't make sense anymore.
 
-	/* Convention. In Kalman coordinates, place target's FOOT-facing edge nominally at 0.0.
+	/* Convention. In Kalman coordinates, place target's FOOT-facing edge (downstream edge) nominally at 0.0.
 	 * Will be shifted back to "real" FRS coordinates later. */
 	inline static constexpr double TARGET_Z = TFOOTHitCont::TARGET_Z;
 
@@ -147,9 +147,9 @@ struct TFOOTHitProc : TProcessor <
 	 * Based on the current online track, make a prediction on the layer n. */
 	Prediction get_prediction(const FTrack& , u32 ) const noexcept;
 	
-	// Add an entry to the online track, and extrapolate back to target. Then remove the entry and restore
-	// the state of the online track as it was before the call. We take by mutable reference, even tho
-	// the call 'promises' to return the state as it was before. TODO: use const_cast instead?
+	// Add an entry to the online track, and extrapolate backwards (upstream) to nominal target centre.
+	// Then remove the entry and restore the state of the online track as it was before the call.
+	// We take by mutable reference, even tho the call 'promises' to return the state as it was before.
 	mnd::geom::Point2D extrapolate_to_target_with_update(
 		FTrackOnline& , const FHitMatrix::Entry& , u32 ) const noexcept;
 
@@ -178,6 +178,9 @@ struct TFOOTHitProc : TProcessor <
 	void ReplayCostCalculation(const DAG::DAGPath& ) noexcept;
 	mnd::Maybe<FHitMatrix::RawHitPairRef> GetHitFromPath(size_t, const DAG::DAGPath& ) const;
 #endif
+
+	/* Extrapolation of the upstream track, coming from the FRS TPC's onto the nominal centre
+	 * of the 9Be target. */
 	mnd::geom::Point2D upstream_hit_loc;
 	std::vector<mnd::geom::Line3D> lines;
 

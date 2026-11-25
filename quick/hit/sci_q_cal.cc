@@ -1,4 +1,5 @@
 #include "TFRSCalCont.h"
+#include "monad/accessories/meta.hxx"
 #include "util/CLI.h"
 #include "util/MacroHelpers.h"
 #include "util/PrettyHisto.h"
@@ -31,7 +32,7 @@ int main(int argc, char* argv[]) {
 	u32 i_sci = 0;
 	u32 nthreads = 1;
 	mnd::Option<u32> q = mnd::None;
-	double d = 0.4;
+	A2 d{-0.4,0.4};
 	A3 bin = {400,100,4000};
     unsigned short line_size = 4;
 
@@ -53,8 +54,9 @@ int main(int argc, char* argv[]) {
 		->check(CLI::PositiveNumber);
 	add_logged_option(app, "-q,--charge", q, "Select the charge: 1...Qm on which to cut on FOOT's. "
 		"If left as undefined, or in None state, won't cut on FOOT.");
-	add_logged_option(app, "-d,--range", d, "Select the charge interval width, [q-d, q+d], on which to cut on FOOT's")
-		->check(CLI::Range(0.01,0.50));
+	add_logged_option(app, "-d,--range", d, "Select the charge interval width, (q + d[0], q + d[1]), on which to cut on FOOT's")
+		->check(CLI::Range(-1.0, 1.0))
+		->delimiter(',');
 	add_logged_option(app, "--binning", bin, "Binning for SCI QDC axis.")
 		->delimiter(',');
 	add_logged_option(app, "-l,--line-size", line_size, "Fit curve line size.");
@@ -73,8 +75,10 @@ int main(int argc, char* argv[]) {
 	
     const auto& label = RNFRSCal::sci_label;
 	const mnd::Option<A2> qcut = q.map([d](u32 val) {
-		return A2{val-d, val+d};
+		return A2{val+d[0], val+d[1]};
 	});
+	if(!mnd::is_strictly_ascending(d))
+		ERROR("Values {} are not in order?", d);
 
 	FRSToFParam const* tof_param {};
 	BeamInfo const* beam_param {};

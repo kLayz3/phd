@@ -22,13 +22,13 @@
 		"da": 0.0, // Small [deg] offset in x- angle relative to the TPCs' defined axis.
 		"db": 0.0, // Small [deg] offset in y- angle relative to the TPCs' defined axis.
 		"target": {
-			"thickness": 7.426, // [g/cm^2]
+			"thickness": 7.426, // [g/cm^2] ; gives the z-thickness of 40.18 mm
 			"width_x": 200.0,   // [mm]
 			"width_y": 20.0,    // [mm]
 			"dx": 0.0,          // [mm]
 			"dy": 0.0,          // [mm]
-			"dz": -8.1          // [mm]; distance relative to the box' inner-outer edge (i.e: without the metal frame)
-			                    // This is also the nominal position of the outer edge (edge with larger z) of the target.
+			"dz": -0.1          // [mm]; distance relative to the box' outer-outer edge
+			                    // This should also correspond ~ to the nominal position of the outer edge (edge with larger z) of the target.
 		}
 	},
 	"FOOT10": {  // Per detector parameters

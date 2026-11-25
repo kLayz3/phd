@@ -1,5 +1,4 @@
 #include "TFOOTHitProc.h"
-#include "TFOOTCalCont.h"
 #include "TFOOTHitCont.h"
 
 #include <algorithm>
@@ -27,6 +26,9 @@ extern thread_local Line3D g_upstream_track; // extern'ed from `includes/TFRSHit
  * Later access is read-only, as such safe to be non thread_local. */
 static std::array<Eigen::Vector2d, N_PAIRS> refl; // +-1 based on the on each of the `orientation` params
 static TrackingGeometry<N_PAIRS> geometry;
+
+/* 9Be target's centre in the FOOT coordinates, where its downstream edge is placed at TARGET_Z */
+static double target_centre;
 
 /* This is a read-only container containing variances from TFOOTCalCont::qcov,
  * aka FOOTQCov entries. It just squares them in the TFOOTHitProc::TFOOTHitProc(...) ctor.
@@ -198,6 +200,8 @@ void TFOOTHitProc::AssignParameters() {
 	SetFitConversionMatrices();
 
 	*out.geometry = stg_from_tg(geometry);
+
+	::target_centre = TARGET_Z - out.box->target.Width() / 2.0;
 
 	for(u32 n=0; n<N_PAIRS; ++n) {
 		const auto& [sd, sr, corr] = out.qcov->operator[](n);
@@ -524,7 +528,8 @@ Point2D TFOOTHitProc::extrapolate_to_target_with_update(
 	FTrack ft_current = tau.get(geometry);
 
 	tau.Add(candidate, layer);
-	const Point2D target_point = tau.get(geometry).l.Eval(TARGET_Z); // This next call cannot throw, so pop_back() always gets executed.
+	const Point2D target_point = tau.get(geometry).l.Eval( ::target_centre );
+	// This next call cannot throw, so pop_back() will alway get executed no matter what.
 
 #ifdef MND_FOOTTRACK_DEBUG
 	if(v > 3) {
@@ -822,11 +827,11 @@ mnd::Maybe<FHitMatrix::RawHitPairRef> TFOOTHitProc::GetHitFromPath(size_t layer,
 #endif
 
 void TFOOTHitProc::PreProcess() noexcept {
-	/* Upstream track is in FRS coordinates, and must be represented in FOOT array coordinates. */
+	/* Upstream track is in FRS coordinates, and must be represented in FOOT coordinates. */
 	g_upstream_track %= ( out.box->GetTargetZ() + TFOOTHitProc::TARGET_Z );
 
 	/* Can be nil. */
-	upstream_hit_loc = g_upstream_track.Eval( TFOOTHitProc::TARGET_Z );
+	upstream_hit_loc = g_upstream_track.Eval(::target_centre);
 };
 
 void TFOOTHitProc::PostProcess() noexcept {
